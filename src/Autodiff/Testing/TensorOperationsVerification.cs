@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -108,12 +109,10 @@ public class TensorOperationsVerification<T>
         Tensor<T> input,
         string operationName)
     {
-        // Compute autodiff gradient
+        // Compute autodiff gradient via ComputationNode backward
         Tensor<T> autodiffGradient;
-        using (var tape = new GradientTape<T>())
         {
             var inputNode = TensorOperations<T>.Variable(input.Clone(), "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var outputNode = operation(inputNode);
 
@@ -181,14 +180,11 @@ public class TensorOperationsVerification<T>
             Tensor<T> input2,
             string operationName)
     {
-        // Compute autodiff gradients
+        // Compute autodiff gradients via ComputationNode backward
         Tensor<T> autodiffGrad1, autodiffGrad2;
-        using (var tape = new GradientTape<T>())
         {
             var node1 = TensorOperations<T>.Variable(input1.Clone(), "input1", requiresGradient: true);
             var node2 = TensorOperations<T>.Variable(input2.Clone(), "input2", requiresGradient: true);
-            tape.Watch(node1);
-            tape.Watch(node2);
 
             var outputNode = operation(node1, node2);
 

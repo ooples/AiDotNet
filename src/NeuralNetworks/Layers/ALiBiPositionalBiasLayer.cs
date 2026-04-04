@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
@@ -47,7 +47,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// Pre-computed per-head slopes: slope_h = 2^(-8/numHeads * (h+1)).
     /// Shape: [numHeads].
     /// </summary>
-    private readonly T[] _slopes;
+    private readonly Tensor<T> _slopes;
 
     /// <summary>
     /// Pre-computed bias tensor [numHeads, maxSequenceLength, maxSequenceLength].
@@ -88,12 +88,14 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         _maxSequenceLength = maxSequenceLength;
 
         // Compute per-head slopes: slope_h = 2^(-8/numHeads * (h+1))
-        _slopes = new T[numHeads];
+        var slopeData = new T[numHeads];
         for (int h = 0; h < numHeads; h++)
         {
             double exponent = -8.0 / numHeads * (h + 1);
-            _slopes[h] = NumOps.FromDouble(Math.Pow(2.0, exponent));
+            slopeData[h] = NumOps.FromDouble(Math.Pow(2.0, exponent));
         }
+        _slopes = new Tensor<T>(slopeData, new[] { numHeads });
+        RegisterBuffer(_slopes, nameof(_slopes));
     }
 
     /// <summary>
@@ -173,7 +175,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// Gets the per-head slope values.
     /// </summary>
     /// <returns>Array of slopes, one per head.</returns>
-    public T[] GetSlopes() => (T[])_slopes.Clone();
+    public T[] GetSlopes() => _slopes.GetDataArray();
 
     /// <summary>
     /// Forward pass adds ALiBi bias to the input attention scores tensor.
@@ -253,15 +255,6 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Backward pass: gradient flows through unchanged (constant additive bias).
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // ALiBi bias is constant, so gradient with respect to input scores is identity.
-        return outputGradient;
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
@@ -284,22 +277,5 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
             _biasCacheQueryLen = 0;
             _biasCacheKeyLen = 0;
         }
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // ALiBi is an additive bias; for graph export, treat as identity placeholder
-        return inputNode;
     }
 }

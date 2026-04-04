@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 8, 8, 8")]
-public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;
     private readonly BatchNormalizationLayer<T>? _expandBn;
@@ -228,6 +228,31 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
             activationFunction: new IdentityActivation<T>());
 
         _projectBn = new BatchNormalizationLayer<T>(outChannels);
+
+        // Default internal BN layers to eval mode.
+        // BN with batch_size=1 in training mode normalizes to zero (I - 1/N*11^T = 0 when N=1),
+        // which breaks forward pass for single samples. Eval mode uses running stats.
+        _expandBn?.SetTrainingMode(false);
+        _dwBn.SetTrainingMode(false);
+        _projectBn.SetTrainingMode(false);
+
+        RegisterSubLayer(_dwConv);
+        RegisterSubLayer(_dwBn);
+        RegisterSubLayer(_projectConv);
+        RegisterSubLayer(_projectBn);
+        if (_expandConv is not null) RegisterSubLayer(_expandConv);
+        if (_expandBn is not null) RegisterSubLayer(_expandBn);
+        if (_se is not null) RegisterSubLayer(_se);
+    }
+
+    /// <inheritdoc />
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        // Propagate to internal BN layers which behave differently in training vs eval mode
+        _expandBn?.SetTrainingMode(isTraining);
+        _dwBn.SetTrainingMode(isTraining);
+        _projectBn.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -285,7 +310,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -294,7 +319,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        IGpuTensor<T> x = input;
+        Tensor<T> x = input;
 
         // Expansion phase (if expansion > 1)
         if (_hasExpansion && _expandConv is not null && _expandBn is not null)
@@ -351,69 +376,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         }
 
         return projectBnOut;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the Inverted Residual Block.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastDwOut is null || _lastDwBnOut is null ||
-            _lastProjectOut is null || _lastProjectBnOut is null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        Tensor<T> grad = outputGradient;
-        Tensor<T>? gradToInput = null;
-
-        // If we have a residual connection, gradient flows to both paths
-        if (_useResidual)
-        {
-            gradToInput = grad;
-        }
-
-        // Backward through projection (no activation)
-        var gradProjectBn = _projectBn.Backward(grad);
-        var gradProjectConv = _projectConv.Backward(gradProjectBn);
-        grad = gradProjectConv;
-
-        // Backward through SE (if used)
-        // Note: SE layer expects NHWC format, so transpose gradients
-        if (_useSE && _se is not null && _lastDwActOut is not null)
-        {
-            // Transpose gradient from NCHW to NHWC for SE backward
-            var gradNHWC = TransposeNCHWToNHWC(grad);
-            var seGrad = _se.Backward(gradNHWC);
-            // Transpose gradient back from NHWC to NCHW
-            grad = TransposeNHWCToNCHW(seGrad);
-        }
-
-        // Backward through depthwise conv activation
-        grad = ApplyBlockActivationDerivative(_lastDwBnOut, grad);
-
-        // Backward through depthwise conv BN and conv
-        var gradDwBn = _dwBn.Backward(grad);
-        var gradDwConv = _dwConv.Backward(gradDwBn);
-        grad = gradDwConv;
-
-        // Backward through expansion (if used)
-        if (_hasExpansion && _expandConv is not null && _expandBn is not null && _lastExpandBnOut is not null)
-        {
-            grad = ApplyBlockActivationDerivative(_lastExpandBnOut, grad);
-            var gradExpandBn = _expandBn.Backward(grad);
-            grad = _expandConv.Backward(gradExpandBn);
-        }
-
-        // Combine gradients if we have residual connection
-        if (gradToInput is not null)
-        {
-            return AddTensors(grad, gradToInput);
-        }
-
-        return grad;
     }
 
     /// <summary>
@@ -507,6 +469,64 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         }
     }
 
+    // --- ILayerSerializationExtras: serialize internal BN running stats ---
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_expandBn is ILayerSerializationExtras<T> eb) count += eb.ExtraParameterCount;
+            if (_dwBn is ILayerSerializationExtras<T> db) count += db.ExtraParameterCount;
+            if (_projectBn is ILayerSerializationExtras<T> pb) count += pb.ExtraParameterCount;
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        if (_expandBn is ILayerSerializationExtras<T> eb)
+            parts.AddRange(eb.GetExtraParameters().ToArray());
+        if (_dwBn is ILayerSerializationExtras<T> db)
+            parts.AddRange(db.GetExtraParameters().ToArray());
+        if (_projectBn is ILayerSerializationExtras<T> pb)
+            parts.AddRange(pb.GetExtraParameters().ToArray());
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        if (_expandBn is ILayerSerializationExtras<T> eb)
+        {
+            int count = eb.ExtraParameterCount;
+            if (offset + count <= extraParameters.Length)
+            {
+                eb.SetExtraParameters(extraParameters.SubVector(offset, count));
+                offset += count;
+            }
+        }
+        if (_dwBn is ILayerSerializationExtras<T> db)
+        {
+            int count = db.ExtraParameterCount;
+            if (offset + count <= extraParameters.Length)
+            {
+                db.SetExtraParameters(extraParameters.SubVector(offset, count));
+                offset += count;
+            }
+        }
+        if (_projectBn is ILayerSerializationExtras<T> pb)
+        {
+            int count = pb.ExtraParameterCount;
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters: need {offset + count} but got {extraParameters.Length}. " +
+                    "Ensure the parameter blob matches the block's expected size.");
+            pb.SetExtraParameters(extraParameters.SubVector(offset, count));
+        }
+    }
+
     /// <summary>
     /// Resets the internal state of the block.
     /// </summary>
@@ -532,62 +552,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         _projectBn.ResetState();
     }
 
-    /// <summary>
-    /// Gets whether this block supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all required sub-layers support JIT
-            if (_hasExpansion)
-            {
-                if (_expandConv is null || !_expandConv.SupportsJitCompilation ||
-                    _expandBn is null || !_expandBn.SupportsJitCompilation)
-                    return false;
-            }
-
-            if (!_dwConv.SupportsJitCompilation || !_dwBn.SupportsJitCompilation)
-                return false;
-
-            if (_useSE && _se is not null && !_se.SupportsJitCompilation)
-                return false;
-
-            if (!_projectConv.SupportsJitCompilation || !_projectBn.SupportsJitCompilation)
-                return false;
-
-            // Check activation supports JIT
-            if (ScalarActivation is not null && !ScalarActivation.SupportsJitCompilation)
-                return false;
-
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node.</returns>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension [B, C, H, W]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
@@ -818,4 +782,5 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         metadata["UseSE"] = _useSE.ToString();
         return metadata;
     }
+
 }

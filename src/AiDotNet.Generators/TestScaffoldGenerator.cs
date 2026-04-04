@@ -3554,7 +3554,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (category == AlgorithmCategory.ContinualLearning)
         {
-            EmitMockNetworkFactory(sb);
+            // EmitMockNetworkFactory removed — backward-based mock no longer needed
         }
 
         sb.AppendLine("}");
@@ -3623,58 +3623,4 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
     }
 
-    /// <summary>
-    /// Emits a CreateMockNetwork override that returns a simple INeuralNetwork mock for continual learning tests.
-    /// </summary>
-    private static void EmitMockNetworkFactory(StringBuilder sb)
-    {
-        sb.AppendLine();
-        sb.AppendLine("    protected override INeuralNetwork<double> CreateMockNetwork()");
-        sb.AppendLine("        => new MockNeuralNetwork();");
-        sb.AppendLine();
-        sb.AppendLine("    private class MockNeuralNetwork : INeuralNetwork<double>");
-        sb.AppendLine("    {");
-        sb.AppendLine("        private Vector<double> _params = new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, -0.1, -0.2, -0.3, -0.4, -0.5 });");
-        sb.AppendLine("        public Tensor<double> Predict(Tensor<double> input) => input;");
-        sb.AppendLine("        public void Train(Tensor<double> input, Tensor<double> output) { }");
-        sb.AppendLine("        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();");
-        sb.AppendLine("        public Vector<double> GetParameters() => new Vector<double>(_params.ToArray());");
-        sb.AppendLine("        public void SetParameters(Vector<double> p) { for (int i = 0; i < System.Math.Min(p.Length, _params.Length); i++) _params[i] = p[i]; }");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) { var c = new MockNeuralNetwork(); c.SetParameters(p); return c; }");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => new MockNeuralNetwork { _params = new Vector<double>(_params.ToArray()) };");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => DeepCopy();");
-        sb.AppendLine("        public int ParameterCount => _params.Length;");
-        sb.AppendLine("        public bool SupportsParameterInitialization => true;");
-        sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
-        sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(_params.Length);");
-        sb.AppendLine("        public void ApplyGradients(Vector<double> g, double lr) { for (int i = 0; i < _params.Length; i++) _params[i] -= lr * g[i]; }");
-        sb.AppendLine("        public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new();");
-        sb.AppendLine("        public byte[] Serialize() => System.Array.Empty<byte>();");
-        sb.AppendLine("        public void Deserialize(byte[] data) { }");
-        sb.AppendLine("        public void SaveModel(string path) { }");
-        sb.AppendLine("        public void LoadModel(string path) { }");
-        sb.AppendLine("        public void SaveState(System.IO.Stream s) { }");
-        sb.AppendLine("        public void LoadState(System.IO.Stream s) { }");
-        sb.AppendLine("        public System.Collections.Generic.IEnumerable<int> GetActiveFeatureIndices() => System.Array.Empty<int>();");
-        sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
-        sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
-        sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
-        sb.AppendLine("        public bool SupportsJitCompilation => false;");
-        sb.AppendLine("        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<double>> n) => throw new System.NotSupportedException();");
-        // INeuralNetwork-specific members
-        sb.AppendLine("        public void UpdateParameters(Vector<double> p) { SetParameters(p); }");
-        sb.AppendLine("        public void SetTrainingMode(bool isTraining) { }");
-        sb.AppendLine("        public Tensor<double> ForwardWithMemory(Tensor<double> input) => input;");
-        sb.AppendLine("        public Tensor<double> Backpropagate(Tensor<double> outputGradients) => outputGradients;");
-        sb.AppendLine("        public Vector<double> GetParameterGradients() => new Vector<double>(_params.Length);");
-        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<double>> GetLayers() => System.Array.Empty<AiDotNet.Interfaces.ILayer<double>>();");
-        // ILayeredModel members
-        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<double>> Layers => System.Array.Empty<AiDotNet.Interfaces.ILayer<double>>();");
-        sb.AppendLine("        public int LayerCount => 0;");
-        sb.AppendLine("        public AiDotNet.Interfaces.LayerInfo<double> GetLayerInfo(int index) => throw new System.IndexOutOfRangeException();");
-        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.LayerInfo<double>> GetAllLayerInfo() => System.Array.Empty<AiDotNet.Interfaces.LayerInfo<double>>();");
-        sb.AppendLine("        public bool ValidatePartitionPoint(int point) => false;");
-        sb.AppendLine("        public AiDotNet.Interfaces.SubModel<double> ExtractSubModel(int startLayer, int endLayer) => throw new System.NotSupportedException();");
-        sb.AppendLine("    }");
-    }
 }

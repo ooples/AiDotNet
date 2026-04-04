@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -510,7 +510,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         // reshape the result to match the input shape
         if (input.Shape.Length > 1 || (input.Shape.Length == 1 && input.Shape[0] == recalledPattern.Length))
         {
-            result = result.Reshape(input.Shape.ToArray());
+            result = result.Reshape(input._shape);
         }
 
         return result;

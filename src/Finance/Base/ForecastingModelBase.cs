@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.LossFunctions;
@@ -173,7 +173,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         int features = input.Shape.Length > 2 ? input.Shape[2] : NumFeatures;
 
         int stepsUsed = Math.Min(stepsToShift, seqLen);
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

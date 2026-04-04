@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -341,7 +341,7 @@ public abstract class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> NormalizeEmbeddings(Tensor<T> embeddings)
     {
-        var normalized = new Tensor<T>(embeddings.Shape.ToArray());
+        var normalized = new Tensor<T>(embeddings._shape);
 
         int seqLen, embDim;
         int batchSize;

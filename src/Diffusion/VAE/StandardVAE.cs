@@ -627,4 +627,35 @@ public class StandardVAE<T> : VAEModelBase<T>
     }
 
     #endregion
+
+    #region Layer-Level Backpropagation
+
+    /// <inheritdoc />
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        AddLayerGradients(gradients, _inputConv);
+        foreach (var layer in _encoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _meanConv);
+        AddLayerGradients(gradients, _logVarConv);
+        AddLayerGradients(gradients, _quantConv);
+        AddLayerGradients(gradients, _postQuantConv);
+        foreach (var layer in _decoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _outputConv);
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private static void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++)
+            gradients.Add(g[i]);
+    }
+
+    #endregion
 }

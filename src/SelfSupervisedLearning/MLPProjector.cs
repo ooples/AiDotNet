@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -194,39 +194,6 @@ public class MLPProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradients)
-    {
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        if (_lastInput is null) throw new InvalidOperationException("Forward must be called before Backward");
-
-        var grad = gradients;
-
-        // Backward through optional BatchNorm 2
-        if (_useBatchNormOnOutput && _preActivation2 is not null)
-        {
-            var gamma2 = _gamma2 ?? throw new InvalidOperationException("Gamma2 has not been initialized.");
-            (grad, _gradGamma2, _gradBeta2) = BatchNormBackward(grad, _preActivation2, gamma2);
-        }
-
-        // Backward through Layer 2
-        var postRelu1 = _postRelu1 ?? throw new InvalidOperationException("Post-ReLU activations not available. Forward must be called before Backward.");
-        (grad, _gradWeight2, _gradBias2) = LinearBackward(grad, postRelu1, _weight2);
-
-        // Backward through ReLU
-        var postBatchNorm1 = _postBatchNorm1 ?? throw new InvalidOperationException("Post-BatchNorm activations not available. Forward must be called before Backward.");
-        grad = ReLUBackward(grad, postBatchNorm1);
-
-        // Backward through BatchNorm 1
-        var preActivation1 = _preActivation1 ?? throw new InvalidOperationException("Pre-activation values not available. Forward must be called before Backward.");
-        (grad, _gradGamma1, _gradBeta1) = BatchNormBackward(grad, preActivation1, _gamma1);
-
-        // Backward through Layer 1
-        (grad, _gradWeight1, _gradBias1) = LinearBackward(grad, _lastInput, _weight1);
-
-        return grad;
-    }
-
-    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var paramList = new List<T>();
@@ -379,112 +346,28 @@ public class MLPProjector<T> : IProjectorHead<T>
     private Tensor<T> LinearForward(Tensor<T> input, Tensor<T> weight, Tensor<T> bias)
     {
         // input: [batch, inputDim], weight: [inputDim, outputDim], bias: [outputDim]
-        var batchSize = input.Shape[0];
-        var inputDim = input.Shape[1];
-        var outputDim = weight.Shape[1];
-
-        var result = new T[batchSize * outputDim];
-
-        // Use Engine-accelerated dot products for each row x column combination
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract input row
-            var inputRow = new T[inputDim];
-            for (int i = 0; i < inputDim; i++)
-            {
-                inputRow[i] = input[b, i];
-            }
-            var inputVec = new Vector<T>(inputRow);
-
-            for (int o = 0; o < outputDim; o++)
-            {
-                // Extract weight column
-                var weightCol = new T[inputDim];
-                for (int i = 0; i < inputDim; i++)
-                {
-                    weightCol[i] = weight[i, o];
-                }
-                var weightVec = new Vector<T>(weightCol);
-
-                // Use engine for accelerated dot product
-                var dot = Engine.DotProduct(inputVec, weightVec);
-                result[b * outputDim + o] = NumOps.Add(bias[o], dot);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, outputDim]);
+        // Vectorized: output = input @ weight + bias
+        var output = Engine.TensorMatMul(input, weight);
+        var bias2D = bias.Reshape(1, weight.Shape[1]);
+        return Engine.TensorBroadcastAdd(output, bias2D);
     }
 
     private (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) LinearBackward(
         Tensor<T> outputGrad, Tensor<T> input, Tensor<T> weight)
     {
-        var batchSize = outputGrad.Shape[0];
-        var outputDim = outputGrad.Shape[1];
-        var inputDim = weight.Shape[0];
+        // Vectorized backward: all matmuls via Engine
+        // Input gradient: dX = dY @ W^T
+        var weightT = weight.Transpose([1, 0]);
+        var inputGradTensor = Engine.TensorMatMul(outputGrad, weightT);
 
-        // Input gradient: outputGrad @ weight.T
-        var inputGrad = new T[batchSize * inputDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract outputGrad row for this batch
-            var gradRow = new Vector<T>(outputDim);
-            for (int o = 0; o < outputDim; o++)
-            {
-                gradRow[o] = outputGrad[b, o];
-            }
+        // Weight gradient: dW = X^T @ dY
+        var inputT = input.Transpose([1, 0]);
+        var weightGradTensor = Engine.TensorMatMul(inputT, outputGrad);
 
-            for (int i = 0; i < inputDim; i++)
-            {
-                // Extract weight row (which is the column in the transpose)
-                var weightRow = new Vector<T>(outputDim);
-                for (int o = 0; o < outputDim; o++)
-                {
-                    weightRow[o] = weight[i, o];
-                }
-                inputGrad[b * inputDim + i] = Engine.DotProduct(gradRow, weightRow);
-            }
-        }
+        // Bias gradient: dB = sum(dY, axis=0)
+        var biasGradTensor = Engine.ReduceSum(outputGrad, new[] { 0 });
 
-        // Weight gradient: input.T @ outputGrad
-        var weightGrad = new T[inputDim * outputDim];
-        for (int i = 0; i < inputDim; i++)
-        {
-            // Extract input column (all batches for feature i)
-            var inputCol = new Vector<T>(batchSize);
-            for (int b = 0; b < batchSize; b++)
-            {
-                inputCol[b] = input[b, i];
-            }
-
-            for (int o = 0; o < outputDim; o++)
-            {
-                // Extract outputGrad column (all batches for output o)
-                var gradCol = new Vector<T>(batchSize);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    gradCol[b] = outputGrad[b, o];
-                }
-                weightGrad[i * outputDim + o] = Engine.DotProduct(inputCol, gradCol);
-            }
-        }
-
-        // Bias gradient: sum over batch
-        var biasGrad = new T[outputDim];
-        for (int o = 0; o < outputDim; o++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, outputGrad[b, o]);
-            }
-            biasGrad[o] = sum;
-        }
-
-        return (
-            new Tensor<T>(inputGrad, [batchSize, inputDim]),
-            new Tensor<T>(weightGrad, [inputDim, outputDim]),
-            new Tensor<T>(biasGrad, [outputDim])
-        );
+        return (inputGradTensor, weightGradTensor, biasGradTensor);
     }
 
     private Tensor<T> BatchNormForward(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
@@ -669,20 +552,15 @@ public class MLPProjector<T> : IProjectorHead<T>
             result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(result, input.Shape.ToArray());
+        return new Tensor<T>(result, input._shape);
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
     {
-        var size = outputGrad.Length;
-        var result = new T[size];
-
-        for (int i = 0; i < size; i++)
-        {
-            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? outputGrad.Data.Span[i] : NumOps.Zero;
-        }
-
-        return new Tensor<T>(result, outputGrad.Shape.ToArray());
+        // Vectorized ReLU backward: grad * (input > 0)
+        var mask = Engine.TensorGreaterThan(input, NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(outputGrad._shape, NumOps.Zero);
+        return Engine.TensorWhere(mask, outputGrad, zeros);
     }
 
     private static void AddTensorToList(List<T> list, Tensor<T> tensor)

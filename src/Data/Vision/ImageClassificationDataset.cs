@@ -1,4 +1,4 @@
-using AiDotNet.Data.Loaders;
+﻿using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Tensors.Helpers;
 
@@ -184,7 +184,7 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
         }
 
         // Infer dimensions from first tensor (assume all same shape)
-        var firstShape = imageTensors[0].Shape.ToArray();
+        var firstShape = imageTensors[0]._shape;
         if (firstShape.Length < 2)
         {
             throw new ArgumentException("Image tensors must have at least 2 dimensions.", nameof(imageTensors));
@@ -317,7 +317,7 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.ToArray().Clone();
+        var newShape = (int[])source.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

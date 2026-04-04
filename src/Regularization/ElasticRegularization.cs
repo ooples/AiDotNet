@@ -1,4 +1,4 @@
-namespace AiDotNet.Regularization;
+﻿namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements Elastic Net regularization, a hybrid approach that combines L1 (Lasso) and L2 (Ridge) regularization techniques.
@@ -92,7 +92,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
-                resultTensor = resultTensor.Reshape(gradientTensor.Shape.ToArray());
+                resultTensor = resultTensor.Reshape(gradientTensor._shape);
             }
 
             return (TOutput)(object)resultTensor;

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -176,7 +176,7 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
         T baseScore = basePrediction.ToVector()[actualTargetClass];
 
         // Determine output shape for sensitivity map
-        var inputShape = input.Shape.ToArray();
+        var inputShape = input._shape;
         var outputShape = ComputeOutputShape(inputShape);
         var sensitivityMap = new Tensor<T>(outputShape);
 
@@ -225,7 +225,7 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     private Tensor<T> ApplyOcclusion(Tensor<T> input, int[] position)
     {
         var occluded = input.Clone();
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Apply occlusion based on shape type
         if (_shape == OcclusionShape.Rectangular)
@@ -245,7 +245,7 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     /// </summary>
     private void ApplyRectangularOcclusion(Tensor<T> tensor, int[] position)
     {
-        var shape = tensor.Shape.ToArray();
+        var shape = tensor._shape;
 
         // For 2D (height, width)
         if (shape.Length == 2 && position.Length >= 2 && _windowShape.Length >= 2)
@@ -324,7 +324,7 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     /// </summary>
     private void ApplyCircularOcclusion(Tensor<T> tensor, int[] position)
     {
-        var shape = tensor.Shape.ToArray();
+        var shape = tensor._shape;
 
         // Compute center and radius
         double centerH = position[0] + _windowShape[0] / 2.0;

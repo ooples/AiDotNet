@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -6,7 +7,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Validation;
@@ -470,87 +473,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return parameters;
     }
 
-    /// <summary>
-    /// Performs backpropagation to compute gradients for network parameters.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
-    /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
-    /// how each parameter contributed to that error. This method handles that backward flow of information.
-    /// </para>
-    /// <para>
-    /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
-    /// </para>
-    /// <para>
-    /// <b>API Change Note:</b> The signature changed from Vector&lt;T&gt; to Tensor&lt;T&gt; to support multi-dimensional
-    /// gradients. This is a breaking change. If you need backward compatibility, consider adding an overload that
-    /// accepts Vector&lt;T&gt; and converts it internally to Tensor&lt;T&gt;.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
-    public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-
-        if (!SupportsTraining)
-        {
-            throw new InvalidOperationException("This network does not support backpropagation");
-        }
-
-        // Use memory-managed backward if gradient checkpointing is enabled
-        if (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
-        {
-            return BackpropagateWithRecompute(outputGradients);
-        }
-
-        // Standard backpropagation through layers in reverse order
-        var gradientTensor = outputGradients;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        return gradientTensor;
-    }
-
-    /// <summary>
-    /// Performs backpropagation with activation recomputation for non-checkpointed layers.
-    /// </summary>
-    /// <param name="outputGradients">Gradients from the loss function.</param>
-    /// <returns>Gradients with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When gradient checkpointing is enabled, we don't store all layer
-    /// activations during forward pass (to save memory). During backprop, we need those
-    /// activations, so we recompute them from the nearest checkpoint.
-    /// </para>
-    /// </remarks>
-    protected virtual Tensor<T> BackpropagateWithRecompute(Tensor<T> outputGradients)
-    {
-        if (_memoryManager is null)
-            throw new InvalidOperationException("Memory manager is not configured.");
-
-        var gradientTensor = outputGradients;
-
-        // Backpropagate through layers in reverse order with recomputation
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            // Use memory manager to handle recomputation from checkpoints
-            gradientTensor = _memoryManager.BackwardWithRecompute(Layers[i], gradientTensor, i);
-        }
-
-        // Clear checkpoints after backprop to free memory
-        _memoryManager.ClearCheckpoints();
-
-        return gradientTensor;
-    }
-
     #region GPU Training Methods
 
     /// <summary>
@@ -569,80 +491,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This is much faster for training because there's no copying between CPU and GPU.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    /// <summary>
+    /// GPU forward pass with named auxiliary inputs routed to multi-port layers.
+    /// Mirrors <see cref="ForwardWithMemory(Tensor{T}, IReadOnlyDictionary{string, Tensor{T}})"/>
+    /// but keeps all data on GPU.
+    /// </summary>
+    /// <param name="input">Primary GPU input tensor.</param>
+    /// <param name="auxiliaryInputs">Named GPU auxiliary tensors (e.g., "time_embed").</param>
+    /// <returns>Final GPU output tensor.</returns>
+    public virtual Tensor<T> ForwardGpu(
+        Tensor<T> input,
+        IReadOnlyDictionary<string, Tensor<T>> auxiliaryInputs)
     {
         if (!CanTrainOnGpu)
-        {
-            throw new InvalidOperationException(
-                "GPU forward pass is not supported. Check CanTrainOnGpu before calling this method.");
-        }
+            throw new InvalidOperationException("GPU forward pass is not supported.");
 
         var current = input;
         foreach (var layer in Layers)
         {
-            if (layer is LayerBase<T> layerBase)
+            if (layer is not LayerBase<T> layerBase)
+                throw new InvalidOperationException(
+                    $"Layer {layer.GetType().Name} does not inherit from LayerBase<T>.");
+
+            if (layerBase.InputPorts.Count > 1)
             {
-                current = layerBase.ForwardGpu(current);
+                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                foreach (var port in layerBase.InputPorts)
+                {
+                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                        namedInputs[port.Name] = aux;
+                }
+                current = layerBase.ForwardGpu(namedInputs);
             }
             else
             {
-                throw new InvalidOperationException(
-                    $"Layer {layer.GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
+                current = layerBase.ForwardGpu(current);
             }
         }
 
         return current;
     }
 
-    /// <summary>
-    /// Performs backpropagation through all layers entirely on GPU.
-    /// </summary>
-    /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>
-    /// <returns>The GPU-resident gradient with respect to network input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method backpropagates through all layers on GPU:
-    /// - Each layer computes input gradients and stores weight gradients on GPU
-    /// - No data is transferred to CPU during backpropagation
-    /// - After calling this, call UpdateParametersGpu() to apply the gradients
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Like Backpropagate() but everything stays on GPU.
-    /// The weight gradients are computed and stored on GPU, ready for the update step.
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> BackpropagateGpu(IGpuTensor<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-
-        if (!CanTrainOnGpu)
-        {
-            throw new InvalidOperationException(
-                "GPU backward pass is not supported. Check CanTrainOnGpu before calling this method.");
-        }
-
-        var gradientTensor = outputGradients;
-
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is LayerBase<T> layerBase)
-            {
-                gradientTensor = layerBase.BackwardGpu(gradientTensor);
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"Layer {Layers[i].GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
-            }
-        }
-
-        return gradientTensor;
-    }
 
     /// <summary>
     /// Performs backpropagation through all layers with deferred GPU execution.
@@ -656,27 +545,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This reduces CPU-GPU synchronization overhead and improves performance.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> BackpropagateGpuDeferred(
-        IGpuTensor<T> outputGradients,
-        GpuExecutionOptions? options = null)
-    {
-        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        if (engine?.GetBackend() == null)
-        {
-            // Fallback to non-deferred if no GPU backend
-            return BackpropagateGpu(outputGradients);
-        }
-
-        var backend = engine.GetBackend() as IAsyncGpuBackend;
-        if (backend == null)
-        {
-            return BackpropagateGpu(outputGradients);
-        }
-
-        return backend.ExecuteDeferred(
-            scope => BackpropagateGpu(outputGradients),
-            options);
-    }
+    // BackpropagateGpuDeferred removed — tape-based autodiff handles GPU gradient computation.
 
     /// <summary>
     /// Updates all trainable parameters in the network using GPU-computed gradients.
@@ -801,8 +670,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     public virtual T TrainBatchGpuDeferred(
-        IGpuTensor<T> input,
-        IGpuTensor<T> target,
+        Tensor<T> input,
+        Tensor<T> target,
         IGpuOptimizerConfig config,
         GpuExecutionOptions? options = null)
     {
@@ -844,7 +713,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 lossValue = lossResult.Loss;
 
                 // Backward pass
-                BackpropagateGpu(lossResult.Gradient);
 
                 // Update parameters
                 UpdateParametersGpu(config);
@@ -864,8 +732,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The loss value for this batch.</returns>
     public virtual async Task<T> TrainBatchGpuDeferredAsync(
-        IGpuTensor<T> input,
-        IGpuTensor<T> target,
+        Tensor<T> input,
+        Tensor<T> target,
         IGpuOptimizerConfig config,
         GpuExecutionOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -908,7 +776,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 lossValue = lossResult.Loss;
 
                 // Backward pass
-                BackpropagateGpu(lossResult.Gradient);
 
                 // Update parameters
                 UpdateParametersGpu(config);
@@ -1065,6 +932,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Forward pass with named auxiliary inputs that are routed to layers declaring matching ports.
+    /// Layers with a single "input" port receive the sequential output as usual.
+    /// Layers with additional ports (e.g., "time_embed") receive the matching tensor from <paramref name="auxiliaryInputs"/>.
+    /// </summary>
+    /// <param name="input">Primary input tensor (routed as "input" port to each layer).</param>
+    /// <param name="auxiliaryInputs">Named auxiliary tensors (e.g., "time_embed" → embedding tensor).</param>
+    /// <returns>Final output tensor.</returns>
+    public virtual Tensor<T> ForwardWithMemory(Tensor<T> input, IReadOnlyDictionary<string, Tensor<T>> auxiliaryInputs)
+    {
+        if (!SupportsTraining)
+            throw new InvalidOperationException("This network does not support training mode");
+
+        Tensor<T> current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            _layerInputs[i] = current;
+
+            var layer = Layers[i];
+            if (layer is LayerBase<T> typedLayer && typedLayer.InputPorts.Count > 1)
+            {
+                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                foreach (var port in typedLayer.InputPorts)
+                {
+                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                        namedInputs[port.Name] = aux;
+                }
+                current = typedLayer.Forward(namedInputs);
+            }
+            else
+            {
+                current = layer.ForwardWithPrecisionCheck(current);
+            }
+
+            _layerOutputs[i] = current;
+        }
+
+        return current;
+    }
+
+    /// <summary>
     /// Performs forward pass with gradient checkpointing to reduce memory usage.
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -1156,7 +1064,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             using var gpuResult = ForwardGpu(input);
-            result = gpuResult.ToTensor();
+            result = gpuResult;
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
@@ -1190,10 +1098,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <code>
     /// // Example: GPU-resident inference
     /// using var gpuResult = network.ForwardGpu(input);
-    /// var output = gpuResult.ToTensor(); // Only downloads here
+    /// var output = gpuResult; // Only downloads here
     /// </code>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(Tensor<T> input)
+    public virtual Tensor<T> ForwardGpu(Tensor<T> input)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
         {
@@ -1203,7 +1111,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Upload input to GPU once
-        IGpuTensor<T>? current = null;
+        Tensor<T>? current = null;
         bool ownsCurrentTensor = false;
 
         try
@@ -1240,7 +1148,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     if (current is not null)
                     {
                         // Download current GPU tensor to CPU
-                        cpuInput = current.ToTensor();
+                        cpuInput = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1350,7 +1258,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                     // Forward through layers - operations chain on GPU
                     // With full integration, these would record to scope.GraphBuilder
-                    IGpuTensor<T> current = gpuInput;
+                    Tensor<T> current = gpuInput;
                     bool ownsCurrentTensor = true;
 
                     try
@@ -1374,7 +1282,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             else
                             {
                                 // CPU fallback for layers without GPU support
-                                var cpuInput = current.ToTensor();
+                                var cpuInput = current;
                                 if (ownsCurrentTensor)
                                 {
                                     current.Dispose();
@@ -1390,7 +1298,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         deferredScope.Execute();
 
                         // Download final result
-                        var result = current.ToTensor();
+                        var result = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1419,7 +1327,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             using var result = ForwardGpu(input);
-            return result.ToTensor();
+            return result;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
@@ -1462,7 +1370,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                     // Upload input
                     var gpuInput = gpuEngine.UploadToGpu(input, GpuTensorRole.Input);
-                    IGpuTensor<T> current = gpuInput;
+                    Tensor<T> current = gpuInput;
                     bool ownsCurrentTensor = true;
 
                     try
@@ -1486,7 +1394,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             }
                             else
                             {
-                                var cpuInput = current.ToTensor();
+                                var cpuInput = current;
                                 if (ownsCurrentTensor)
                                 {
                                     current.Dispose();
@@ -1502,7 +1410,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         await deferredScope.ExecuteAsync(cancellationToken);
 
                         // Download final result
-                        var result = current.ToTensor();
+                        var result = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1538,7 +1446,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             try
             {
                 using var result = ForwardGpu(input);
-                return result.ToTensor();
+                return result;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
@@ -1569,7 +1477,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     ///     {
     ///         var result = network.ForwardWithGpuContext(batch);
     ///         // Results are GPU-resident until ToTensor() is called
-    ///         predictions.Add(result.ToTensor());
+    ///         predictions.Add(result);
     ///     }
     /// } // All GPU tensors are cleaned up here
     /// </code>
@@ -1604,7 +1512,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// to track all tensor allocations. The context handles memory management automatically,
     /// preventing memory leaks and enabling memory pressure monitoring.</para>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardWithGpuContext(Tensor<T> input)
+    public virtual Tensor<T> ForwardWithGpuContext(Tensor<T> input)
     {
         var ctx = GpuExecutionContext.Current;
         if (ctx is null)
@@ -1632,7 +1540,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Upload input to GPU using context (tracked in registry)
-        IGpuTensor<T> current = ctx.Upload(input, GpuTensorRole.Activation);
+        Tensor<T> current = ctx.Upload(input, GpuTensorRole.Activation);
 
         try
         {
@@ -1645,9 +1553,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     var next = layer.ForwardGpu(current);
 
                     // Register output with context (if not already registered by layer)
-                    if (next is GpuTensor<T> gpuNext)
+                    if (next is Tensor<float> gpuNextFloat)
                     {
-                        ctx.Registry.TryRegister(gpuNext);
+                        ctx.Registry.TryRegister(gpuNextFloat);
                     }
 
                     current = next;
@@ -1655,7 +1563,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 else
                 {
                     // Layer doesn't support GPU - fall back to CPU
-                    var cpuInput = current.ToTensor();
+                    var cpuInput = current;
                     var cpuOutput = layer.Forward(cpuInput);
 
                     // Upload result back using context
@@ -1670,61 +1578,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // On error, tensors are cleaned up when context is disposed
             throw;
         }
-    }
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass within a GPU execution context with GPU-resident input.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor managed by the current context.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no GPU context is active.</exception>
-    public virtual IGpuTensor<T> ForwardWithGpuContext(IGpuTensor<T> input)
-    {
-        var ctx = GpuExecutionContext.Current;
-        if (ctx is null)
-        {
-            throw new InvalidOperationException(
-                "ForwardWithGpuContext requires an active GpuExecutionContext. " +
-                "Call BeginGpuExecution() first.");
-        }
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardWithGpuContext requires DirectGpuTensorEngine. Current engine: " +
-                Engine.GetType().Name);
-        }
-
-        IGpuTensor<T> current = input;
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            var layer = Layers[i];
-
-            if (layer.CanExecuteOnGpu)
-            {
-                var next = layer.ForwardGpu(current);
-
-                // Register output with context (if not already registered by layer)
-                if (next is GpuTensor<T> gpuNext)
-                {
-                    ctx.Registry.TryRegister(gpuNext);
-                }
-
-                current = next;
-            }
-            else
-            {
-                // Layer doesn't support GPU - fall back to CPU
-                var cpuInput = current.ToTensor();
-                var cpuOutput = layer.Forward(cpuInput);
-
-                // Upload result back using context
-                current = ctx.Upload(cpuOutput, GpuTensorRole.Activation);
-            }
-        }
-
-        return current;
     }
 
     /// <summary>
@@ -1877,6 +1730,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateParameterCountCache()
     {
         _cachedParameterCount = null;
+        _layerStructureVersion++;
+        _parameterBuffer = null;
+        Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
     }
 
@@ -1899,6 +1755,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This method ensures that the parameter count cache is properly invalidated when layers are added.
     /// Derived classes should use this method instead of directly accessing Layers.Add().
     /// </remarks>
+    /// <summary>
+    /// Monotonically increasing version counter, incremented when layers are added/removed.
+    /// Used by TapeTrainingStep caching to detect structural changes.
+    /// </summary>
+    private int _layerStructureVersion;
+
+    /// <summary>
+    /// Gets the current layer structure version for cache invalidation.
+    /// </summary>
+    internal int LayerStructureVersion => _layerStructureVersion;
+
+
     protected void AddLayerToCollection(ILayer<T> layer)
     {
         _layers.Add(layer);
@@ -2190,6 +2058,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// layers to produce an output (like a classification or prediction).
     /// </remarks>
     public abstract Tensor<T> Predict(Tensor<T> input);
+
+    /// <summary>
+    /// Runs the forward pass through all layers WITHOUT suppressing tape recording.
+    /// Used for tape-based training where engine ops must be recorded.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The network output.</returns>
+    /// <inheritdoc />
+    public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
+    }
 
     /// <summary>
     /// Compiles the forward pass into an optimized executable function via JIT compilation.
@@ -2552,7 +2437,201 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// After training, you can get the loss value using the GetLastLoss() method to see how well the network is learning.
     /// </para>
     /// </remarks>
-    public abstract void Train(Tensor<T> input, Tensor<T> expectedOutput);
+    public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+
+            if (trainableParams.Count > 0)
+            {
+                // Tape-based training: delegates forward/backward/update to TrainWithTape
+                // which uses the configured optimizer via Step(TapeStepContext)
+                TrainWithTape(input, expectedOutput, optimizer: null);
+            }
+            else
+            {
+                // Fallback for networks without ITrainableLayer layers:
+                // use the legacy per-layer UpdateParameters path
+                var opt = GetOrCreateBaseOptimizer();
+                opt.UpdateParameters(Layers);
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Performs tape-based forward/backward pass and delegates the parameter update to the
+    /// provided optimizer via <see cref="IGradientBasedOptimizer{T,TInput,TOutput}.Step"/>.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="expected">The target tensor.</param>
+    /// <param name="optimizer">The optimizer to apply. If null, uses a default Adam optimizer.</param>
+    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        var engine = AiDotNetEngine.Current;
+
+        // Initialize parameter buffer BEFORE collecting params and running the forward pass.
+        var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
+        var paramBuffer = GetOrCreateParameterBuffer(initialParams);
+
+        // Re-collect after buffer initialization — parameter tensor references may have changed
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
+
+        // Forward + loss under tape — uses the buffer-backed view tensors
+        using var tape = new GradientTape<T>();
+        var output = ForwardForTraining(input);
+        var lossTensor = loss.ComputeTapeLoss(output, expected);
+
+        // Compute gradients
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        // Resolve optimizer
+        var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+        // Build context with re-evaluation support and zero-copy buffer
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
+
+        var context = new TapeStepContext<T>(
+            trainableParams, grads, lossValue,
+            input, expected, ComputeForward,
+            (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+            paramBuffer);
+
+        opt.Step(context);
+    }
+
+    /// <summary>
+    /// Overload for backward compatibility — accepts a learning rate instead of an optimizer.
+    /// Creates a temporary GradientDescent optimizer with the specified rate.
+    /// </summary>
+    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate)
+    {
+        // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
+        TrainWithTape(input, expected, optimizer: null);
+    }
+
+    /// <summary>
+    /// Performs tape-based training with a caller-provided loss function.
+    /// Use this for RL agents and other scenarios where the loss is not a standard
+    /// predicted-vs-target comparison (e.g., PPO's clipped surrogate objective).
+    /// </summary>
+    /// <param name="input">The input tensor for the forward pass.</param>
+    /// <param name="computeLoss">
+    /// Function that receives the forward pass output and computes a scalar loss tensor
+    /// using engine ops (tape-tracked). Must return a scalar tensor for gradient computation.
+    /// </param>
+    /// <param name="optimizer">Optional optimizer override. Uses default Adam if null.</param>
+    /// <returns>The scalar loss value for monitoring.</returns>
+    public T TrainWithCustomLoss(
+        Tensor<T> input,
+        Func<Tensor<T>, Tensor<T>> computeLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+            using var tape = new GradientTape<T>();
+            var output = ForwardForTraining(input);
+            var lossTensor = computeLoss(output);
+
+            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
+            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => computeLoss(pred);
+
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, input, ComputeForward, RecomputeLoss);
+
+            opt.Step(context);
+            return lossValue;
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Gets or lazily creates the default optimizer for tape-based training.
+    /// Used when a network doesn't provide its own optimizer.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    /// <summary>
+    /// Persistent optimizer for models using the standard TrainStep pattern.
+    /// Lazily initialized on first use (Adam with default settings).
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// Contiguous parameter buffer for zero-copy flat parameter access.
+    /// Lazily initialized on first training step when trainable parameters are available.
+    /// </summary>
+    private ParameterBuffer<T>? _parameterBuffer;
+
+    /// <summary>
+    /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
+    /// </summary>
+    private ParameterBuffer<T>? GetOrCreateParameterBuffer(IReadOnlyList<Tensor<T>> trainableParams)
+    {
+        if (trainableParams.Count == 0)
+            return null;
+
+        if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Count)
+            return _parameterBuffer;
+
+        // Build buffer from current parameter shapes
+        var shapes = new int[trainableParams.Count][];
+        for (int i = 0; i < trainableParams.Count; i++)
+            shapes[i] = trainableParams[i]._shape;
+
+        var buffer = new ParameterBuffer<T>(shapes);
+
+        // Copy current weights into the buffer
+        buffer.CopyFrom(trainableParams);
+
+        // Replace layer parameter tensors with views into the contiguous buffer.
+        // This makes the buffer the single source of truth — in-place updates by
+        // first-order optimizers automatically reflect in the flat vector, and vice versa.
+        var views = buffer.CreateAllViews();
+        int viewIdx = 0;
+        foreach (var layer in Layers)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                var layerParams = trainable.GetTrainableParameters();
+                var layerViews = new Tensor<T>[layerParams.Count];
+                for (int i = 0; i < layerParams.Count; i++)
+                    layerViews[i] = views[viewIdx++];
+                trainable.SetTrainableParameters(layerViews);
+            }
+        }
+
+        _parameterBuffer = buffer;
+        return buffer;
+    }
 
     /// <summary>
     /// Gets the metadata for this neural network model.
@@ -2587,91 +2666,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             layer.ResetState();
         }
-    }
-
-    /// <summary>
-    /// Computes gradients of the network output with respect to the network input using backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient signal from the output (typically all ones for gradient computation).</param>
-    /// <returns>A tensor containing the gradients with respect to the network input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a backward pass through all layers to compute how the output changes
-    /// with respect to the input. Unlike the standard backward pass which computes gradients for
-    /// parameters, this method computes gradients for the input itself.
-    /// </para>
-    /// <para>
-    /// This is essential for techniques like:
-    /// - Gradient-based input optimization
-    /// - Saliency maps and input attribution
-    /// - WGAN-GP gradient penalty computation
-    /// - Adversarial example generation
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how sensitive the output is to changes in the input.
-    ///
-    /// Normally, backpropagation adjusts the network's internal parameters (weights and biases).
-    /// This method instead computes how the output would change if we modified the input data.
-    ///
-    /// Use cases:
-    /// - Understanding which input features matter most (interpretability)
-    /// - Generating adversarial examples (security research)
-    /// - Computing gradient penalties for training stability (WGAN-GP)
-    ///
-    /// The process:
-    /// 1. Assumes a forward pass has already been run (outputs are cached)
-    /// 2. Starts with a gradient signal at the output (how much we "care" about each output)
-    /// 3. Propagates this gradient backwards through each layer
-    /// 4. Returns the gradient with respect to the original input
-    /// </para>
-    /// </remarks>
-    public virtual Tensor<T> BackwardWithInputGradient(Tensor<T> outputGradient)
-    {
-        if (Layers.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot compute input gradients for a network with no layers.");
-        }
-
-        // Start with the output gradient and propagate backwards through layers
-        var currentGradient = outputGradient;
-
-        // Iterate backwards through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            var layer = Layers[i];
-
-            // Each layer's Backward method takes the gradient from the next layer
-            // and returns the gradient to pass to the previous layer
-            currentGradient = layer.Backward(currentGradient);
-        }
-
-        // The final gradient is with respect to the network input
-        return currentGradient;
-    }
-
-    /// <inheritdoc/>
-    public virtual Vector<T> ComputeInputGradient(Vector<T> input, Vector<T> outputGradient)
-    {
-        // Convert vectors to tensors and use the existing tensor-based implementation
-        var inputTensor = Tensor<T>.FromVector(input);
-        var gradientTensor = Tensor<T>.FromVector(outputGradient);
-
-        // Run forward pass to cache layer activations
-        Predict(inputTensor);
-
-        // Compute input gradient using backpropagation
-        var resultTensor = BackwardWithInputGradient(gradientTensor);
-
-        return resultTensor.ToVector();
-    }
-
-    /// <inheritdoc/>
-    public virtual Tensor<T> ComputeInputGradient(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Run forward pass to cache layer activations
-        Predict(input);
-
-        // Compute input gradient using backpropagation
-        return BackwardWithInputGradient(outputGradient);
     }
 
     /// <summary>
@@ -3519,7 +3513,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int targetClass = -1)
     {
         // Get input shape from the tensor
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // For GradCAM we need feature map shape, which depends on the network architecture
         // Default to a reasonable size; users can override with the helper method directly
@@ -3982,22 +3976,70 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
-        var loss = lossFunction ?? DefaultLossFunction;
-
-        var prediction = Predict(input);
-        var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        var outputGradients = new Tensor<T>(prediction.Shape.ToArray(), lossDerivative);
-
-        Backpropagate(outputGradients);
-
-        var gradients = new List<T>();
-        foreach (var layer in Layers)
+        // Try tape-based gradient computation first (preferred path)
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        if (trainableParams.Count > 0)
         {
-            var layerParams = layer.GetParameters();
-            gradients.AddRange(layerParams.ToArray());
+            try
+            {
+                var engine = AiDotNetEngine.Current;
+
+                using var tape = new GradientTape<T>();
+
+                // Forward pass under tape recording (NOT using Predict which has NoGradScope)
+                var prediction = ForwardForTraining(input);
+
+                // Compute MSE loss via tape-recorded engine ops
+                var diff = engine.TensorSubtract(prediction, target);
+                var squared = engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
+
+                // Reverse-mode AD: compute gradients for all trainable parameters
+                var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+                // Flatten into parameter gradient vector (same ordering as GetParameters)
+                var flatGradients = new List<T>();
+                foreach (var layer in Layers)
+                {
+                    if (layer is ITrainableLayer<T> trainable)
+                    {
+                        foreach (var param in trainable.GetTrainableParameters())
+                        {
+                            if (grads.TryGetValue(param, out var grad))
+                            {
+                                for (int i = 0; i < grad.Length; i++)
+                                    flatGradients.Add(grad[i]);
+                            }
+                            else
+                            {
+                                // No gradient for this param — add zeros
+                                for (int i = 0; i < param.Length; i++)
+                                    flatGradients.Add(NumOps.Zero);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Non-trainable layer: add zeros for its parameter count
+                        for (int i = 0; i < layer.ParameterCount; i++)
+                            flatGradients.Add(NumOps.Zero);
+                    }
+                }
+                return new Vector<T>(flatGradients.ToArray());
+            }
+            catch
+            {
+                // Fall through to legacy backward path
+            }
         }
 
-        return new Vector<T>(gradients.ToArray());
+        // Legacy path: manual backward through layers
+        var loss = lossFunction ?? DefaultLossFunction;
+        var pred = Predict(input);
+        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
+        var outputGradients = new Tensor<T>(pred._shape, lossDerivative);
+        return GetParameterGradients();
     }
 
     /// <summary>

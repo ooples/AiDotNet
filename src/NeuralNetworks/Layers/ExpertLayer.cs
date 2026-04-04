@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -219,7 +219,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// ForwardGpu method. If any layer doesn't support GPU execution, falls back to CPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -238,14 +238,14 @@ public class ExpertLayer<T> : LayerBase<T>
             else
             {
                 // Fall back to CPU for this layer
-                var cpuInput = output.ToTensor();
+                var cpuInput = output;
                 var cpuOutput = layer.Forward(cpuInput);
                 output = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
             }
         }
 
         // Store pre-activation output for backpropagation
-        _lastPreActivationOutput = output.ToTensor();
+        _lastPreActivationOutput = output;
 
         // Apply the expert's activation function if specified
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
@@ -259,69 +259,13 @@ public class ExpertLayer<T> : LayerBase<T>
             else
             {
                 // CPU fallback for unsupported activations
-                var cpuOutput = output.ToTensor();
+                var cpuOutput = output;
                 var activated = ApplyActivation(cpuOutput);
                 output = gpuEngine.UploadToGpu(activated, GpuTensorRole.Activation);
             }
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var grad = outputGradient;
-
-        // Apply activation backward if needed
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T> && _lastPreActivationOutput != null)
-        {
-            var activationType = GetActivationType();
-            if (activationType != FusedActivationType.None)
-            {
-                var preActGpu = gpuEngine.UploadToGpu<T>(_lastPreActivationOutput, GpuTensorRole.Activation);
-                grad = activationType switch
-                {
-                    FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, preActGpu),
-                    FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, preActGpu),
-                    FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, preActGpu),
-                    _ => outputGradient
-                };
-                preActGpu.Dispose();
-            }
-        }
-
-        // Backpropagate through each layer in reverse order
-        for (int i = _layers.Count - 1; i >= 0; i--)
-        {
-            var layer = _layers[i];
-            if (layer is LayerBase<T> layerBase)
-            {
-                var layerType = layerBase.GetType();
-                var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-                if (backwardGpuMethod != null)
-                {
-                    grad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(layerBase, new object[] { grad })
-                        ?? throw new InvalidOperationException("BackwardGpu returned null."));
-                }
-                else
-                {
-                    // Fallback to CPU backward
-                    var cpuGrad = grad.ToTensor();
-                    var cpuInputGrad = layer.Backward(cpuGrad);
-                    grad = gpuEngine.UploadToGpu<T>(cpuInputGrad, GpuTensorRole.Gradient);
-                }
-            }
-        }
-
-        return grad;
     }
 
     /// <summary>
@@ -340,92 +284,6 @@ public class ExpertLayer<T> : LayerBase<T>
         if (ScalarActivation is IdentityActivation<T>)
             return FusedActivationType.None;
         return FusedActivationType.None;
-    }
-
-    /// <summary>
-    /// Calculates gradients by backpropagating through all layers in reverse order.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this expert's output.</param>
-    /// <returns>The gradient of the loss with respect to this expert's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the backward pass by propagating gradients through layers in reverse order.
-    /// Each layer computes gradients for its parameters and passes the input gradient to the previous layer.
-    /// The gradients are stored in each layer for the subsequent parameter update step.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method helps all layers learn from their mistakes by passing error information backward.
-    ///
-    /// The backward pass works in reverse:
-    /// 1. Start with information about how wrong the output was
-    /// 2. Apply the derivative of the expert's activation function
-    /// 3. Pass this error information to the last layer
-    /// 4. That layer calculates how to improve and passes error info to the previous layer
-    /// 5. Continue in reverse until reaching the first layer
-    /// 6. Return the gradient for the input (so earlier layers can learn too)
-    ///
-    /// This is the core of how neural networks learn - each layer figures out how to
-    /// adjust its parameters to reduce the error.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // Apply the derivative of the expert's activation function
-        // Use the stored pre-activation output from the forward pass
-        if (_lastPreActivationOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward pass.");
-        }
-
-        var gradient = ApplyActivationDerivative(_lastPreActivationOutput, outputGradient);
-
-        // Backpropagate through layers in reverse order
-        for (int i = _layers.Count - 1; i >= 0; i--)
-        {
-            gradient = _layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the constituent layers in this expert. Each sublayer will use its own autodiff if available.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Apply the derivative of the expert's activation function
-        if (_lastPreActivationOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before Backward pass.");
-
-        var gradient = ApplyActivationDerivative(_lastPreActivationOutput, outputGradient);
-
-        // Composite layer: backpropagate through layers in reverse order
-        // The sublayers will handle their own autodiff if they support it
-        for (int i = _layers.Count - 1; i >= 0; i--)
-        {
-            gradient = _layers[i].Backward(gradient);
-        }
-
-        return gradient;
     }
 
 
@@ -641,47 +499,5 @@ public class ExpertLayer<T> : LayerBase<T>
 
         return new ExpertLayer<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Check if all inner layers support JIT
-        foreach (var layer in _layers)
-        {
-            if (layer is LayerBase<T> layerBase && !layerBase.SupportsJitCompilation)
-                throw new InvalidOperationException($"Inner layer does not support JIT compilation.");
-        }
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Chain layers sequentially
-        var currentNode = inputNode;
-        foreach (var layer in _layers)
-        {
-            if (layer is LayerBase<T> layerBase)
-            {
-                var layerInputNodes = new List<ComputationNode<T>>();
-                currentNode = layerBase.ExportComputationGraph(layerInputNodes);
-            }
-        }
-
-        // Apply expert's activation function if specified
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            currentNode = ScalarActivation.ApplyToGraph(currentNode);
-        }
-
-        return currentNode;
-    }
-
-    public override bool SupportsJitCompilation =>
-        _layers.All(l => l is LayerBase<T> layerBase && layerBase.SupportsJitCompilation);
 
 }

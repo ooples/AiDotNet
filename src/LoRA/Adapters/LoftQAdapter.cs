@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -836,39 +836,13 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Sum outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass (only updates LoRA if base is frozen).
-    /// </summary>
-    /// <param name="outputGradient">Gradient from next layer.</param>
-    /// <returns>Gradient for previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training works exactly like QLoRA:
-    /// - Only LoRA parameters are updated (if base is frozen)
-    /// - Gradients flow through both paths
-    /// - Memory efficient because base stays frozen
-    ///
-    /// The benefit of LoftQ appears in faster convergence and better final accuracy,
-    /// not in the training process itself.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> inputGradient = base.Backward(outputGradient);
-
-        // Clear dequantized weight cache
-        _dequantizedWeights = null;
-
-        return inputGradient;
     }
 
     /// <summary>

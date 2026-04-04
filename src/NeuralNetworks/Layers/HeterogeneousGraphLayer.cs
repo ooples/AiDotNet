@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Validation;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -282,6 +283,22 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             bias.Fill(NumOps.Zero);
             _biases[nodeType] = bias;
         }
+
+        // Register all trainable parameters for gradient tape discovery
+        // Flatten dictionary values at registration time — edge types are known at construction
+        foreach (var (_, weight) in _edgeTypeWeights)
+            RegisterTrainableParameter(weight, PersistentTensorRole.Weights);
+        foreach (var (_, weight) in _selfLoopWeights)
+            RegisterTrainableParameter(weight, PersistentTensorRole.Weights);
+        foreach (var (_, bias2) in _biases)
+            RegisterTrainableParameter(bias2, PersistentTensorRole.Biases);
+        if (_basisMatrices is not null)
+            RegisterTrainableParameter(_basisMatrices, PersistentTensorRole.Weights);
+        if (_basisCoefficients is not null)
+        {
+            foreach (var (_, coeffs) in _basisCoefficients)
+                RegisterTrainableParameter(coeffs, PersistentTensorRole.Weights);
+        }
     }
 
     /// <summary>
@@ -498,7 +515,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// GPU-accelerated forward pass for HeterogeneousGraphLayer.
     /// Implements type-specific graph convolution with fully GPU-native operations.
     /// </summary>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -782,7 +799,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         var finalBuffer = backend.AllocateBuffer(outputSize);
         backend.Copy(outputBuffer, finalBuffer, outputSize);
         outputBuffer.Dispose();
-        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -972,204 +989,6 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         var flattened = input3D.Reshape([batch * rows, cols]);
         var result = Engine.TensorMatMul(flattened, weights2D);
         return result.Reshape([batch, rows, outputCols]);
-    }
-
-    /// <summary>
-    /// Computes the backward pass for this Heterogeneous Graph layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients for all type-specific parameters including edge type weights,
-    /// self-loop weights, biases, and basis decomposition parameters if enabled.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrices == null || _nodeTypeMap == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        // Handle 2D input [numNodes, features] by adding batch dimension
-        bool was2D = _lastInput.Rank == 2;
-        var input3D = was2D ? _lastInput.Reshape(new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1] }) : _lastInput;
-        var grad3D = was2D ? activationGradient.Reshape(new[] { 1, activationGradient.Shape[0], activationGradient.Shape[1] }) : activationGradient;
-
-        int batchSize = input3D.Shape[0];
-        int numNodes = input3D.Shape[1];
-        int inputFeatures = input3D.Shape[2];
-
-        // Initialize gradient accumulators
-        _edgeTypeWeightsGradients = new Dictionary<string, Tensor<T>>();
-        _selfLoopWeightsGradients = new Dictionary<string, Tensor<T>>();
-        _biasesGradients = new Dictionary<string, Tensor<T>>();
-
-        var inputGradient = new Tensor<T>(input3D.Shape.ToArray());
-        inputGradient.Fill(NumOps.Zero);
-
-        // Compute gradients for edge type weights
-        // Forward: output = normalizedAdj @ input @ weights
-        // Backward: dL/dweights = sum_batch(input^T @ normalizedAdj^T @ grad)
-        //           dL/dinput = normalizedAdj^T @ grad @ weights^T
-        foreach (var edgeType in _metadata.EdgeTypes)
-        {
-            if (!_adjacencyMatrices.TryGetValue(edgeType, out var adjacency))
-                continue;
-
-            var (sourceType, targetType) = _metadata.EdgeTypeSchema[edgeType];
-            int inFeatures = _metadata.NodeTypeFeatures[sourceType];
-
-            // Get or reconstruct weights for this edge type
-            Tensor<T> weights;
-            if (_useBasis && _basisMatrices != null && _basisCoefficients != null)
-            {
-                var coeffs = _basisCoefficients[edgeType];
-                weights = new Tensor<T>([InputFeatures, _outputFeatures]);
-                weights.Fill(NumOps.Zero);
-                for (int b = 0; b < _numBases; b++)
-                {
-                    var basisSlice = ExtractBasisMatrix(_basisMatrices, b, InputFeatures, _outputFeatures);
-                    var scaledBasis = Engine.TensorMultiplyScalar(basisSlice, coeffs[b]);
-                    weights = Engine.TensorAdd(weights, scaledBasis);
-                }
-            }
-            else
-            {
-                weights = _edgeTypeWeights[edgeType];
-            }
-
-            // Normalize adjacency for this edge type
-            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
-
-            // Extract input features for source type
-            var inputSlice = input3D.Shape[2] == inFeatures ? input3D :
-                ExtractInputFeatures(input3D, batchSize, numNodes, inFeatures);
-
-            // Compute weight gradient: dL/dW = sum_batch(input^T @ adj^T @ grad)
-            var weightGradient = new Tensor<T>([inFeatures, _outputFeatures]);
-            weightGradient.Fill(NumOps.Zero);
-
-            // For each batch: adj^T @ grad -> [numNodes, outputFeatures]
-            // Then: input^T @ (adj^T @ grad) -> [inFeatures, outputFeatures]
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Extract batch slices
-                var adjBatch = ExtractBatchSlice(normalizedAdj, b, numNodes, numNodes);
-                var gradBatch = ExtractBatchSlice(grad3D, b, numNodes, _outputFeatures);
-                var inputBatch = ExtractBatchSlice(inputSlice, b, numNodes, inFeatures);
-
-                // adj^T @ grad: transpose adjacency and multiply
-                var adjT = Engine.TensorTranspose(adjBatch);
-                var adjTGrad = Engine.TensorMatMul(adjT, gradBatch); // [numNodes, outputFeatures]
-
-                // input^T @ (adj^T @ grad)
-                var inputT = Engine.TensorTranspose(inputBatch);
-                var batchWeightGrad = Engine.TensorMatMul(inputT, adjTGrad); // [inFeatures, outputFeatures]
-
-                weightGradient = Engine.TensorAdd(weightGradient, batchWeightGrad);
-            }
-
-            _edgeTypeWeightsGradients[edgeType] = weightGradient;
-
-            // Compute input gradient: dL/dinput = adj^T @ grad @ weights^T
-            var weightsT = Engine.TensorTranspose(weights);
-            for (int b = 0; b < batchSize; b++)
-            {
-                var adjBatch = ExtractBatchSlice(normalizedAdj, b, numNodes, numNodes);
-                var gradBatch = ExtractBatchSlice(grad3D, b, numNodes, _outputFeatures);
-
-                // adj^T @ grad
-                var adjT = Engine.TensorTranspose(adjBatch);
-                var adjTGrad = Engine.TensorMatMul(adjT, gradBatch);
-
-                // (adj^T @ grad) @ weights^T
-                var inputGradBatch = Engine.TensorMatMul(adjTGrad, weightsT);
-
-                // Add to input gradient (only first inFeatures)
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < Math.Min(inFeatures, inputFeatures); f++)
-                    {
-                        inputGradient[b, n, f] = NumOps.Add(inputGradient[b, n, f], inputGradBatch[n, f]);
-                    }
-                }
-            }
-        }
-
-        // Compute gradients for self-loop weights and biases
-        // Forward: output += input @ selfWeights + bias (for each node of the type)
-        // Backward: dL/dselfWeights = sum_batch(input^T @ grad) for nodes of this type
-        //           dL/dbias = sum(grad) for nodes of this type
-        //           dL/dinput += grad @ selfWeights^T
-        foreach (var nodeType in _metadata.NodeTypes)
-        {
-            int inFeatures = _metadata.NodeTypeFeatures[nodeType];
-
-            var selfWeightGradient = new Tensor<T>([inFeatures, _outputFeatures]);
-            selfWeightGradient.Fill(NumOps.Zero);
-
-            var biasGradient = new Tensor<T>([_outputFeatures]);
-            biasGradient.Fill(NumOps.Zero);
-
-            var selfWeights = _selfLoopWeights[nodeType];
-            var selfWeightsT = Engine.TensorTranspose(selfWeights);
-
-            // For each node of this type
-            for (int i = 0; i < numNodes; i++)
-            {
-                if (_nodeTypeMap[i] != nodeType)
-                    continue;
-
-                for (int b = 0; b < batchSize; b++)
-                {
-                    // Accumulate bias gradient
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        biasGradient[f] = NumOps.Add(biasGradient[f], grad3D[b, i, f]);
-                    }
-
-                    // Accumulate self-weight gradient: input^T @ grad for this node
-                    for (int inF = 0; inF < inFeatures && inF < inputFeatures; inF++)
-                    {
-                        for (int outF = 0; outF < _outputFeatures; outF++)
-                        {
-                            T contribution = NumOps.Multiply(input3D[b, i, inF], grad3D[b, i, outF]);
-                            selfWeightGradient[inF, outF] = NumOps.Add(selfWeightGradient[inF, outF], contribution);
-                        }
-                    }
-
-                    // Accumulate input gradient: grad @ selfWeights^T
-                    for (int inF = 0; inF < inFeatures && inF < inputFeatures; inF++)
-                    {
-                        T gradSum = NumOps.Zero;
-                        for (int outF = 0; outF < _outputFeatures; outF++)
-                        {
-                            gradSum = NumOps.Add(gradSum, NumOps.Multiply(grad3D[b, i, outF], selfWeights[inF, outF]));
-                        }
-                        inputGradient[b, i, inF] = NumOps.Add(inputGradient[b, i, inF], gradSum);
-                    }
-                }
-            }
-
-            _selfLoopWeightsGradients[nodeType] = selfWeightGradient;
-            _biasesGradients[nodeType] = biasGradient;
-        }
-
-        // Restore gradient shape to match original input shape
-        if (was2D)
-        {
-            return inputGradient.Reshape(new[] { numNodes, inputFeatures });
-        }
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -1411,195 +1230,5 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         _biasesGradients = null;
         _basisMatricesGradient = null;
         _basisCoefficientsGradients = null;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count < 1)
-        {
-            throw new ArgumentException("HeterogeneousGraphLayer requires at least 1 input node (node features).");
-        }
-
-        if (_adjacencyMatrices == null || _nodeTypeMap == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrices and node type map must be set before exporting computation graph. " +
-                "Call SetAdjacencyMatrices() and SetNodeTypeMap() first.");
-        }
-
-        var inputNode = inputNodes[0]; // Node features [batch, numNodes, inputFeatures]
-        var inputShape = inputNode.Value.Shape.ToArray();
-        int batchSize = inputShape[0];
-        int numNodes = inputShape[1];
-
-        // Create output accumulator initialized to zero
-        var outputTensor = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
-        outputTensor.Fill(NumOps.Zero);
-        var outputNode = TensorOperations<T>.Constant(outputTensor, "hgnn_output_init");
-
-        // Process each edge type
-        foreach (var edgeType in _metadata.EdgeTypes)
-        {
-            if (!_adjacencyMatrices.TryGetValue(edgeType, out var adjacency))
-                continue;
-
-            var (sourceType, _) = _metadata.EdgeTypeSchema[edgeType];
-            int inFeatures = _metadata.NodeTypeFeatures[sourceType];
-
-            // Get weights for this edge type
-            Tensor<T> weights;
-            if (_useBasis && _basisMatrices != null && _basisCoefficients != null)
-            {
-                // Reconstruct weights from basis decomposition
-                var coeffs = _basisCoefficients[edgeType];
-                weights = new Tensor<T>(new int[] { InputFeatures, _outputFeatures });
-                weights.Fill(NumOps.Zero);
-
-                for (int b = 0; b < _numBases; b++)
-                {
-                    var basisSlice = ExtractBasisMatrix(_basisMatrices, b, InputFeatures, _outputFeatures);
-                    var scaledBasis = Engine.TensorMultiplyScalar(basisSlice, coeffs[b]);
-                    weights = Engine.TensorAdd(weights, scaledBasis);
-                }
-            }
-            else
-            {
-                weights = _edgeTypeWeights[edgeType];
-            }
-
-            // Create constant nodes for weights and normalized adjacency
-            var weightsNode = TensorOperations<T>.Constant(weights, $"edge_weights_{edgeType}");
-
-            // Normalize and store adjacency as constant
-            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
-            var adjNode = TensorOperations<T>.Constant(normalizedAdj, $"adj_{edgeType}");
-
-            // Extract input features if needed (or use full input if dimensions match)
-            ComputationNode<T> inputSlice;
-            if (inputShape[2] == inFeatures)
-            {
-                inputSlice = inputNode;
-            }
-            else
-            {
-                // Extract relevant input features at export time by slicing
-                var extractedFeatures = ExtractInputFeatures(inputNode.Value, batchSize, numNodes, inFeatures);
-                inputSlice = TensorOperations<T>.Constant(extractedFeatures, $"input_slice_{edgeType}");
-            }
-
-            // Compute: normalizedAdj @ inputSlice @ weights
-            // First: inputSlice @ weights (batched matrix multiply across last dimensions)
-            var xw = TensorOperations<T>.BatchMatrixMultiply(inputSlice, weightsNode);
-
-            // Then: adj @ xw for message passing
-            var convOutput = TensorOperations<T>.BatchMatrixMultiply(adjNode, xw);
-
-            // Accumulate to output
-            outputNode = TensorOperations<T>.Add(outputNode, convOutput);
-        }
-
-        // Add self-loops and biases per node type
-        // For JIT compilation, we precompute the self-loop contribution for all nodes
-        foreach (var nodeType in _metadata.NodeTypes)
-        {
-            var selfWeights = _selfLoopWeights[nodeType];
-            var bias = _biases[nodeType];
-            int inFeatures = _metadata.NodeTypeFeatures[nodeType];
-
-            // Create constant nodes
-            var selfWeightsNode = TensorOperations<T>.Constant(selfWeights, $"self_weights_{nodeType}");
-            var biasNode = TensorOperations<T>.Constant(bias, $"bias_{nodeType}");
-
-            // Create a mask tensor for nodes of this type
-            var nodeMask = new Tensor<T>(new int[] { batchSize, numNodes, 1 });
-            nodeMask.Fill(NumOps.Zero);
-            for (int n = 0; n < numNodes; n++)
-            {
-                if (_nodeTypeMap.TryGetValue(n, out var type) && type == nodeType)
-                {
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        nodeMask[b, n, 0] = NumOps.One;
-                    }
-                }
-            }
-            var maskNode = TensorOperations<T>.Constant(nodeMask, $"node_mask_{nodeType}");
-
-            // For nodes of this type: compute input @ selfWeights and add bias
-            // Since we need type-specific extraction, compute it for all nodes
-            // then mask to keep only relevant nodes
-
-            // Extract features for this node type
-            ComputationNode<T> typeInput;
-            if (inputShape[2] == inFeatures)
-            {
-                typeInput = inputNode;
-            }
-            else
-            {
-                var extractedFeatures = ExtractInputFeatures(inputNode.Value, batchSize, numNodes, inFeatures);
-                typeInput = TensorOperations<T>.Constant(extractedFeatures, $"type_input_{nodeType}");
-            }
-
-            // Compute self-loop transformation: input @ selfWeights
-            var selfOutput = TensorOperations<T>.BatchMatrixMultiply(typeInput, selfWeightsNode);
-
-            // Broadcast and add bias
-            var biasBroadcast = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        biasBroadcast[b, n, f] = bias[f];
-                    }
-                }
-            }
-            var biasBroadcastNode = TensorOperations<T>.Constant(biasBroadcast, $"bias_broadcast_{nodeType}");
-            selfOutput = TensorOperations<T>.Add(selfOutput, biasBroadcastNode);
-
-            // Mask to only keep contribution from nodes of this type
-            // Broadcast mask to match output features
-            var maskBroadcast = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    T maskVal = nodeMask[b, n, 0];
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        maskBroadcast[b, n, f] = maskVal;
-                    }
-                }
-            }
-            var maskBroadcastNode = TensorOperations<T>.Constant(maskBroadcast, $"mask_broadcast_{nodeType}");
-
-            // Apply mask: selfOutput * mask (element-wise)
-            var maskedSelfOutput = TensorOperations<T>.ElementwiseMultiply(selfOutput, maskBroadcastNode);
-
-            // Accumulate to output
-            outputNode = TensorOperations<T>.Add(outputNode, maskedSelfOutput);
-        }
-
-        // Apply activation function
-        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
-        {
-            if (ScalarActivation.SupportsJitCompilation)
-            {
-                outputNode = ScalarActivation.ApplyToGraph(outputNode);
-            }
-            else
-            {
-                var activated = ScalarActivation.Activate(outputNode.Value);
-                outputNode = TensorOperations<T>.Constant(activated, "activated_output");
-            }
-        }
-
-        return outputNode;
     }
 }

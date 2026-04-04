@@ -139,4 +139,14 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Wasserstein = -mean(target * predicted)
+        var product = Engine.TensorMultiply(target, predicted);
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
+    }
 }

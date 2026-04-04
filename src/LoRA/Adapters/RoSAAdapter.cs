@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -459,7 +459,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> sparseOutput = new Tensor<T>(new[] { batchSize, outputSize }, sparseOutputData);
 
         // 4. Sum all three outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -468,144 +468,6 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through RoSA adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for all three components:
-    /// 1. LoRA component (via LoRA layer's backward)
-    /// 2. Sparse component (direct gradient computation)
-    /// 3. Base layer (if not frozen)
-    ///
-    /// Gradients are accumulated and input gradients are summed.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is where RoSA learns from errors.
-    ///
-    /// The backward pass tells each component how to improve:
-    /// - LoRA component: Update low-rank matrices A and B
-    /// - Sparse component: Update the sparse weight matrix
-    /// - Base layer: Update if not frozen (usually frozen)
-    ///
-    /// After this, UpdateParameters() will apply the learning using these gradients.
-    /// The sparse gradients will be pruned to maintain sparsity.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int batchSize = outputGradient.Shape[0];
-        int outputSize = GetOutputShape()[0];
-        int inputSize = GetInputShape()[0];
-
-        // 1. Backward through LoRA layer
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // 2. Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // 3. Compute gradients for sparse component
-        // Sparse gradient: dL/dW_sparse = output_gradient^T @ input
-        // Convert output gradient to matrix
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        // Compute sparse weight gradients using cached input from forward pass
-        // Formula: dL/dW_sparse[i,j] = sum_over_batch(gradMatrix[b,i] * input[b,j]) / batchSize
-        if (_cachedInputMatrix == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        _sparseGradients = new Matrix<T>(outputSize, inputSize);
-
-        // Proper gradient computation with input activation
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T gradSum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    // Multiply output gradient by input activation
-                    T term = NumOps.Multiply(gradMatrix[b, i], _cachedInputMatrix[b, j]);
-                    gradSum = NumOps.Add(gradSum, term);
-                }
-                // Average over batch
-                _sparseGradients[i, j] = NumOps.Divide(gradSum, NumOps.FromDouble(batchSize));
-            }
-        }
-
-        // 4. Compute input gradient for sparse component
-        // input_grad_sparse = output_gradient @ sparse_weights
-        Matrix<T> sparseInputGradMatrix = gradMatrix.Multiply(_sparseWeights);
-
-        // Convert to tensor
-        Vector<T> sparseInputGradData = new Vector<T>(batchSize * inputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                sparseInputGradData[idx++] = sparseInputGradMatrix[i, j];
-            }
-        }
-        Tensor<T> sparseInputGrad = new Tensor<T>(new[] { batchSize, inputSize }, sparseInputGradData);
-
-        // 5. Sum input gradients from all three paths
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            T sum = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-            sum = NumOps.Add(sum, sparseInputGrad[i]);
-            inputGrad[i] = sum;
-        }
-
-        // 6. Pack parameter gradients for optimizer
-        // Order: [base_grads (if not frozen) | lora_grads | sparse_grads]
-        ParameterGradients = new Vector<T>(ParameterCount);
-        int gradIdx = 0;
-
-        // Pack base layer gradients (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[gradIdx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[gradIdx++] = loraGrads[i];
-        }
-
-        // Pack sparse weight gradients
-        if (_sparseGradients != null)
-        {
-            for (int i = 0; i < _sparseGradients.Rows; i++)
-            {
-                for (int j = 0; j < _sparseGradients.Columns; j++)
-                {
-                    ParameterGradients[gradIdx++] = _sparseGradients[i, j];
-                }
-            }
-        }
-
-        return inputGrad;
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -466,7 +466,6 @@ public class TimesNet<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -786,70 +785,6 @@ public class TimesNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the TimesNet network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through final norm
-        if (_finalNorm is not null)
-        {
-            grad = _finalNorm.Backward(grad);
-        }
-
-        // Backward through TimesBlock layers (in reverse order)
-        int ffnIdx = _ffnLayers.Count - 1;
-        for (int i = _convLayers.Count - 1; i >= 0; i--)
-        {
-            // Layer norm backward
-            if (i < _normLayers.Count)
-                grad = _normLayers[i].Backward(grad);
-
-            // Dropout backward
-            if (i < _dropoutLayers.Count)
-                grad = _dropoutLayers[i].Backward(grad);
-
-            // FFN backward (2 layers)
-            if (ffnIdx >= 0)
-                grad = _ffnLayers[ffnIdx--].Backward(grad);
-            if (ffnIdx >= 0)
-                grad = _ffnLayers[ffnIdx--].Backward(grad);
-
-            // Conv backward: reshape grad to NCHW [B, C, 1, S]
-            int batchSize = grad.Shape[0];
-            int seqLen = grad.Shape[1];
-            int channels = grad.Shape[2];
-            var convGradInput = grad.Transpose(new[] { 0, 2, 1 }).Reshape(batchSize, channels, 1, seqLen);
-            var convGradOutput = _convLayers[i].Backward(convGradInput);
-
-            // Reshape back to [B, S, C] for previous layers
-            int outSeqLen = convGradOutput.Shape[3];
-            int outChannels = convGradOutput.Shape[1];
-            grad = convGradOutput.Transpose(new[] { 0, 3, 1, 2 }).Reshape(batchSize, outSeqLen, outChannels);
-        }
-
-        // Backward through embedding
-        if (_embeddingLayer is not null)
-        {
-            _embeddingLayer.Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <param name="input">Input historical data.</param>
@@ -889,7 +824,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -966,7 +901,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape.ToArray());
+            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -1004,7 +939,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape.ToArray());
+            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

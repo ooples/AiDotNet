@@ -253,22 +253,21 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // For single-frame prediction, use zero mask (no inpainting)
-        var mask = new Tensor<T>(input.Shape.ToArray());
+        var mask = new Tensor<T>(input._shape);
         return InpaintFrame(input, mask, input, input, mask, mask);
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var predicted = Predict(input);
-        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
-
-        BackwardPass(lossGradient);
-
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
+        SetTrainingMode(true);
+        try
         {
-            layer.UpdateParameters(lr);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -357,7 +356,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
             // Multi-head self-attention
             var qkv = _transformerQKV[i].Forward(normed);
-            var attended = MultiHeadSelfAttention(qkv, transformedFeatures.Shape.ToArray());
+            var attended = MultiHeadSelfAttention(qkv, transformedFeatures._shape);
             attended = _transformerProj[i].Forward(attended);
 
             // Residual connection
@@ -451,7 +450,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -484,7 +483,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -513,7 +512,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var result = new Tensor<T>(original.Shape.ToArray());
+        var result = new Tensor<T>(original._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -605,7 +604,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
@@ -849,34 +848,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         return tensor.Rank == 4 ? tensor : AddBatchDimension(tensor);
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        var outputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        gradient = outputConv.Backward(gradient);
-
-        for (int i = _imageDecoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _imageDecoder[i].Backward(gradient);
-        }
-
-        // Backward through transformer blocks (in reverse order)
-        for (int i = _numTransformerBlocks - 1; i >= 0; i--)
-        {
-            // Backward through FFN (contract then expand)
-            gradient = _transformerFFN[i * 2 + 1].Backward(gradient);
-            gradient = _transformerFFN[i * 2].Backward(gradient);
-
-            // Backward through attention projection and QKV
-            gradient = _transformerProj[i].Backward(gradient);
-            gradient = _transformerQKV[i].Backward(gradient);
-        }
-
-        for (int i = _imageEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _imageEncoder[i].Backward(gradient);
-        }
-    }
-
     #endregion
 
     #region Abstract Implementation
@@ -885,6 +856,15 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _flowEncoder) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        foreach (var layer in _imageEncoder) Layers.Add(layer);
+        foreach (var layer in _imageDecoder) Layers.Add(layer);
+        foreach (var layer in _transformerQKV) Layers.Add(layer);
+        foreach (var layer in _transformerProj) Layers.Add(layer);
+        foreach (var layer in _transformerFFN) Layers.Add(layer);
+        if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
     /// <inheritdoc/>

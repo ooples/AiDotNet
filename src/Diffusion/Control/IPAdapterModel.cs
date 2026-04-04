@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -683,7 +683,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var span = x.AsSpan();
         var resultSpan = result.AsWritableSpan();
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -65,6 +65,21 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// Configuration options for the Locally Weighted Regression algorithm.
     /// </summary>
     private readonly LocallyWeightedRegressionOptions _options;
+
+    /// <summary>
+    /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
+    /// </summary>
+    private const double ZeroWeightTolerance = 1e-15;
+
+    /// <summary>
+    /// Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityStrengthScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the ridge penalty when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityStrength = 1e-6;
 
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
@@ -263,6 +278,22 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Compute weights for each training point
         var weights = ComputeWeights(input);
 
+        // Fail fast if the model hasn't been trained yet
+        if (_xTrain.Rows == 0 || _yTrain.Length == 0)
+        {
+            throw new InvalidOperationException("Call Train() before Predict().");
+        }
+
+        // If all weights are zero (query point is outside bandwidth of all training data),
+        // fall back to the global mean of y to avoid NaN from a zero-weight solve.
+        double totalWeight = 0;
+        for (int i = 0; i < weights.Length; i++)
+            totalWeight += NumOps.ToDouble(weights[i]);
+        if (totalWeight < ZeroWeightTolerance)
+        {
+            return _yTrain.Mean();
+        }
+
         // Create the weighted design matrix and target vector
         // For weighted least squares, we multiply each row of X by its corresponding weight
         // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
@@ -275,16 +306,18 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Solve the weighted least squares problem
         var xTx = weightedX.Transpose().Multiply(weightedX);
 
-        // Add ridge regularization penalty to ensure numerical stability
+        // Add ridge regularization penalty to ensure numerical stability.
         // The tricube kernel can produce many zero weights, making X^T*W*X nearly singular.
-        // We always add a minimum regularization (1e-10) to ensure the matrix is invertible,
-        // plus any user-specified regularization strength.
-        var minRegularization = 1e-10;
-        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+        // Scale regularization relative to diagonal magnitude.
+        double diagMean = 0;
+        for (int i = 0; i < xTx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
+        diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
+        var stabilityStrength = NumOps.FromDouble(
+            Math.Max(diagMean * StabilityStrengthScale, MinimumStabilityStrength));
         for (int i = 0; i < xTx.Rows; i++)
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], effectiveStrength);
+            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
         }
 
         var xTy = weightedX.Transpose().Multiply(weightedY);
@@ -530,100 +563,5 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     {
         get => _options.UseSoftMode;
         set => _options.UseSoftMode = value;
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when <see cref="UseSoftMode"/> is enabled and training data is available;
-    /// <c>false</c> otherwise.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// When <see cref="UseSoftMode"/> is enabled, LWR can be exported as a differentiable
-    /// computation graph using attention-weighted averaging. The training data is embedded
-    /// as constants in the computation graph.
-    /// </para>
-    /// <para>
-    /// When <see cref="UseSoftMode"/> is disabled, JIT compilation is not supported because
-    /// traditional LWR requires solving a weighted least squares problem for each query point,
-    /// which cannot be represented as a static computation graph.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => UseSoftMode && _xTrain.Rows > 0;
-
-    /// <summary>
-    /// Exports the model's computation as a graph of operations.
-    /// </summary>
-    /// <param name="inputNodes">The input nodes for the computation graph.</param>
-    /// <returns>The root node of the exported computation graph.</returns>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when <see cref="UseSoftMode"/> is false.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no training data is available.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// When soft mode is enabled, this exports the LWR model as a differentiable computation
-    /// graph using <see cref="TensorOperations{T}.SoftLocallyWeighted"/> operations. The training data
-    /// (features and targets) are embedded as constants in the graph.
-    /// </para>
-    /// <para>
-    /// The soft LWR approximation computes:
-    /// - distances[i] = ||input - xTrain[i]||²
-    /// - weights = softmax(-distances / bandwidth)
-    /// - output = Σ weights[i] * yTrain[i]
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!UseSoftMode)
-        {
-            throw new NotSupportedException(
-                "LocallyWeightedRegression does not support JIT compilation in traditional mode because it " +
-                "solves a new weighted least squares problem for each query point.\n\n" +
-                "To enable JIT compilation, set UseSoftMode = true to use soft (differentiable) LWR " +
-                "with attention-weighted outputs.");
-        }
-
-        if (_xTrain.Rows == 0)
-        {
-            throw new InvalidOperationException(
-                "Cannot export computation graph: the LWR model has not been trained. " +
-                "Call Train() first to store the training data.");
-        }
-
-        int numFeatures = _xTrain.Columns;
-        int numSamples = _xTrain.Rows;
-
-        // Create input variable node
-        var inputTensor = new Tensor<T>(new[] { numFeatures });
-        var input = TensorOperations<T>.Variable(inputTensor, "input");
-        inputNodes.Add(input);
-
-        // Create constants for training features
-        var xTrainTensor = new Tensor<T>(new[] { numSamples, numFeatures });
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                xTrainTensor[i * numFeatures + j] = _xTrain[i, j];
-            }
-        }
-        var xTrainNode = TensorOperations<T>.Constant(xTrainTensor, "x_train");
-
-        // Create constants for training targets
-        var yTrainTensor = new Tensor<T>(new[] { numSamples });
-        for (int i = 0; i < numSamples; i++)
-        {
-            yTrainTensor[i] = _yTrain[i];
-        }
-        var yTrainNode = TensorOperations<T>.Constant(yTrainTensor, "y_train");
-
-        // Use SoftLocallyWeighted operation with bandwidth parameter
-        var bandwidth = NumOps.FromDouble(_options.Bandwidth);
-        return TensorOperations<T>.SoftLocallyWeighted(input, xTrainNode, yTrainNode, bandwidth);
     }
 }

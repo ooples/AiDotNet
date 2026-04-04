@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -352,7 +352,7 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
             for (int j = 0; j < heatmapWidth; j++)
             {
                 // Create occluded version
-                var occluded = new Tensor<T>(input.Shape.ToArray());
+                var occluded = new Tensor<T>(input._shape);
                 var occSpan = occluded.Data.Span;
                 inputSpan.CopyTo(occSpan);
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -135,19 +135,6 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Power(baseValue, exponent);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.ISRU provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// ISRU supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients: (1 + alpha * x²)^(-3/2).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

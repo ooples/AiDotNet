@@ -26,6 +26,7 @@ using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LanguageModels;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
@@ -3302,11 +3303,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
-        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        // Create gradient function from neural network if available, otherwise use numerical
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
 
         var explainer = new IntegratedGradientsExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             instance.Length,
             numSteps,
             baseline,
@@ -3470,11 +3478,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
-        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        // Create gradient function from neural network if available
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
 
         var explainer = new GradientSHAPExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             backgroundData,
             numSamples,
             numSteps,
@@ -3561,11 +3576,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
-        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        // Create gradient function from neural network if available
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
 
         var explainer = new SaliencyMapExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             instance.Length,
             method,
             smoothGradSamples,
@@ -3789,78 +3811,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         };
     }
 
-    /// <summary>
-    /// Attempts to create a gradient function from the model if it supports gradients.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Gradients tell us how the output changes with respect to
-    /// small changes in each input feature. If the model doesn't support analytical gradients,
-    /// this returns null and the explainer will fall back to numerical approximation.</para>
-    /// </remarks>
-    private Func<Vector<T>, Vector<T>>? TryCreateGradientFunction()
-    {
-        // Check if the model supports gradient computation via the existing IInputGradientComputable interface
-        // This interface is already implemented by NeuralNetworkBase<T>
-        if (Model is IInputGradientComputable<T> gradientComputable)
-        {
-            return (Vector<T> input) =>
-            {
-                // For saliency/attribution, we compute gradient of max output with respect to input
-                // First get the prediction to determine output size
-                var modelInput = ConvertVectorToInput(input);
-                var output = EnsureModel.Predict(modelInput);
-
-                // Create output gradient: gradient of loss is 1 at predicted class
-                Vector<T> outputGradient;
-                var numOps = MathHelper.GetNumericOperations<T>();
-
-                if (output is Vector<T> outputVec)
-                {
-                    // For multi-output: use gradient that's 1 for max output, 0 elsewhere
-                    var gradArray = new T[outputVec.Length];
-                    int maxIdx = 0;
-                    T maxVal = outputVec[0];
-                    for (int i = 1; i < outputVec.Length; i++)
-                    {
-                        if (numOps.GreaterThan(outputVec[i], maxVal))
-                        {
-                            maxVal = outputVec[i];
-                            maxIdx = i;
-                        }
-                    }
-                    gradArray[maxIdx] = numOps.One;
-                    outputGradient = new Vector<T>(gradArray);
-                }
-                else if (output is Tensor<T> outputTensor)
-                {
-                    var outVec = outputTensor.ToVector();
-                    var gradArray = new T[outVec.Length];
-                    int maxIdx = 0;
-                    T maxVal = outVec[0];
-                    for (int i = 1; i < outVec.Length; i++)
-                    {
-                        if (numOps.GreaterThan(outVec[i], maxVal))
-                        {
-                            maxVal = outVec[i];
-                            maxIdx = i;
-                        }
-                    }
-                    gradArray[maxIdx] = numOps.One;
-                    outputGradient = new Vector<T>(gradArray);
-                }
-                else
-                {
-                    // Single output: gradient is just 1
-                    outputGradient = new Vector<T>(new[] { numOps.One });
-                }
-
-                return gradientComputable.ComputeInputGradient(input, outputGradient);
-            };
-        }
-
-        // For other model types, return null to use numerical approximation
-        return null;
-    }
 
     /// <summary>
     /// Creates a prediction function for tensor input/output (used by CNN explainers).
@@ -4199,49 +4149,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         };
     }
 
-    /// <summary>
-    /// Creates a gradient function that takes a vector and output index, returns gradients.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Some explainers need gradients with respect to a specific
-    /// output (e.g., a specific class probability). This function computes gradients for
-    /// the specified output index.</para>
-    /// </remarks>
-    private Func<Vector<T>, int, Vector<T>>? TryCreateIndexedGradientFunction()
-    {
-        // Use the existing IInputGradientComputable interface implemented by NeuralNetworkBase<T>
-        if (Model is IInputGradientComputable<T> gradientComputable)
-        {
-            return (Vector<T> input, int outputIndex) =>
-            {
-                // Get output size from a forward pass
-                var modelInput = ConvertVectorToInput(input);
-                var output = EnsureModel.Predict(modelInput);
-                var numOps = MathHelper.GetNumericOperations<T>();
-
-                // Create output gradient that's 1 at the specified index, 0 elsewhere
-                int outputSize;
-                if (output is Vector<T> outputVec)
-                    outputSize = outputVec.Length;
-                else if (output is Tensor<T> outputTensor)
-                    outputSize = outputTensor.ToVector().Length;
-                else
-                    outputSize = 1;
-
-                var gradArray = new T[outputSize];
-                if (outputIndex >= 0 && outputIndex < outputSize)
-                    gradArray[outputIndex] = numOps.One;
-                else if (outputSize > 0)
-                    gradArray[0] = numOps.One; // Fallback to first output
-
-                var outputGradient = new Vector<T>(gradArray);
-                return gradientComputable.ComputeInputGradient(input, outputGradient);
-            };
-        }
-
-        // Return null to use numerical approximation
-        return null;
-    }
 
     /// <summary>
     /// Creates a function to get feature maps at a specific layer for a given class.

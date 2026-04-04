@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -140,7 +140,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor on GPU.</param>
     /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -154,7 +154,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length < 3)
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
@@ -162,7 +162,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             addedBatch = true;
-            input4D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+            input4D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -174,7 +174,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+            input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input4D.Shape.ToArray();
@@ -198,70 +198,13 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output.Shape[3];
-            return output.CreateView(0, outputShape);
+            return output.Reshape(outputShape);
         }
         if (addedBatch)
         {
-            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
         }
         return output;
-    }
-
-    /// <summary>
-    /// Performs GPU-resident backward pass of max pooling.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the output on GPU.</param>
-    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_gpuIndices == null || _gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        IGpuTensor<T> gradient4D;
-
-        if (rank == 3)
-        {
-            gradient4D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
-        }
-        else if (rank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.CreateView(0, new[] { flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1] });
-        }
-
-        var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Stride, Stride };
-
-        var inputGrad = gpuEngine.MaxPool2DBackwardGpu<T>(gradient4D, _gpuIndices, _gpuInputShape, poolSizeArr, strideArr);
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            var restoreShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 3; d++)
-                restoreShape[d] = _originalInputShape[d];
-            restoreShape[_originalInputShape.Length - 3] = inputGrad.Shape[1];
-            restoreShape[_originalInputShape.Length - 2] = inputGrad.Shape[2];
-            restoreShape[_originalInputShape.Length - 1] = inputGrad.Shape[3];
-            return inputGrad.CreateView(0, restoreShape);
-        }
-        if (_addedBatchDimension)
-        {
-            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
-        }
-        return inputGrad;
     }
 
     /// <summary>
@@ -382,176 +325,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the max pooling operation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> During training, neural networks need to adjust their parameters based on
-    /// how much error they made. This adjustment flows backward through the network.
-    ///
-    /// In max pooling, only the maximum value from each window contributed to the output.
-    /// So during the backward pass, the gradient only flows back to that maximum value's position.
-    /// All other positions receive zero gradient because they didn't contribute to the output.
-    ///
-    /// Think of it like giving credit only to the team member who contributed the most to a project.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (_maxIndices == null)
-            throw new InvalidOperationException("Max indices not available for backward pass.");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        Tensor<T> gradient4D;
-        int[] inputShape4D;
-
-        if (rank == 3)
-        {
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-            inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
-        }
-        else if (rank == 4)
-        {
-            gradient4D = outputGradient;
-            inputShape4D = _lastInput.Shape.Length == 3
-                ? new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
-                : _lastInput.Shape.ToArray();
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-
-            int inputFlatBatch = 1;
-            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
-                inputFlatBatch *= _lastInput.Shape[d];
-            inputShape4D = new int[] { inputFlatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1] };
-        }
-
-        var poolSizeArr = new int[] { PoolSize, PoolSize };
-        var strideArr = new int[] { Stride, Stride };
-
-        var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
-
-        // Restore to original input shape
-        return inputGradient4D.Reshape(_lastInput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a MaxPool2D operation using automatic differentiation
-    /// and propagates gradients through the computation graph. It serves as an alternative
-    /// reference implementation to the manual engine-backed backward pass.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle both 3D and 4D input
-        Tensor<T> input4D;
-        Tensor<T> gradient4D;
-
-        if (_lastInput.Shape.Length == 3)
-        {
-            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
-            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
-            gradient4D = outputGradient.Shape.Length == 3
-                ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
-                : outputGradient;
-        }
-        else
-        {
-            // Already 4D
-            input4D = _lastInput;
-            gradient4D = outputGradient;
-        }
-
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
-
-        // Forward pass using autodiff MaxPool2D operation
-        var poolSize = new int[] { PoolSize, PoolSize };
-        var strideArr = new int[] { Stride, Stride };
-        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strideArr);
-
-        // Set output gradient
-        outputNode.Gradient = gradient4D;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract input gradient and reshape back to original dimensions
-        var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape.ToArray()) : inputGrad4D;
-    }
-
-    /// <summary>
     /// Saves the layer's configuration to a binary stream.
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
@@ -667,33 +440,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         _gpuIndices?.Dispose();
         _gpuIndices = null;
         _gpuInputShape = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        var poolSize = GetPoolSize();
-        var strides = GetStride();
-
-        var maxPoolNode = TensorOperations<T>.MaxPool2D(inputNode, poolSize: poolSize, strides: strides);
-        return maxPoolNode;
-    }
-
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return InputShape != null && InputShape.Length > 0;
-        }
     }
 
     internal override Dictionary<string, string> GetMetadata()

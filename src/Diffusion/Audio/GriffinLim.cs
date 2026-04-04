@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
@@ -412,7 +412,7 @@ public class GriffinLim<T>
     /// </summary>
     private static Tensor<T> ClonePhase(Tensor<T> phase)
     {
-        var clone = new Tensor<T>(phase.Shape.ToArray());
+        var clone = new Tensor<T>(phase._shape);
         phase.Data.Span.CopyTo(clone.Data.Span);
         return clone;
     }
@@ -430,7 +430,7 @@ public class GriffinLim<T>
     /// </summary>
     private static Tensor<T> ExtractPhase(Tensor<Complex<T>> complex)
     {
-        var phase = new Tensor<T>(complex.Shape.ToArray());
+        var phase = new Tensor<T>(complex._shape);
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
@@ -445,7 +445,7 @@ public class GriffinLim<T>
     /// </summary>
     private static Tensor<Complex<T>> PolarToComplex(Tensor<T> magnitude, Tensor<T> phase)
     {
-        var complex = new Tensor<Complex<T>>(magnitude.Shape.ToArray());
+        var complex = new Tensor<Complex<T>>(magnitude._shape);
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
@@ -469,7 +469,7 @@ public class GriffinLim<T>
     /// </remarks>
     private Tensor<T> ApplyMomentum(Tensor<T> newPhase, Tensor<T> previousPhase, Tensor<T> currentPhase)
     {
-        var result = new Tensor<T>(newPhase.Shape.ToArray());
+        var result = new Tensor<T>(newPhase._shape);
         T momentumT = NumOps.FromDouble(_momentum);
 
         for (int i = 0; i < newPhase.Data.Length; i++)

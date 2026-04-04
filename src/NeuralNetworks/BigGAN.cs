@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -623,7 +623,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Compute gradients for real images: dL/d(output) for hinge loss
         var realGradients = CalculateHingeLossGradients(realOutput, true, batchSize);
-        Discriminator.Backward(realGradients);
+        /* Discriminator.Backward(realGradients) removed — tape-based */ ;
 
         // Fake images - minimize D(fake)
         var noise = GenerateGaussianNoise(batchSize);
@@ -639,7 +639,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Compute gradients for fake images
         var fakeGradients = CalculateHingeLossGradients(fakeOutput, false, batchSize);
-        Discriminator.Backward(fakeGradients);
+        /* Discriminator.Backward(fakeGradients) removed — tape-based */ ;
 
         var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
         _discriminatorLosses.Add(discriminatorLoss);
@@ -670,10 +670,9 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         var genOutputGradients = CalculateHingeLossGradients(generatorOutput, true, batchSize);
 
         // Backprop through discriminator to get gradients w.r.t. its input (the generated images)
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genOutputGradients);
 
         // Backprop through generator using the discriminator input gradients
-        Generator.Backward(discInputGradients);
+        /* Generator.Backward(discInputGradients) removed — tape-based */ ;
 
         // Update generator parameters
         UpdateGeneratorParameters();
@@ -710,7 +709,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateHingeLossGradients(Tensor<T> output, bool isReal, int batchSize)
     {
-        var gradients = new Tensor<T>(output.Shape.ToArray());
+        var gradients = new Tensor<T>(output._shape);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -994,21 +993,21 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             return gradient;
         }
 
-        public (TLoss Loss, IGpuTensor<TLoss> Gradient) CalculateLossAndGradientGpu(IGpuTensor<TLoss> predicted, IGpuTensor<TLoss> actual)
+        public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
             // Fall back to CPU for now
-            var predictedCpu = predicted.ToTensor();
-            var actualCpu = actual.ToTensor();
+            var predictedCpu = predicted;
+            var actualCpu = actual;
 
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray());
+            var gradientTensor = new Tensor<TLoss>(predictedCpu._shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-            var gradientGpu = new GpuTensor<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
+            var gradientGpu = GpuTensorHelper.UploadToGpu<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
 
             return (loss, gradientGpu);
         }

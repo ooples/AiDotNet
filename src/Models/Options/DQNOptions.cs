@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models.Options;
 
@@ -20,6 +22,12 @@ public class DQNOptions<T> : ModelOptions
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
     public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
+
+    /// <summary>
+    /// Optimizer for Q-network training. Default: Adam (per Mnih et al. 2015).
+    /// </summary>
+    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
+
     public List<int> HiddenLayers { get; set; } = new List<int> { 128, 128 };
 
     public DQNOptions()

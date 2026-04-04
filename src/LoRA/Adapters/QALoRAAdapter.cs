@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -289,76 +289,9 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through both layers, accounting for quantization in gradients.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass uses the Straight-Through Estimator (STE) for quantization:
-    /// - Forward: y = quantize(x)
-    /// - Backward: ∂L/∂x = ∂L/∂y (gradient passes through unchanged)
-    ///
-    /// This allows gradients to flow to the full-precision weights despite quantization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the tricky part of quantization-aware training!
-    ///
-    /// The Problem:
-    /// - Quantization is a discontinuous operation (rounding)
-    /// - Discontinuous operations have zero or undefined gradients
-    /// - If gradients can't flow, we can't update weights, so training fails
-    ///
-    /// The Solution (Straight-Through Estimator):
-    /// - Pretend quantization is the identity function during backprop
-    /// - Forward: actually quantize (add noise)
-    /// - Backward: pretend we didn't quantize (gradient flows through)
-    /// - This is mathematically "wrong" but works well in practice!
-    ///
-    /// Why it works:
-    /// - The forward pass sees quantized values (learns to compensate)
-    /// - The backward pass updates full-precision weights (maintains precision)
-    /// - The network learns weights that work well when quantized
-    ///
-    /// Example:
-    /// Forward: weight = 0.7234 → quantize → 0.7333 (closest 4-bit value)
-    /// Backward: gradient flows as if 0.7234 → 0.7234 (identity)
-    /// Update: 0.7234 - learning_rate * gradient (updates full-precision weight)
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // The Straight-Through Estimator (STE) means we compute gradients
-        // as if quantization was the identity function.
-        // The base implementation handles this correctly because:
-        // 1. We restored original (full-precision) parameters after Forward
-        // 2. Backward computes gradients w.r.t. those full-precision parameters
-        // 3. Gradient flow is not blocked by quantization
-
-        // Standard LoRA backward pass
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
     }
 
     /// <summary>

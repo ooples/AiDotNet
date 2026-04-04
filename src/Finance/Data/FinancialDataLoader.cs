@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -231,7 +231,7 @@ public sealed class FinancialDataLoader<T> : InputOutputDataLoaderBase<T, Tensor
     /// </remarks>
     private static Tensor<T> ExtractTensorSubset(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.ToArray().Clone();
+        var newShape = (int[])source.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

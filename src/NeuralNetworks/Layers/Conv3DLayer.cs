@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -5,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -37,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public class Conv3DLayer<T> : LayerBase<T>
+public partial class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -123,12 +125,6 @@ public class Conv3DLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
-    /// </summary>
-    /// <value><c>true</c> if kernels and biases are initialized and activation can be JIT compiled.</value>
-    public override bool SupportsJitCompilation => _kernels != null && _biases != null && CanActivationBeJitted();
-
     #endregion
 
     #region Private Fields
@@ -136,11 +132,15 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <summary>
     /// The learnable convolution kernels with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
     /// The learnable bias values with shape [OutputChannels], one per output channel.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -191,28 +191,28 @@ public class Conv3DLayer<T> : LayerBase<T>
     #endregion
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
-    private GpuTensor<T>? _gpuKernels;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuKernels;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
-    private GpuTensor<T>? _gpuKernelsGradient;
-    private GpuTensor<T>? _gpuBiasesGradient;
+    private Tensor<T>? _gpuKernelsGradient;
+    private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
-    private GpuTensor<T>? _gpuKernelsVelocity;
-    private GpuTensor<T>? _gpuBiasesVelocity;
+    private Tensor<T>? _gpuKernelsVelocity;
+    private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
-    private GpuTensor<T>? _gpuKernelsM;
-    private GpuTensor<T>? _gpuBiasesM;
+    private Tensor<T>? _gpuKernelsM;
+    private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
-    private GpuTensor<T>? _gpuKernelsV;
-    private GpuTensor<T>? _gpuBiasesV;
+    private Tensor<T>? _gpuKernelsV;
+    private Tensor<T>? _gpuBiasesV;
     #endregion
 
     /// <summary>
@@ -565,7 +565,7 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -588,13 +588,13 @@ public class Conv3DLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 5D NCDHW [B, C, D, H, W] for 3D convolution
-        IGpuTensor<T> input5D;
+        Tensor<T> input5D;
         bool addedBatchDimension = false;
         if (rank == 4)
         {
             // 4D [C, D, H, W] -> 5D [1, C, D, H, W]
             addedBatchDimension = true;
-            input5D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
+            input5D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
         }
         else if (rank == 5)
         {
@@ -609,7 +609,7 @@ public class Conv3DLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input5D = input.CreateView(0, [flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input5D = input.Reshape([flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -644,7 +644,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         if (addedBatchDimension)
         {
             // Input was 4D [C, D, H, W], output should also be 4D [OutC, OutD, OutH, OutW]
-            return result.CreateView(0, [OutputChannels, result.Shape[2], result.Shape[3], result.Shape[4]]);
+            return result.Reshape([OutputChannels, result.Shape[2], result.Shape[3], result.Shape[4]]);
         }
 
         return result;
@@ -670,111 +670,6 @@ public class Conv3DLayer<T> : LayerBase<T>
     #endregion
 
     #region Backward Pass
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients for training.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    /// <remarks>
-    /// <para>
-    /// The backward pass routes to either manual or autodiff implementation based on the
-    /// <see cref="LayerBase{T}.UseAutodiff"/> property.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes:
-    /// 1. Activation derivative applied to output gradient
-    /// 2. Input gradient using Engine.Conv3DBackwardInput
-    /// 3. Kernel gradient using Engine.Conv3DBackwardKernel
-    /// 4. Bias gradient by summing over batch and spatial dimensions
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle any-rank gradient: reshape to match _lastOutput rank before ApplyActivationDerivative
-        bool hasBatch = _lastInput.Rank == 5;
-        Tensor<T> outGrad5D = (outputGradient.Rank == 4 && _lastOutput.Rank == 5)
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
-            : outputGradient;
-
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outGrad5D);
-
-        Tensor<T> batchedDelta = hasBatch
-            ? delta
-            : (delta.Rank == 4
-                ? delta.Reshape(1, delta.Shape[0], delta.Shape[1], delta.Shape[2], delta.Shape[3])
-                : delta);
-
-        Tensor<T> batchedInput = hasBatch
-            ? _lastInput
-            : _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
-
-        var inputGrad = Engine.Conv3DBackwardInput(
-            batchedDelta,
-            _kernels,
-            batchedInput.Shape.ToArray(),
-            [Stride, Stride, Stride],
-            [Padding, Padding, Padding],
-            [1, 1, 1]);
-
-        _kernelsGradient = Engine.Conv3DBackwardKernel(
-            batchedDelta,
-            batchedInput,
-            _kernels.Shape.ToArray(),
-            [Stride, Stride, Stride],
-            [Padding, Padding, Padding],
-            [1, 1, 1]);
-
-        _biasesGradient = ComputeBiasGradient(batchedDelta);
-
-        if (!hasBatch && inputGrad.Rank == 5 && inputGrad.Shape[0] == 1)
-        {
-            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4]);
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// <para>
-    /// Currently falls back to manual implementation as Conv3D autodiff is pending integration.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Conv3D autodiff operations are pending full integration
-        // Fall back to manual implementation for now
-        return BackwardManual(outputGradient);
-    }
 
     /// <summary>
     /// Computes the bias gradient by summing gradients over batch and spatial dimensions.
@@ -1021,83 +916,9 @@ public class Conv3DLayer<T> : LayerBase<T>
 
     #region JIT Compilation
 
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer is not properly initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_kernels == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        // Create input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "conv3d_input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for kernels and biases
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "conv3d_kernel");
-        var biasNode = TensorOperations<T>.Constant(_biases, "conv3d_bias");
-
-        // Build the actual convolution graph: Conv3D(input, kernel) + bias -> activation
-        var convNode = TensorOperations<T>.Conv3D(
-            inputNode,
-            kernelNode,
-            biasNode,
-            new int[] { Stride, Stride, Stride },
-            new int[] { Padding, Padding, Padding });
-
-        // Apply activation function to the convolution result
-        var activatedOutput = ApplyActivationToGraph(convNode);
-        return activatedOutput;
-    }
-
     #endregion
 
     #region GPU Training Methods
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // CPU fallback: download gradient, run Backward(), upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradient buffers to GPU for UpdateParametersGpu
-        if (_kernelsGradient is not null)
-        {
-            _gpuKernelsGradient?.Dispose();
-            _gpuKernelsGradient = new GpuTensor<T>(backend, _kernelsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_biasesGradient is not null)
-        {
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
-        }
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Updates parameters on GPU using the configured optimizer.
@@ -1113,8 +934,8 @@ public class Conv3DLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weight buffers exist
-        _gpuKernels ??= new GpuTensor<T>(backend, _kernels, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
+        _gpuKernels ??= GpuTensorHelper.UploadToGpu<T>(backend, _kernels, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureConv3DOptimizerState(config, backend);
@@ -1134,8 +955,8 @@ public class Conv3DLayer<T> : LayerBase<T>
         }
 
         // Download updated weights back to CPU tensors
-        _kernels = _gpuKernels.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _kernels = _gpuKernels;
+        _biases = _gpuBiases;
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_kernels);
@@ -1149,17 +970,17 @@ public class Conv3DLayer<T> : LayerBase<T>
         // Ensure velocity buffers for SGD momentum, NAG, LARS
         if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKernelsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
 
         // Ensure Adam moment buffers
         if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
-            _gpuKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKernelsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKernelsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

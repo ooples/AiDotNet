@@ -37,26 +37,9 @@ namespace AiDotNetTestConsole
             var output = layer.Forward(input);
             Console.WriteLine($"Output Shape: {string.Join(", ", output.Shape.ToArray())}");
 
-            // Backward
-            var gradOutput = Tensor<double>.CreateRandom(output.Shape.ToArray());
-            var gradInput = layer.Backward(gradOutput);
-            Console.WriteLine($"GradInput Shape: {string.Join(", ", gradInput.Shape)}");
-
             // Update
             layer.UpdateParameters(0.01);
             Console.WriteLine("Parameters updated successfully.");
-
-            // JIT check
-            try
-            {
-                var nodes = new System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<double>>();
-                var graph = layer.ExportComputationGraph(nodes);
-                Console.WriteLine("ExportComputationGraph successful.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ExportComputationGraph failed: {ex.Message}");
-            }
         }
     }
 }

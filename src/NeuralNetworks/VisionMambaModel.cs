@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -327,16 +327,6 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-        var predictions = Predict(input);
-        SetTrainingMode(true); // Re-enable after Predict set it to false
-        LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
-        var outputGradients = LossFunction.CalculateDerivative(predictions.ToVector(), expectedOutput.ToVector());
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-        var parameterGradients = GetParameterGradients();
-        parameterGradients = ClipGradient(parameterGradients);
-        UpdateParameters(parameterGradients);
-        SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> gradients)
@@ -452,7 +442,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int b = 0; b < batchSize; b++)

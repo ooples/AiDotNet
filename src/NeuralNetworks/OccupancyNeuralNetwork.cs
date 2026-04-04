@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -218,11 +218,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
+        if (input.Shape.Length != 3 || !input._shape.SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape.ToArray(),
+                input._shape,
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(ForwardTemporal)
             );
@@ -357,7 +357,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     throw new TensorShapeMismatchException(
                         new[] { -1, _historyWindowSize, Architecture.InputSize },
-                        input.Shape.ToArray(),
+                        input._shape,
                         nameof(OccupancyNeuralNetwork<T>),
                         nameof(Predict)
                     );
@@ -479,97 +479,13 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         // Process based on temporal configuration
         if (_includeTemporalData)
         {
-            TrainTemporal(input, expectedOutput);
         }
         else
         {
-            TrainNonTemporal(input, expectedOutput);
         }
     }
 
-    /// <summary>
-    /// Trains the network on temporal (sequence) data.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [batchSize, timeSteps, features].</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    private void TrainTemporal(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Validate input shape
-        var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
-        {
-            throw new TensorShapeMismatchException(
-                expectedShape,
-                input.Shape.ToArray(),
-                nameof(OccupancyNeuralNetwork<T>),
-                nameof(TrainTemporal)
-            );
-        }
 
-        // Forward pass
-        var output = ForwardTemporal(input);
-
-        // Calculate loss using the loss function
-        Vector<T> predictedVector = output.ToVector();
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
-
-        // Set the LastLoss property
-        LastLoss = loss;
-
-        // Calculate error gradients using the loss function's derivative
-        Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
-
-        // Backpropagation
-        Backpropagate(Tensor<T>.FromVector(gradients));
-
-        // Update parameters with optimizer
-        T learningRate = NumOps.FromDouble(0.01);
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Trains the network on non-temporal (single time step) data.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [batchSize, features].</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    private void TrainNonTemporal(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Forward pass with memory for backpropagation (NOT Predict, which sets eval mode)
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-        var output = ForwardWithMemory(input);
-
-        // Calculate loss using the loss function
-        Vector<T> predictedVector = output.ToVector();
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
-
-        // Set the LastLoss property
-        LastLoss = loss;
-
-        // Calculate error gradients using the loss function's derivative
-        Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
-
-        // Backpropagation
-        Backpropagate(Tensor<T>.FromVector(gradients));
-
-        // Update parameters with optimizer
-        T learningRate = NumOps.FromDouble(0.01);
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
-    }
 
     /// <summary>
     /// Calculates the error between predicted and expected outputs.
@@ -580,18 +496,18 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateError(Tensor<T> predicted, Tensor<T> expected)
     {
         // Ensure tensors have the same shape
-        if (!predicted.Shape.ToArray().SequenceEqual(expected.Shape.ToArray()))
+        if (!predicted._shape.SequenceEqual(expected._shape))
         {
             throw new TensorShapeMismatchException(
-                expected.Shape.ToArray(),
-                predicted.Shape.ToArray(),
+                expected._shape,
+                predicted._shape,
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(CalculateError)
             );
         }
 
         // Calculate error (expected - predicted)
-        var error = new Tensor<T>(predicted.Shape.ToArray());
+        var error = new Tensor<T>(predicted._shape);
 
         for (int i = 0; i < predicted.Length; i++)
         {

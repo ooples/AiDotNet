@@ -310,20 +310,6 @@ public abstract class NODEBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the backbone.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
-    {
-        // Simplified backward pass - gradients flow back through preprocessing
-        if (_featurePreprocessing != null && _preprocessedFeaturesCache != null)
-        {
-            return _featurePreprocessing.Backward(gradOutput);
-        }
-
-        return gradOutput;
-    }
-
-    /// <summary>
     /// Gets the feature importance scores.
     /// </summary>
     /// <returns>Feature importance scores [num_features].</returns>

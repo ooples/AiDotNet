@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -385,10 +385,7 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             // Update context: psi = psi - alpha * grad
             T lr = NumOps.FromDouble(_caviaOptions.InnerLearningRate);
-            for (int i = 0; i < context.Length; i++)
-            {
-                context[i] = NumOps.Subtract(context[i], NumOps.Multiply(lr, contextGradients[i]));
-            }
+            context = Engine.Subtract(context, Engine.Multiply(contextGradients, lr));
         }
 
         return context;
@@ -521,7 +518,7 @@ internal static class CAVIAContextHelper<T>
             CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
             CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
             CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
-            _ => ConcatenateContext<TInput>(input, context)
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, $"Unknown CAVIAContextInjectionMode: {mode}")
         };
     }
 
@@ -619,7 +616,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor.Shape.ToArray());
+            var result = new Tensor<T>(tensor._shape);
             for (int i = 0; i < tensor.Shape[0]; i++)
                 result[new int[] { i }] = numOps.Add(tensor[new int[] { i }], context[i]);
             return result;
@@ -629,7 +626,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor.Shape.ToArray());
+            var result = new Tensor<T>(tensor._shape);
             for (int b = 0; b < tensor.Shape[0]; b++)
                 for (int f = 0; f < tensor.Shape[1]; f++)
                     result[new int[] { b, f }] = numOps.Add(tensor[new int[] { b, f }], context[f]);
@@ -676,7 +673,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor.Shape.ToArray());
+            var result = new Tensor<T>(tensor._shape);
             for (int i = 0; i < tensor.Shape[0]; i++)
                 result[new int[] { i }] = numOps.Multiply(tensor[new int[] { i }], context[i]);
             return result;
@@ -686,7 +683,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor.Shape.ToArray());
+            var result = new Tensor<T>(tensor._shape);
             for (int b = 0; b < tensor.Shape[0]; b++)
                 for (int f = 0; f < tensor.Shape[1]; f++)
                     result[new int[] { b, f }] = numOps.Multiply(tensor[new int[] { b, f }], context[f]);
@@ -788,7 +785,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// - Transfer (reuse context from a similar seen task)
     /// </para>
     /// </remarks>
-    public Vector<T> AdaptedContext => _adaptedContext;
+    public Vector<T> AdaptedContext => Vector<T>.Wrap(_adaptedContext.ToArray());
 
     /// <summary>
     /// Makes predictions by augmenting input with the adapted context and running through the body model.

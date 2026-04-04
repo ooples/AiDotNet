@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -305,7 +305,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         foreach (var frame in frames)
         {
             var spatialFeatures = ExtractSpatialFeatures(frame);
-            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame.Shape.ToArray());
+            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame._shape);
             results.Add(attentionMap);
         }
 
@@ -553,11 +553,9 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                         // Backpropagate through audio encoder
                         var audioGradTensor = Tensor<T>.FromVector(audioGrad);
-                        BackpropagateAudioEncoder(audioGradTensor);
 
                         // Backpropagate through visual encoder
                         var visualGradTensor = Tensor<T>.FromVector(visualGrad);
-                        BackpropagateVisualEncoder(visualGradTensor);
 
                         // Update parameters using optimizer
                         _optimizer.UpdateParameters(Layers);
@@ -577,52 +575,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         {
             SetTrainingMode(false);
         }
-    }
-
-    /// <summary>
-    /// Backpropagates gradients through the audio encoder layers.
-    /// </summary>
-    private void BackpropagateAudioEncoder(Tensor<T> gradient)
-    {
-        // Backprop through output projection
-        var current = AudioOutputProjection.Backward(gradient);
-
-        // Backprop through encoder layers in reverse (3 layers per block)
-        for (int i = AudioEncoderLayers.Count - 1; i >= 0; i -= 3)
-        {
-            if (i >= 2)
-            {
-                current = AudioEncoderLayers[i].Backward(current);     // FFN2
-                current = AudioEncoderLayers[i - 1].Backward(current); // FFN1
-                current = AudioEncoderLayers[i - 2].Backward(current); // Attention
-            }
-        }
-
-        // Backprop through input projection
-        AudioInputProjection.Backward(current);
-    }
-
-    /// <summary>
-    /// Backpropagates gradients through the visual encoder layers.
-    /// </summary>
-    private void BackpropagateVisualEncoder(Tensor<T> gradient)
-    {
-        // Backprop through output projection
-        var current = VisualOutputProjection.Backward(gradient);
-
-        // Backprop through encoder layers in reverse (3 layers per block)
-        for (int i = VisualEncoderLayers.Count - 1; i >= 0; i -= 3)
-        {
-            if (i >= 2)
-            {
-                current = VisualEncoderLayers[i].Backward(current);     // FFN2
-                current = VisualEncoderLayers[i - 1].Backward(current); // FFN1
-                current = VisualEncoderLayers[i - 2].Backward(current); // Attention
-            }
-        }
-
-        // Backprop through input projection
-        VisualInputProjection.Backward(current);
     }
 
     #endregion
@@ -1071,8 +1023,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
 
             // Convert gradient to tensor and backpropagate through audio encoder
-            var gradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-            BackpropagateAudioEncoder(gradientTensor);
+            var gradientTensor = new Tensor<T>(prediction._shape, outputGradient);
 
             // Update parameters using the optimizer
             _optimizer.UpdateParameters(Layers);

@@ -206,13 +206,15 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
         }
 
-        var predicted = Forward(input);
-        var gradVec = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
-        var lossGradient = Tensor<T>.FromVector(gradVec);
-
-        BackwardPass(lossGradient);
-
-        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
@@ -271,7 +273,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue>
@@ -296,21 +298,6 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Propagates gradients backward through all layers.
-    /// </summary>
-    protected virtual void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0) return;
-
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     #endregion

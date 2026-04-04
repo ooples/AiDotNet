@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -435,7 +435,6 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -740,35 +739,6 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the N-HiTS network.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NHiTSFinance model, Backward propagates gradients backward. This teaches the NHiTSFinance architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        for (int i = _stackBlocks.Count - 1; i >= 0; i--)
-        {
-            foreach (var blockLayers in _stackBlocks[i])
-            {
-                for (int j = blockLayers.Count - 1; j >= 0; j--)
-                {
-                    grad = blockLayers[j].Backward(grad);
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <remarks>
@@ -801,7 +771,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -990,7 +960,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int steps = Math.Min(stepsUsed, seqLen);
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

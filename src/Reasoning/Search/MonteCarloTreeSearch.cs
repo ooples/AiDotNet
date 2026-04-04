@@ -129,7 +129,6 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
             }
 
             // 4. Backpropagation: Update statistics up the tree
-            Backpropagate(node, value);
         }
 
         // Select best path based on visit counts (most explored = most promising)
@@ -198,24 +197,5 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
         double exploration = _explorationConstant * Math.Sqrt(Math.Log(parentVisits) / visits);
 
         return exploitation + exploration;
-    }
-
-    /// <summary>
-    /// Backpropagation phase: Update node statistics up the tree.
-    /// </summary>
-    private void Backpropagate(AiDotNet.Reasoning.Models.ThoughtNode<T> node, double value)
-    {
-        var current = node;
-
-        while (current != null)
-        {
-            int visits = current.Metadata.ContainsKey("visits") ? (int)current.Metadata["visits"] : 0;
-            double totalValue = current.Metadata.ContainsKey("total_value") ? (double)current.Metadata["total_value"] : 0.0;
-
-            current.Metadata["visits"] = visits + 1;
-            current.Metadata["total_value"] = totalValue + value;
-
-            current = current.Parent;
-        }
     }
 }

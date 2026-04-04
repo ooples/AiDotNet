@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -51,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly RadialBasisFunctionNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -182,10 +184,11 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null,
+    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null,
         RadialBasisFunctionNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new RadialBasisFunctionNetworkOptions();
         Options = _options;
         // Get the input shape and output size from the architecture
@@ -343,7 +346,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        var inputShape = input.Shape.ToArray();
+        var inputShape = input._shape;
         var expectedShape = Architecture.GetInputShape();
 
         // Ensure input has correct shape
@@ -411,32 +414,19 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
 
         SetTrainingMode(true);
-
-        // Forward pass with memory for backpropagation
-        var output = ForwardWithMemory(input);
-        Vector<T> outputVector = output.ToVector();
-
-        // Calculate error/loss
-        Vector<T> expectedOutputVector = expectedOutput.ToVector();
-
-        // Calculate and set the loss using the loss function
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedOutputVector);
-
-        // Compute gradient of loss w.r.t. output
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedOutputVector);
-
-        // Backpropagate error through the network
-        Backpropagate(Tensor<T>.FromVector(lossGrad));
-
-        // Update parameters using Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     /// <summary>
     /// Gets metadata about the Radial Basis Function Network model.
@@ -577,6 +567,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a new instance with the cloned architecture and RBF
-        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction, LossFunction);
+        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction, lossFunction: LossFunction);
     }
 }

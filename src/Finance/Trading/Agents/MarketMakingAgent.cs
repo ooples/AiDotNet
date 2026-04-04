@@ -104,7 +104,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
         _mmOptions = options;
         _architecture = architecture;
         EnsureMarketMakingLayers(architecture, options.StateSize, options.ActionSize);
-        _policyNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _policyNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
     }
 

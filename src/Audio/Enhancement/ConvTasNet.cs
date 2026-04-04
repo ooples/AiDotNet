@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -344,7 +344,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 result[i] = _numOps.Multiply(modelOutput.Data.Span[i], strengthT);
             }
-            return new Tensor<T>(result, modelOutput.Shape.ToArray());
+            return new Tensor<T>(result, modelOutput._shape);
         }
         return modelOutput;
     }

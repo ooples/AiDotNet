@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -455,7 +455,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         Tensor<T>? biases)
     {
         // Get weight matrix dimensions
-        var shape = weights.Shape.ToArray();
+        var shape = weights._shape;
         if (shape.Length < 2)
         {
             return (lower, upper);

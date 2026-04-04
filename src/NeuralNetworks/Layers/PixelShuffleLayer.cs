@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -85,9 +85,6 @@ public class PixelShuffleLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU execution.
@@ -304,7 +301,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// All operations stay GPU-resident.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -396,128 +393,6 @@ public class PixelShuffleLayer<T> : LayerBase<T>
 
     #region Backward Pass
 
-    /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">The gradient from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass of pixel shuffle (pixel unshuffle) reverses the forward:
-    /// Reshape [N, C, H*r, W*r] -> [N, C, H, r, W, r] -> Permute (inverse) -> [N, C, r, r, H, W] -> Reshape [N, C*r², H, W]
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuCachedInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var gradShape = outputGradient.Shape.ToArray();
-        int r = _upscaleFactor;
-        int r2 = r * r;
-
-        // Get dimensions from cached input shape
-        int batch, channels, height, width;
-        var grad = outputGradient;
-
-        if (_gpuAdded3DBatch)
-        {
-            // Original was 3D, add batch dimension to gradient
-            batch = 1;
-            channels = gradShape[0] * r2; // output had reduced channels
-            int outHeight = gradShape[1];
-            int outWidth = gradShape[2];
-            height = outHeight / r;
-            width = outWidth / r;
-            grad = gpuEngine.ReshapeGpu(outputGradient, new[] { 1, gradShape[0], outHeight, outWidth });
-        }
-        else
-        {
-            batch = gradShape[0];
-            channels = gradShape[1] * r2; // output had reduced channels
-            int outHeight = gradShape[2];
-            int outWidth = gradShape[3];
-            height = outHeight / r;
-            width = outWidth / r;
-        }
-
-        int outChannels = channels / r2; // = gradShape[1] or gradShape[0] for 3D
-        int outHeight2 = height * r;
-        int outWidth2 = width * r;
-
-        // Step 1: Reshape [N, C, H*r, W*r] -> [N, C, H, r, W, r]
-        var reshaped1 = gpuEngine.ReshapeGpu(grad, new[] { batch, outChannels, height, r, width, r });
-
-        // Step 2: Permute [N, C, H, r, W, r] -> [N, C, r, r, H, W]
-        // Original forward permutation was [0, 1, 4, 2, 5, 3]
-        // Inverse permutation: [0, 1, 3, 5, 2, 4]
-        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 3, 5, 2, 4 });
-
-        // Step 3: Reshape [N, C, r, r, H, W] -> [N, C*r², H, W]
-        var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, channels, height, width });
-
-        // Remove batch dimension if we added it
-        if (_gpuAdded3DBatch)
-        {
-            result = gpuEngine.ReshapeGpu(result, new[] { channels, height, width });
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Uses the GPU-accelerated IEngine.PixelShuffleBackward operation for optimal performance.
-    /// This reverses the pixel shuffle operation for backpropagation.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _originalInputShape == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        var inShape = _lastInput.Shape.ToArray();
-
-        // For 4D tensors, use Engine directly
-        if (_originalInputShape.Length == 4)
-        {
-            return Engine.PixelShuffleBackward(outputGradient, inShape, _upscaleFactor);
-        }
-
-        // For 3D tensors, add batch dimension
-        if (_originalInputShape.Length == 3)
-        {
-            var grad4D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
-            var inputGrad4D = Engine.PixelShuffleBackward(grad4D, inShape, _upscaleFactor);
-            return inputGrad4D.Reshape([inputGrad4D.Shape[1], inputGrad4D.Shape[2], inputGrad4D.Shape[3]]);
-        }
-
-        // For higher-rank tensors, collapse batch dimensions
-        if (_originalInputShape.Length > 4)
-        {
-            // Collapse all leading dimensions into single batch
-            int batchSize = 1;
-            for (int i = 0; i < _originalInputShape.Length - 3; i++)
-            {
-                batchSize *= _originalInputShape[i];
-            }
-
-            var grad4D = outputGradient.Reshape([batchSize, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
-            var inputGrad4D = Engine.PixelShuffleBackward(grad4D, inShape, _upscaleFactor);
-
-            // Restore original batch dimensions
-            return inputGrad4D.Reshape(_originalInputShape);
-        }
-
-        throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {_originalInputShape.Length}.");
-    }
-
     #endregion
 
     #region Parameter Management
@@ -546,37 +421,6 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
-    /// The pixel shuffle operation is supported in the computation graph via TensorOperations.PixelShuffle.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation creates an optimized version of this
-    /// layer that can run faster during inference. Once compiled, the computation graph can be executed
-    /// as native code rather than interpreted operations.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        // Input shape: [batch, channels, height, width] (NCHW format)
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "pixelshuffle_input");
-        inputNodes.Add(inputNode);
-
-        // Apply PixelShuffle operation from TensorOperations
-        var shuffled = TensorOperations<T>.PixelShuffle(inputNode, _upscaleFactor);
-
-        return shuffled;
-    }
 
     #endregion
 }

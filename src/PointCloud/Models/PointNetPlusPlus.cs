@@ -374,18 +374,6 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return x;
     }
 
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -532,29 +520,13 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        _globalFeatures = null;
-
-        var prediction = ForwardWithMemory(input);
-
-        if (LossFunction == null)
+        try
         {
-            throw new InvalidOperationException("Loss function not set.");
+            TrainWithTape(input, expectedOutput);
         }
-
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
-        LastLoss = loss;
-
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        // Basic SGD parameter update
-        foreach (var layer in Layers)
+        finally
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
+            SetTrainingMode(false);
         }
     }
 
@@ -1232,86 +1204,6 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         return new Tensor<T>(combined, [numCentroids, _outputChannels]);
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _centroidIndices == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-        if (outputGradient.Shape.Length != 2 || outputGradient.Shape[1] != _outputChannels)
-        {
-            throw new ArgumentException($"Output gradient must have shape [M, {_outputChannels}].", nameof(outputGradient));
-        }
-
-        int numPoints = _lastInput.Shape[0];
-        int numCentroids = _centroidIndices.Length;
-        var numOps = NumOps;
-        var inputGradient = new T[numPoints * _inputChannels];
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = numOps.Zero;
-        }
-
-        int channelOffset = 0;
-        foreach (var branch in _branches)
-        {
-            if (branch.NeighborCounts == null || branch.NeighborIndices == null || branch.MaxIndices == null)
-            {
-                throw new InvalidOperationException("Branch metadata missing for backward pass.");
-            }
-
-            int branchChannels = branch.OutputChannels;
-            int maxNeighbors = branch.NeighborIndices.GetLength(1);
-            var branchGradient = new T[numCentroids * maxNeighbors * branchChannels];
-
-            for (int c = 0; c < numCentroids; c++)
-            {
-                for (int ch = 0; ch < branchChannels; ch++)
-                {
-                    int maxIdx = branch.MaxIndices[c * branchChannels + ch];
-                    int gradIdx = (c * maxNeighbors + maxIdx) * branchChannels + ch;
-                    int srcIdx = c * _outputChannels + channelOffset + ch;
-                    branchGradient[gradIdx] = outputGradient.Data.Span[srcIdx];
-                }
-            }
-
-            Tensor<T> gradTensor = new Tensor<T>(branchGradient, [numCentroids * maxNeighbors, branchChannels]);
-            for (int i = branch.MlpLayers.Count - 1; i >= 0; i--)
-            {
-                gradTensor = branch.MlpLayers[i].Backward(gradTensor);
-            }
-
-            var gradData = gradTensor.Data.Span;
-            for (int c = 0; c < numCentroids; c++)
-            {
-                int centroidIdx = _centroidIndices[c];
-                int count = branch.NeighborCounts[c];
-                for (int k = 0; k < count; k++)
-                {
-                    int neighborIdx = branch.NeighborIndices[c, k];
-                    int baseIdx = (c * maxNeighbors + k) * _inputChannels;
-                    for (int d = 0; d < 3; d++)
-                    {
-                        var gradVal = gradData[baseIdx + d];
-                        int neighborOffset = neighborIdx * _inputChannels + d;
-                        int centroidOffset = centroidIdx * _inputChannels + d;
-                        inputGradient[neighborOffset] = numOps.Add(inputGradient[neighborOffset], gradVal);
-                        inputGradient[centroidOffset] = numOps.Subtract(inputGradient[centroidOffset], gradVal);
-                    }
-                    for (int d = 3; d < _inputChannels; d++)
-                    {
-                        int neighborOffset = neighborIdx * _inputChannels + d;
-                        inputGradient[neighborOffset] = numOps.Add(inputGradient[neighborOffset], gradData[baseIdx + d]);
-                    }
-                }
-            }
-
-            channelOffset += branchChannels;
-        }
-
-        return new Tensor<T>(inputGradient, [numPoints, _inputChannels]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         foreach (var branch in _branches)
@@ -1394,14 +1286,6 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
             branch.NeighborIndices = null;
             branch.MaxIndices = null;
         }
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "SetAbstractionLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount

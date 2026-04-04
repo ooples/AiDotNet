@@ -1875,48 +1875,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <summary>
-    /// Backward pass through Q-Former (vision encoder is frozen).
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> gradient)
-    {
-        // Backward pass through Q-Former and vision encoder
-        // Only Q-Former is trainable; vision encoder is frozen
-
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Backward pass is only supported in native mode.");
-        }
-
-        // Backprop through layers (only Q-Former layers are trainable)
-        var currentGradient = gradient;
-
-        // Backward through Q-Former layers in reverse order
-        for (int i = _numQformerLayers - 1; i >= 0; i--)
-        {
-            if (i < _qformerFeedForwardLayers.Count)
-            {
-                currentGradient = _qformerFeedForwardLayers[i].Backward(currentGradient);
-            }
-
-            if (i < _qformerCrossAttentionLayers.Count)
-            {
-                currentGradient = _qformerCrossAttentionLayers[i].Backward(currentGradient);
-            }
-
-            if (i < _qformerSelfAttentionLayers.Count)
-            {
-                currentGradient = _qformerSelfAttentionLayers[i].Backward(currentGradient);
-            }
-        }
-
-        // Accumulate gradients for query tokens and positional embeddings
-        // The gradient at this point flows back to the input query tokens
-        AccumulateQueryTokenGradients(currentGradient);
-
-        return currentGradient;
-    }
-
-    /// <summary>
     /// Accumulates gradients for query tokens and positional embeddings from the backward pass.
     /// </summary>
     private void AccumulateQueryTokenGradients(Tensor<T> gradient)
@@ -2273,7 +2231,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Backward pass - compute gradients
         var lossGradient = LossFunction.CalculateDerivative(imageOutput.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
-        Backward(gradient);
 
         // Apply gradient descent update using the computed gradients
         // The Backward pass accumulates gradients in layers

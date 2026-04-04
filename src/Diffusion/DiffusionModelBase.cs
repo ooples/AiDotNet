@@ -1,8 +1,9 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -179,6 +180,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
+        // Suppress tape recording during inference (like PyTorch torch.no_grad())
+        using var _ = new NoGradScope<T>();
+
         // Set up random generator
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
 
@@ -216,9 +220,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             var noisePrediction = PredictNoise(sampleTensor, timestep);
 
             // Copy prediction to pre-allocated vector (avoids ToVector() allocation)
-            int copyLen = Math.Min(noisePrediction.Length, noisePredVec.Length);
-            for (int idx = 0; idx < copyLen; idx++)
-                noisePredVec[idx] = noisePrediction[idx];
+            var predSpan = noisePrediction.AsSpan();
+            for (int idx = 0; idx < predSpan.Length && idx < noisePredVec.Length; idx++)
+                noisePredVec[idx] = predSpan[idx];
 
             // Perform one denoising step
             // eta=0 for deterministic generation
@@ -253,7 +257,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noisySample = _scheduler.AddNoise(cleanVector, noiseVector, timesteps[0]);
 
         // Create tensor for noise prediction
-        var noisySampleTensor = new Tensor<T>(cleanSamples.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(cleanSamples._shape, noisySample);
 
         // Predict the noise
         var predictedNoise = PredictNoise(noisySampleTensor, timesteps[0]);
@@ -305,7 +309,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
         }
-        return Generate(input.Shape.ToArray(), _options.DefaultInferenceSteps, seed);
+        return Generate(input._shape, _options.DefaultInferenceSteps, seed);
     }
 
     /// <inheritdoc />
@@ -621,55 +625,31 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Add noise to the clean sample using the scheduler
         var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-        var noisySampleTensor = new Tensor<T>(input.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
 
-        // Get current parameters
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
-
-        // Try to use autodiff if computation graph is available
+        // Primary path: layer-level backpropagation (like PyTorch's autograd).
+        // Forward pass through the noise predictor, compute loss gradient,
+        // then backpropagate through the model's layers for exact gradients.
         try
         {
-            using var tape = new GradientTape<T>();
+            // Forward pass: predict noise from the noisy sample
+            var predicted = PredictNoise(noisySampleTensor, timestep);
 
-            // Create computation nodes for parameters
-            var paramNodes = new List<ComputationNode<T>>();
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                var paramVector = new Vector<T>(1) { [0] = parameters[i] };
-                var paramTensor = new Tensor<T>(new[] { 1 }, paramVector);
-                var paramNode = TensorOperations<T>.Variable(paramTensor, $"param_{i}");
-                tape.Watch(paramNode);
-                paramNodes.Add(paramNode);
-            }
+            // Compute loss gradient: d(loss)/d(predicted)
+            var lossGrad = effectiveLossFunction.CalculateDerivative(
+                predicted.ToVector(), noiseVector);
+            var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
-            // Forward pass: predict noise
-            var predictedNoise = PredictNoise(noisySampleTensor, timestep);
+            // Backpropagate through the noise predictor's layers.
+            // Each layer computes input gradients and stores weight gradients internally.
+            BackpropagateNoise(lossGradTensor, timestep);
 
-            // Compute loss using the effective loss function
-            var loss = effectiveLossFunction.CalculateLoss(predictedNoise.ToVector(), noiseVector);
+            // Extract accumulated parameter gradients from all layers
+            var gradients = GetParameterGradients();
 
-            // Create loss node for autodiff
-            var lossVector = new Vector<T>(1) { [0] = loss };
-            var lossTensor = new Tensor<T>(new[] { 1 }, lossVector);
-            var lossNode = TensorOperations<T>.Variable(lossTensor, "loss", requiresGradient: false);
-
-            // Compute gradients via autodiff
-            var gradientDict = tape.Gradient(lossNode, paramNodes);
-
-            // Extract gradients
-            foreach (var kvp in gradientDict)
-            {
-                var idx = paramNodes.IndexOf(kvp.Key);
-                if (idx >= 0 && idx < gradients.Length)
-                {
-                    gradients[idx] = kvp.Value[0];
-                }
-            }
-
-            // Check if autodiff produced valid gradients
+            // Verify backprop produced meaningful gradients
             bool hasValidGradients = false;
-            for (int i = 0; i < gradients.Length; i++)
+            for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
             {
                 if (!NumOps.Equals(gradients[i], NumOps.Zero))
                 {
@@ -683,78 +663,78 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 return gradients;
             }
         }
-        catch (InvalidOperationException)
+        catch (Exception ex)
         {
-            // GradientTape may throw if computation graph is not properly built
-            // Fall through to numerical gradients
-        }
-        catch (NotSupportedException)
-        {
-            // Some tensor operations may not support autodiff
-            // Fall through to numerical gradients
+            // Fall through to SPSA if layer backprop is not supported
+            System.Diagnostics.Trace.TraceWarning(
+                $"Layer backpropagation failed, falling back to SPSA: {ex.Message}");
         }
 
-        // Fallback: Multi-sample SPSA (Simultaneous Perturbation Stochastic Approximation)
-        // Averages multiple perturbations for more stable gradient estimates.
-        // Each sample requires 2 forward passes; total = 2 * numSamples.
-        // Reference: Spall, J.C., IEEE TAC, 1992.
+        // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation).
+        // Only used when layer backprop fails (e.g., model doesn't implement BackpropagateNoise).
+        // SPSA estimates all N gradients with just 2 forward passes per sample
+        // (vs 2N for finite differences). Reference: Spall, J.C., IEEE TAC, 1992.
+        var parameters = GetParameters();
+        var gradients_spsa = new Vector<T>(parameters.Length);
         var epsilon = NumOps.FromDouble(1e-3);
         var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = RandomGenerator;
         int numSamples = 3;
 
-        // Pre-allocate reusable vectors outside the loop to avoid 9 Vector allocations
         var delta = new Vector<T>(parameters.Length);
-        var perturbedParams = new Vector<T>(parameters.Length);
-        var negOne = NumOps.FromDouble(-1.0);
-        var posOne = NumOps.FromDouble(1.0);
 
         for (int s = 0; s < numSamples; s++)
         {
-            // Generate random perturbation vector: each element ±1 (Rademacher distribution)
+            // Rademacher random direction vector
             for (int i = 0; i < parameters.Length; i++)
-            {
-                delta[i] = rng.NextDouble() < 0.5 ? negOne : posOne;
-            }
+                delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
 
-            // Compute f(x + epsilon * delta) — reuse perturbedParams
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            }
-            SetParameters(perturbedParams);
-            var predictedPlus = PredictNoise(noisySampleTensor, timestep);
-            var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
+            // Vectorized perturbations: params ± epsilon * delta
+            var eDelta = Engine.Multiply(delta, epsilon);
+            SetParameters(Engine.Add(parameters, eDelta));
+            var lossPlus = effectiveLossFunction.CalculateLoss(
+                PredictNoise(noisySampleTensor, timestep).ToVector(), noiseVector);
 
-            // Compute f(x - epsilon * delta) — reuse perturbedParams
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            }
-            SetParameters(perturbedParams);
-            var predictedMinus = PredictNoise(noisySampleTensor, timestep);
-            var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
+            SetParameters(Engine.Subtract(parameters, eDelta));
+            var lossMinus = effectiveLossFunction.CalculateLoss(
+                PredictNoise(noisySampleTensor, timestep).ToVector(), noiseVector);
 
-            // Accumulate SPSA gradient estimate: g_i += (f+ - f-) / (2 * epsilon * delta_i)
+            // Vectorized gradient accumulation: g += (L+ - L-) / (2ε * δ)
             var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                var sampleGrad = NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i]));
-                gradients[i] = NumOps.Add(gradients[i], sampleGrad);
-            }
+            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
+                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
-        // Average across samples
-        var invSamples = NumOps.FromDouble(1.0 / numSamples);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            gradients[i] = NumOps.Multiply(gradients[i], invSamples);
-        }
-
-        // Restore original parameters
+        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / numSamples));
         SetParameters(parameters);
 
-        return gradients;
+        return gradients_spsa;
+    }
+
+    /// <summary>
+    /// Backpropagates the loss gradient through the noise prediction model's layers.
+    /// Override in derived classes to implement layer-by-layer gradient computation.
+    /// </summary>
+    /// <param name="lossGradient">Gradient of the loss w.r.t. the noise predictor output.</param>
+    /// <param name="timestep">The timestep used during the forward pass.</param>
+    protected virtual void BackpropagateNoise(Tensor<T> lossGradient, int timestep)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement BackpropagateNoise. " +
+            "Override this method to enable layer-level gradient computation.");
+    }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// Override in derived classes to collect gradients from the model's layer structure.
+    /// </summary>
+    /// <returns>Flat vector of parameter gradients matching <see cref="GetParameters"/> layout.</returns>
+    protected virtual Vector<T> GetParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     /// <inheritdoc />
@@ -762,11 +742,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     {
         var parameters = GetParameters();
 
-        for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
-        {
-            var update = NumOps.Multiply(gradients[i], learningRate);
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Vectorized SGD: params = params - lr * gradients
+        var scaledGradients = Engine.Multiply(gradients, learningRate);
+        parameters = Engine.Subtract(parameters, scaledGradients);
 
         SetParameters(parameters);
     }

@@ -108,17 +108,6 @@ public class TemporalConvolution<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var convGrad = _conv.Backward(outputGradient);
-        var normGrad = _norm.Backward(convGrad);
-        return AddTensors(outputGradient, normGrad);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _conv.UpdateParameters(learningRate);
@@ -164,12 +153,5 @@ public class TemporalConvolution<T> : LayerBase<T>
         _norm.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("TemporalConvolution does not support JIT compilation.");
-    }
 }

@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Helper class for tensor copy operations.
@@ -51,8 +51,8 @@ public static class TensorCopyHelper
             {
                 throw new ArgumentException(
                     $"Source and destination tensors must have matching shapes except for the first dimension. " +
-                    $"Source shape: [{string.Join(", ", source.Shape.ToArray())}], " +
-                    $"Destination shape: [{string.Join(", ", dest.Shape.ToArray())}].");
+                    $"Source shape: [{string.Join(", ", source._shape)}], " +
+                    $"Destination shape: [{string.Join(", ", dest._shape)}].");
             }
         }
 

@@ -277,13 +277,14 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        var o = Predict(input);
-        var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(g);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />

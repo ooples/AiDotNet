@@ -617,25 +617,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var features = PreprocessAudio(input);
-        var prediction = Forward(features);
-
-        // Calculate loss
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // Backward pass
-        var outputGradients = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Update parameters
-        var parameterGradients = GetParameterGradients();
-        UpdateParameters(parameterGradients);
-
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

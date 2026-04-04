@@ -316,7 +316,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
             if (output is null)
             {
-                output = new Tensor<T>(kvp.Value.Shape.ToArray());
+                output = new Tensor<T>(kvp.Value._shape);
                 for (int i = 0; i < output.Length; i++)
                 {
                     output[i] = kvp.Value[i];
@@ -331,7 +331,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             }
         }
 
-        return output ?? new Tensor<T>(audio.Shape.ToArray());
+        return output ?? new Tensor<T>(audio._shape);
     }
 
     /// <summary>
@@ -405,7 +405,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
             if (output is null)
             {
-                output = new Tensor<T>(kvp.Value.Shape.ToArray());
+                output = new Tensor<T>(kvp.Value._shape);
             }
 
             for (int i = 0; i < output.Length && i < kvp.Value.Length; i++)
@@ -415,7 +415,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             }
         }
 
-        return output ?? new Tensor<T>(separationResult.OriginalMix.Shape.ToArray());
+        return output ?? new Tensor<T>(separationResult.OriginalMix._shape);
     }
 
     #endregion
@@ -460,24 +460,14 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Calculate loss gradient
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-
-        // Backward pass through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        try
         {
-            gradientTensor = Layers[i].Backward(gradientTensor);
+            TrainWithTape(input, expected);
         }
-
-        // Update parameters
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -642,7 +632,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         else
         {
             vocals = harmonic;
-            other = new Tensor<T>(audio.Shape.ToArray());
+            other = new Tensor<T>(audio._shape);
         }
 
         var bass = ExtractBassline(harmonicMag, phase);

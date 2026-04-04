@@ -1,4 +1,4 @@
-
+﻿
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -468,33 +468,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs backward pass (training mode only, cache not used).
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-
-        // Standard backward pass (no cache during training)
-        // Implementation similar to MultiHeadAttentionLayer
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        // Simplified gradient computation
-        // In practice, use autodiff or detailed manual gradient
-        _queryWeightsGradient = new Matrix<T>(_queryWeights.Rows, _queryWeights.Columns);
-        _keyWeightsGradient = new Matrix<T>(_keyWeights.Rows, _keyWeights.Columns);
-        _valueWeightsGradient = new Matrix<T>(_valueWeights.Rows, _valueWeights.Columns);
-        _outputWeightsGradient = new Matrix<T>(_outputWeights.Rows, _outputWeights.Columns);
-        _outputBiasGradient = activationGradient.Sum([0, 1]).ToVector();
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Updates parameters using computed gradients.
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -621,49 +594,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         }
 
         return diagnostics;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => _queryWeights != null && _queryWeights.Rows > 0;
-
-    /// <summary>
-    /// Exports computation graph for JIT compilation.
-    /// </summary>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        // Similar to FlashAttentionLayer
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var seqLen = InputShape[0];
-        var embDim = InputShape[1];
-        var symbolicInput = new Tensor<T>(new[] { 1, seqLen, embDim });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        var wqTensor = MatrixToTensor(_queryWeights);
-        var wkTensor = MatrixToTensor(_keyWeights);
-        var wvTensor = MatrixToTensor(_valueWeights);
-        var woTensor = MatrixToTensor(_outputWeights);
-
-        var wqNode = Autodiff.TensorOperations<T>.Constant(wqTensor, "Wq");
-        var wkNode = Autodiff.TensorOperations<T>.Constant(wkTensor, "Wk");
-        var wvNode = Autodiff.TensorOperations<T>.Constant(wvTensor, "Wv");
-        var woNode = Autodiff.TensorOperations<T>.Constant(woTensor, "Wo");
-
-        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
-            query: inputNode,
-            key: inputNode,
-            value: inputNode,
-            numHeads: _headCount,
-            wQ: wqNode,
-            wK: wkNode,
-            wV: wvNode,
-            wO: woNode);
-
-        return output;
     }
 
     private Tensor<T> MatrixToTensor(Matrix<T> matrix)

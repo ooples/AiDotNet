@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -231,7 +231,7 @@ public class AudioVAE<T> : VAEModelBase<T>
         _lastInput = input;
 
         // Input shape: [batch, melChannels, timeFrames]
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
@@ -292,7 +292,7 @@ public class AudioVAE<T> : VAEModelBase<T>
     public override Tensor<T> Decode(Tensor<T> latent)
     {
         // Latent shape: [batch, latentChannels, latentTimeFrames]
-        var shape = latent.Shape.ToArray();
+        var shape = latent._shape;
         var batch = shape[0];
         var latentChannels = shape[1];
         var latentTimeFrames = shape[2];
@@ -336,7 +336,7 @@ public class AudioVAE<T> : VAEModelBase<T>
         _lastInput = input;
 
         // Input shape: [batch, melChannels, timeFrames]
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
@@ -429,7 +429,7 @@ public class AudioVAE<T> : VAEModelBase<T>
                 logMel: true);
         }
 
-        var shape = waveform.Shape.ToArray();
+        var shape = waveform._shape;
 
         // Handle 1D waveform input [samples] vs 2D input [batch, samples]
         if (shape.Length == 1)
@@ -561,7 +561,7 @@ public class AudioVAE<T> : VAEModelBase<T>
                 momentum: 0.99);
         }
 
-        var shape = melSpectrogram.Shape.ToArray();
+        var shape = melSpectrogram._shape;
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
@@ -768,4 +768,20 @@ public class AudioVAE<T> : VAEModelBase<T>
     }
 
     #endregion
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddGrads(allGrads, _muProjection);
+        AddGrads(allGrads, _logVarProjection);
+        AddGrads(allGrads, _latentToDecoder);
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddGrads(List<T> list, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
 }

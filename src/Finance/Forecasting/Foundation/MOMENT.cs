@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -429,7 +429,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -596,7 +595,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         // MOMENT uses RevIN (Reversible Instance Normalization)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -747,7 +746,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
                 "Imputation requires native mode. ONNX inference only supports forecasting.");
 
         // Apply mask to input (zero out missing values)
-        var masked = new Tensor<T>(series.Shape.ToArray());
+        var masked = new Tensor<T>(series._shape);
         for (int i = 0; i < series.Length && i < mask.Length; i++)
         {
             masked.Data.Span[i] = NumOps.Multiply(series[i], mask[i]);
@@ -758,7 +757,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         var reconstructed = ReconstructNative(normalized);
 
         // Blend: use original where mask=1, reconstruction where mask=0
-        var result = new Tensor<T>(series.Shape.ToArray());
+        var result = new Tensor<T>(series._shape);
         for (int i = 0; i < series.Length; i++)
         {
             if (i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5)))
@@ -879,46 +878,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             return _reconstructionHead.Forward(encoded);
 
         return encoded;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the MOMENT architecture.
-    /// </summary>
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        // Backward through forecast head
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        // Backward through final norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        // Backward through transformer layers (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Backward through patch embedding
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
-            current = current.Reshape(new[] { current.Shape[1] });
-        }
-
-        return current;
     }
 
     /// <summary>

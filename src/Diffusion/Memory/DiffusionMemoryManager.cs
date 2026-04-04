@@ -198,37 +198,6 @@ public class DiffusionMemoryManager<T>
         return (current, state);
     }
 
-    /// <summary>
-    /// Performs backward pass with checkpointing, recomputing activations as needed.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from subsequent layer.</param>
-    /// <param name="state">Checkpoint state from forward pass.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> BackwardWithCheckpointing(
-        Tensor<T> outputGradient,
-        LayerCheckpointState<T> state)
-    {
-        if (state.Layers == null)
-            throw new InvalidOperationException("Checkpoint state is missing layer information.");
-
-        var layers = state.Layers;
-        var gradient = outputGradient;
-
-        // Process backward in reverse order
-        for (int i = layers.Count - 1; i >= 0; i--)
-        {
-            // If we need to recompute activations for this segment
-            if (Config.UseGradientCheckpointing && ShouldRecompute(i, state))
-            {
-                RecomputeForBackward(layers, i, state);
-            }
-
-            gradient = layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
     private bool ShouldRecompute(int layerIndex, LayerCheckpointState<T> state)
     {
         // Check if this layer is at a checkpoint boundary
@@ -316,19 +285,6 @@ public class DiffusionMemoryManager<T>
             throw new InvalidOperationException("Model sharding is not configured.");
 
         return _modelShard.Forward(input, context);
-    }
-
-    /// <summary>
-    /// Performs backward pass through sharded model.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from subsequent layer.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> ShardedBackward(Tensor<T> outputGradient)
-    {
-        if (_modelShard == null)
-            throw new InvalidOperationException("Model sharding is not configured.");
-
-        return _modelShard.Backward(outputGradient);
     }
 
     /// <summary>

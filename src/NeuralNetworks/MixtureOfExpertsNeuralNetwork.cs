@@ -321,40 +321,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients backward through each layer, including the
-    /// MoE layer which distributes gradients to the experts that were activated during the forward pass.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns from mistakes.
-    ///
-    /// After making a prediction, we calculate how wrong it was (the error).
-    /// This method works backward through the network, calculating how each part
-    /// contributed to the error. This information is used to improve the network.
-    ///
-    /// For MoE networks:
-    /// - Gradients flow back through the output layers
-    /// - Then through the MoE layer to the activated experts
-    /// - The gating network also learns which experts to select
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -447,7 +413,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 
         // Backpropagation
-        Backward(outputGradientTensor);
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);

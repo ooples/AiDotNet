@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -45,6 +45,6 @@ public static class LossFunctionExtensions
         }
 
         var derivative = lossFunction.CalculateDerivative(predicted.ToVector(), actual.ToVector());
-        return new Tensor<T>(predicted.Shape.ToArray(), derivative);
+        return new Tensor<T>(predicted._shape, derivative);
     }
 }

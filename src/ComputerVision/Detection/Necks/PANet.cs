@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -315,7 +315,7 @@ public class PANet<T> : NeckBase<T>
     {
         // Write shape
         writer.Write(tensor.Rank);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
         {
             writer.Write(dim);
         }

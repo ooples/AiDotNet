@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -276,7 +276,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             for (int b = 0; b < data.Rows; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, data.Rows);
-                TrainBatch(transformedData, b, end, lr);
             }
         }
 
@@ -327,81 +326,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region Training
-
-    private void TrainBatch(Matrix<T> data, int startRow, int endRow, T lr)
-    {
-        for (int row = startRow; row < endRow; row++)
-        {
-            var x = GetRow(data, row);
-
-            // GNN encoder with adjacency-based message passing
-            var gnnOut = GNNEncoderForward(x);
-
-            // VAE: get mean and logvar
-            if (_meanHead is null || _logvarHead is null) continue;
-            var meanTensor = _meanHead.Forward(VectorToTensor(gnnOut));
-            var logvarTensor = _logvarHead.Forward(VectorToTensor(gnnOut));
-
-            int latentDim = _options.LatentDimension;
-            var mean = TensorToVector(meanTensor, latentDim);
-            var logvar = TensorToVector(logvarTensor, latentDim);
-
-            // Reparameterization
-            var z = Reparameterize(mean, logvar);
-
-            // Decode
-            var decoded = DecoderForward(z);
-
-            // Compute reconstruction loss gradient
-            var reconGrad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                double diff = NumOps.ToDouble(decoded[j]) - NumOps.ToDouble(x[j]);
-                reconGrad[j] = NumOps.FromDouble(2.0 * diff);
-            }
-
-            // Sanitize and clip gradient
-            reconGrad = SanitizeAndClipGradient(reconGrad, 5.0);
-
-            // Backward through decoder
-            BackwardDecoder(reconGrad);
-
-            // KL divergence gradient on mean and logvar
-            var meanGrad = new Tensor<T>([latentDim]);
-            var logvarGrad = new Tensor<T>([latentDim]);
-            for (int j = 0; j < latentDim; j++)
-            {
-                double m = NumOps.ToDouble(mean[j]);
-                double lv = NumOps.ToDouble(logvar[j]);
-                meanGrad[j] = NumOps.FromDouble(m * _options.KLWeight);
-                logvarGrad[j] = NumOps.FromDouble(0.5 * (Math.Exp(lv) - 1.0) * _options.KLWeight);
-            }
-
-            // Sanitize and clip KL gradients
-            meanGrad = SanitizeAndClipGradient(meanGrad, 5.0);
-            logvarGrad = SanitizeAndClipGradient(logvarGrad, 5.0);
-
-            var encoderGradFromMean = _meanHead.Backward(meanGrad);
-            var encoderGradFromLogvar = _logvarHead.Backward(logvarGrad);
-
-            // Propagate KL gradient through GNN encoder layers
-            var encoderGrad = encoderGradFromMean.Add(encoderGradFromLogvar);
-            for (int i = _gnnLayers.Count - 1; i >= 0; i--)
-            {
-                encoderGrad = _gnnLayers[i].Backward(encoderGrad);
-            }
-
-            // Update adjacency matrix (gradient descent on structure loss)
-            UpdateAdjacency(x, lr);
-
-            // Update parameters for layers that had Backward() called
-            _meanHead.UpdateParameters(lr);
-            _logvarHead.UpdateParameters(lr);
-            foreach (var layer in _gnnLayers) layer.UpdateParameters(lr);
-            foreach (var layer in Layers) layer.UpdateParameters(lr);
-            _decoderOutput?.UpdateParameters(lr);
-        }
-    }
 
     private void UpdateAdjacency(Vector<T> x, T lr)
     {
@@ -509,15 +433,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             z[i] = NumOps.FromDouble(m + eps * Math.Exp(0.5 * lv));
         }
         return z;
-    }
-
-    private void BackwardDecoder(Tensor<T> grad)
-    {
-        var current = grad;
-        if (_decoderOutput is not null)
-            current = _decoderOutput.Backward(current);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            current = Layers[i].Backward(current);
     }
 
     #endregion
@@ -738,11 +653,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// GOGGLE uses GNN message passing on a learned adjacency matrix which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -184,6 +185,8 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         PreviousState = Vector<T>.Empty();
 
         InitializeCellStates();
+
+        RegisterBuffer(CellStates, nameof(CellStates), PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -257,7 +260,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -281,7 +284,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         // This broadcasts input[ColumnCount] across the CellsPerColumn dimension without CPU download
         backend.BroadcastMultiplyFirstAxis(cellStatesBuffer, input.Buffer, outputBuffer, ColumnCount, CellsPerColumn);
 
-        return new GpuTensor<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -416,132 +419,6 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         return new Vector<T>(predictions.ToArray());
     }
 
-    /// <summary>
-    /// Performs the backward pass of the temporal memory layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the temporal memory layer, which is used during training to propagate
-    /// error gradients back through the network. It sums the gradients for all cells in each column to produce a
-    /// gradient for each column in the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method helps the layer understand how to adjust its behavior during training.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives information about how its output should change (outputGradient)
-    /// - It calculates how each input column contributed to the output errors
-    /// - It creates an inputGradient to pass back to previous layers
-    /// 
-    /// The process works by:
-    /// - Summing up the gradients for all cells in each column
-    /// - This tells the layer how each column's activation affected the final result
-    /// 
-    /// While the main learning in this layer happens through the Learn method,
-    /// this backward pass allows it to participate in the neural network's
-    /// overall gradient-based learning.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // Reshape output gradient from [ColumnCount * CellsPerColumn] to [ColumnCount, CellsPerColumn]
-        var reshapedGrad = outputGradient.Reshape([ColumnCount, CellsPerColumn]);
-
-        // Sum gradients along axis 1 (cells) to get gradient per column
-        // This aggregates the gradients from all cells in each column
-        var inputGradient = Engine.ReduceSum(reshapedGrad, [1], keepDims: false);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Build graph equivalent to repeating input across cells: matmul with ones then flatten
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "tm_input", requiresGradient: true);
-        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, new[] { ColumnCount, 1 });
-
-        var onesData = new T[CellsPerColumn];
-        for (int i = 0; i < CellsPerColumn; i++) onesData[i] = NumOps.One;
-        var onesTensor = new Tensor<T>(new[] { 1, CellsPerColumn }, new Vector<T>(onesData));
-        var onesNode = Autodiff.TensorOperations<T>.Constant(onesTensor, "tm_ones");
-
-        var repeated = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, onesNode);
-        var flattened = Autodiff.TensorOperations<T>.Reshape(repeated, new[] { ColumnCount * CellsPerColumn });
-
-        flattened.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((flattened, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in temporal memory autodiff.");
-
-        return inputNode.Gradient;
-    }
-
 
     /// <summary>
     /// Updates the parameters of the layer.
@@ -667,76 +544,5 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
             PreviousState = new Vector<T>(prevStateTensor.ToArray());
         }
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // TemporalMemoryLayer JIT uses a simplified differentiable approximation:
-        // 1. Project input through cell states matrix
-        // 2. Apply sigmoid for cell activation probabilities
-        // 3. Apply straight-through threshold for binary output
-        //
-        // This approximates the HTM temporal memory behavior with differentiable operations.
-
-        var input = inputNodes[0];
-
-        // CellStates is [ColumnCount, CellsPerColumn], need to reshape for projection
-        // Transpose CellStates to [CellsPerColumn, ColumnCount] then expand for output
-        int outputSize = ColumnCount * CellsPerColumn;
-
-        // Create expanded cell states tensor for projection [outputSize, ColumnCount]
-        var cellStatesTensor = new Tensor<T>([outputSize, ColumnCount]);
-        for (int col = 0; col < ColumnCount; col++)
-        {
-            for (int cell = 0; cell < CellsPerColumn; cell++)
-            {
-                int outputIdx = col * CellsPerColumn + cell;
-                // Each output cell responds to its column's input
-                cellStatesTensor[outputIdx, col] = CellStates[col, cell];
-            }
-        }
-
-        var cellStatesNode = TensorOperations<T>.Constant(cellStatesTensor, "tm_cell_states");
-
-        // Project input through cell states
-        var inputReshaped = TensorOperations<T>.Reshape(input, ColumnCount, 1);
-        var projection = TensorOperations<T>.MatrixMultiply(cellStatesNode, inputReshaped);
-        var projectionFlat = TensorOperations<T>.Reshape(projection, outputSize);
-
-        // Apply sigmoid for activation probabilities
-        var activations = TensorOperations<T>.Sigmoid(projectionFlat);
-
-        // Apply straight-through threshold for binary cell output
-        var output = TensorOperations<T>.StraightThroughThreshold(activations, 0.5);
-
-        // Apply layer activation
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. TemporalMemoryLayer uses a differentiable approximation for JIT.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for TemporalMemory uses a simplified differentiable approximation
-    /// of the HTM algorithm. The complex cell state tracking and prediction mechanisms
-    /// are approximated with matrix projections and sigmoid activations, enabling
-    /// gradient-based optimization while maintaining similar sparse activation patterns.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
 }

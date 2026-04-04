@@ -1,4 +1,4 @@
-namespace AiDotNet.Extensions;
+﻿namespace AiDotNet.Extensions;
 
 public static class TensorExtensions
 {
@@ -69,7 +69,7 @@ public static class TensorExtensions
             throw new ArgumentException($"The size of the flattened vector ({flattenedValues.Length}) does not match the tensor shape total size ({totalSize})");
 
         // Create a new tensor with the same shape
-        var result = new Tensor<T>(tensor.Shape.ToArray());
+        var result = new Tensor<T>(tensor._shape);
 
         // Use SIMD Copy for bulk transfer
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -138,7 +138,7 @@ public static class TensorExtensions
     public static bool TensorEquals<T>(this Tensor<T> a, Tensor<T> b)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        if (!a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
+        if (!a._shape.SequenceEqual(b._shape))
             return false;
 
         // Use spans for vectorized comparison
@@ -165,8 +165,8 @@ public static class TensorExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Get shapes and verify they can be concatenated
-        int[] shapeA = tensorA.Shape.ToArray();
-        int[] shapeB = tensorB.Shape.ToArray();
+        int[] shapeA = tensorA._shape;
+        int[] shapeB = tensorB._shape;
 
         if (shapeA.Length != shapeB.Length)
         {

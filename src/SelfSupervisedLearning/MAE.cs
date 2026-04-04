@@ -103,81 +103,6 @@ public class MAE<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Apply simple augmentation (MAE uses minimal augmentation)
-        var augmented = _augmentation.ApplyMinimal(batch);
-
-        // Patchify the image
-        var patches = Patchify(augmented);
-
-        // Generate random mask
-        var mask = MAEReconstructionLoss<T>.CreateRandomMask(
-            batchSize, _numPatches, _maskRatio, _config.Seed);
-
-        // Get visible and masked patches
-        var (visiblePatches, visibleIndices) = ExtractVisiblePatches(patches, mask);
-
-        // Encode visible patches
-        var encoded = _encoder.ForwardWithMemory(visiblePatches);
-
-        // Decode and reconstruct (if decoder available)
-        Tensor<T> reconstructed;
-        if (_decoder is not null)
-        {
-            // Add position embeddings and mask tokens, then decode
-            var decoderInput = PrepareDecoderInput(encoded, visibleIndices, mask);
-            reconstructed = _decoder.ForwardWithMemory(decoderInput);
-        }
-        else
-        {
-            // Simplified: use encoder output directly
-            reconstructed = ReconstructFromVisible(encoded, mask);
-        }
-
-        // Compute loss only on masked patches
-        var (loss, gradRecon) = _loss.ComputeLossWithGradients(reconstructed, patches, mask);
-
-        // Backward pass through decoder and encoder
-        if (_decoder is not null)
-        {
-            // Backpropagate through decoder
-            _decoder.Backpropagate(gradRecon);
-
-            // Get decoder input gradients and route to encoder
-            var decoderInputGrad = _decoder.GetParameterGradients();
-            var encoderGrad = RouteGradientsToEncoder(gradRecon, visibleIndices, mask);
-            _encoder.Backpropagate(encoderGrad);
-        }
-        else
-        {
-            // Without decoder, route reconstruction gradients directly to encoder
-            var encoderGrad = RouteGradientsToEncoderDirect(gradRecon, visibleIndices, mask);
-            _encoder.Backpropagate(encoderGrad);
-        }
-
-        // Update parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateParameters(learningRate);
-
-        // Compute metrics
-        var numMaskedPatches = (int)(_numPatches * _maskRatio) * batchSize;
-        var numVisiblePatches = (_numPatches - (int)(_numPatches * _maskRatio)) * batchSize;
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = numMaskedPatches; // Masked patches being reconstructed
-        result.NumNegativePairs = 0;
-        result.Metrics["mask_ratio"] = NumOps.FromDouble(_maskRatio);
-        result.Metrics["num_visible"] = NumOps.FromDouble(numVisiblePatches);
-        result.Metrics["num_masked"] = NumOps.FromDouble(numMaskedPatches);
-
-        return result;
-    }
-
     private Tensor<T> Patchify(Tensor<T> images)
     {
         var batchSize = images.Shape[0];
@@ -565,5 +490,7 @@ public class MAE<T> : SSLMethodBase<T>
         double maskRatio = 0.75)
     {
         return new MAE<T>(encoder, decoder, patchSize, imageSize, maskRatio);
-    }
+    
+
+}
 }

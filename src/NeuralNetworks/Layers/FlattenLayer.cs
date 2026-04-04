@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -239,108 +239,6 @@ public class FlattenLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the flatten layer, reshaping gradients back to the original input shape.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
-    /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using manual gradient computation (optimized implementation).
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
-    /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        return Engine.Reshape(outputGradient, _lastInput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Performs the backward pass using automatic differentiation via TensorOperations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
-    /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation node for input
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Replay forward pass: flatten is just a reshape operation
-        // Must match Forward() logic: rank 1 stays 1D, rank >= 2 becomes [batch, flat]
-        int[] flattenedShape;
-        if (_lastInput.Rank == 1)
-        {
-            flattenedShape = new[] { _outputSize };
-        }
-        else
-        {
-            int batchSize = _lastInput.Shape[0];
-            flattenedShape = new[] { batchSize, _outputSize };
-        }
-        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
-
-        // Set the output gradient and perform backward pass manually
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                        stack.Push((parent, false));
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract and return the input gradient
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
-
-        return inputNode.Gradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of the layer based on the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for parameter updates.</param>
@@ -425,14 +323,6 @@ public class FlattenLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because flatten is a simple reshape operation that can be JIT compiled.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     /// <value>
@@ -459,7 +349,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// but still points to the exact same memory on the GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -476,61 +366,12 @@ public class FlattenLayer<T> : LayerBase<T>
         if (input.Shape.Length <= 3)
         {
             // Unbatched input: flatten to 1D vector
-            return input.CreateView(0, [input.ElementCount]);
+            return input.Reshape([input.Length]);
         }
 
         // Batched input: flatten spatial dimensions keeping batch dimension
         int batchSize = input.Shape[0];
-        int flattenedSize = input.ElementCount / batchSize;
-        return input.CreateView(0, [batchSize, flattenedSize]);
-    }
-
-    /// <summary>
-    /// Performs GPU-resident backward pass for the flatten layer.
-    /// Reshapes the gradient back to the original input shape.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_lastInputGpuShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Flatten backward is just reshaping the gradient back to original shape
-        // No computation needed, just a view with the original shape
-        return outputGradient.CreateView(0, _lastInputGpuShape);
-    }
-
-    /// <summary>
-    /// Exports the flatten layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the flattened result.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the flatten operation using a reshape node.
-    /// The flatten operation is equivalent to reshaping the input to [batchSize, product of dimensions].
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input data with symbolic batch dimension
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(_inputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        inputNodes.Add(inputNode);
-
-        // Flatten is just a reshape operation: reshape to [batchSize, outputSize]
-        var flattenedShape = new int[] { -1, _outputSize }; // -1 means variable batch size
-        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
-
-        return outputNode;
+        int flattenedSize = input.Length / batchSize;
+        return input.Reshape([batchSize, flattenedSize]);
     }
 }

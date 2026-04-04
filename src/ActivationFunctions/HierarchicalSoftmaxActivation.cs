@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -261,23 +261,6 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return probability;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.HierarchicalSoftmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// HierarchicalSoftmax supports JIT compilation with gradient computation through the binary tree structure.
-    /// The backward pass computes gradients for both the input and the node weights, enabling end-to-end training.
-    /// </para>
-    /// <para>
-    /// The node weights are exposed via <see cref="NodeWeightsTensor"/> for use in computation graphs.
-    /// For training, wrap the weights in a ComputationNode to track gradients.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

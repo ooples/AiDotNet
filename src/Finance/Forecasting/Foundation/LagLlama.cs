@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -580,7 +580,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
                 // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
             }
 
-            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -895,42 +894,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Performs the backward pass through Lag-Llama.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation through Lag-Llama updates all learnable
-    /// parameters: embeddings, attention weights, FFN weights, and distribution head.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Distribution head backward
-        if (_distributionHead is not null)
-            current = _distributionHead.Backward(current);
-
-        // Final norm backward
-        if (_finalNorm is not null)
-            current = _finalNorm.Backward(current);
-
-        // Transformer layers backward (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Input embedding backward
-        if (_inputEmbedding is not null)
-            current = _inputEmbedding.Backward(current);
-
-        return current;
-    }
-
     #endregion
 
     #region Inference Methods
@@ -968,7 +931,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1217,7 +1180,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         // For Lag-Llama, update lag features after shifting.
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         int featureSize = 1 + _lagIndices.Length; // value + lags
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;

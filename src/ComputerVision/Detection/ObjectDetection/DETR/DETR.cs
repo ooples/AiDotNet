@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
@@ -125,7 +125,7 @@ public class DETR<T> : ObjectDetectorBase<T>
         var flattened = FlattenForTransformer(projected);
 
         // Generate positional encoding
-        var posEncoding = GeneratePositionalEncoding(flattened.Shape.ToArray());
+        var posEncoding = GeneratePositionalEncoding(flattened._shape);
 
         // Encode features
         var memory = _encoder.Forward(flattened, posEncoding);
@@ -536,7 +536,7 @@ internal class EncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -626,7 +626,7 @@ internal class LayerNorm<T>
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
 
         for (int b = 0; b < batch; b++)
         {

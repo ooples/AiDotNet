@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 
@@ -65,7 +65,7 @@ public class AdaptiveProjectedGuidance<T> : IGuidanceMethod<T>
         // Project direction onto conditional prediction
         double projScale = condNormSq > 1e-10 ? dotProduct / condNormSq : 0;
 
-        var result = new Tensor<T>(unconditional.Shape.ToArray());
+        var result = new Tensor<T>(unconditional._shape);
         var resultSpan = result.AsWritableSpan();
 
         for (int i = 0; i < len; i++)

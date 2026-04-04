@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -96,8 +96,8 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput3D;
-    private IGpuTensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuInput3D;
+    private Tensor<T>? _gpuNormalized1;
 
     /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
@@ -405,6 +405,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm2);
     }
 
     /// <summary>
@@ -523,7 +529,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -537,7 +543,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int[] inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
         int[] originalShape = inputShape;
         bool was2D = rank == 2;
 
@@ -615,196 +621,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        // If forward received 2D input, we need to reshape the gradient to 3D
-        int[] originalShape = outputGradient.Shape.ToArray();
-        bool gradWas2D = originalShape.Length == 2;
-
-        IGpuTensor<T> grad3D;
-        if (gradWas2D)
-        {
-            grad3D = gpuEngine.ReshapeGpu(outputGradient, [1, originalShape[0], originalShape[1]]);
-        }
-        else
-        {
-            grad3D = outputGradient;
-        }
-
-        // Backward through norm2
-        IGpuTensor<T> grad = InvokeBackwardGpu(_norm2, grad3D, gpuEngine);
-
-        // Gradient flows to both residual connection and FFN
-        // Backward through FFN2
-        IGpuTensor<T> ffProjectedGrad = InvokeBackwardGpu(_feedForward2, grad, gpuEngine);
-
-        // Backward through FFN1
-        IGpuTensor<T> ffExpandedGrad = InvokeBackwardGpu(_feedForward1, ffProjectedGrad, gpuEngine);
-
-        // Add residual gradient: dNormalized1 = grad + ffExpandedGrad
-        var norm1Grad = gpuEngine.AddGpu(grad, ffExpandedGrad);
-
-        // Backward through norm1
-        grad = InvokeBackwardGpu(_norm1, norm1Grad, gpuEngine);
-
-        // Gradient flows to both residual connection and self-attention
-        // Backward through self-attention
-        IGpuTensor<T> selfAttnGrad = InvokeBackwardGpu(_selfAttention, grad, gpuEngine);
-
-        // Add residual gradient: dInput = grad + selfAttnGrad
-        var inputGrad = gpuEngine.AddGpu(grad, selfAttnGrad);
-
-        // Reshape back to original shape if needed
-        if (gradWas2D)
-        {
-            inputGrad = gpuEngine.ReshapeGpu(inputGrad, originalShape);
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Helper method to invoke BackwardGpu on a sublayer using reflection.
-    /// </summary>
-    private static IGpuTensor<T> InvokeBackwardGpu(LayerBase<T> layer, IGpuTensor<T> grad, DirectGpuTensorEngine gpuEngine)
-    {
-        var layerType = layer.GetType();
-        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardGpuMethod != null)
-        {
-            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // Fallback to CPU backward
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = layer.Backward(cpuGrad);
-            return gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the transformer encoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the transformer encoder layer, which is used during training to
-    /// propagate error gradients back through the network. It computes gradients for each sublayer in reverse order
-    /// of the forward pass, ensuring that residual connections are properly handled.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how the layer's inputs should change to reduce errors.
-    ///
-    /// During the backward pass, we go through the same steps as the forward pass, but in reverse order:
-    ///
-    /// 1. Final Layer Normalization:
-    ///    - Compute how the normalization's input should change based on output errors
-    ///
-    /// 2. Feed-Forward Network:
-    ///    - Determine how the feed-forward network's input should change
-    ///    - Account for the residual connection by adding gradients
-    ///
-    /// 3. First Layer Normalization:
-    ///    - Compute how the first normalization's input should change
-    ///
-    /// 4. Self-Attention:
-    ///    - Determine how the self-attention's input should change
-    ///    - Account for the residual connection
-    ///
-    /// This reverse flow of gradients allows each component to learn how it contributed to any errors.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // If forward received 2D input, the output gradient will also be 2D
-        // We need to reshape it to 3D to match internal processing shapes
-        Tensor<T> grad3D;
-        bool gradWas2D = outputGradient.Shape.Length == 2;
-
-        if (gradWas2D)
-        {
-            // 2D gradient: [seq, embed] -> [1, seq, embed]
-            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
-        }
-        else
-        {
-            grad3D = outputGradient;
-        }
-
-        // Backward pass through the second normalization layer
-        var dNorm2 = _norm2.Backward(grad3D);
-
-        // Split the gradient for the residual connection (copy gradient to both paths)
-        var dFeedForward = dNorm2;
-        var dNormalized1 = dNorm2; // Residual gradient flows directly
-
-        // Backward pass through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(dFeedForward);
-        var dFeedForwardInput = _feedForward1.Backward(dFF2);
-        // Add gradients at the join point: dNormalized1 = dNorm2 + dFeedForwardInput
-        dNormalized1 = Engine.TensorAdd(dNormalized1, dFeedForwardInput);
-
-        // Backward pass through the first normalization layer
-        var dNorm1 = _norm1.Backward(dNormalized1);
-
-        // Split the gradient for the residual connection
-        var dAttention = dNorm1;
-        var dInput = dNorm1; // Residual gradient flows directly
-
-        // Backward pass through the self-attention layer
-        var dSelfAttentionInput = _selfAttention.Backward(dAttention);
-        // Add gradients at the join point: dInput = dNorm1 + dSelfAttentionInput
-        dInput = Engine.TensorAdd(dInput, dSelfAttentionInput);
-
-        // If input was originally 2D, reshape gradient back to 2D
-        if (gradWas2D)
-        {
-            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
-        }
-
-        return dInput;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Since this is a composite layer,
-    /// it delegates to its sublayers which will use autodiff when their UseAutodiff flags are enabled.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Composite layer - delegates to sublayers which use autodiff if enabled
-        return BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -1074,80 +890,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Exports the transformer encoder layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the transformer encoder operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node
-    /// 2. Applies multi-head self-attention with residual connection and norm
-    /// 3. Applies feed-forward network with residual connection and norm
-    /// 4. Returns the final output
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of a transformer encoder layer for JIT.
-    ///
-    /// The transformer encoder layer is a composite layer combining:
-    /// - Multi-head self-attention (captures relationships between positions)
-    /// - Layer normalization (stabilizes training)
-    /// - Feed-forward network (processes each position independently)
-    /// - Residual connections (helps gradient flow in deep networks)
-    ///
-    /// The forward pass:
-    /// 1. x' = LayerNorm(x + MultiHeadAttention(x))
-    /// 2. output = LayerNorm(x' + FeedForward(x'))
-    ///
-    /// JIT optimization for composite layers:
-    /// - For now, composite layers note their structure but may delegate to sublayers
-    /// - Future optimization could fuse operations across sublayers
-    /// - Each sublayer (attention, feed-forward, norm) can be independently JIT compiled
-    ///
-    /// This is the core building block of BERT (12-24 encoder layers), GPT uses decoder layers.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when sublayers are not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
-
-        if (_selfAttention == null || _norm1 == null || _feedForward1 == null || _feedForward2 == null || _norm2 == null)
-            throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
-
-        // Create symbolic input node with batch dimension
-        // InputShape is [sequenceLength, embeddingDimension]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "encoder_input");
-        inputNodes.Add(inputNode);
-
-        // Step 1: Self-attention sublayer using MultiHeadAttention operation
-        var attentionOut = ApplyMultiHeadAttentionGraph(_selfAttention, inputNode);
-
-        // Step 2: First residual connection: residual1 = input + attention_out
-        var residual1 = TensorOperations<T>.Add(inputNode, attentionOut);
-
-        // Step 3: First layer normalization
-        var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
-
-        // Step 4: Feed-forward sublayer (two linear layers)
-        var ffExpanded = ApplyFeedForwardGraph(_feedForward1, normalized1);
-        var ffApplied = ApplyFeedForwardGraph(_feedForward2, ffExpanded);
-
-        // Step 5: Second residual connection: residual2 = normalized1 + ff_out
-        var residual2 = TensorOperations<T>.Add(normalized1, ffApplied);
-
-        // Step 6: Second layer normalization
-        var output = ApplyLayerNormGraph(_norm2, residual2);
-
-        return output;
-    }
-
-    /// <summary>
     /// Applies multi-head attention graph to an input node.
     /// </summary>
     private ComputationNode<T> ApplyMultiHeadAttentionGraph(MultiHeadAttentionLayer<T> attentionLayer, ComputationNode<T> input)
@@ -1228,48 +970,4 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return withBias;
     }
 
-    /// <summary>
-    /// Gets whether this transformer encoder layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if all sublayers support JIT compilation.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. As a composite layer,
-    /// it supports JIT if all its sublayers support JIT:
-    /// - Multi-head self-attention layer
-    /// - Layer normalization layers
-    /// - Feed-forward layer
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this composite layer can use JIT compilation.
-    ///
-    /// The transformer encoder layer can be JIT compiled if:
-    /// - All sublayers are properly initialized
-    /// - Each sublayer supports JIT compilation
-    ///
-    /// Composite layer JIT optimization:
-    /// - Each sublayer can be independently JIT compiled
-    /// - Future optimization: fuse operations across sublayers
-    /// - Residual connections and layer norms are fast operations
-    ///
-    /// The bottleneck in transformers is typically the attention mechanism (O(n²)),
-    /// which benefits most from JIT compilation. The feed-forward networks are also
-    /// computationally expensive (matrix multiplications).
-    ///
-    /// BERT and other transformers stack 12-24 of these encoder layers, so optimizing
-    /// each layer compounds to significant speedup for the full model.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // TransformerEncoderLayer is a composite layer
-            // It supports JIT if all sublayers support JIT
-            return _selfAttention != null && _selfAttention.SupportsJitCompilation &&
-                   _norm1 != null && _norm1.SupportsJitCompilation &&
-                   _feedForward1 != null && _feedForward1.SupportsJitCompilation &&
-                   _feedForward2 != null && _feedForward2.SupportsJitCompilation &&
-                   _norm2 != null && _norm2.SupportsJitCompilation;
-        }
-    }
 }

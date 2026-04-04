@@ -396,7 +396,7 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation });
         }
-        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.FlashAttentionLayer<>))
         {
             instance = CreateFlashAttentionLayer<T>(type, inputShape, additionalParams);
         }
@@ -432,7 +432,10 @@ public static class DeserializationHelper
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
-            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, null, null });
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
+            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation, null });
         }
         else if (genericDef == typeof(Conv3DLayer<>))
         {
@@ -581,7 +584,8 @@ public static class DeserializationHelper
             {
                 throw new InvalidOperationException($"Cannot find InvertedResidualBlock constructor.");
             }
-            instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, null });
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, activation });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.TransitionLayer")))

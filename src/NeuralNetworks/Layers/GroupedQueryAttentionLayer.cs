@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -193,6 +193,11 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+
+        // Unregister previous sub-layers before replacing
+        if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
+        if (_alibiLayer is not null) UnregisterSubLayer(_alibiLayer);
+
         _ropeLayer = null;
         _alibiLayer = null;
 
@@ -201,9 +206,11 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
             case PositionalEncodingType.Rotary:
                 _ropeLayer = new RotaryPositionalEncodingLayer<T>(
                     maxSequenceLength, _headDimension, ropeTheta);
+                RegisterSubLayer(_ropeLayer);
                 break;
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_numHeads, maxSequenceLength);
+                RegisterSubLayer(_alibiLayer);
                 break;
             case PositionalEncodingType.None:
                 break;
@@ -436,111 +443,6 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastProjectedQueries == null || _lastExpandedKeys == null ||
-            _lastExpandedValues == null || _lastAttentionWeights == null ||
-            _lastAttentionContext == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int seqLen = rank >= 2 ? outputGradient.Shape[rank - 2] : 1;
-        int embDim = outputGradient.Shape[rank - 1];
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLength = _lastInput.Shape[1];
-
-        // Normalize gradient to 3D
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, seqLen, embDim)
-            : outputGradient.Reshape(batchSize, seqLength, _embeddingDimension);
-
-        // Apply activation derivative
-        var activationGrad = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
-
-        // 1. Output bias gradient: sum over batch and sequence
-        _outputBiasGradient = activationGrad.Sum([0, 1]);
-
-        // 2. Output weights gradient: context^T @ dOut
-        // context: [batch, seq, numHeads*headDim], dOut: [batch, seq, embDim]
-        _outputWeightsGradient = _lastAttentionContext.Transpose([0, 2, 1])
-            .Multiply(activationGrad)
-            .Sum([0])
-            .Reshape([_numHeads * _headDimension, _embeddingDimension]);
-
-        // 3. Gradient through output projection: dOut @ W_o^T -> [batch, seq, numHeads*headDim]
-        var dContext = activationGrad.Multiply(_outputWeights.Transpose([1, 0]));
-
-        // 4. Reshape to [batch, numHeads, seq, headDim]
-        var dContext4D = dContext.Reshape(batchSize, seqLength, _numHeads, _headDimension)
-            .Transpose(new[] { 0, 2, 1, 3 });
-
-        // 5. Backward through scaled dot-product attention
-        // Using Engine.ScaledDotProductAttentionBackward with expanded K/V
-        Engine.ScaledDotProductAttentionBackward(
-            dContext4D,
-            _lastProjectedQueries,
-            _lastExpandedKeys,
-            _lastExpandedValues,
-            _lastAttentionWeights,
-            1.0 / Math.Sqrt(_headDimension),
-            out var dQ_4D,
-            out var dExpandedK_4D,
-            out var dExpandedV_4D);
-
-        // 6. GQA-specific: aggregate expanded K/V gradients back to numKVHeads
-        // dExpandedK/V: [batch, numHeads, seq, headDim] -> dK/V: [batch, numKVHeads, seq, headDim]
-        var dK_4D = AggregateKVGradients(dExpandedK_4D, batchSize, seqLength);
-        var dV_4D = AggregateKVGradients(dExpandedV_4D, batchSize, seqLength);
-
-        // 6b. Apply inverse RoPE rotation to Q/K gradients
-        // The forward pass cached post-RoPE Q/K, so attention backward gives gradients w.r.t.
-        // rotated Q/K. We need gradients w.r.t. pre-rotation Q/K for correct weight updates.
-        if (_ropeLayer != null)
-        {
-            dQ_4D = _ropeLayer.Backward(dQ_4D);
-            dK_4D = _ropeLayer.Backward(dK_4D);
-        }
-
-        // 7. Reshape gradients from 4D to 2D for weight gradient computation
-        var dQ_flat = dQ_4D.Transpose(new[] { 0, 2, 1, 3 })
-            .Reshape(batchSize * seqLength, _numHeads * _headDimension);
-        var dK_flat = dK_4D.Transpose(new[] { 0, 2, 1, 3 })
-            .Reshape(batchSize * seqLength, _numKVHeads * _headDimension);
-        var dV_flat = dV_4D.Transpose(new[] { 0, 2, 1, 3 })
-            .Reshape(batchSize * seqLength, _numKVHeads * _headDimension);
-
-        // 8. Compute projection weight gradients: input^T @ dProjection
-        var input2D = _lastInput.Reshape(batchSize * seqLength, _embeddingDimension);
-        var input2DT = input2D.Transpose([1, 0]);
-
-        _queryWeightsGradient = Engine.TensorMatMul(input2DT, dQ_flat);
-        _keyWeightsGradient = Engine.TensorMatMul(input2DT, dK_flat);
-        _valueWeightsGradient = Engine.TensorMatMul(input2DT, dV_flat);
-
-        // 9. Compute input gradient: dInput = dQ @ W_q^T + dK @ W_k^T + dV @ W_v^T
-        var inputGradient = Engine.TensorMatMul(dQ_flat, _queryWeights.Transpose([1, 0]));
-        inputGradient = Engine.TensorAdd(inputGradient,
-            Engine.TensorMatMul(dK_flat, _keyWeights.Transpose([1, 0])));
-        inputGradient = Engine.TensorAdd(inputGradient,
-            Engine.TensorMatMul(dV_flat, _valueWeights.Transpose([1, 0])));
-
-        var inputGrad3D = inputGradient.Reshape(batchSize, seqLength, _embeddingDimension);
-
-        // Reshape back to original input rank
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLength, _embeddingDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     /// <summary>
     /// Aggregates expanded K/V gradients from [batch, numHeads, seq, headDim]
     /// back to [batch, numKVHeads, seq, headDim] by summing across head groups.
@@ -680,22 +582,6 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _outputBiasGradient = null;
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode;
-    }
-
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
@@ -726,4 +612,5 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the output projection weights for external use.
     /// </summary>
     public Tensor<T> GetOutputWeights() => _outputWeights;
+
 }

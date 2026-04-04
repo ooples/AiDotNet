@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -240,14 +240,14 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         if (realLabels.Shape.Length != 2 || realLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels.Shape.ToArray())}].",
+                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels._shape)}].",
                 nameof(realLabels));
         }
 
         if (fakeLabels.Shape.Length != 2 || fakeLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels.Shape.ToArray())}].",
+                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels._shape)}].",
                 nameof(fakeLabels));
         }
 
@@ -271,7 +271,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate for real images
         var realGradients = CalculateDiscriminatorGradients(realDiscOutput, realLabels, isReal: true, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorWithOptimizer();
 
         // Train discriminator on fake images
@@ -283,7 +282,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate for fake images
         var fakeGradients = CalculateDiscriminatorGradients(fakeDiscOutput, fakeLabels, isReal: false, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorWithOptimizer();
 
         // Total discriminator loss
@@ -308,8 +306,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through discriminator to get input gradients, then through generator
         var genGradients = CalculateDiscriminatorGradients(genDiscOutput, fakeLabels, isReal: true, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
-        Generator.Backward(discInputGradients);
+        /* Generator.Backward(discInputGradients) removed — tape-based */ ;
         UpdateGeneratorWithOptimizer();
 
         // Track losses
@@ -442,7 +439,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         bool isReal,
         int batchSize)
     {
-        var gradients = new Tensor<T>(discOutput.Shape.ToArray());
+        var gradients = new Tensor<T>(discOutput._shape);
         T authTarget = isReal ? NumOps.One : NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
         T batchSizeT = NumOps.FromDouble(batchSize);

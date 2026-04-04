@@ -46,7 +46,9 @@ public class SSLFineTuningPipeline<T>
     /// <summary>
     /// Event raised for progress updates.
     /// </summary>
+    #pragma warning disable CS0067
     public event Action<int, int, double>? OnProgress;
+    #pragma warning restore CS0067
 
     /// <summary>
     /// Initializes a new fine-tuning pipeline.
@@ -94,93 +96,6 @@ public class SSLFineTuningPipeline<T>
     {
         _config.Strategy = strategy;
         return this;
-    }
-
-    /// <summary>
-    /// Fine-tunes the model on labeled data.
-    /// </summary>
-    /// <param name="trainData">Training data.</param>
-    /// <param name="trainLabels">Training labels.</param>
-    /// <param name="validData">Optional validation data.</param>
-    /// <param name="validLabels">Optional validation labels.</param>
-    /// <returns>Fine-tuning result with accuracy.</returns>
-    public FineTuningResult<T> FineTune(
-        Tensor<T> trainData, int[] trainLabels,
-        Tensor<T>? validData = null, int[]? validLabels = null)
-    {
-        var result = new FineTuningResult<T>
-        {
-            TrainAccuracies = [],
-            ValidAccuracies = []
-        };
-
-        var epochs = _config.Epochs ?? 100;
-        var batchSize = _config.BatchSize ?? 256;
-        var numSamples = trainData.Shape[0];
-
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            var lr = GetLearningRate(epoch, epochs);
-            var freezeEncoder = ShouldFreezeEncoder(epoch, epochs);
-
-            T epochLoss = NumOps.Zero;
-            int correct = 0;
-
-            for (int i = 0; i < numSamples; i += batchSize)
-            {
-                int actualBatch = Math.Min(batchSize, numSamples - i);
-
-                var batchData = ExtractBatch(trainData, i, actualBatch);
-                var batchLabels = trainLabels.Skip(i).Take(actualBatch).ToArray();
-
-                // Forward pass
-                var features = _encoder.ForwardWithMemory(batchData);
-                var logits = ComputeLogits(features);
-
-                // Compute loss
-                var loss = ComputeCrossEntropyLoss(logits, batchLabels);
-                epochLoss = NumOps.Add(epochLoss, loss);
-
-                // Backward pass
-                var gradLogits = ComputeGradients(logits, batchLabels);
-
-                // Update classifier
-                UpdateClassifier(features, gradLogits, lr);
-
-                // Update encoder if not frozen
-                if (!freezeEncoder)
-                {
-                    var gradFeatures = ComputeFeatureGradients(gradLogits);
-                    _encoder.Backpropagate(gradFeatures);
-                    UpdateEncoder(lr * _config.EncoderLRMultiplier);
-                }
-
-                correct += ComputeCorrect(logits, batchLabels);
-            }
-
-            var trainAcc = (double)correct / numSamples;
-            result.TrainAccuracies.Add(trainAcc);
-
-            // Validation
-            if (validData is not null && validLabels is not null)
-            {
-                var validAcc = Evaluate(validData, validLabels);
-                result.ValidAccuracies.Add(validAcc);
-
-                if (validAcc > result.BestValidAccuracy)
-                {
-                    result.BestValidAccuracy = validAcc;
-                    result.BestEpoch = epoch;
-                }
-            }
-
-            OnProgress?.Invoke(epoch, epochs, trainAcc);
-        }
-
-        result.FinalTrainAccuracy = result.TrainAccuracies.LastOrDefault();
-        result.FinalValidAccuracy = result.ValidAccuracies.LastOrDefault();
-
-        return result;
     }
 
     /// <summary>

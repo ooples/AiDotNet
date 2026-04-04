@@ -503,7 +503,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
         double[] means = [123.68, 116.78, 103.94];
 
         for (int b = 0; b < batchSize; b++)
@@ -620,7 +620,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new ArgumentException($"Tensor 'b' must be 4-D, got {b.Shape.Length}-D.", nameof(b));
         if (a.Shape[0] != b.Shape[0] || a.Shape[2] != b.Shape[2] || a.Shape[3] != b.Shape[3])
             throw new ArgumentException(
-                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a.Shape.ToArray())}], b=[{string.Join(",", b.Shape.ToArray())}].");
+                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a._shape)}], b=[{string.Join(",", b._shape)}].");
 
         // Concatenate along dimension 1 (channels)
         int batch = a.Shape[0];
@@ -684,7 +684,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape.ToArray());
+        var result = new Tensor<T>(a._shape);
         for (int i = 0; i < a.Data.Length; i++)
             result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         return result;
@@ -704,44 +704,14 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var gradient = Tensor<T>.FromVector(
-            LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
-
-        if (Layers.Count >= 3)
+        try
         {
-            // Split gradient by channels for parallel score/geometry heads
-            var scoreHead = Layers[^2];
-            var geometryHead = Layers[^1];
-            int scoreChannels = 1; // score map is single channel
-            int totalChannels = gradient.Shape.Length >= 2 ? gradient.Shape[1] : 1;
-            int geoChannels = totalChannels - scoreChannels;
-
-            var scoreGrad = SliceChannels(gradient, 0, scoreChannels);
-            var geoGrad = SliceChannels(gradient, scoreChannels, geoChannels);
-
-            // Backprop through both heads independently
-            var scoreFeatureGrad = scoreHead.Backward(scoreGrad);
-            var geoFeatureGrad = geometryHead.Backward(geoGrad);
-
-            // Sum gradients from both heads for the shared feature map
-            var featureGrad = AddTensors(scoreFeatureGrad, geoFeatureGrad);
-
-            // Continue backprop through shared backbone
-            for (int i = Layers.Count - 3; i >= 0; i--)
-                featureGrad = Layers[i].Backward(featureGrad);
+            TrainWithTape(input, expectedOutput);
         }
-        else
+        finally
         {
-            // Fallback: sequential backprop for simple architectures
-            for (int i = Layers.Count - 1; i >= 0; i--)
-                gradient = Layers[i].Backward(gradient);
+            SetTrainingMode(false);
         }
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

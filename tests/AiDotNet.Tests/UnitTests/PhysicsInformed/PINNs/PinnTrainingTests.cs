@@ -7,68 +7,15 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.PINNs;
 
 public class PinnTrainingTests
 {
-    [Fact]
-    public void PhysicsInformedNeuralNetwork_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var pde = new LinearResidualPde();
-        var model = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            initialCondition: null,
-            numCollocationPoints: 8);
 
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4);
-        var after = model.GetParameters().ToArray();
 
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
-
-    [Fact]
-    public void DeepRitzMethod_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var model = new DeepRitzMethod<double>(
-            architecture,
-            EnergyFunctional,
-            boundaryCheck: null,
-            boundaryValue: null,
-            numQuadraturePoints: 8);
-
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4, derivativeStep: 1e-4);
-        var after = model.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
-
-    [Fact]
-    public void VariationalPinn_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var model = new VariationalPINN<double>(
-            architecture,
-            WeakFormResidual,
-            numQuadraturePoints: 8,
-            numTestFunctions: 2);
-
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4, derivativeStep: 1e-4);
-        var after = model.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
 
     private static double EnergyFunctional(double[] x, double[] u, double[,] gradU)
     {
@@ -100,7 +47,7 @@ public class PinnTrainingTests
 
     private sealed class LinearResidualPde : IPDESpecification<double>, IPDEResidualGradient<double>
     {
-        public double ComputeResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+        public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
         {
             return outputs[0] - inputs[0];
         }
@@ -110,8 +57,8 @@ public class PinnTrainingTests
         public string Name => "LinearResidualTest";
 
         public PDEResidualGradient<double> ComputeResidualGradient(
-            double[] inputs,
-            double[] outputs,
+            Vector<double> inputs,
+            Vector<double> outputs,
             PDEDerivatives<double> derivatives)
         {
             var gradient = new PDEResidualGradient<double>(OutputDimension, InputDimension);

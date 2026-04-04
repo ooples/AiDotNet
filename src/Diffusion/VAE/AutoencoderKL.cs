@@ -349,31 +349,10 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     /// <param name="expectedOutput">Target output (usually same as input for VAE).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var reconstruction = Forward(input);
-
-        // Compute combined loss
-        var loss = ComputeVAELoss(expectedOutput, reconstruction, klWeight: 1e-6);
-
-        // Backward pass (simplified - actual implementation would propagate gradients)
-        var reconstructionGrad = LossFunction.CalculateDerivative(reconstruction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(reconstruction.Shape.ToArray());
-        var gradSpan = gradTensor.AsWritableSpan();
-        for (int i = 0; i < gradSpan.Length && i < reconstructionGrad.Length; i++)
-        {
-            gradSpan[i] = reconstructionGrad[i];
-        }
-
-        // Backward through decoder
-        var decoderGrad = _decoder.Backward(gradTensor);
-
-        // Backward through encoder
-        _encoder.Backward(decoderGrad);
-
-        // Update parameters
+        // Use VAEModelBase tape-based training
+        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
         var lr = NumOps.FromDouble(1e-4);
-        _encoder.UpdateParameters(lr);
-        _decoder.UpdateParameters(lr);
+        ApplyGradients(gradients, lr);
     }
 
     #region Parameter Management
@@ -580,4 +559,16 @@ public class AutoencoderKL<T> : VAEModelBase<T>
         numGroups: 16,
         latentScaleFactor: 0.18215,
         inputSpatialSize: 256);
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var encoderGrads = _encoder.GetParameterGradients();
+        var decoderGrads = _decoder.GetParameterGradients();
+        var combined = new T[encoderGrads.Length + decoderGrads.Length];
+        for (int i = 0; i < encoderGrads.Length; i++)
+            combined[i] = encoderGrads[i];
+        for (int i = 0; i < decoderGrads.Length; i++)
+            combined[encoderGrads.Length + i] = decoderGrads[i];
+        return new Vector<T>(combined);
+    }
 }

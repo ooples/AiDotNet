@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -466,8 +466,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastFeedForwardOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuNormalized1;
-    private IGpuTensor<T>? _gpuNormalized2;
+    private Tensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuNormalized2;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -598,6 +598,14 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_feedForward);
+        RegisterSubLayer(_feedForwardProjection);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -656,6 +664,14 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_feedForward);
+        RegisterSubLayer(_feedForwardProjection);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -765,7 +781,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
             throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
@@ -773,8 +789,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        IGpuTensor<T> decoderInput = inputs[0];
-        IGpuTensor<T> encoderOutput = inputs[1];
+        Tensor<T> decoderInput = inputs[0];
+        Tensor<T> encoderOutput = inputs[1];
 
         // 1. Self-attention sublayer
         var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
@@ -810,180 +826,16 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _gpuNormalized1 = normalized1;
             _gpuNormalized2 = normalized2;
-            _lastInput = decoderInput.ToTensor();
-            _lastEncoderOutput = encoderOutput.ToTensor();
-            _lastSelfAttentionOutput = selfAttentionOutput.ToTensor();
-            _lastNormalized1 = normalized1.ToTensor();
-            _lastCrossAttentionOutput = crossAttentionOutput.ToTensor();
-            _lastNormalized2 = normalized2.ToTensor();
-            _lastFeedForwardOutput = ffProjected.ToTensor();
+            _lastInput = decoderInput;
+            _lastEncoderOutput = encoderOutput;
+            _lastSelfAttentionOutput = selfAttentionOutput;
+            _lastNormalized1 = normalized1;
+            _lastCrossAttentionOutput = crossAttentionOutput;
+            _lastNormalized2 = normalized2;
+            _lastFeedForwardOutput = ffProjected;
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the decoder input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the decoder input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        // Backward through norm3
-        IGpuTensor<T> grad = InvokeBackwardGpu(_norm3, outputGradient, gpuEngine);
-
-        // Gradient flows to both residual and FFN
-        // Backward through FFN projection
-        IGpuTensor<T> ffProjectedGrad = InvokeBackwardGpu(_feedForwardProjection, grad, gpuEngine);
-
-        // Backward through FFN
-        IGpuTensor<T> ffHiddenGrad = InvokeBackwardGpu(_feedForward, ffProjectedGrad, gpuEngine);
-
-        // Add residual gradient: dNormalized2 = grad + ffHiddenGrad
-        var norm2Grad = gpuEngine.AddGpu(grad, ffHiddenGrad);
-
-        // Backward through norm2
-        grad = InvokeBackwardGpu(_norm2, norm2Grad, gpuEngine);
-
-        // Gradient flows to both residual and cross-attention
-        // Backward through cross-attention
-        IGpuTensor<T> crossAttnGrad = InvokeBackwardGpu(_crossAttention, grad, gpuEngine);
-
-        // Add residual gradient: dNormalized1 = grad + crossAttnGrad
-        var norm1Grad = gpuEngine.AddGpu(grad, crossAttnGrad);
-
-        // Backward through norm1
-        grad = InvokeBackwardGpu(_norm1, norm1Grad, gpuEngine);
-
-        // Gradient flows to both residual and self-attention
-        // Backward through self-attention
-        IGpuTensor<T> selfAttnGrad = InvokeBackwardGpu(_selfAttention, grad, gpuEngine);
-
-        // Add residual gradient to get final input gradient
-        var inputGrad = gpuEngine.AddGpu(grad, selfAttnGrad);
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Helper method to invoke BackwardGpu on a sublayer using reflection.
-    /// </summary>
-    private static IGpuTensor<T> InvokeBackwardGpu(LayerBase<T> layer, IGpuTensor<T> grad, DirectGpuTensorEngine gpuEngine)
-    {
-        var layerType = layer.GetType();
-        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardGpuMethod != null)
-        {
-            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // Fallback to CPU backward
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = layer.Backward(cpuGrad);
-            return gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the transformer decoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the transformer decoder layer, which is used during training to
-    /// propagate error gradients back through the network. It computes gradients for each sublayer in reverse order
-    /// of the forward pass, ensuring that residual connections are properly handled.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how the layer's inputs should change to reduce errors.
-    ///
-    /// During the backward pass, we go through the same steps as the forward pass, but in reverse order:
-    ///
-    /// 1. Final Layer Normalization:
-    ///    - Compute how the normalization's input should change based on output errors
-    ///
-    /// 2. Feed-Forward Network:
-    ///    - Determine how the feed-forward network's input should change
-    ///    - Account for the residual connection by adding gradients
-    ///
-    /// 3. Second Layer Normalization:
-    ///    - Compute how the second normalization's input should change
-    ///
-    /// 4. Cross-Attention:
-    ///    - Determine how the cross-attention's inputs should change
-    ///    - Account for the residual connection
-    ///
-    /// 5. First Layer Normalization:
-    ///    - Compute how the first normalization's input should change
-    ///
-    /// 6. Self-Attention:
-    ///    - Determine how the self-attention's input should change
-    ///    - Account for the final residual connection
-    ///
-    /// This reverse flow of gradients allows each component to learn how it contributed to any errors.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        var gradNorm3 = _norm3.Backward(outputGradient);
-        // Backward through projection layer first, then the feed-forward layer
-        var gradProjection = _feedForwardProjection.Backward(gradNorm3);
-        var gradFeedForward = _feedForward.Backward(gradProjection);
-
-        // gradInput2 = gradFeedForward + gradNorm3
-        var gradInput2 = Engine.TensorAdd(gradFeedForward, gradNorm3);
-        var gradNorm2 = _norm2.Backward(gradInput2);
-
-        var gradCrossAttention = _crossAttention.Backward(gradNorm2);
-
-        // gradInput1 = gradCrossAttention + gradNorm2
-        var gradInput1 = Engine.TensorAdd(gradCrossAttention, gradNorm2);
-        var gradNorm1 = _norm1.Backward(gradInput1);
-
-        var gradSelfAttention = _selfAttention.Backward(gradNorm1);
-
-        // gradInput = gradSelfAttention + gradNorm1
-        return Engine.TensorAdd(gradSelfAttention, gradNorm1);
     }
 
     /// <summary>
@@ -1296,98 +1148,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Exports the transformer decoder layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the transformer decoder operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node (decoder input)
-    /// 2. Applies masked self-attention with residual connection and norm
-    /// 3. Applies cross-attention to encoder output with residual and norm
-    /// 4. Applies feed-forward network with residual connection and norm
-    /// 5. Returns the final output
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of a transformer decoder layer for JIT.
-    ///
-    /// The transformer decoder layer is a composite layer combining:
-    /// - Masked self-attention (prevents looking ahead in target sequence)
-    /// - Cross-attention (attends to encoder output, connects source and target)
-    /// - Layer normalization (stabilizes training)
-    /// - Feed-forward network (processes each position independently)
-    /// - Residual connections (helps gradient flow in deep networks)
-    ///
-    /// The forward pass:
-    /// 1. x' = LayerNorm(x + MaskedSelfAttention(x))
-    /// 2. x'' = LayerNorm(x' + CrossAttention(x', encoder_output))
-    /// 3. output = LayerNorm(x'' + FeedForward(x''))
-    ///
-    /// JIT optimization for composite layers:
-    /// - For now, composite layers note their structure but may delegate to sublayers
-    /// - Future optimization could fuse operations across sublayers
-    /// - Each sublayer (self-attention, cross-attention, feed-forward, norm) can be independently JIT compiled
-    ///
-    /// This is the core building block of GPT (decoder-only) and encoder-decoder models like T5.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when sublayers are not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
-
-        if (_selfAttention == null || _norm1 == null ||
-            _crossAttention == null || _norm2 == null ||
-            _feedForward == null || _norm3 == null)
-            throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
-
-        // Create symbolic input nodes: decoder input and encoder output
-        var symbolicDecoderInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var decoderInputNode = TensorOperations<T>.Variable(symbolicDecoderInput, "decoder_input");
-        inputNodes.Add(decoderInputNode);
-
-        // Encoder output has same shape as decoder input in standard transformers
-        var symbolicEncoderOutput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var encoderOutputNode = TensorOperations<T>.Variable(symbolicEncoderOutput, "encoder_output");
-        inputNodes.Add(encoderOutputNode);
-
-        // Step 1: Masked self-attention sublayer (decoder attends to itself)
-        var selfAttentionOut = ApplyMultiHeadAttentionGraph(_selfAttention, decoderInputNode, decoderInputNode, decoderInputNode);
-
-        // Step 2: First residual connection: residual1 = input + self_attention_out
-        var residual1 = TensorOperations<T>.Add(decoderInputNode, selfAttentionOut);
-
-        // Step 3: First layer normalization
-        var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
-
-        // Step 4: Cross-attention sublayer (decoder attends to encoder output)
-        // Query comes from decoder, Key and Value come from encoder
-        var crossAttentionOut = ApplyMultiHeadAttentionGraph(_crossAttention, normalized1, encoderOutputNode, encoderOutputNode);
-
-        // Step 5: Second residual connection: residual2 = normalized1 + cross_attention_out
-        var residual2 = TensorOperations<T>.Add(normalized1, crossAttentionOut);
-
-        // Step 6: Second layer normalization
-        var normalized2 = ApplyLayerNormGraph(_norm2, residual2);
-
-        // Step 7: Feed-forward sublayer
-        var ffOut = ApplyFeedForwardGraph(_feedForward, normalized2);
-
-        // Step 8: Third residual connection: residual3 = normalized2 + ff_out
-        var residual3 = TensorOperations<T>.Add(normalized2, ffOut);
-
-        // Step 9: Third layer normalization (final output)
-        var output = ApplyLayerNormGraph(_norm3, residual3);
-
-        return output;
-    }
-
-    /// <summary>
     /// Applies multi-head attention graph to input nodes (supports both self-attention and cross-attention).
     /// </summary>
     private ComputationNode<T> ApplyMultiHeadAttentionGraph(
@@ -1487,55 +1247,4 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return output;
     }
 
-    /// <summary>
-    /// Gets whether this transformer decoder layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if all sublayers support JIT compilation.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. As a composite layer,
-    /// it supports JIT if all its sublayers support JIT:
-    /// - Masked self-attention layer
-    /// - Cross-attention layer (attends to encoder output)
-    /// - Layer normalization layers (3 total)
-    /// - Feed-forward layer
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this composite layer can use JIT compilation.
-    ///
-    /// The transformer decoder layer can be JIT compiled if:
-    /// - All sublayers are properly initialized
-    /// - Each sublayer supports JIT compilation
-    ///
-    /// Composite layer JIT optimization:
-    /// - Each sublayer can be independently JIT compiled
-    /// - Future optimization: fuse operations across sublayers
-    /// - Residual connections and layer norms are fast operations
-    ///
-    /// The bottleneck in decoder layers:
-    /// - Self-attention: O(n²) for target sequence
-    /// - Cross-attention: O(n*m) where n=target length, m=source length
-    /// - Feed-forward: matrix multiplications
-    ///
-    /// All benefit significantly from JIT compilation (5-10x speedup).
-    ///
-    /// GPT models use decoder-only architecture (no cross-attention, only self-attention).
-    /// T5 and other seq2seq models use both encoder and decoder layers.
-    /// GPT-3 has 96 decoder layers, making JIT optimization critical for performance.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // TransformerDecoderLayer is a composite layer
-            // It supports JIT if all sublayers support JIT
-            return _selfAttention != null && _selfAttention.SupportsJitCompilation &&
-                   _norm1 != null && _norm1.SupportsJitCompilation &&
-                   _crossAttention != null && _crossAttention.SupportsJitCompilation &&
-                   _norm2 != null && _norm2.SupportsJitCompilation &&
-                   _feedForward != null && _feedForward.SupportsJitCompilation &&
-                   _feedForwardProjection != null && _feedForwardProjection.SupportsJitCompilation &&
-                   _norm3 != null && _norm3.SupportsJitCompilation;
-        }
-    }
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -663,7 +663,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             }
         }
 
-        return new Tensor<T>(normalized, embeddings.Shape.ToArray());
+        return new Tensor<T>(normalized, embeddings._shape);
     }
 
     /// <summary>
@@ -1078,7 +1078,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            return new Tensor<T>(normed, input.Shape.ToArray());
+            return new Tensor<T>(normed, input._shape);
         }
     }
 

@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -129,8 +129,8 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         // Sample a batch from episodic memory
         var (memInputs, memTargets) = SampleFromEpisodicMemory();
 
-        // Compute reference gradient on memory sample
-        var refGradient = ComputeReferenceGradient(network, memInputs, memTargets);
+        // Compute reference gradient on memory sample using tape
+        var refGradient = network.ComputeGradients(memInputs, memTargets);
 
         // Check if gradient violates constraint
         var dotProduct = VectorHelper.DotProduct(gradients, refGradient);
@@ -284,22 +284,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         return new Tensor<T>(newShape, data);
     }
 
-    /// <summary>
-    /// Computes the reference gradient on memory samples.
-    /// </summary>
-    private Vector<T> ComputeReferenceGradient(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        network.SetTrainingMode(true);
-
-        var output = network.ForwardWithMemory(inputs);
-        var outputGrad = ComputeLossGradient(output, targets);
-        network.Backpropagate(outputGrad);
-        var grads = network.GetParameterGradients();
-
-        network.SetTrainingMode(false);
-        return grads.Clone();
-    }
-
 
     /// <summary>
     /// Computes the gradient of the loss.
@@ -311,6 +295,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         {
             gradData[i] = _numOps.Subtract(output[i], target[i]);
         }
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 }

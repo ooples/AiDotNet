@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -55,7 +55,7 @@ public static class StopGradient<T>
         tensor.Data.Span.CopyTo(dataCopy);
 
         // Create new tensor with copied data (no gradient tracking)
-        return new Tensor<T>(dataCopy, tensor.Shape.ToArray());
+        return new Tensor<T>(dataCopy, tensor._shape);
     }
 
     /// <summary>
@@ -108,7 +108,7 @@ public static class StopGradient<T>
             zeros[i] = NumOps.Zero;
         }
 
-        return new Tensor<T>(zeros, tensor.Shape.ToArray());
+        return new Tensor<T>(zeros, tensor._shape);
     }
 
     /// <summary>

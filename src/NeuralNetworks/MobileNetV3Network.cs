@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
@@ -112,7 +113,19 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
+        // Per Howard et al. ICCV 2019: ensure deterministic BLAS for reproducible
+        // inference. MKL single-threaded is deterministic and still fast.
+        EnsureDeterministicBlas();
+
         InitializeLayers();
+    }
+
+    private static bool _determinismSet;
+    private static void EnsureDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
@@ -163,6 +176,16 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             // Use MobileNetV3-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
         }
+
+        // Set eval mode: BN with constant spatial input in training mode normalizes to zero
+        // (variance=0), destroying information. Eval mode uses running stats which preserves input.
+        SetAllLayersEvalMode();
+    }
+
+    private void SetAllLayersEvalMode()
+    {
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -183,19 +206,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs backward propagation through the network.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
@@ -205,20 +215,17 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        // BN layers must use eval mode (running stats) for batch_size=1.
+        // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1
+        // in training mode (variance=0). Eval mode preserves information flow.
+        foreach (var layer in Layers)
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
         }
-
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput, _optimizer);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
@@ -297,6 +304,14 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             _configuration.InputChannels);
 
         return new MobileNetV3Network<T>(Architecture, config, _optimizer, _lossFunction);
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] data)
+    {
+        base.Deserialize(data);
+        // Restore eval mode after deserialization (training/eval state is not serialized).
+        SetAllLayersEvalMode();
     }
 
     /// <inheritdoc />

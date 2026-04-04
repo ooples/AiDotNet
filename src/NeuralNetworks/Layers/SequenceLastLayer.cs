@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -38,11 +38,6 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// <c>false</c> because this layer has no trainable parameters.
     /// </value>
     public override bool SupportsTraining => false;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU execution.
@@ -145,7 +140,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors.</param>
     /// <returns>GPU-resident output tensor containing the last timestep.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -192,105 +187,6 @@ public class SequenceLastLayer<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (zeros except at last timestep).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_originalShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        int inputSize = 1;
-        foreach (var dim in _originalShape) inputSize *= dim;
-
-        // Create zero-initialized buffer for input gradient
-        var gradInputBuffer = backend.AllocateBuffer(inputSize);
-        backend.Fill(gradInputBuffer, 0.0f, inputSize);
-
-        int rank = _originalShape.Length;
-
-        if (rank == 1)
-        {
-            // Pass through
-            backend.Copy(outputGradient.Buffer, gradInputBuffer, outputGradient.ElementCount);
-        }
-        else if (rank == 2)
-        {
-            // Shape: [seqLen, features] - copy gradient to last row
-            int features = _originalShape[1];
-            int offset = (_lastSequenceLength - 1) * features;
-            backend.Copy(outputGradient.Buffer, 0, gradInputBuffer, offset, features);
-        }
-        else if (rank == 3)
-        {
-            // Shape: [seqLen, batch, features] - copy gradient to last slice
-            int batch = _originalShape[1];
-            int features = _originalShape[2];
-            int offset = (_lastSequenceLength - 1) * batch * features;
-            int copySize = batch * features;
-            backend.Copy(outputGradient.Buffer, 0, gradInputBuffer, offset, copySize);
-        }
-
-        return new GpuTensor<T>(backend, gradInputBuffer, _originalShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Backward pass: distributes gradient to the last timestep only.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient with shape matching the original input (zeros except at last timestep).</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_originalShape == null)
-            throw new InvalidOperationException("Forward must be called before Backward.");
-
-        // Create zero gradient tensor with original input shape
-        var inputGradient = new Tensor<T>(_originalShape);
-        int rank = _originalShape.Length;
-
-        if (rank == 1)
-        {
-            // Pass through
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                inputGradient.Data.Span[i] = outputGradient.Data.Span[i];
-            }
-        }
-        else if (rank == 2)
-        {
-            // Shape: [seqLen, features]
-            int features = _originalShape[1];
-            int offset = (_lastSequenceLength - 1) * features;
-            for (int i = 0; i < features; i++)
-            {
-                inputGradient.Data.Span[offset + i] = outputGradient.Data.Span[i];
-            }
-        }
-        else if (rank == 3)
-        {
-            // Shape: [seqLen, batch, features]
-            int batch = _originalShape[1];
-            int features = _originalShape[2];
-            int stride = batch * features;
-            int lastOffset = (_lastSequenceLength - 1) * stride;
-            for (int i = 0; i < batch * features; i++)
-            {
-                inputGradient.Data.Span[lastOffset + i] = outputGradient.Data.Span[i];
-            }
-        }
-
-        return inputGradient;
-    }
-
     /// <summary>
     /// Returns an empty vector since this layer has no trainable parameters.
     /// </summary>
@@ -315,25 +211,5 @@ public class SequenceLastLayer<T> : LayerBase<T>
         // No state to reset (except cached shape for backward pass)
         _originalShape = null;
         _lastSequenceLength = 0;
-    }
-
-    /// <summary>
-    /// Exports the computation graph for this layer.
-    /// </summary>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // For sequence last, we're essentially doing a slice operation
-        // For simplicity, return the input node as this is a pass-through in terms of graph structure
-        return inputNode;
     }
 }

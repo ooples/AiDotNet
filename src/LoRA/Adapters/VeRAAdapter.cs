@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -422,145 +422,13 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> veraOutput = new Tensor<T>(new[] { batchSize, outputSize }, veraOutputData);
 
         // Sum base output and VeRA output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], veraOutput[i]);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the VeRA adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients ONLY for the scaling vectors d and b.
-    /// The shared matrices A and B remain frozen and are never updated.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where VeRA learns! During backpropagation:
-    /// 1. Compute gradients for scaling vectors d and b (these are trained)
-    /// 2. Shared matrices A and B are NOT updated (they stay frozen)
-    /// 3. Pass gradients back to earlier layers
-    ///
-    /// This is why VeRA is so efficient - we only train tiny scaling vectors!
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastIntermediate == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-        int outputSize = GetOutputShape()[0];
-        int rank = _scalingVectorB.Length;
-
-        // Convert gradient to matrix
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-
-        // Compute gradient for d: sum over batch of (gradMatrix * _lastIntermediate * scaling)
-        _scalingVectorDGradient = new Vector<T>(outputSize);
-        for (int j = 0; j < outputSize; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                T grad = NumOps.Multiply(gradMatrix[i, j], _lastIntermediate[i, j]);
-                grad = NumOps.Multiply(grad, scaling);
-                sum = NumOps.Add(sum, grad);
-            }
-            _scalingVectorDGradient[j] = sum;
-        }
-
-        // Propagate gradient back through d scaling: grad_afterSharedB = gradMatrix * diag(d) * scaling
-        Matrix<T> gradAfterSharedB = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradAfterSharedB[i, j] = NumOps.Multiply(
-                    NumOps.Multiply(gradMatrix[i, j], _scalingVectorD[j]),
-                    scaling);
-            }
-        }
-
-        // Propagate through shared B: grad_afterB = gradAfterSharedB * B^T
-        Matrix<T> gradAfterB = gradAfterSharedB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("_sharedMatrixB has not been initialized.")).Transpose());
-
-        // Convert input to matrix for gradient computation
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = _lastInput[i * inputSize + j];
-            }
-        }
-
-        // Compute intermediate: input * A
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."));
-
-        // Compute gradient for b: sum over batch of (gradAfterB * afterA)
-        _scalingVectorBGradient = new Vector<T>(rank);
-        for (int j = 0; j < rank; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                T grad = NumOps.Multiply(gradAfterB[i, j], afterA[i, j]);
-                sum = NumOps.Add(sum, grad);
-            }
-            _scalingVectorBGradient[j] = sum;
-        }
-
-        // Propagate gradient back through b scaling: grad_afterA = gradAfterB * diag(b)
-        Matrix<T> gradAfterA = new Matrix<T>(batchSize, rank);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                gradAfterA[i, j] = NumOps.Multiply(gradAfterB[i, j], _scalingVectorB[j]);
-            }
-        }
-
-        // Propagate through shared A: grad_input_vera = gradAfterA * A^T
-        Matrix<T> veraInputGrad = gradAfterA.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("_sharedMatrixA has not been initialized.")).Transpose());
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum input gradients from VeRA and base layer
-        Vector<T> inputGradData = new Vector<T>(batchSize * inputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T veraGrad = veraInputGrad[i, j];
-                T baseGrad = baseInputGrad[i * inputSize + j];
-                inputGradData[idx++] = NumOps.Add(veraGrad, baseGrad);
-            }
-        }
-
-        // Update parameter gradients
-        UpdateParameterGradientsFromVectors();
-
-        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradData);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -394,5 +395,18 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
             (float)NumOps.ToDouble(CurrentLearningRate),
             0.0f, // No weight decay
             parameterCount);
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        foreach (var param in context.Parameters)
+        {
+            if (context.Gradients.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
     }
 }

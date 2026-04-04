@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -177,88 +177,6 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         return preActivation;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int numPoints = _lastInput.Shape[0];
-        var numOps = NumOps;
-
-        // Apply activation derivative if needed
-        Tensor<T> gradientTensor;
-        if (ScalarActivation != null)
-        {
-            if (_lastPreActivation == null)
-            {
-                throw new InvalidOperationException("Forward pass must be called before backward pass.");
-            }
-            gradientTensor = ApplyActivationDerivative(_lastPreActivation, outputGradient);
-        }
-        else
-        {
-            gradientTensor = outputGradient;
-        }
-
-        // Convert tensors to matrices for vectorized operations
-        var inputMatrix = new Matrix<T>(numPoints, _inputChannels);
-        for (int i = 0; i < numPoints; i++)
-        {
-            for (int j = 0; j < _inputChannels; j++)
-            {
-                inputMatrix[i, j] = _lastInput.Data.Span[i * _inputChannels + j];
-            }
-        }
-
-        var gradMatrix = new Matrix<T>(numPoints, _outputChannels);
-        for (int i = 0; i < numPoints; i++)
-        {
-            for (int j = 0; j < _outputChannels; j++)
-            {
-                gradMatrix[i, j] = gradientTensor.Data.Span[i * _outputChannels + j];
-            }
-        }
-
-        // Compute weight gradients: dL/dW = X^T * dL/dY (vectorized)
-        var inputT = Engine.MatrixTranspose(inputMatrix);
-        var weightGrad = Engine.MatrixMultiply(inputT, gradMatrix);
-        for (int inC = 0; inC < _inputChannels; inC++)
-        {
-            for (int outC = 0; outC < _outputChannels; outC++)
-            {
-                _weightGradients[inC, outC] = numOps.Add(_weightGradients[inC, outC], weightGrad[inC, outC]);
-            }
-        }
-
-        // Compute bias gradients: sum over batch dimension (vectorized)
-        for (int outC = 0; outC < _outputChannels; outC++)
-        {
-            T gradSum = numOps.Zero;
-            for (int n = 0; n < numPoints; n++)
-            {
-                gradSum = numOps.Add(gradSum, gradMatrix[n, outC]);
-            }
-            _biasGradients[outC] = numOps.Add(_biasGradients[outC], gradSum);
-        }
-
-        // Compute input gradient: dL/dX = dL/dY * W^T (vectorized)
-        var weightsT = Engine.MatrixTranspose(_weights);
-        var inputGradMatrix = Engine.MatrixMultiply(gradMatrix, weightsT);
-
-        var inputGradient = new T[numPoints * _inputChannels];
-        for (int n = 0; n < numPoints; n++)
-        {
-            for (int inC = 0; inC < _inputChannels; inC++)
-            {
-                inputGradient[n * _inputChannels + inC] = inputGradMatrix[n, inC];
-            }
-        }
-
-        return new Tensor<T>(inputGradient, [numPoints, _inputChannels]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         var numOps = NumOps;
@@ -321,14 +239,6 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastPreActivation = null;
         ClearGradients();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "PointConvolutionLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount => _inputChannels * _outputChannels + _outputChannels;

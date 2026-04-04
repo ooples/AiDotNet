@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -232,21 +232,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var currentGradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-        return currentGradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -329,7 +314,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
             // Compute gradient and backward pass
             var gradient = ComputeGradient(logits, task.Labels, task.TrainIndices, task.NumClasses);
-            Backward(gradient);
 
             // Update parameters
             foreach (var layer in Layers)
@@ -479,7 +463,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
     {
         // Initialize gradient tensor (zeros)
-        var gradient = new Tensor<T>(logits.Shape.ToArray());
+        var gradient = new Tensor<T>(logits._shape);
         Engine.TensorFill(gradient, NumOps.Zero);
 
         if (trainIndices.Length == 0)
@@ -587,10 +571,9 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
+            gradOutput = gradOutput.Reshape(predictions._shape);
         }
 
-        Backward(gradOutput);
 
         Vector<T> parameterGradients = GetParameterGradients();
         Vector<T> currentParameters = GetParameters();

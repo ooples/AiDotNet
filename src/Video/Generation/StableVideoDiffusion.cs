@@ -356,7 +356,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var imageLatent = EncodeToLatent(inputImage);
 
         // Initialize noise
-        var latents = InitializeLatents(imageLatent.Shape.ToArray(), random);
+        var latents = InitializeLatents(imageLatent._shape, random);
 
         // Condition on input image
         var imageCondition = ImageConditioner.Forward(imageLatent);
@@ -539,28 +539,14 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training involves predicting noise added to latents
-        var latent = EncodeToLatent(input);
-        var random = RandomHelper.CreateSecureRandom();
-
-        // Add noise
-        double noiseLevel = random.NextDouble();
-        var noise = GenerateNoise(latent.Shape.ToArray(), random);
-        var noisyLatent = AddNoiseAtLevel(latent, noise, noiseLevel);
-
-        // Predict noise
-        var timeEmbed = CreateTimeEmbedding(noiseLevel);
-        var predictedNoise = PredictNoise(noisyLatent, null, timeEmbed, null, null);
-
-        // Compute loss gradient
-        var lossGradient = Engine.TensorSubtract(predictedNoise, noise);
-
-        BackwardPass(lossGradient);
-
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
+        SetTrainingMode(true);
+        try
         {
-            layer.UpdateParameters(lr);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -888,7 +874,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     {
         int batch = input.Shape[0];
         int channels = input.Shape[1];
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         double eps = 1e-5;
 
         for (int b = 0; b < batch; b++)
@@ -1043,7 +1029,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddNoise(Tensor<T> latent, double noiseLevel, Random random)
     {
-        var noise = GenerateNoise(latent.Shape.ToArray(), random);
+        var noise = GenerateNoise(latent._shape, random);
         var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(noiseLevel));
         return Engine.TensorAdd(latent, scaledNoise);
     }
@@ -1161,64 +1147,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return result;
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        // Backpropagate through noise predictor
-        gradient = NoisePredictor.Backward(gradient);
-
-        // Backpropagate through up blocks (decoder path)
-        for (int i = _upBlocks.Count - 1; i >= 0; i--)
-        {
-            gradient = _upBlocks[i].Backward(gradient);
-        }
-
-        // Backpropagate through middle block
-        gradient = MiddleBlock.Backward(gradient);
-
-        // Backpropagate through down blocks (encoder path)
-        for (int i = _downBlocks.Count - 1; i >= 0; i--)
-        {
-            gradient = _downBlocks[i].Backward(gradient);
-        }
-
-        // Backpropagate through temporal attention layers
-        for (int i = _temporalAttention.Count - 1; i >= 0; i--)
-        {
-            gradient = _temporalAttention[i].Backward(gradient);
-        }
-
-        // Backpropagate through VAE encoder (when training end-to-end)
-        for (int i = _vaeEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _vaeEncoder[i].Backward(gradient);
-        }
-
-        // Backpropagate through conditioning components
-        // Note: These create auxiliary gradients for their respective inputs
-        // In a full implementation, gradients would be accumulated for each conditioning path
-        TimeEmbedding.Backward(gradient);
-        ImageConditioner.Backward(gradient);
-
-        // Backpropagate through text encoder layers (in reverse order)
-        // Final projection
-        TextFinalProjection.Backward(gradient);
-
-        // Transformer layers in reverse
-        for (int layer = _textEncoderLayers - 1; layer >= 0; layer--)
-        {
-            // FFN backward
-            _textEncoderFFN2[layer].Backward(gradient);
-            _textEncoderFFN1[layer].Backward(gradient);
-
-            // Attention backward
-            _textEncoderAttnProj[layer].Backward(gradient);
-            _textEncoderQKV[layer].Backward(gradient);
-        }
-
-        // Initial embedding projection
-        TextEmbedProjection.Backward(gradient);
-    }
-
     #endregion
 
     #region Abstract Implementation
@@ -1227,6 +1155,22 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _vaeEncoder) Layers.Add(layer);
+        foreach (var layer in _vaeDecoder) Layers.Add(layer);
+        foreach (var layer in _downBlocks) Layers.Add(layer);
+        if (_middleBlock is not null) Layers.Add(_middleBlock);
+        foreach (var layer in _upBlocks) Layers.Add(layer);
+        foreach (var layer in _temporalAttention) Layers.Add(layer);
+        foreach (var layer in _textEncoderQKV) Layers.Add(layer);
+        foreach (var layer in _textEncoderAttnProj) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN1) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN2) Layers.Add(layer);
+        if (_textEmbedProjection is not null) Layers.Add(_textEmbedProjection);
+        if (_textFinalProjection is not null) Layers.Add(_textFinalProjection);
+        if (_imageConditioner is not null) Layers.Add(_imageConditioner);
+        if (_timeEmbedding is not null) Layers.Add(_timeEmbedding);
+        if (_noisePredictor is not null) Layers.Add(_noisePredictor);
     }
 
     /// <inheritdoc/>

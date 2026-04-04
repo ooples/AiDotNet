@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -133,19 +133,6 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Multiply(NumOps.Multiply(negTwoBeta, input), activationValue);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.SQRBF provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// SQRBF supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients using the derivative: -2βx * exp(-β * x²).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

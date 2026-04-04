@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -283,7 +283,7 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature.Shape.ToArray());
+        var warped = new Tensor<T>(feature._shape);
 
         for (int b = 0; b < batch; b++)
         {

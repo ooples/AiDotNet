@@ -918,38 +918,6 @@ public class ComputerVisionExtendedIntegrationTests
         Assert.Throws<ArgumentException>(() => loss.Compute(predicted, target));
     }
 
-    [Fact]
-    public void MaskBCELoss_Gradient_VerifyNumerically()
-    {
-        var loss = new MaskBCELoss<double>();
-        var predicted = new Tensor<double>(new[] { 3 });
-        var target = new Tensor<double>(new[] { 3 });
-
-        predicted[0] = 0.7; target[0] = 1.0;
-        predicted[1] = 0.3; target[1] = 0.0;
-        predicted[2] = 0.5; target[2] = 1.0;
-
-        var analyticalGrad = loss.Backward(predicted, target);
-
-        // Verify with numerical gradient
-        double eps = 1e-5;
-        for (int i = 0; i < 3; i++)
-        {
-            double original = predicted[i];
-
-            predicted[i] = original + eps;
-            double lossPlus = loss.Compute(predicted, target);
-
-            predicted[i] = original - eps;
-            double lossMinus = loss.Compute(predicted, target);
-
-            predicted[i] = original;
-
-            double numericalGrad = (lossPlus - lossMinus) / (2 * eps);
-
-            Assert.Equal(numericalGrad, analyticalGrad[i], 1e-3);
-        }
-    }
 
     #endregion
 
@@ -1021,37 +989,6 @@ public class ComputerVisionExtendedIntegrationTests
         Assert.Equal(expectedLoss, lossVal, LooseTolerance);
     }
 
-    [Fact]
-    public void MaskDiceLoss_Gradient_VerifyNumerically()
-    {
-        var loss = new MaskDiceLoss<double>();
-        var predicted = new Tensor<double>(new[] { 3 });
-        var target = new Tensor<double>(new[] { 3 });
-
-        predicted[0] = 0.7; target[0] = 1.0;
-        predicted[1] = 0.3; target[1] = 0.0;
-        predicted[2] = 0.5; target[2] = 1.0;
-
-        var analyticalGrad = loss.Backward(predicted, target);
-
-        double eps = 1e-5;
-        for (int i = 0; i < 3; i++)
-        {
-            double original = predicted[i];
-
-            predicted[i] = original + eps;
-            double lossPlus = loss.Compute(predicted, target);
-
-            predicted[i] = original - eps;
-            double lossMinus = loss.Compute(predicted, target);
-
-            predicted[i] = original;
-
-            double numericalGrad = (lossPlus - lossMinus) / (2 * eps);
-
-            Assert.Equal(numericalGrad, analyticalGrad[i], 1e-3);
-        }
-    }
 
     #endregion
 
@@ -1109,37 +1046,6 @@ public class ComputerVisionExtendedIntegrationTests
             $"Focal ratio ({focalRatio}) should be > BCE ratio ({bceRatio})");
     }
 
-    [Fact]
-    public void MaskFocalLoss_Gradient_VerifyNumerically()
-    {
-        var loss = new MaskFocalLoss<double>(alpha: 0.25, gamma: 2.0);
-        var predicted = new Tensor<double>(new[] { 3 });
-        var target = new Tensor<double>(new[] { 3 });
-
-        predicted[0] = 0.7; target[0] = 1.0;
-        predicted[1] = 0.3; target[1] = 0.0;
-        predicted[2] = 0.5; target[2] = 1.0;
-
-        var analyticalGrad = loss.Backward(predicted, target);
-
-        double eps = 1e-5;
-        for (int i = 0; i < 3; i++)
-        {
-            double original = predicted[i];
-
-            predicted[i] = original + eps;
-            double lossPlus = loss.Compute(predicted, target);
-
-            predicted[i] = original - eps;
-            double lossMinus = loss.Compute(predicted, target);
-
-            predicted[i] = original;
-
-            double numericalGrad = (lossPlus - lossMinus) / (2 * eps);
-
-            Assert.Equal(numericalGrad, analyticalGrad[i], 1e-3);
-        }
-    }
 
     #endregion
 
@@ -1170,31 +1076,6 @@ public class ComputerVisionExtendedIntegrationTests
         Assert.Equal(expectedCombined, combined, LooseTolerance);
     }
 
-    [Fact]
-    public void CombinedMaskLoss_Gradient_EqualsWeightedSumOfGradients()
-    {
-        double bceWeight = 1.5, diceWeight = 2.5;
-        var combinedLoss = new CombinedMaskLoss<double>(bceWeight, diceWeight);
-        var bceLoss = new MaskBCELoss<double>();
-        var diceLoss = new MaskDiceLoss<double>();
-
-        var predicted = new Tensor<double>(new[] { 3 });
-        var target = new Tensor<double>(new[] { 3 });
-
-        predicted[0] = 0.7; target[0] = 1.0;
-        predicted[1] = 0.3; target[1] = 0.0;
-        predicted[2] = 0.5; target[2] = 1.0;
-
-        var bceGrad = bceLoss.Backward(predicted, target);
-        var diceGrad = diceLoss.Backward(predicted, target);
-        var combinedGrad = combinedLoss.Backward(predicted, target);
-
-        for (int i = 0; i < 3; i++)
-        {
-            double expected = bceWeight * bceGrad[i] + diceWeight * diceGrad[i];
-            Assert.Equal(expected, combinedGrad[i], LooseTolerance);
-        }
-    }
 
     #endregion
 

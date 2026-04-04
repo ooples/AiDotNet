@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Pruning;
@@ -188,7 +188,7 @@ public class PruningMask<T> : IPruningMask<T>
                 var flatWeights = weights.ToVector();
                 var flatMask = _mask.GetRow(0);
                 var flatResult = flatWeights.PointwiseMultiply(flatMask);
-                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.ToArray().Clone());
+                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.ToArray());
             }
 
             var matrix = TensorToMatrix(weights);
@@ -260,7 +260,7 @@ public class PruningMask<T> : IPruningMask<T>
                 var flatMaskVector = new Vector<T>(flatMask);
                 var flatResult = flatWeights.PointwiseMultiply(flatMaskVector);
 
-                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.ToArray().Clone());
+                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.ToArray());
             }
         }
 

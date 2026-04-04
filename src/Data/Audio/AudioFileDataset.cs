@@ -1,4 +1,4 @@
-using AiDotNet.Data.Loaders;
+﻿using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
 
@@ -411,7 +411,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.ToArray().Clone();
+        var newShape = (int[])source.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

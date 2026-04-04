@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -350,6 +352,43 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
+    }
+
+    // Per-parameter AdaMax state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeU = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep)));
+        T epsilon = NumOps.FromDouble(1e-8);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeU.TryGetValue(param, out var u)) { u = new Tensor<T>(param._shape); _tapeU[param] = u; }
+
+            // m = beta1 * m + (1 - beta1) * grad
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
+
+            // u = max(beta2 * u, |grad|)
+            Engine.TensorCopy(Engine.TensorMax(Engine.TensorMultiplyScalar(u, beta2), Engine.TensorAbs(grad)), u);
+
+            // param -= alpha * m / (u + epsilon)
+            var denom = Engine.TensorAddScalar(u, epsilon);
+            var update = Engine.TensorDivide(Engine.TensorMultiplyScalar(m, alpha), denom);
+            Engine.TensorSubtractInPlace(param, update);
+        }
     }
 
     /// <summary>

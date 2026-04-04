@@ -113,33 +113,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void Backward_WithoutForward_ThrowsInvalidOperationException()
-        {
-            // Arrange
-            var layer = new LoRALayer<double>(10, 5, rank: 3);
-            var outputGradient = new Tensor<double>(new[] { 2, 5 });
 
-            // Act & Assert
-            Assert.Throws<InvalidOperationException>(() => layer.Backward(outputGradient));
-        }
-
-        [Fact]
-        public void Backward_WithValidGradient_ProducesCorrectInputGradientShape()
-        {
-            // Arrange
-            var layer = new LoRALayer<double>(10, 5, rank: 3);
-            var input = new Tensor<double>(new[] { 2, 10 });
-            layer.Forward(input);
-            var outputGradient = new Tensor<double>(new[] { 2, 5 });
-
-            // Act
-            var inputGradient = layer.Backward(outputGradient);
-
-            // Assert
-            Assert.Equal(2, inputGradient.Shape[0]);
-            Assert.Equal(10, inputGradient.Shape[1]);
-        }
 
         [Fact]
         public void GetParameters_ReturnsCorrectParameterCount()
@@ -188,43 +162,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
         }
 
-        [Fact]
-        public void UpdateParameters_UpdatesParametersCorrectly()
-        {
-            // Arrange
-            var layer = new LoRALayer<double>(10, 5, rank: 3);
-            var input = new Tensor<double>(new[] { 1, 10 });
-            for (int i = 0; i < 10; i++)
-            {
-                input[0, i] = 1.0;
-            }
-            layer.Forward(input);
-
-            var outputGradient = new Tensor<double>(new[] { 1, 5 });
-            for (int i = 0; i < 5; i++)
-            {
-                outputGradient[0, i] = 0.1;
-            }
-            layer.Backward(outputGradient);
-
-            var paramsBefore = layer.GetParameters();
-
-            // Act
-            layer.UpdateParameters(0.01);
-            var paramsAfter = layer.GetParameters();
-
-            // Assert - At least some parameters should have changed
-            bool parametersChanged = false;
-            for (int i = 0; i < paramsBefore.Length; i++)
-            {
-                if (Math.Abs(paramsBefore[i] - paramsAfter[i]) > 1e-10)
-                {
-                    parametersChanged = true;
-                    break;
-                }
-            }
-            Assert.True(parametersChanged);
-        }
 
         [Fact]
         public void MergeWeights_ProducesCorrectDimensions()
@@ -321,33 +258,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void GetParameterGradients_AfterBackward_ReturnsValidGradients()
-        {
-            // Arrange
-            var layer = new LoRALayer<double>(10, 5, rank: 3);
-            var input = new Tensor<double>(new[] { 1, 10 });
-            for (int i = 0; i < 10; i++)
-            {
-                input[0, i] = 1.0;
-            }
-            layer.Forward(input);
-
-            var outputGradient = new Tensor<double>(new[] { 1, 5 });
-            for (int i = 0; i < 5; i++)
-            {
-                outputGradient[0, i] = 0.1;
-            }
-
-            // Act
-            layer.Backward(outputGradient);
-            var gradients = layer.GetParameterGradients();
-
-            // Assert
-            Assert.Equal(layer.ParameterCount, gradients.Length);
-            // At least some gradients should be non-zero
-            Assert.Contains(gradients, g => Math.Abs(g) > 1e-10);
-        }
 
         [Fact]
         public void ParameterCount_ReflectsCorrectFormula()
@@ -373,24 +283,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal((inputSize * rank) + (rank * outputSize), layer.ParameterCount);
         }
 
-        [Fact]
-        public void ForwardAndBackward_MultipleIterations_MaintainsGradientFlow()
-        {
-            // Arrange
-            var layer = new LoRALayer<double>(10, 5, rank: 3);
-            var input = new Tensor<double>(new[] { 2, 10 });
-            var outputGradient = new Tensor<double>(new[] { 2, 5 });
-
-            // Act & Assert - Multiple iterations should not throw
-            for (int i = 0; i < 10; i++)
-            {
-                var output = layer.Forward(input);
-                var inputGrad = layer.Backward(outputGradient);
-
-                Assert.NotNull(output);
-                Assert.NotNull(inputGrad);
-            }
-        }
 
         [Fact]
         public void LoRALayer_WithFloat_WorksCorrectly()

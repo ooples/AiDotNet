@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -568,7 +568,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             totalSize *= features.Shape[i];
         }
 
-        var result = new Tensor<T>(features.Shape.ToArray());
+        var result = new Tensor<T>(features._shape);
         int featureDim = gamma.Shape.Length > 0 ? gamma.Shape[0] : 1;
 
         for (int i = 0; i < totalSize; i++)
@@ -938,7 +938,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         double norm = Math.Sqrt(NumOps.ToDouble(sumSquares));
         if (norm < 1e-8) return tensor;
 
-        var normalized = new Tensor<T>(tensor.Shape.ToArray());
+        var normalized = new Tensor<T>(tensor._shape);
         for (int i = 0; i < size; i++)
         {
             normalized.SetFlat(i, NumOps.Divide(tensor.GetFlat(i), NumOps.FromDouble(norm)));

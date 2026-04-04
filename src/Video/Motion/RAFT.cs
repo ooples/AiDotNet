@@ -254,15 +254,14 @@ public class RAFT<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var predicted = Predict(input);
-        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
-
-        BackwardPass(lossGradient);
-
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
+        SetTrainingMode(true);
+        try
         {
-            layer.UpdateParameters(lr);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -450,7 +449,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
         var hNew = ApplyTanh(gruConvH.Forward(gruInput));
 
-        var ones = Tensor<T>.CreateDefault(z.Shape.ToArray(), NumOps.One);
+        var ones = Tensor<T>.CreateDefault(z._shape, NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
         var term1 = Engine.TensorMultiply(oneMinusZ, hiddenState);
         var term2 = Engine.TensorMultiply(z, hNew);
@@ -591,37 +590,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         return result;
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        ThrowIfNotInitialized();
-
-        var upsampleConv = _upsampleConv ?? throw new InvalidOperationException("Upsample conv not initialized.");
-        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head not initialized.");
-        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head not initialized.");
-        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU conv H not initialized.");
-        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU conv R not initialized.");
-        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU conv Z not initialized.");
-        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation conv not initialized.");
-
-        gradient = upsampleConv.Backward(gradient);
-        gradient = deltaFlowHead.Backward(gradient);
-        gradient = flowHead.Backward(gradient);
-        gradient = gruConvH.Backward(gradient);
-        gradient = gruConvR.Backward(gradient);
-        gradient = gruConvZ.Backward(gradient);
-        gradient = correlationConv.Backward(gradient);
-
-        for (int i = _contextEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _contextEncoder[i].Backward(gradient);
-        }
-
-        for (int i = _featureEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _featureEncoder[i].Backward(gradient);
-        }
-    }
-
     #endregion
 
     #region Abstract Implementation
@@ -630,6 +598,16 @@ public class RAFT<T> : OpticalFlowBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _featureEncoder) Layers.Add(layer);
+        foreach (var layer in _contextEncoder) Layers.Add(layer);
+        if (_correlationConv is not null) Layers.Add(_correlationConv);
+        if (_gruConvZ is not null) Layers.Add(_gruConvZ);
+        if (_gruConvR is not null) Layers.Add(_gruConvR);
+        if (_gruConvH is not null) Layers.Add(_gruConvH);
+        if (_flowHead is not null) Layers.Add(_flowHead);
+        if (_deltaFlowHead is not null) Layers.Add(_deltaFlowHead);
+        if (_upsampleConv is not null) Layers.Add(_upsampleConv);
     }
 
     /// <inheritdoc/>

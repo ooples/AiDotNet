@@ -1,7 +1,6 @@
-using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.Autodiff;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Intersample (Row) Attention for SAINT architecture.
@@ -23,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class IntersampleAttention<T> : LayerBase<T>
+public class IntersampleAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -48,9 +47,6 @@ public class IntersampleAttention<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
     public override int ParameterCount =>
         _queryProjection.ParameterCount +
         _keyProjection.ParameterCount +
@@ -64,7 +60,7 @@ public class IntersampleAttention<T> : LayerBase<T>
     /// <param name="embeddingDim">Embedding dimension.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="dropoutRate">Dropout rate for attention.</param>
-    public IntersampleAttention(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
+    public IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
         : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;
@@ -207,18 +203,6 @@ public class IntersampleAttention<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through intersample attention.
-    /// </summary>
-    /// <param name="gradient">Gradient from upstream.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        // Simplified backward - in full implementation would backprop through attention
-        var inputGrad = _outputProjection.Backward(gradient);
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters.
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -274,23 +258,5 @@ public class IntersampleAttention<T> : LayerBase<T>
         _keyProjection.ResetState();
         _valueProjection.ResetState();
         _outputProjection.ResetState();
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Delegate to Q/K/V projection layers and compose attention
-        var queryNode = _queryProjection.ExportComputationGraph(inputNodes);
-        var keyNode = _keyProjection.ExportComputationGraph(inputNodes);
-        var valueNode = _valueProjection.ExportComputationGraph(inputNodes);
-
-        var attentionScores = TensorOperations<T>.MatrixMultiply(queryNode, TensorOperations<T>.Transpose(keyNode));
-        var attentionWeights = TensorOperations<T>.Softmax(attentionScores);
-        var attended = TensorOperations<T>.MatrixMultiply(attentionWeights, valueNode);
-
-        return _outputProjection.ExportComputationGraph(inputNodes);
     }
 }

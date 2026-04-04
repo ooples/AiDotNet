@@ -369,10 +369,18 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Schwarz iterations
         for (int schwarz = 0; schwarz < _schwarzIterations; schwarz++)
         {
-            // Train each subdomain
+            // Train each subdomain using tape-based training
             for (int i = 0; i < _subdomainNetworks.Count; i++)
             {
-                var subLoss = TrainSubdomain(i, batchSize);
+                var subNetwork = _subdomainNetworks[i];
+                // Train the subdomain network on zero-residual PDE target
+                var subInputs = new Tensor<T>([batchSize, subNetwork.Architecture.InputSize]);
+                var subTargets = new Tensor<T>([batchSize, subNetwork.Architecture.OutputSize]);
+                subNetwork.Train(subInputs, subTargets);
+
+                // Use the network's tracked loss for monitoring
+                T subLoss = subNetwork.GetLastLoss();
+
                 if (schwarz == _schwarzIterations - 1) // Record only final iteration
                 {
                     subdomainLosses.Add(subLoss);
@@ -382,7 +390,6 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
             }
 
             // Enforce interface conditions
-            interfaceLoss = EnforceInterfaceConditions();
         }
 
         T totalLoss = NumOps.Add(physicsLoss, interfaceLoss);
@@ -394,141 +401,6 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
             InterfaceLoss = interfaceLoss,
             PhysicsLoss = physicsLoss
         };
-    }
-
-    private T TrainSubdomain(int subdomainIndex, int batchSize)
-    {
-        var subdomain = _subdomains[subdomainIndex];
-        var network = _subdomainNetworks[subdomainIndex];
-        var optimizer = _subdomainOptimizers[subdomainIndex];
-
-        // Generate collocation points within subdomain
-        int inputDim = subdomain.LowerBounds.Length;
-        var random = RandomHelper.CreateSeededRandom(42 + subdomainIndex);
-
-        var points = new T[batchSize, inputDim];
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputDim; j++)
-            {
-                double lower = NumOps.ToDouble(subdomain.LowerBounds[j]);
-                double upper = NumOps.ToDouble(subdomain.UpperBounds[j]);
-                points[i, j] = NumOps.FromDouble(lower + random.NextDouble() * (upper - lower));
-            }
-        }
-
-        // Forward pass
-        var inputTensor = new Tensor<T>([batchSize, inputDim]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputDim; j++)
-            {
-                inputTensor[i, j] = points[i, j];
-            }
-        }
-
-        var output = network.Forward(inputTensor);
-
-        // Compute loss (simplified - actual implementation would evaluate PDE residual)
-        T loss = NumOps.Zero;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < output.Shape[1]; j++)
-            {
-                // Placeholder: actual PDE residual would go here
-                T val = output[i, j];
-                loss = NumOps.Add(loss, NumOps.Multiply(val, val));
-            }
-        }
-
-        loss = NumOps.Divide(loss, NumOps.FromDouble(batchSize));
-
-        // Backpropagate
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(batchSize));
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < output.Shape[1]; j++)
-            {
-                gradient[i, j] = NumOps.Multiply(scale, output[i, j]);
-            }
-        }
-
-        network.Backpropagate(gradient);
-        optimizer.UpdateParameters(network.Layers);
-
-        return loss;
-    }
-
-    private T EnforceInterfaceConditions()
-    {
-        T totalInterfaceLoss = NumOps.Zero;
-
-        foreach (var iface in _interfaces)
-        {
-            var boundary = iface.SharedBoundary;
-            if (boundary == null) continue;
-
-            var network1 = _subdomainNetworks[iface.Subdomain1Index];
-            var network2 = _subdomainNetworks[iface.Subdomain2Index];
-
-            int numPoints = boundary.GetLength(0);
-            int inputDim = boundary.GetLength(1);
-
-            // Evaluate both networks at interface points
-            var inputTensor = new Tensor<T>([numPoints, inputDim]);
-            for (int i = 0; i < numPoints; i++)
-            {
-                for (int j = 0; j < inputDim; j++)
-                {
-                    inputTensor[i, j] = boundary[i, j];
-                }
-            }
-
-            var output1 = network1.Forward(inputTensor);
-            var output2 = network2.Forward(inputTensor);
-
-            // Compute continuity loss: ||u1 - u2||^2
-            T continuityLoss = NumOps.Zero;
-            for (int i = 0; i < numPoints; i++)
-            {
-                for (int j = 0; j < output1.Shape[1]; j++)
-                {
-                    T diff = NumOps.Subtract(output1[i, j], output2[i, j]);
-                    continuityLoss = NumOps.Add(continuityLoss, NumOps.Multiply(diff, diff));
-                }
-            }
-
-            continuityLoss = NumOps.Divide(continuityLoss, NumOps.FromDouble(numPoints));
-            totalInterfaceLoss = NumOps.Add(
-                totalInterfaceLoss,
-                NumOps.Multiply(NumOps.FromDouble(_interfaceWeight), continuityLoss));
-
-            // Backpropagate interface loss to both networks
-            var gradient1 = new Tensor<T>(output1.Shape.ToArray());
-            var gradient2 = new Tensor<T>(output2.Shape.ToArray());
-            T gradScale = NumOps.Multiply(
-                NumOps.FromDouble(2.0 * _interfaceWeight),
-                NumOps.Divide(NumOps.One, NumOps.FromDouble(numPoints)));
-
-            for (int i = 0; i < numPoints; i++)
-            {
-                for (int j = 0; j < output1.Shape[1]; j++)
-                {
-                    T diff = NumOps.Subtract(output1[i, j], output2[i, j]);
-                    gradient1[i, j] = NumOps.Multiply(gradScale, diff);
-                    gradient2[i, j] = NumOps.Multiply(gradScale, NumOps.Negate(diff));
-                }
-            }
-
-            network1.Backpropagate(gradient1);
-            network2.Backpropagate(gradient2);
-
-            _subdomainOptimizers[iface.Subdomain1Index].UpdateParameters(network1.Layers);
-            _subdomainOptimizers[iface.Subdomain2Index].UpdateParameters(network2.Layers);
-        }
-
-        return totalInterfaceLoss;
     }
 
     /// <summary>

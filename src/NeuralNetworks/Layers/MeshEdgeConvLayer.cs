@@ -1,10 +1,11 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
-public class MeshEdgeConvLayer<T> : LayerBase<T>
+public partial class MeshEdgeConvLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -81,13 +82,6 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     /// <value>Always <c>true</c> for MeshEdgeConvLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>false</c>. JIT compilation is not currently supported for MeshEdgeConvLayer due to
-    /// the lack of graph-specific operations for edge aggregation in TensorOperations.</value>
-    public override bool SupportsJitCompilation => false;
-
     #endregion
 
     #region Private Fields
@@ -95,11 +89,15 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights for edge convolution [OutputChannels, InputChannels * (1 + NumNeighbors)].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// Learnable bias values [OutputChannels].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -255,11 +253,14 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion
@@ -433,7 +434,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -541,78 +542,12 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
         _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
 
-        return new GpuTensor<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion
 
     #region Backward Pass
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients for training.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    /// <remarks>
-    /// <para>
-    /// Routes to manual or autodiff implementation based on UseAutodiff property.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to output.</param>
-    /// <returns>The gradient of the loss with respect to input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _lastEdgeAdjacency == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        int numEdges = _lastInput.Shape[0];
-        int aggregatedFeatures = InputChannels * (1 + NumNeighbors);
-
-        var aggregatedInput = AggregateEdgeFeatures(_lastInput, _lastEdgeAdjacency, numEdges, aggregatedFeatures);
-
-        // Compute weight gradient: delta.T @ aggregatedInput
-        var deltaTransposed = Engine.TensorTranspose(delta);
-        _weightsGradient = Engine.TensorMatMul(deltaTransposed, aggregatedInput);
-        _weightsGradient = _weightsGradient.Reshape(_weights.Shape.ToArray());
-
-        _biasesGradient = ComputeBiasGradient(delta);
-
-        // Compute input gradient: delta @ weights
-        var aggregatedGrad = Engine.TensorMatMul(delta, _weights);
-        var inputGrad = ScatterGradients(aggregatedGrad, _lastEdgeAdjacency, numEdges);
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to output.</param>
-    /// <returns>The gradient of the loss with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Currently routes to manual implementation. Full autodiff integration pending
-    /// the addition of mesh-specific operations to the computation graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // TODO: Implement proper autodiff when mesh graph operations are available
-        return BackwardManual(outputGradient);
-    }
 
     /// <summary>
     /// Computes the bias gradient by summing gradients over edges using vectorized reduction.
@@ -860,19 +795,6 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="NotSupportedException">Thrown because MeshEdgeConv JIT is not yet implemented.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "MeshEdgeConvLayer.ExportComputationGraph requires graph-specific operations " +
-            "for edge aggregation which are not yet available in TensorOperations.");
-    }
 
     #endregion
 }

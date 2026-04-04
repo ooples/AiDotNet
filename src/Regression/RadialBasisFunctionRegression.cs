@@ -62,6 +62,16 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </value>
     private readonly RadialBasisFunctionOptions _options;
 
+    /// <summary>
+    /// Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityLambdaScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the ridge penalty when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityLambda = 1e-6;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -484,10 +494,19 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         Matrix<T> xTx = xTranspose.Multiply(x);
 
         // Add ridge regularization: (X^T X + λI)^-1 X^T y
-        // Using a small lambda value (1e-8) for numerical stability
-        T lambda = NumOps.FromDouble(1e-8);
+        // Scale lambda relative to the diagonal magnitude to ensure numerical stability
+        double diagMean = 0;
+        for (int i = 0; i < xTx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
+        diagMean /= xTx.Rows;
+        T stabilityLambda = NumOps.FromDouble(
+            Math.Max(MinimumStabilityLambda, diagMean * StabilityLambdaScale));
         Matrix<T> identity = Matrix<T>.CreateIdentity(xTx.Rows);
-        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(lambda));
+        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(stabilityLambda));
+        if (Regularization != null)
+        {
+            xTxRegularized = xTxRegularized.Add(Regularization.Regularize(xTx));
+        }
 
         Matrix<T> xTxInverse = xTxRegularized.Inverse();
         Matrix<T> xTxInverseXT = xTxInverse.Multiply(xTranspose);

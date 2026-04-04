@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -126,7 +126,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     private int[]? _maxIndices;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputGpuShape;
 
     /// <summary>
@@ -392,194 +392,6 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the global pooling layer to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, 1, 1, channels].</param>
-    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, height, width, channels].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the global pooling layer.
-    /// For average pooling, the gradient is distributed equally among all positions in the input that
-    /// contributed to the average. For max pooling, the gradient is assigned only to the position that
-    /// had the maximum value in the forward pass. This reflects how each position in the input
-    /// contributed to the output during the forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the layer passes error information back to previous layers.
-    ///
-    /// The backward pass works differently depending on the pooling type:
-    ///
-    /// For average pooling:
-    /// - The gradient for each output value is divided equally among all input positions
-    /// - Every position in a feature map gets the same small portion of the gradient
-    /// - This reflects that each input position contributed equally to the average
-    ///
-    /// For max pooling:
-    /// - The gradient for each output value is assigned only to the input position that had the maximum value
-    /// - Only the "winning" position gets the gradient, all others get zero
-    /// - This reflects that only the maximum value contributed to the output
-    ///
-    /// This process ensures that the network learns appropriately based on how
-    /// each input position influenced the pooled output.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, 1, 1, channels].</param>
-    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, height, width, channels].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Apply activation derivative
-        outputGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        // Industry-standard: dynamically determine axes based on input rank
-        var axes = GetReductionAxes(_lastInput.Shape.Length);
-
-        // If no axes to reduce, just return the gradient as-is
-        if (axes.Length == 0)
-        {
-            return outputGradient;
-        }
-
-        if (_poolingType == PoolingType.Average)
-        {
-            // Use GPU-accelerated ReduceMeanBackward
-            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape.ToArray(), axes);
-        }
-        else // Max pooling
-        {
-            if (_maxIndices == null)
-                throw new InvalidOperationException("Max indices not available for backward pass.");
-
-            // Use GPU-accelerated ReduceMaxBackward
-            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape.ToArray());
-        }
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, 1, 1, channels].</param>
-    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, height, width, channels].</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, global pooling operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once global pooling operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // If vector activation is configured, fall back to manual path
-        if (VectorActivation != null)
-        {
-            return BackwardManual(outputGradient);
-        }
-
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Apply global pooling using reduce operations
-        // Global pooling reduces over spatial dimensions (all non-batch, non-channel axes), keeping channels.
-        // The reduction axes are determined dynamically from the input rank. For a 4D NHWC tensor
-        // [batch, height, width, channels], this corresponds to reducing over height (1) and width (2).
-        var axes = GetReductionAxes(_lastInput.Shape.Length); // Industry-standard: dynamic axes based on input rank
-
-        // If no axes to reduce (1D or 2D input), just return the gradient as-is
-        if (axes.Length == 0)
-        {
-            return outputGradient;
-        }
-
-        Autodiff.ComputationNode<T> outputNode;
-        if (_poolingType == PoolingType.Max)
-        {
-            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
-            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: _lastInput.Shape.Length >= 4);
-        }
-        else // Average pooling
-        {
-            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
-            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: _lastInput.Shape.Length >= 4);
-        }
-
-        // Reshape the reduction result to match this layer's OutputShape (may add/remove dimensions or just validate shape)
-        var squeezed = Autodiff.TensorOperations<T>.Reshape(outputNode, OutputShape);
-
-        // Apply activation if present
-        var activated = ApplyScalarActivationAutodiff(squeezed);
-
-        // Perform backward pass with inline topological sort
-        activated.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activated, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    /// <summary>
     /// Applies scalar activation function with autodiff support.
     /// </summary>
     /// <param name="input">The input computation node.</param>
@@ -607,7 +419,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The GPU-resident input tensor.</param>
     /// <returns>The GPU-resident output tensor after global pooling.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -617,7 +429,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (_poolingType == PoolingType.Average)
         {
             output = gpuEngine.GlobalMeanPoolGpu(input);
@@ -639,8 +451,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input;
+            _lastOutput = output;
             _lastOutputGpu = output;
             _lastInputGpuShape = input.Shape.ToArray().ToArray();
         }
@@ -648,55 +460,10 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Performs GPU-resident backward pass for global pooling.
-    /// Computes gradients distributed to spatial positions based on pooling type.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_lastOutputGpu == null || _lastInputGpuShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        // Apply activation backward if needed
-        IGpuTensor<T> gradientWithActivation;
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            gradientWithActivation = ComputeActivationBackwardGpu(gpuEngine, outputGradient, _lastOutputGpu, fusedOp);
-        }
-        else
-        {
-            gradientWithActivation = outputGradient;
-        }
-
-        // Compute gradient based on pooling type
-        if (_poolingType == PoolingType.Average)
-        {
-            // Mean pool backward: broadcast gradient to all spatial positions and divide by count
-            return gpuEngine.GlobalMeanPoolBackwardGpu<T>(gradientWithActivation, _lastInputGpuShape);
-        }
-        else // Max pooling
-        {
-            if (_maxIndices == null)
-                throw new InvalidOperationException("Max indices not available for backward pass.");
-
-            // Max pool backward: scatter gradient to max positions only
-            return gpuEngine.GlobalMaxPoolBackwardGpu<T>(gradientWithActivation, _maxIndices, _lastInputGpuShape);
-        }
-    }
-
     /// <summary>
     /// Computes the activation backward gradient on GPU.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    private Tensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activationType)
     {
         return activationType switch
         {
@@ -796,48 +563,5 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;
         _lastInputGpuShape = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Global pooling can be implemented as regular pooling with pool size = spatial dimensions
-        // InputShape for CNN: [channels, height, width]
-        if (InputShape.Length >= 3)
-        {
-            int height = InputShape[1];
-            int width = InputShape[2];
-            var poolSize = new int[] { height, width };
-            var strides = new int[] { 1, 1 };
-
-            if (_poolingType == PoolingType.Max)
-            {
-                return TensorOperations<T>.MaxPool2D(inputNode, poolSize: poolSize, strides: strides);
-            }
-            else // Average
-            {
-                return TensorOperations<T>.AvgPool2D(inputNode, poolSize: poolSize, strides: strides);
-            }
-        }
-
-        // Fallback for other shapes - return identity for now
-        return inputNode;
-    }
-
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return InputShape != null && InputShape.Length > 0;
-        }
     }
 }

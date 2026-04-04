@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -67,17 +67,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         return pooledOutput;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_maxIndices == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Use vectorized backward pass
-        return Engine.ReduceMaxBackward(outputGradient, _maxIndices, [_numPoints, _numFeatures]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update
@@ -97,14 +86,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         _maxIndices = null;
         _numPoints = 0;
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "MaxPoolingLayer does not support computation graph export due to point cloud-specific pooling.");
     }
 
     public override int ParameterCount => 0;

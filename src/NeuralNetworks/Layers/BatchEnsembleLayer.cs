@@ -1,7 +1,6 @@
-using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.Autodiff;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements a BatchEnsemble layer that provides parameter-efficient ensembling.
@@ -82,9 +81,6 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount
@@ -263,98 +259,6 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer [batchSize * numMembers, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_inputCache == null || _scaledInputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int expandedBatchSize = outputGradient.Shape[0];
-        int batchSize = expandedBatchSize / _numMembers;
-
-        // Initialize gradients
-        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
-        _weightsGrad.Fill(NumOps.Zero);
-
-        if (_bias != null)
-        {
-            _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
-            _biasGrad.Fill(NumOps.Zero);
-        }
-
-        _rVectorsGrad = new Tensor<T>(_rVectors.Shape.ToArray());
-        _rVectorsGrad.Fill(NumOps.Zero);
-
-        _sVectorsGrad = new Tensor<T>(_sVectors.Shape.ToArray());
-        _sVectorsGrad.Fill(NumOps.Zero);
-
-        // Input gradient (accumulated across members)
-        var inputGrad = new Tensor<T>([batchSize, _inputDim]);
-        inputGrad.Fill(NumOps.Zero);
-
-        for (int row = 0; row < expandedBatchSize; row++)
-        {
-            int batchIdx = row / _numMembers;
-            int memberIdx = row % _numMembers;
-
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var grad = outputGradient[row * _outputDim + j];
-                var sVal = _sVectors[memberIdx * _outputDim + j];
-
-                // Bias gradient: sum of output gradients
-                if (_biasGrad != null)
-                {
-                    _biasGrad[j] = NumOps.Add(_biasGrad[j], grad);
-                }
-
-                // s-vector gradient: grad * pre_s_output
-                // pre_s_output = scaledInput @ weights[:, j]
-                var preSOutput = NumOps.Zero;
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    preSOutput = NumOps.Add(preSOutput,
-                        NumOps.Multiply(_scaledInputCache[row * _inputDim + i], _weights[i * _outputDim + j]));
-                }
-                _sVectorsGrad[memberIdx * _outputDim + j] = NumOps.Add(
-                    _sVectorsGrad[memberIdx * _outputDim + j],
-                    NumOps.Multiply(grad, preSOutput));
-
-                // Gradient after s-vector: grad * s
-                var gradAfterS = NumOps.Multiply(grad, sVal);
-
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    var rVal = _rVectors[memberIdx * _inputDim + i];
-                    var inputVal = _inputCache[row * _inputDim + i];
-
-                    // Weights gradient: scaledInput[i] * gradAfterS
-                    _weightsGrad[i * _outputDim + j] = NumOps.Add(
-                        _weightsGrad[i * _outputDim + j],
-                        NumOps.Multiply(_scaledInputCache[row * _inputDim + i], gradAfterS));
-
-                    // r-vector gradient: input[i] * weight[i,j] * gradAfterS
-                    _rVectorsGrad[memberIdx * _inputDim + i] = NumOps.Add(
-                        _rVectorsGrad[memberIdx * _inputDim + i],
-                        NumOps.Multiply(NumOps.Multiply(inputVal, _weights[i * _outputDim + j]), gradAfterS));
-
-                    // Input gradient: r[i] * weight[i,j] * gradAfterS
-                    inputGrad[batchIdx * _inputDim + i] = NumOps.Add(
-                        inputGrad[batchIdx * _inputDim + i],
-                        NumOps.Multiply(NumOps.Multiply(rVal, _weights[i * _outputDim + j]), gradAfterS));
-                }
-            }
-        }
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -548,28 +452,5 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         _biasGrad = null;
         _rVectorsGrad = null;
         _sVectorsGrad = null;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export weights and compute matmul
-        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
-        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-
-        if (_bias is not null)
-        {
-            var biasNode = TensorOperations<T>.Constant(_bias, "bias");
-            return TensorOperations<T>.Add(matmulNode, biasNode);
-        }
-
-        return matmulNode;
     }
 }

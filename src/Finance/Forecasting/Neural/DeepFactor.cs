@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -528,7 +528,6 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -861,76 +860,6 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 0);
     }
 
-    /// <summary>
-    /// Performs the backward pass through DeepFactor.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation splits gradients between the factor path
-    /// and local path, updating both to minimize prediction error.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Combination layer backward
-        if (_combinationLayer is not null)
-            current = _combinationLayer.Backward(current);
-
-        // Split gradient for factor and local paths
-        // Account for multivariate outputs: chunk size = forecastHorizon * numFeatures
-        int outputElements = _forecastHorizon * Math.Max(_numFeatures, 1);
-        var factorGrad = new Tensor<T>(new[] { outputElements });
-        var localGrad = new Tensor<T>(new[] { outputElements });
-
-        for (int i = 0; i < outputElements && i < current.Length; i++)
-        {
-            factorGrad.Data.Span[i] = current.Data.Span[i];
-        }
-        for (int i = 0; i < outputElements && i + outputElements < current.Length; i++)
-        {
-            localGrad.Data.Span[i] = current.Data.Span[i + outputElements];
-        }
-
-        // === Factor Path Backward ===
-        var factorCurrent = factorGrad;
-
-        if (_factorLoadingLayer is not null)
-            factorCurrent = _factorLoadingLayer.Backward(factorCurrent);
-
-        if (_factorGenerationLayer is not null)
-            factorCurrent = _factorGenerationLayer.Backward(factorCurrent);
-
-        for (int i = _factorRnnLayers.Count - 1; i >= 0; i--)
-        {
-            factorCurrent = _factorRnnLayers[i].Backward(factorCurrent);
-        }
-
-        if (_factorInputProjection is not null)
-            factorCurrent = _factorInputProjection.Backward(factorCurrent);
-
-        // === Local Path Backward ===
-        var localCurrent = localGrad;
-
-        if (_localPredictionLayer is not null)
-            localCurrent = _localPredictionLayer.Backward(localCurrent);
-
-        for (int i = _localLayers.Count - 1; i >= 0; i--)
-        {
-            localCurrent = _localLayers[i].Backward(localCurrent);
-        }
-
-        if (_localInputProjection is not null)
-            localCurrent = _localInputProjection.Backward(localCurrent);
-
-        // Combine input gradients from both paths
-        // Both paths receive the same input, so gradients should be summed
-        return Engine.TensorBroadcastAdd(factorCurrent, localCurrent);
-    }
-
     #endregion
 
     #region Inference Methods
@@ -969,7 +898,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1007,7 +936,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         int shift = stepsUsed * _numFeatures;
         for (int i = 0; i < totalElements - shift; i++)

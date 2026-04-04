@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -110,7 +110,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors on GPU (uses first input).</param>
     /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -124,7 +124,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length < 3)
             throw new ArgumentException($"AveragePooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
@@ -132,7 +132,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             addedBatch = true;
-            input4D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+            input4D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -144,7 +144,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+            input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input4D.Shape.ToArray();
@@ -164,70 +164,13 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output.Shape[3];
-            return output.CreateView(0, outputShape);
+            return output.Reshape(outputShape);
         }
         if (addedBatch)
         {
-            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
         }
         return output;
-    }
-
-    /// <summary>
-    /// Performs GPU-resident backward pass of average pooling.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the output on GPU.</param>
-    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        IGpuTensor<T> gradient4D;
-
-        if (rank == 3)
-        {
-            gradient4D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
-        }
-        else if (rank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.CreateView(0, new[] { flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1] });
-        }
-
-        var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Strides, Strides };
-
-        var inputGrad = gpuEngine.AvgPool2DBackwardGpu<T>(gradient4D, _gpuInputShape, poolSizeArr, strideArr);
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            var restoreShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 3; d++)
-                restoreShape[d] = _originalInputShape[d];
-            restoreShape[_originalInputShape.Length - 3] = inputGrad.Shape[1];
-            restoreShape[_originalInputShape.Length - 2] = inputGrad.Shape[2];
-            restoreShape[_originalInputShape.Length - 1] = inputGrad.Shape[3];
-            return inputGrad.CreateView(0, restoreShape);
-        }
-        if (_addedBatchDimension)
-        {
-            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
-        }
-        return inputGrad;
     }
 
     /// <summary>
@@ -371,175 +314,6 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the average pooling operation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> During training, neural networks need to adjust their parameters based on
-    /// how much error they made. This adjustment flows backward through the network.
-    ///
-    /// In average pooling, all values in each window contributed equally to the output average.
-    /// So during the backward pass, the gradient is distributed equally to all positions in the window.
-    /// Each position receives (output gradient) / (pool size × pool size).
-    ///
-    /// This is different from max pooling, where only the maximum value gets the gradient.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        Tensor<T> gradient4D;
-        int[] inputShape4D;
-
-        if (rank == 3)
-        {
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-            inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
-        }
-        else if (rank == 4)
-        {
-            gradient4D = outputGradient;
-            inputShape4D = _lastInput.Shape.Length == 3
-                ? new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
-                : _lastInput.Shape.ToArray();
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-
-            int inputFlatBatch = 1;
-            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
-                inputFlatBatch *= _lastInput.Shape[d];
-            inputShape4D = new int[] { inputFlatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1] };
-        }
-
-        var poolSizeArr = new int[] { PoolSize, PoolSize };
-        var strideArr = new int[] { Strides, Strides };
-
-        var inputGradient4D = Engine.AvgPool2DBackward(gradient4D, inputShape4D, poolSizeArr, strideArr);
-
-        // Restore to original input shape
-        return inputGradient4D.Reshape(_lastInput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients using the AvgPool2D
-    /// operation from TensorOperations. This provides:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle both 3D and 4D input
-        Tensor<T> input4D;
-        Tensor<T> gradient4D;
-
-        if (_lastInput.Shape.Length == 3)
-        {
-            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
-            input4D = _lastInput.Reshape(new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] });
-            gradient4D = outputGradient.Shape.Length == 3
-                ? outputGradient.Reshape(new int[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] })
-                : outputGradient;
-        }
-        else
-        {
-            // Already 4D
-            input4D = _lastInput;
-            gradient4D = outputGradient;
-        }
-
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
-
-        // Forward pass using autodiff AvgPool2D operation
-        var poolSize = new int[] { PoolSize, PoolSize };
-        var strides = new int[] { Strides, Strides };
-        var outputNode = Autodiff.TensorOperations<T>.AvgPool2D(inputNode, poolSize, strides);
-
-        // Perform backward pass with 4D gradient
-        outputNode.Gradient = gradient4D;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract input gradient and reshape back to original dimensions
-        var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape.ToArray()) : inputGrad4D;
-    }
-
-    /// <summary>
     /// Saves the layer's configuration to a binary stream.
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
@@ -650,104 +424,5 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         _lastOutputShape = null;
         _addedBatchDimension = false;
         _gpuInputShape = null;
-    }
-
-    /// <summary>
-    /// Exports the average pooling layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the average pooling operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node with shape [batch=1, channels, height, width]
-    /// 2. Applies the AvgPool2D operation with specified pool size and strides
-    /// 3. No learnable parameters needed (average pooling is parameter-free)
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of average pooling for JIT.
-    ///
-    /// JIT compilation converts the average pooling operation into optimized native code.
-    /// Average pooling:
-    /// - Reduces spatial dimensions by averaging values in each pooling window
-    /// - Slides a window across the input with specified stride
-    /// - Provides smoother downsampling compared to max pooling
-    /// - Has no trainable parameters (purely computational)
-    ///
-    /// The symbolic graph allows the JIT compiler to:
-    /// - Optimize the sliding window computation
-    /// - Generate SIMD-optimized code for parallel averaging
-    /// - Fuse operations with adjacent layers
-    ///
-    /// Average pooling is commonly used in CNNs for downsampling and global pooling.
-    /// JIT compilation provides 5-10x speedup by optimizing the window operations.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer shape is not configured.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // AveragePoolingLayer expects input shape: [channels, height, width]
-        // AvgPool2D expects: [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Get pooling parameters
-        var poolSize = GetPoolSize();    // [poolSize, poolSize]
-        var strides = GetStride();       // [strides, strides]
-
-        // Apply AvgPool2D operation
-        var avgPoolNode = TensorOperations<T>.AvgPool2D(
-            inputNode,
-            poolSize: poolSize,
-            strides: strides);
-
-        return avgPoolNode;
-    }
-
-    /// <summary>
-    /// Gets whether this average pooling layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the layer is properly configured.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
-    /// - Input shape is configured
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The layer has been initialized with valid input shape
-    ///
-    /// Average pooling has no trainable parameters, so it can be JIT compiled immediately
-    /// after initialization. It's a purely computational operation that:
-    /// - Averages values in sliding windows
-    /// - Reduces spatial dimensions
-    /// - Provides translation invariance
-    ///
-    /// JIT compilation optimizes:
-    /// - Window sliding and boundary handling
-    /// - Parallel averaging across channels
-    /// - Memory access patterns for cache efficiency
-    ///
-    /// Once initialized, JIT compilation can provide significant speedup (5-10x)
-    /// especially for large feature maps in CNNs.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // AveragePooling supports JIT if input shape is configured
-            // No trainable parameters needed
-            return InputShape != null && InputShape.Length > 0;
-        }
     }
 }

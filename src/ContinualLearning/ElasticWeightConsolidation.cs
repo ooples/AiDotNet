@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -95,8 +95,40 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         _optimalParameters.Add(currentParams.Clone());
 
-        // Compute the diagonal of the Fisher Information Matrix
-        var fisherDiag = ComputeFisherDiagonal(network, taskData.inputs, taskData.targets);
+        // Compute the diagonal of the Fisher Information Matrix via per-sample gradients.
+        // F_ii = (1/N) * sum_n (grad_n_i)^2  (empirical Fisher approximation)
+        int batchSize = taskData.inputs.Shape[0];
+        var paramCount = network.GetParameters().Length;
+        var fisherDiag = new Vector<T>(paramCount);
+
+        for (int n = 0; n < batchSize; n++)
+        {
+            // Extract single sample: slice along batch dimension
+            var sampleShape = new int[taskData.inputs.Shape.Length];
+            sampleShape[0] = 1;
+            for (int d = 1; d < sampleShape.Length; d++)
+                sampleShape[d] = taskData.inputs.Shape[d];
+
+            var sampleInput = new Tensor<T>(sampleShape);
+            var sampleTarget = new Tensor<T>(new[] { 1, taskData.targets.Shape.Length > 1 ? taskData.targets.Shape[1] : 1 });
+
+            int inputStride = taskData.inputs.Length / batchSize;
+            int targetStride = taskData.targets.Length / batchSize;
+            for (int j = 0; j < inputStride; j++)
+                sampleInput.Data.Span[j] = taskData.inputs.Data.Span[n * inputStride + j];
+            for (int j = 0; j < targetStride; j++)
+                sampleTarget.Data.Span[j] = taskData.targets.Data.Span[n * targetStride + j];
+
+            var grads = network.ComputeGradients(sampleInput, sampleTarget);
+            for (int i = 0; i < grads.Length; i++)
+                fisherDiag[i] = _numOps.Add(fisherDiag[i], _numOps.Multiply(grads[i], grads[i]));
+        }
+
+        // Average over samples
+        var invN = _numOps.FromDouble(1.0 / batchSize);
+        for (int i = 0; i < fisherDiag.Length; i++)
+            fisherDiag[i] = _numOps.Multiply(fisherDiag[i], invN);
+
         _fisherDiagonals.Add(fisherDiag);
     }
 
@@ -184,52 +216,6 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes the diagonal approximation of the Fisher Information Matrix.
-    /// </summary>
-    private Vector<T> ComputeFisherDiagonal(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        var paramCount = network.ParameterCount;
-        var fisherDiag = new Vector<T>(paramCount);
-        var batchSize = inputs.Shape[0];
-
-        network.SetTrainingMode(true);
-
-        // Accumulate squared gradients over the dataset
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Get single sample (simplified - assumes batch dimension is first)
-            var singleInput = ExtractSample(inputs, i);
-            var singleTarget = ExtractSample(targets, i);
-
-            // Forward pass with memory
-            var output = network.ForwardWithMemory(singleInput);
-
-            // Compute gradient with respect to log-likelihood
-            // For classification, this is typically the gradient of cross-entropy
-            var outputGrad = ComputeLogLikelihoodGradient(output, singleTarget);
-            network.Backpropagate(outputGrad);
-
-            // Get parameter gradients and square them
-            var grads = network.GetParameterGradients();
-            for (int j = 0; j < paramCount; j++)
-            {
-                var squaredGrad = _numOps.Multiply(grads[j], grads[j]);
-                fisherDiag[j] = _numOps.Add(fisherDiag[j], squaredGrad);
-            }
-        }
-
-        // Average over the batch
-        var batchSizeT = _numOps.FromDouble(batchSize);
-        for (int j = 0; j < paramCount; j++)
-        {
-            fisherDiag[j] = _numOps.Divide(fisherDiag[j], batchSizeT);
-        }
-
-        network.SetTrainingMode(false);
-        return fisherDiag;
-    }
-
-    /// <summary>
     /// Extracts a single sample from a batch tensor.
     /// </summary>
     private Tensor<T> ExtractSample(Tensor<T> batch, int index)
@@ -269,6 +255,6 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
             gradData[i] = _numOps.Subtract(output[i], target[i]);
         }
 
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 }

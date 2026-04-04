@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -61,7 +61,7 @@ public class DenseBlock<T> : LayerBase<T>
     private List<Tensor<T>>? _layerOutputs;
 
     // GPU cached tensors for backward pass
-    private List<IGpuTensor<T>>? _gpuFeatureMaps;
+    private List<Tensor<T>>? _gpuFeatureMaps;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -129,8 +129,10 @@ public class DenseBlock<T> : LayerBase<T>
         int currentChannels = inputChannels;
         for (int i = 0; i < numLayers; i++)
         {
-            _layers.Add(new DenseBlockLayer<T>(
-                currentChannels, growthRate, inputHeight, inputWidth, bnMomentum));
+            var layer = new DenseBlockLayer<T>(
+                currentChannels, growthRate, inputHeight, inputWidth, bnMomentum);
+            _layers.Add(layer);
+            RegisterSubLayer(layer);
             currentChannels += growthRate; // Each layer adds growthRate channels
         }
     }
@@ -165,7 +167,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -178,7 +180,7 @@ public class DenseBlock<T> : LayerBase<T>
         // Cache feature maps for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuFeatureMaps = new List<IGpuTensor<T>>(_numLayers + 1) { currentFeatures };
+            _gpuFeatureMaps = new List<Tensor<T>>(_numLayers + 1) { currentFeatures };
         }
 
         foreach (var layer in _layers)
@@ -198,96 +200,6 @@ public class DenseBlock<T> : LayerBase<T>
         }
 
         return currentFeatures;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the Dense Block.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_layerOutputs is null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Start with the full gradient (for all concatenated features)
-        var currentGrad = outputGradient;
-
-        // Process layers in reverse order
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            var layer = _layers[i];
-
-            // Calculate input channels to this layer
-            int inputChannelsToLayer = _inputChannels + i * _growthRate;
-
-            // Split gradient: [grad for previous layers, grad for this layer's output]
-            var (prevGrad, layerGrad) = SplitGradient(currentGrad, inputChannelsToLayer, _growthRate);
-
-            // Backward through this layer
-            var layerInputGrad = layer.Backward(layerGrad);
-
-            // Accumulate gradients (add to previous gradient)
-            currentGrad = AddGradients(prevGrad, layerInputGrad);
-        }
-
-        // The remaining gradient is for the original input
-        return currentGrad;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated backward pass for the Dense Block.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Processes layers in reverse order, splitting gradients along channel dimension
-    /// and accumulating gradients through dense connections.
-    /// </para>
-    /// </remarks>
-    /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to output.</param>
-    /// <returns>GPU tensor containing gradient with respect to input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuFeatureMaps == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Start with the full gradient (for all concatenated features)
-        var currentGrad = outputGradient;
-
-        // Process layers in reverse order
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            var layer = _layers[i];
-
-            // Calculate input channels to this layer
-            int inputChannelsToLayer = _inputChannels + i * _growthRate;
-
-            // Get batch and spatial dimensions from gradient
-            int batch = currentGrad.Shape[0];
-            int height = currentGrad.Shape.Length > 2 ? currentGrad.Shape[2] : 1;
-            int width = currentGrad.Shape.Length > 3 ? currentGrad.Shape[3] : 1;
-
-            // Split gradient: [grad for previous layers, grad for this layer's output]
-            // Use SliceGpu along channel dimension (axis 1)
-            var prevGrad = gpuEngine.SliceGpu(currentGrad, 1, 0, inputChannelsToLayer);
-            var layerGrad = gpuEngine.SliceGpu(currentGrad, 1, inputChannelsToLayer, inputChannelsToLayer + _growthRate);
-
-            // Backward through this layer
-            var layerInputGrad = layer.BackwardGpu(layerGrad);
-
-            // Accumulate gradients (add to previous gradient)
-            currentGrad = gpuEngine.AddGpu(prevGrad, layerInputGrad);
-        }
-
-        // The remaining gradient is for the original input
-        return currentGrad;
     }
 
     /// <summary>
@@ -345,70 +257,6 @@ public class DenseBlock<T> : LayerBase<T>
         {
             layer.ResetState();
         }
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all sub-layers support JIT
-            foreach (var layer in _layers)
-            {
-                if (!layer.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the DenseBlock.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the DenseBlock with dense connectivity:
-    /// Each layer's output is concatenated with all previous features along the channel dimension.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Current features (accumulated via concatenation)
-        var currentFeatures = inputNode;
-
-        // Process each layer with dense connectivity
-        for (int i = 0; i < _layers.Count; i++)
-        {
-            var layer = _layers[i];
-
-            // Build the layer's computation graph using the current accumulated features
-            var layerOutput = layer.BuildComputationGraph(currentFeatures, $"layer{i}_");
-
-            // Concatenate new features with existing features along channel dimension (axis 1)
-            var nodesToConcat = new List<ComputationNode<T>> { currentFeatures, layerOutput };
-            currentFeatures = TensorOperations<T>.Concat(nodesToConcat, axis: 1);
-        }
-
-        return currentFeatures;
     }
 
     #region Helper Methods
@@ -508,4 +356,5 @@ public class DenseBlock<T> : LayerBase<T>
     }
 
     #endregion
+
 }

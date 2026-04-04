@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -133,16 +133,6 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>
             return inRange ? NumOps.One : NumOps.Zero;
         });
     }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>False because TensorOperations.Minimum is not yet implemented.</value>
-    /// <remarks>
-    /// ReLU6 would be implemented as min(max(0, x), 6) using the ReLU and Minimum operations.
-    /// Currently disabled until TensorOperations.Minimum is available.
-    /// </remarks>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

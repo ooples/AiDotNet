@@ -98,59 +98,6 @@ public class SimSiam<T> : SSLMethodBase<T>
         };
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (view1, view2) = _augmentation.ApplySimCLR(batch);
-
-        // Forward pass for view 1
-        var h1 = _encoder.ForwardWithMemory(view1);
-        var z1 = SymmetricProjector.Project(h1);
-        var p1 = SymmetricProjector.Predict(z1);
-
-        // Forward pass for view 2
-        var h2 = _encoder.ForwardWithMemory(view2);
-        var z2 = SymmetricProjector.Project(h2);
-        var p2 = SymmetricProjector.Predict(z2);
-
-        // Apply stop-gradient to z1 and z2
-        var z1Detached = StopGradient<T>.Detach(z1);
-        var z2Detached = StopGradient<T>.Detach(z2);
-
-        // Symmetric loss: D(p1, stopgrad(z2)) + D(p2, stopgrad(z1))
-        var loss = _loss.ComputeSymmetricLoss(p1, z2Detached, p2, z1Detached);
-
-        // Backward pass for both symmetric paths
-        var (_, gradP1) = _loss.ComputeLossWithGradients(p1, z2Detached);
-        var (_, gradP2) = _loss.ComputeLossWithGradients(p2, z1Detached);
-
-        // Backpropagate gradients from first path (p1 -> z2)
-        var gradZ1 = SymmetricProjector.Backward(gradP1);
-        _encoder.Backpropagate(gradZ1);
-
-        // Backpropagate gradients from second path (p2 -> z1)
-        var gradZ2 = SymmetricProjector.Backward(gradP2);
-        _encoder.Backpropagate(gradZ2);
-
-        // Update parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateParameters(learningRate);
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize * 2; // Symmetric loss
-        result.NumNegativePairs = 0; // No negatives in SimSiam
-
-        // Add SimSiam-specific metrics
-        result.Metrics["z1_std"] = ComputeStd(z1);
-        result.Metrics["z2_std"] = ComputeStd(z2);
-
-        return result;
-    }
-
     private void UpdateParameters(T learningRate)
     {
         // Update encoder
@@ -215,5 +162,7 @@ public class SimSiam<T> : SSLMethodBase<T>
             encoderOutputDim, hiddenDim, projectionDim, predictorHiddenDim);
 
         return new SimSiam<T>(encoder, projector);
-    }
+    
+
+}
 }

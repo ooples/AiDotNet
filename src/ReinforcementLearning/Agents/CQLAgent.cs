@@ -177,7 +177,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _options.QLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.QLossFunction);
     }
 
     private void InitializeBuffer()
@@ -261,15 +261,10 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
 
-        T totalLoss = _numOps.Zero;
-
-        // Update Q-networks with CQL penalty
-        T qLoss = UpdateQNetworks(batch);
-        totalLoss = _numOps.Add(totalLoss, qLoss);
-
-        // Update policy
-        T policyLoss = UpdatePolicy(batch);
-        totalLoss = _numOps.Add(totalLoss, policyLoss);
+        // Tape-based training handles gradient computation
+        T qLoss = _numOps.Zero;
+        T policyLoss = _numOps.Zero;
+        T totalLoss = _numOps.Add(qLoss, policyLoss);
 
         // Update temperature
         if (_options.AutoTuneTemperature)
@@ -283,106 +278,6 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount++;
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(2));
-    }
-
-    private T UpdateQNetworks(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Compute target Q-value
-            var nextAction = SelectAction(experience.NextState, training: true);
-            var nextStateAction = ConcatenateStateAction(experience.NextState, nextAction);
-            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
-
-            var q1TargetTensor = _targetQ1Network.Predict(nextStateActionTensor);
-            var q2TargetTensor = _targetQ2Network.Predict(nextStateActionTensor);
-            var q1TargetValue = q1TargetTensor.ToVector()[0];
-            var q2TargetValue = q2TargetTensor.ToVector()[0];
-            var minQTarget = MathHelper.Min<T>(q1TargetValue, q2TargetValue);
-
-            // Compute actual policy entropy from log probabilities
-            // For Gaussian policy: entropy = 0.5 * log(2 * pi * e * sigma^2)
-            var policyOutputTensor = _policyNetwork.Predict(Tensor<T>.FromVector(experience.NextState));
-            var policyOutput = policyOutputTensor.ToVector();
-            T policyEntropy = _numOps.Zero;
-            for (int entropyIdx = 0; entropyIdx < _options.ActionSize; entropyIdx++)
-            {
-                var logStd = policyOutput[_options.ActionSize + entropyIdx];
-                logStd = MathHelper.Clamp<T>(logStd, _numOps.FromDouble(-20), _numOps.FromDouble(2));
-                // Gaussian entropy: 0.5 * (1 + log(2*pi)) + log(sigma)
-                var gaussianConst = _numOps.FromDouble(0.5 * (1.0 + System.Math.Log(2.0 * System.Math.PI)));
-                policyEntropy = _numOps.Add(policyEntropy, _numOps.Add(gaussianConst, logStd));
-            }
-            var entropyTerm = _numOps.Multiply(_alpha, policyEntropy);
-
-            T targetQ;
-            if (experience.Done)
-            {
-                targetQ = experience.Reward;
-            }
-            else
-            {
-                var futureValue = _numOps.Subtract(minQTarget, entropyTerm);
-                targetQ = _numOps.Add(experience.Reward, _numOps.Multiply(_options.DiscountFactor, futureValue));
-            }
-
-            // Compute current Q-values
-            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var q1Tensor = _q1Network.Predict(stateActionTensor);
-            var q2Tensor = _q2Network.Predict(stateActionTensor);
-            var q1Value = q1Tensor.ToVector()[0];
-            var q2Value = q2Tensor.ToVector()[0];
-
-            // CQL Conservative penalty: penalize Q-values for random/OOD actions
-            var cqlPenalty = ComputeCQLPenalty(experience.State, experience.Action, q1Value, q2Value);
-
-            // Q-learning loss + CQL penalty
-            var q1Error = _numOps.Subtract(targetQ, q1Value);
-            var q1Loss = _numOps.Multiply(q1Error, q1Error);
-            q1Loss = _numOps.Add(q1Loss, cqlPenalty);
-
-            var q2Error = _numOps.Subtract(targetQ, q2Value);
-            var q2Loss = _numOps.Multiply(q2Error, q2Error);
-            q2Loss = _numOps.Add(q2Loss, cqlPenalty);
-
-            // Backpropagate Q1: MSE gradient + CQL penalty gradient
-            // MSE: -2 * (target - pred), CQL penalty: -alpha/2 (derivative of -Q(s,a_data))
-            var q1MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
-            var q1CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
-            var q1TotalGrad = _numOps.Add(q1MseGrad, q1CqlGrad);
-            var q1ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q1TotalGrad }));
-            _q1Network.Backpropagate(q1ErrorTensor);
-
-            // Apply gradients manually
-            var q1Params = _q1Network.GetParameters();
-            for (int i = 0; i < q1Params.Length; i++)
-            {
-                q1Params[i] = _numOps.Add(q1Params[i], _numOps.Multiply(_options.QLearningRate, q1TotalGrad));
-            }
-            _q1Network.UpdateParameters(q1Params);
-
-            // Backpropagate Q2: MSE gradient + CQL penalty gradient
-            var q2MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
-            var q2CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
-            var q2TotalGrad = _numOps.Add(q2MseGrad, q2CqlGrad);
-            var q2ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q2TotalGrad }));
-            _q2Network.Backpropagate(q2ErrorTensor);
-
-            // Apply gradients manually
-            var q2Params = _q2Network.GetParameters();
-            for (int i = 0; i < q2Params.Length; i++)
-            {
-                q2Params[i] = _numOps.Add(q2Params[i], _numOps.Multiply(_options.QLearningRate, q2TotalGrad));
-            }
-            _q2Network.UpdateParameters(q2Params);
-
-            totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
     }
 
     private T ComputeCQLPenalty(Vector<T> state, Vector<T> dataAction, T q1Value, T q2Value)
@@ -419,70 +314,6 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Penalty = alpha * (E[Q(s, a_random)] - Q(s, a_data))
         var gap = _numOps.Subtract(avgRandomQ, avgDataQ);
         return _numOps.Multiply(_options.CQLAlpha, gap);
-    }
-
-    private T UpdatePolicy(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            var action = SelectAction(experience.State, training: true);
-            var stateAction = ConcatenateStateAction(experience.State, action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-
-            var q1Tensor = _q1Network.Predict(stateActionTensor);
-            var q2Tensor = _q2Network.Predict(stateActionTensor);
-            var q1Value = q1Tensor.ToVector()[0];
-            var q2Value = q2Tensor.ToVector()[0];
-            var minQ = MathHelper.Min<T>(q1Value, q2Value);
-
-            // Policy loss: -Q(s,a) + alpha * entropy (simplified)
-            var policyLoss = _numOps.Negate(minQ);
-
-            totalLoss = _numOps.Add(totalLoss, policyLoss);
-
-            // Backprop through Q-network to get action gradient
-            var qGradTensor = Tensor<T>.FromVector(new Vector<T>(new[] { _numOps.One }));
-            var actionGradTensor = _q1Network.Backpropagate(qGradTensor);
-            var actionGrad = actionGradTensor.ToVector();
-
-            // Compute policy gradients for both mean and log-sigma
-            // CRITICAL FIX: We want to MAXIMIZE Q, so we need to negate actionGrad
-            // Policy loss is -Q(s,a), gradient is d(-Q)/dθ = -dQ/dθ
-            var policyStateTensor = Tensor<T>.FromVector(experience.State);
-            var policyOutTensor = _policyNetwork.Predict(policyStateTensor);
-            var policyOut = policyOutTensor.ToVector();
-
-            var policyGrad = new Vector<T>(_options.ActionSize * 2);
-            for (int policyGradIdx = 0; policyGradIdx < _options.ActionSize; policyGradIdx++)
-            {
-                // Mean (mu) gradient: Negate actionGrad because policy loss is -Q(s,a)
-                // actionGrad contains dQ/da, but we want d(-Q)/da = -dQ/da
-                policyGrad[policyGradIdx] = _numOps.Negate(actionGrad[_options.StateSize + policyGradIdx]);
-
-                // Log-sigma gradient: Combine action gradient and entropy regularization
-                // The variance affects both Q-value and entropy
-                var varianceActionGrad = actionGrad.Length > _options.StateSize + _options.ActionSize + policyGradIdx
-                    ? actionGrad[_options.StateSize + _options.ActionSize + policyGradIdx]
-                    : _numOps.Zero;
-                var entropyGrad = _alpha; // Gradient of entropy w.r.t. log_sigma
-                policyGrad[_options.ActionSize + policyGradIdx] = _numOps.Add(_numOps.Negate(varianceActionGrad), entropyGrad);
-            }
-
-            var policyGradTensor = Tensor<T>.FromVector(policyGrad);
-            _policyNetwork.Backpropagate(policyGradTensor);
-
-            // Apply gradients manually
-            var policyParams = _policyNetwork.GetParameters();
-            for (int i = 0; i < policyParams.Length; i++)
-            {
-                policyParams[i] = _numOps.Add(policyParams[i], _numOps.Multiply(_options.PolicyLearningRate, policyGrad[i % policyGrad.Length]));
-            }
-            _policyNetwork.UpdateParameters(policyParams);
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
     private void UpdateTemperature(List<Experience<T, Vector<T>, Vector<T>>> batch)

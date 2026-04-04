@@ -680,7 +680,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
-        return new Tensor<T>(data, gradient.Shape.ToArray());
+        return new Tensor<T>(data, gradient._shape);
     }
 
     private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
@@ -695,7 +695,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
-        return new Tensor<T>(data, gradient.Shape.ToArray());
+        return new Tensor<T>(data, gradient._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
@@ -1110,176 +1110,19 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     }
 
     /// <summary>
-    /// Performs backpropagation to compute gradients.
-    /// </summary>
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        if (_lastPositionEncoding == null || _lastDirectionEncoding == null || _lastDensityRaw == null || _lastRgbRaw == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backpropagation.");
-        }
-        if (_densityLayer == null || _featureLayer == null || _colorOutputLayer == null)
-        {
-            throw new InvalidOperationException("NeRF layers are not initialized.");
-        }
-        if (outputGradient.Shape.Length != 2 || outputGradient.Shape[1] != 4)
-        {
-            throw new ArgumentException("Output gradient must have shape [N, 4].", nameof(outputGradient));
-        }
-
-        int numPoints = outputGradient.Shape[0];
-        int posDim = _lastPositionEncoding.Shape[1];
-        int dirDim = _lastDirectionEncoding.Shape[1];
-
-        var rgbGrad = new T[numPoints * 3];
-        var densityGrad = new T[numPoints];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * 4;
-            rgbGrad[i * 3] = outputGradient.Data.Span[baseIdx];
-            rgbGrad[i * 3 + 1] = outputGradient.Data.Span[baseIdx + 1];
-            rgbGrad[i * 3 + 2] = outputGradient.Data.Span[baseIdx + 2];
-            densityGrad[i] = outputGradient.Data.Span[baseIdx + 3];
-        }
-
-        var rgbGradTensor = new Tensor<T>(rgbGrad, [numPoints, 3]);
-        var densityGradTensor = new Tensor<T>(densityGrad, [numPoints, 1]);
-        var rgbRawGrad = ApplySigmoidGradient(_lastRgbRaw, rgbGradTensor);
-        var densityRawGrad = ApplySoftplusGradient(_lastDensityRaw, densityGradTensor);
-
-        Tensor<T> gradColor = _colorOutputLayer.Backward(rgbRawGrad);
-        for (int i = _colorLayers.Count - 1; i >= 0; i--)
-        {
-            gradColor = _colorLayers[i].Backward(gradColor);
-        }
-
-        var gradFeatures = new T[numPoints * _hiddenDim];
-        var gradDirEncoded = new T[numPoints * dirDim];
-        int colorStride = _hiddenDim + dirDim;
-        for (int i = 0; i < numPoints; i++)
-        {
-            int colorBase = i * colorStride;
-            int featureBase = i * _hiddenDim;
-            int dirBase = i * dirDim;
-            for (int f = 0; f < _hiddenDim; f++)
-            {
-                gradFeatures[featureBase + f] = gradColor.Data.Span[colorBase + f];
-            }
-            for (int d = 0; d < dirDim; d++)
-            {
-                gradDirEncoded[dirBase + d] = gradColor.Data.Span[colorBase + _hiddenDim + d];
-            }
-        }
-
-        var gradFeatureTensor = new Tensor<T>(gradFeatures, [numPoints, _hiddenDim]);
-        var gradDirEncodedTensor = new Tensor<T>(gradDirEncoded, [numPoints, dirDim]);
-
-        var gradFromFeatures = _featureLayer.Backward(gradFeatureTensor);
-        var gradFromDensity = _densityLayer.Backward(densityRawGrad);
-        var gradBase = AddTensors(gradFromFeatures, gradFromDensity);
-
-        var posEncodingGrad = new T[numPoints * posDim];
-        Tensor<T> grad = gradBase;
-        var numOps = NumOps;
-
-        for (int i = _positionLayers.Count - 1; i >= 0; i--)
-        {
-            if (_skipConnectionLayer >= 0 && i == _skipConnectionLayer)
-            {
-                var gradConcat = _positionLayers[i].Backward(grad);
-                var gradHidden = new T[numPoints * _hiddenDim];
-                var gradSkip = new T[numPoints * posDim];
-                for (int n = 0; n < numPoints; n++)
-                {
-                    int concatBase = n * (_hiddenDim + posDim);
-                    int hiddenBase = n * _hiddenDim;
-                    int posBase = n * posDim;
-                    for (int h = 0; h < _hiddenDim; h++)
-                    {
-                        gradHidden[hiddenBase + h] = gradConcat.Data.Span[concatBase + h];
-                    }
-                    for (int p = 0; p < posDim; p++)
-                    {
-                        gradSkip[posBase + p] = gradConcat.Data.Span[concatBase + _hiddenDim + p];
-                    }
-                }
-
-                for (int j = 0; j < posEncodingGrad.Length; j++)
-                {
-                    posEncodingGrad[j] = numOps.Add(posEncodingGrad[j], gradSkip[j]);
-                }
-
-                grad = new Tensor<T>(gradHidden, [numPoints, _hiddenDim]);
-            }
-            else
-            {
-                grad = _positionLayers[i].Backward(grad);
-            }
-        }
-
-        for (int j = 0; j < posEncodingGrad.Length; j++)
-        {
-            posEncodingGrad[j] = numOps.Add(posEncodingGrad[j], grad.Data.Span[j]);
-        }
-
-        if (_lastPositions == null || _lastDirections == null)
-        {
-            throw new InvalidOperationException("Cached inputs missing from forward pass.");
-        }
-
-        var posEncodedGradTensor = new Tensor<T>(posEncodingGrad, [numPoints, posDim]);
-        var posGrad = PositionalEncodingBackward(_lastPositions, _positionEncodingLevels, posEncodedGradTensor);
-        var normalizedDirections = NormalizeDirections(_lastDirections);
-        var dirGrad = PositionalEncodingBackward(normalizedDirections, _directionEncodingLevels, gradDirEncodedTensor);
-
-        var inputGrad = new T[numPoints * 6];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * 6;
-            int posBase = i * 3;
-            int dirBase = i * 3;
-            for (int d = 0; d < 3; d++)
-            {
-                inputGrad[baseIdx + d] = posGrad.Data.Span[posBase + d];
-                inputGrad[baseIdx + 3 + d] = dirGrad.Data.Span[dirBase + d];
-            }
-        }
-
-        return new Tensor<T>(inputGrad, [numPoints, 6]);
-    }
-
-    /// <summary>
     /// Trains the model on input data.
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var prediction = ForwardWithMemory(input);
-
-        // Compute loss
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // Compute gradients - reshape to [N, 4] for backpropagation
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        int numPoints = prediction.Shape[0];
-        var gradTensor = new Tensor<T>(lossGradient.ToArray(), [numPoints, 4]);
-        Backpropagate(gradTensor);
-
-        // Update layer parameters
-        foreach (var layer in Layers)
+        try
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
+            TrainWithTape(input, expectedOutput);
         }
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

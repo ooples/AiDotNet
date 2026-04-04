@@ -15,7 +15,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false  # Don't cancel release in progress
+  cancel-in-progress: true  # Cancel stale release when new push to master arrives
 
 permissions:
   contents: write

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -77,7 +77,7 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
         if (span.Length < 64) return findings;
 
         // 1. High-frequency energy ratio (adversarial perturbations have unusual HF content)
-        double hfScore = ComputeHighFrequencyAnomalyScore(span, image.Shape.ToArray());
+        double hfScore = ComputeHighFrequencyAnomalyScore(span, image._shape);
 
         // 2. Pixel distribution analysis (adversarial images have non-natural histogram shapes)
         double histScore = ComputeHistogramAnomalyScore(span);

@@ -133,7 +133,9 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         Vector<T> centeredY = y.Subtract(meanY);
 
         // Scale the variables if option is set
+        // Both X and Y must be scaled consistently for TLS to work correctly
         Vector<T> scaleX = Vector<T>.CreateDefault(p, NumOps.One);
+        T scaleY = NumOps.One;
         if (_options.ScaleVariables)
         {
             for (int j = 0; j < p; j++)
@@ -146,6 +148,17 @@ public class OrthogonalRegression<T> : RegressionBase<T>
                     {
                         centeredX[i, j] = NumOps.Divide(centeredX[i, j], scaleX[j]);
                     }
+                }
+            }
+
+            // Scale Y as well to keep the augmented matrix in consistent units
+            T yVariance = centeredY.Variance();
+            scaleY = NumOps.Sqrt(yVariance);
+            if (!NumOps.Equals(scaleY, NumOps.Zero))
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    centeredY[i] = NumOps.Divide(centeredY[i], scaleY);
                 }
             }
         }
@@ -176,8 +189,10 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
-                    Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
+                    // TLS coefficient in scaled space: -v_j / v_last
+                    T scaledCoeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
+                    // Unscale: multiply by scaleY/scaleX[j] to return to original units
+                    Coefficients[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
                 }
                 svdSucceeded = true;
             }
@@ -196,7 +211,7 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             var xTy = centeredX.Transpose().Multiply(centeredY);
             Coefficients = xTx.Inverse().Multiply(xTy);
             for (int j = 0; j < p; j++)
-                Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
+                Coefficients[j] = NumOps.Multiply(NumOps.Divide(Coefficients[j], scaleX[j]), scaleY);
         }
 
         Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using System.Globalization;
 using System.Text;
 using AiDotNet.Autodiff;
@@ -275,15 +275,6 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
         }
 
         return importance;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public override ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported.");
     }
 
     private string SerializeParameters()

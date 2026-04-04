@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -96,7 +97,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// This is critical for training a variational autoencoder.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -109,10 +110,10 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuMean;
-    private IGpuTensor<T>? _gpuLogVar;
-    private IGpuTensor<T>? _gpuEpsilon;
-    private IGpuTensor<T>? _gpuStdDev;
+    private Tensor<T>? _gpuMean;
+    private Tensor<T>? _gpuLogVar;
+    private Tensor<T>? _gpuEpsilon;
+    private Tensor<T>? _gpuStdDev;
     private int _gpuBatchSize;
     private int _gpuLatentSize;
 
@@ -273,7 +274,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
     /// <returns>GPU-resident output tensor with sampled latent values.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -371,10 +372,10 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             int[] latentShape = [batchSize, latentSize];
-            _gpuMean = new GpuTensor<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuLogVar = new GpuTensor<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuEpsilon = new GpuTensor<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuStdDev = new GpuTensor<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuMean = GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuLogVar = GpuTensorHelper.UploadToGpu<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuEpsilon = GpuTensorHelper.UploadToGpu<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuStdDev = GpuTensorHelper.UploadToGpu<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuBatchSize = batchSize;
             _gpuLatentSize = latentSize;
 
@@ -413,297 +414,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             outputShape[rank - 1] = latentSize;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the reparameterization layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (means and log variances).</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the reparameterization layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradients with respect to
-    /// the means and log variances based on the gradients of the output. The gradient flow through the
-    /// random sampling process is what makes the reparameterization trick valuable for training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changes in the means and variances would affect the loss.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives gradients indicating how the network's output should change
-    /// 2. It calculates how changes in the mean values would affect the output
-    /// 3. It calculates how changes in the log variance values would affect the output
-    /// 4. It combines these into gradients for the original input (means and log variances)
-    /// 
-    /// The gradient for means is straightforward - changes in the mean directly affect the output.
-    /// The gradient for log variances is more complex because it controls the scale of the random noise.
-    /// 
-    /// This backward flow of information is what allows a VAE to learn good latent representations
-    /// even though it involves random sampling.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Collapse to 2D matching _lastMean shape
-        int rank = outputGradient.Shape.Length;
-        int flatBatch;
-        int latentSize;
-        Tensor<T> outGrad2D;
-
-        if (rank <= 2)
-        {
-            flatBatch = rank == 1 ? 1 : outputGradient.Shape[0];
-            latentSize = outputGradient.Shape[^1];
-            outGrad2D = rank == 1 ? outputGradient.Reshape([1, latentSize]) : outputGradient;
-        }
-        else
-        {
-            flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= outputGradient.Shape[d];
-            latentSize = outputGradient.Shape[^1];
-            outGrad2D = outputGradient.Reshape([flatBatch, latentSize]);
-        }
-
-        // Compute stdDev = exp(logvar * 0.5) using Engine operations
-        var halfTensor = new Tensor<T>([flatBatch, latentSize]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
-        var stdDev = Engine.TensorExp(scaledLogVar);
-
-        // Gradient for mean = outputGradient (unchanged)
-        var gradMean = outGrad2D;
-
-        // Gradient for log variance = outputGradient * epsilon * stdDev * 0.5
-        var gradLogVar = Engine.TensorMultiply(
-            Engine.TensorMultiply(
-                Engine.TensorMultiply(outGrad2D, _lastEpsilon),
-                stdDev),
-            halfTensor);
-
-        // Concatenate gradients: [gradMean, gradLogVar] along last dim
-        var inputGradient = new Tensor<T>([flatBatch, latentSize * 2]);
-        inputGradient = Engine.TensorSetSlice(inputGradient, gradMean, [0, 0]);
-        inputGradient = Engine.TensorSetSlice(inputGradient, gradLogVar, [0, latentSize]);
-
-        // Restore original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the reparameterization trick and uses autodiff
-    /// to compute gradients. The forward computation is: z = mean + exp(logvar * 0.5) * epsilon
-    ///
-    /// The gradients are:
-    /// - dL/d_mean = dL/dz (gradient passes through unchanged)
-    /// - dL/d_logvar = dL/dz * epsilon * exp(logvar * 0.5) * 0.5
-    /// </para>
-    /// <para>
-    /// <b>Production-Ready Features:</b>
-    /// <list type="bullet">
-    /// <item>Builds proper computation graph using TensorOperations</item>
-    /// <item>Uses inline topological sort for backward pass</item>
-    /// <item>Fully vectorized - no nested loops</item>
-    /// <item>GPU-accelerated via IEngine</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = outputGradient.Shape[0];
-        int latentSize = outputGradient.Shape[1];
-
-        // Build computation graph for the reparameterization trick
-        // Create variable nodes for mean and logvar (these require gradients)
-        var meanNode = TensorOperations<T>.Variable(_lastMean, "mean", requiresGradient: true);
-        var logvarNode = TensorOperations<T>.Variable(_lastLogVar, "logvar", requiresGradient: true);
-
-        // Create constant node for epsilon (random noise - no gradients)
-        var epsilonNode = TensorOperations<T>.Constant(_lastEpsilon, "epsilon");
-
-        // Create constant for 0.5 scalar multiplication
-        var halfTensor = new Tensor<T>([batchSize, latentSize]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var halfNode = TensorOperations<T>.Constant(halfTensor, "half");
-
-        // Build forward graph: z = mean + exp(logvar * 0.5) * epsilon
-        // Step 1: scaledLogVar = logvar * 0.5
-        var scaledLogVarNode = TensorOperations<T>.ElementwiseMultiply(logvarNode, halfNode);
-
-        // Step 2: stdDev = exp(scaledLogVar)
-        var stdDevNode = TensorOperations<T>.Exp(scaledLogVarNode);
-
-        // Step 3: scaledEpsilon = stdDev * epsilon
-        var scaledEpsilonNode = TensorOperations<T>.ElementwiseMultiply(stdDevNode, epsilonNode);
-
-        // Step 4: z = mean + scaledEpsilon
-        var zNode = TensorOperations<T>.Add(meanNode, scaledEpsilonNode);
-
-        // Set the output gradient as the seed for backpropagation
-        zNode.Gradient = outputGradient;
-
-        // Inline topological sort (matching FullyConnectedLayer pattern)
-        var visited = new HashSet<ComputationNode<T>>();
-        var topoOrder = new List<ComputationNode<T>>();
-        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
-        stack.Push((zNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients for mean and logvar
-        if (meanNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed for mean.");
-        if (logvarNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed for logvar.");
-
-        var gradMean = meanNode.Gradient;
-        var gradLogVar = logvarNode.Gradient;
-
-        // Concatenate gradients: [gradMean, gradLogVar] using Engine operations
-        var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
-        inputGradient = Engine.TensorSetSlice(inputGradient, gradMean, [0, 0]);
-        inputGradient = Engine.TensorSetSlice(inputGradient, gradLogVar, [0, latentSize]);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated backward pass for the reparameterization layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Computes gradients for the reparameterization trick: z = mean + exp(logvar * 0.5) * epsilon
-    /// - Gradient for mean: dL/d_mean = dL/dz (passes through unchanged)
-    /// - Gradient for logvar: dL/d_logvar = dL/dz * epsilon * stdDev * 0.5
-    /// The output is concatenated [gradMean, gradLogVar] to match input shape.
-    /// </para>
-    /// </remarks>
-    /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to layer output.</param>
-    /// <returns>GPU tensor containing gradient with respect to input [mean, logvar].</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuMean == null || _gpuEpsilon == null || _gpuStdDev == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int totalElements = _gpuBatchSize * _gpuLatentSize;
-        int[] latentShape = [_gpuBatchSize, _gpuLatentSize];
-        int[] outputShape = [_gpuBatchSize, _gpuLatentSize * 2];
-
-        // Reshape outputGradient to 2D if needed (flatten batch dims)
-        IGpuTensor<T> grad = outputGradient.Shape.Length == 2
-            ? outputGradient
-            : gpuEngine.ReshapeGpu(outputGradient, latentShape);
-
-        // gradMean = outputGradient (unchanged)
-        // The gradient for mean passes through directly
-
-        // gradLogVar = outputGradient * epsilon * stdDev * 0.5
-        // First: temp1 = outputGradient * epsilon
-        var temp1Buffer = backend.AllocateBuffer(totalElements);
-        backend.Multiply(grad.Buffer, _gpuEpsilon.Buffer, temp1Buffer, totalElements);
-
-        // temp2 = temp1 * stdDev
-        var temp2Buffer = backend.AllocateBuffer(totalElements);
-        backend.Multiply(temp1Buffer, _gpuStdDev.Buffer, temp2Buffer, totalElements);
-
-        // gradLogVar = temp2 * 0.5
-        var gradLogVarBuffer = backend.AllocateBuffer(totalElements);
-        backend.Scale(temp2Buffer, gradLogVarBuffer, 0.5f, totalElements);
-
-        temp1Buffer.Dispose();
-        temp2Buffer.Dispose();
-
-        // Allocate output buffer for concatenated gradients [gradMean, gradLogVar]
-        int totalOutputElements = _gpuBatchSize * _gpuLatentSize * 2;
-        var outputBuffer = backend.AllocateBuffer(totalOutputElements);
-
-        // Copy gradMean and gradLogVar into output buffer
-        // For each batch: output[b, 0:latentSize] = gradMean, output[b, latentSize:2*latentSize] = gradLogVar
-        for (int b = 0; b < _gpuBatchSize; b++)
-        {
-            int srcBatchOffset = b * _gpuLatentSize;
-            int dstBatchOffset = b * (_gpuLatentSize * 2);
-
-            // Copy gradMean (from outputGradient)
-            backend.Copy(grad.Buffer, srcBatchOffset, outputBuffer, dstBatchOffset, _gpuLatentSize);
-
-            // Copy gradLogVar
-            backend.Copy(gradLogVarBuffer, srcBatchOffset, outputBuffer, dstBatchOffset + _gpuLatentSize, _gpuLatentSize);
-        }
-
-        gradLogVarBuffer.Dispose();
-
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -796,32 +507,5 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         _gpuEpsilon = null;
         _gpuStdDev = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Input contains [batch, latentSize * 2] where first half is mean, second half is logvar
-        int latentSize = InputShape[0] / 2;
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0] });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Split input into mean and logvar along axis 1
-        var splitOutputs = TensorOperations<T>.Split(inputNode, numSplits: 2, axis: 1);
-
-        // splitOutputs will contain [meanNode, logvarNode]
-        // For deterministic VAE inference (standard practice), return only the mean
-        // This avoids randomness and gives the expected value of the latent distribution
-        var meanNode = splitOutputs[0];  // Get the first split (mean)
-
-        return meanNode;
-    }
-
-    public override bool SupportsJitCompilation => true;
 
 }

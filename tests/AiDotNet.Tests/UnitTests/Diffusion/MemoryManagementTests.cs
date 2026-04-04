@@ -338,34 +338,6 @@ public class MemoryManagementTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ModelShard_Backward_ProcessesInReverse()
-    {
-        // Arrange
-        var layers = CreateSimpleLayers(4);
-        var shard = new ModelShard<float>(layers, numDevices: 2);
-
-        // First do a forward pass
-        var input = new Tensor<float>(new[] { 1, 64 });
-        for (int i = 0; i < input.Length; i++)
-        {
-            input[i] = 1.0f;
-        }
-        var output = shard.Forward(input);
-
-        // Now do backward
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = shard.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-    }
 
     #endregion
 

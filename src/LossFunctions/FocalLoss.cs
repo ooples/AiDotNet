@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -141,7 +142,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -152,7 +153,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float alpha = Convert.ToSingle(NumOps.ToDouble(_alpha));
         float gamma = Convert.ToSingle(NumOps.ToDouble(_gamma));
 
@@ -164,8 +165,29 @@ public class FocalLoss<T> : LossFunctionBase<T>
         backend.FocalBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, alpha, gamma);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Focal = -mean(alpha * (1 - pt)^gamma * log(pt))
+        var clamped = Engine.TensorClamp(predicted, NumOps.FromDouble(1e-7), NumOps.FromDouble(1.0 - 1e-7));
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clamped);
+        var oneMinusT = Engine.ScalarMinusTensor(NumOps.One, target);
+        // pt = target * p + (1-target) * (1-p)
+        var pt = Engine.TensorAdd(
+            Engine.TensorMultiply(target, clamped),
+            Engine.TensorMultiply(oneMinusT, oneMinusP));
+        var logPt = Engine.TensorLog(pt);
+        var oneMinusPt = Engine.ScalarMinusTensor(NumOps.One, pt);
+        var focalWeight = Engine.TensorPower(oneMinusPt, _gamma);
+        var weighted = Engine.TensorMultiply(focalWeight, logPt);
+        var scaled = Engine.TensorMultiplyScalar(weighted, _alpha);
+        var allAxes = Enumerable.Range(0, scaled.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(scaled, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
     }
 }

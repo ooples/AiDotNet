@@ -116,32 +116,7 @@ public class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            var output = Predict(input);
-            var ov = output.ToVector();
-            var ev = expected.ToVector();
-            if (ov.Length != ev.Length)
-            {
-                int minLen = Math.Min(ov.Length, ev.Length);
-                ov = ov.Slice(0, minLen);
-                ev = ev.Slice(0, minLen);
-            }
-            var g = LossFunction.CalculateDerivative(ov, ev);
-            var gt = Tensor<T>.FromVector(g);
-            for (int i = Layers.Count - 1; i >= 0; i--)
-                gt = Layers[i].Backward(gt);
-            _optimizer?.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

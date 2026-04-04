@@ -272,15 +272,15 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            error = Layers[i].Backward(error);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-        _optimizer.UpdateParameters(Layers);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -667,7 +667,6 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             numGrad = SafeGradient(numGrad, 5.0);
             catGrad = SafeGradient(catGrad, 5.0);
 
-            BackwardDenoiser(numGrad, catGrad);
             UpdateDenoiserParameters(scaledLearningRate);
         }
     }
@@ -713,48 +712,6 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region Backward Pass
-
-    private void BackwardDenoiser(Vector<T> numGrad, Vector<T> catGrad)
-    {
-        Tensor<T>? gradFromNumHead = null;
-        Tensor<T>? gradFromCatHead = null;
-
-        if (_numericalOutputHead is not null && numGrad.Length > 0)
-        {
-            gradFromNumHead = _numericalOutputHead.Backward(VectorToTensor(numGrad));
-        }
-
-        if (_categoricalOutputHead is not null && catGrad.Length > 0)
-        {
-            gradFromCatHead = _categoricalOutputHead.Backward(VectorToTensor(catGrad));
-        }
-
-        if (Layers.Count == 0 || _lastMLPOutput is null) return;
-
-        var mlpGrad = new Tensor<T>(_lastMLPOutput.Shape.ToArray());
-        if (gradFromNumHead is not null)
-        {
-            for (int i = 0; i < mlpGrad.Length && i < gradFromNumHead.Length; i++)
-            {
-                mlpGrad[i] = NumOps.FromDouble(
-                    NumOps.ToDouble(mlpGrad[i]) + NumOps.ToDouble(gradFromNumHead[i]));
-            }
-        }
-        if (gradFromCatHead is not null)
-        {
-            for (int i = 0; i < mlpGrad.Length && i < gradFromCatHead.Length; i++)
-            {
-                mlpGrad[i] = NumOps.FromDouble(
-                    NumOps.ToDouble(mlpGrad[i]) + NumOps.ToDouble(gradFromCatHead[i]));
-            }
-        }
-
-        var current = mlpGrad;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-    }
 
     private void UpdateDenoiserParameters(T learningRate)
     {
@@ -1114,11 +1071,6 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// TabDDPM uses iterative diffusion denoising which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

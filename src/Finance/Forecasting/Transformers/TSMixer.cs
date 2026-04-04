@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -519,7 +519,6 @@ public class TSMixer<T> : ForecastingModelBase<T>
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -848,8 +847,8 @@ public class TSMixer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException(
                 $"Input projection failed to transform features. " +
                 $"Expected output last dimension = {_hiddenDim}, got {currentLastDim}. " +
-                $"Input shape: [{string.Join(", ", normalized.Shape.ToArray())}], " +
-                $"Output shape: [{string.Join(", ", current.Shape.ToArray())}]. " +
+                $"Input shape: [{string.Join(", ", normalized._shape)}], " +
+                $"Output shape: [{string.Join(", ", current._shape)}]. " +
                 $"Layer used: {layerType}. " +
                 $"NumFeatures={_numFeatures}, HiddenDim={_hiddenDim}.");
         }
@@ -894,27 +893,6 @@ public class TSMixer<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass calculates how each parameter contributed
-    /// to the error. This information is then used by the optimizer to update the parameters.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-
-        // Backward through all layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     /// <summary>

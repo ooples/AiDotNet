@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -102,7 +103,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor (probabilities between 0 and 1).</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -113,7 +114,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
 
         // Compute loss on GPU
         float lossValue = backend.BinaryCrossEntropyLoss(predicted.Buffer, actual.Buffer, size);
@@ -123,8 +124,27 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
         backend.BinaryCrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // BCE = -mean(target * log(p) + (1 - target) * log(1 - p))
+        var eps = NumOps.FromDouble(1e-7);
+        var oneMinusEps = NumOps.FromDouble(1.0 - 1e-7);
+        var clamped = Engine.TensorClamp(predicted, eps, oneMinusEps);
+        var logP = Engine.TensorLog(clamped);
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clamped);
+        var logOneMinusP = Engine.TensorLog(oneMinusP);
+        var oneMinusT = Engine.ScalarMinusTensor(NumOps.One, target);
+        var term1 = Engine.TensorMultiply(target, logP);
+        var term2 = Engine.TensorMultiply(oneMinusT, logOneMinusP);
+        var sum = Engine.TensorAdd(term1, term2);
+        var allAxes = Enumerable.Range(0, sum.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(sum, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
     }
 }

@@ -1,4 +1,4 @@
-namespace AiDotNet.Data.Collation;
+﻿namespace AiDotNet.Data.Collation;
 
 /// <summary>
 /// Stacks equal-size tensors into a batch tensor along dimension 0.
@@ -19,12 +19,12 @@ public class DefaultCollateFunction<T> : ICollateFunction<Tensor<T>, Tensor<T>>
         if (samples.Count == 0)
             throw new ArgumentException("Cannot collate an empty sample list.", nameof(samples));
 
-        int[] sampleShape = samples[0].Shape.ToArray();
+        int[] sampleShape = samples[0]._shape;
 
         // Verify all samples have the same shape
         for (int i = 1; i < samples.Count; i++)
         {
-            int[] shape = samples[i].Shape.ToArray();
+            int[] shape = samples[i]._shape;
             if (shape.Length != sampleShape.Length)
                 throw new ArgumentException(
                     $"Sample {i} has rank {shape.Length} but expected {sampleShape.Length}.");

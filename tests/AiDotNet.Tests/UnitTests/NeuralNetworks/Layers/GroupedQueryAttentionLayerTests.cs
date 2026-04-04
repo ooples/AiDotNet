@@ -99,22 +99,6 @@ public class GroupedQueryAttentionLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int embDim = 32;
-        int numHeads = 4;
-        int numKVHeads = 2;
-        var layer = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numKVHeads);
-        var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
-
-        var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void ParameterCount_ReflectsReducedKVWeights()

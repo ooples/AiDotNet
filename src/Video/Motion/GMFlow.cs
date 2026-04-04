@@ -297,38 +297,15 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
-
-        // Compute loss gradient
-        var lossGradient = Engine.TensorSubtract(prediction, expectedOutput);
-
-        // Backward pass through all layers
-        var gradient = lossGradient;
-        foreach (var layer in _refinement.AsEnumerable().Reverse())
+        SetTrainingMode(true);
+        try
         {
-            gradient = layer.Backward(gradient);
+            TrainWithTape(input, expectedOutput);
         }
-        foreach (var layer in _flowDecoder.AsEnumerable().Reverse())
+        finally
         {
-            gradient = layer.Backward(gradient);
+            SetTrainingMode(false);
         }
-        foreach (var layer in _crossAttention.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _selfAttention.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _encoder.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
-            layer.UpdateParameters(lr);
     }
 
     #endregion
@@ -397,7 +374,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var output = new Tensor<T>(value.Shape.ToArray());
+        var output = new Tensor<T>(value._shape);
         double scale = 1.0 / Math.Sqrt(channels);
 
         // Use local window attention for efficiency (window size based on feature resolution)
@@ -584,7 +561,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var warped = new Tensor<T>(image.Shape.ToArray());
+        var warped = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -655,7 +632,17 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _selfAttention) Layers.Add(layer);
+        foreach (var layer in _crossAttention) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        Layers.Add(_flowHead);
+        foreach (var layer in _refinement) Layers.Add(layer);
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {

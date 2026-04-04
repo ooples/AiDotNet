@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -189,6 +189,10 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenActivation);
         _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenActivation);
         _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputActivation);
+
+        RegisterSubLayer(_fc1);
+        RegisterSubLayer(_fc2);
+        RegisterSubLayer(_fc3);
     }
 
     /// <summary>
@@ -241,6 +245,10 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenVectorActivation);
         _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenVectorActivation);
         _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputVectorActivation);
+
+        RegisterSubLayer(_fc1);
+        RegisterSubLayer(_fc2);
+        RegisterSubLayer(_fc3);
     }
 
     /// <summary>
@@ -279,7 +287,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -293,74 +301,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
         x2.Dispose(); // Dispose intermediate tensor
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the reconstruction layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the reconstruction layer, which is used during training
-    /// to propagate error gradients back through the network. It sequentially passes the gradient backward
-    /// through the three fully connected layers in reverse order, with each layer's input gradient becoming
-    /// the output gradient for the previous layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The error gradient arrives at the third layer (the output layer)
-    /// 2. The third layer calculates its updates and passes the gradient to the second layer
-    /// 3. The second layer calculates its updates and passes the gradient to the first layer
-    /// 4. The first layer calculates its updates and passes the gradient to the previous layer in the network
-    /// 
-    /// This reverse flow of information is like feedback being passed backward:
-    /// - "The final output was wrong in this way" (outputGradient)
-    /// - "To fix that, the third layer should change like this"
-    /// - "To help the third layer, the second layer should change like this"
-    /// - "To help the second layer, the first layer should change like this"
-    /// - "To help the first layer, the previous layers should change like this" (return value)
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        var gradient = _fc3.Backward(outputGradient);
-        gradient = _fc2.Backward(gradient);
-
-        return _fc1.Backward(gradient);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the three constituent FullyConnectedLayers. Each sublayer will use its own autodiff implementation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
-        // The sublayers will handle their own autodiff if they support it
-        var gradient = _fc3.Backward(outputGradient);
-        gradient = _fc2.Backward(gradient);
-        return _fc1.Backward(gradient);
     }
 
 
@@ -612,37 +552,5 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc2.ResetState();
         _fc3.ResetState();
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Check if all inner layers support JIT compilation
-        if (!_fc1.SupportsJitCompilation || !_fc2.SupportsJitCompilation || !_fc3.SupportsJitCompilation)
-            throw new InvalidOperationException("ReconstructionLayer requires all inner fully connected layers to support JIT compilation.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Chain the three fully connected layers sequentially
-        var fc1InputNodes = new List<ComputationNode<T>>();
-        var currentNode = _fc1.ExportComputationGraph(fc1InputNodes);
-
-        var fc2InputNodes = new List<ComputationNode<T>>();
-        currentNode = _fc2.ExportComputationGraph(fc2InputNodes);
-
-        var fc3InputNodes = new List<ComputationNode<T>>();
-        currentNode = _fc3.ExportComputationGraph(fc3InputNodes);
-
-        return currentNode;
-    }
-
-    public override bool SupportsJitCompilation =>
-        _fc1.SupportsJitCompilation && _fc2.SupportsJitCompilation && _fc3.SupportsJitCompilation;
 
 }

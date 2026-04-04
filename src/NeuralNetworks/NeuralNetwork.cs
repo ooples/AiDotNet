@@ -49,6 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -105,9 +106,10 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
+    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new NeuralNetworkDefaultOptions();
         Options = _options;
         InitializeLayers();
@@ -282,26 +284,14 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure we're in training mode
         SetTrainingMode(true);
-
-        // Step 1: Forward pass with memory for backpropagation
-        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
-
-        // Step 2: Calculate loss
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Step 3: Backpropagation using proper loss gradient (not raw error)
-        Vector<T> lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Step 4: Update parameters using gradients and learning rate
-        T learningRate = NumOps.FromDouble(0.01);
-
-        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
+        try
         {
-            layer.UpdateParameters(learningRate);
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 

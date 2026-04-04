@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -205,11 +205,11 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         }
 
         // Create new tensors with only inliers
-        int[] newXShape = (int[])X.Shape.ToArray().Clone();
+        int[] newXShape = (int[])X.Shape.ToArray();
         newXShape[0] = inlierCount;
         var newX = new Tensor<T>(newXShape);
 
-        int[] newYShape = (int[])y.Shape.ToArray().Clone();
+        int[] newYShape = (int[])y.Shape.ToArray();
         newYShape[0] = inlierCount;
         var newY = new Tensor<T>(newYShape);
 

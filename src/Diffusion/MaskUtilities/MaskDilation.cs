@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -63,7 +63,7 @@ public class MaskDilation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>The dilated mask.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask.Shape.ToArray();
+        var shape = mask._shape;
         var result = new Tensor<T>(shape);
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;

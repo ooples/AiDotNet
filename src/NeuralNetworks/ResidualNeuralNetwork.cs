@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -52,6 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -111,7 +113,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
     private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
+    #pragma warning disable CS0649
     private Vector<T>? _lastExpectedOutput;
+    #pragma warning restore CS0649
 
     /// <summary>
     /// Adds an auxiliary classifier at the specified layer position for deep supervision.
@@ -172,7 +176,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// Persistent Adam optimizer for Train() calls. Momentum state persists across
     /// iterations for stable convergence on deep residual networks.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -284,16 +290,17 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
 
     public ResidualNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        T? learningRate = default,
         int epochs = 10,
         int batchSize = 32,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResidualNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new ResidualNeuralNetworkOptions();
         Options = _options;
-        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _epochs = epochs;
         _batchSize = batchSize;
 
@@ -682,96 +689,18 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Propagate training mode to all layers including ResidualLayer inner layers
         foreach (var layer in Layers)
-        {
             layer.SetTrainingMode(true);
-        }
-
-        // Forward pass through all layers
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        // Cache expected output for auxiliary loss computation
-        _lastExpectedOutput = expectedVector;
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass using proper loss gradient
-        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Use persistent Adam optimizer for gradient-scaled parameter updates.
-        // Raw SGD fails on deep ResNets because gradients vanish — Adam's adaptive
-        // learning rate and momentum handle this. Persistent optimizer keeps momentum
-        // state across Train() calls for stable convergence.
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGradients = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
-        UpdateParameters(updatedParams);
+try
+{
+    TrainWithTape(input, expectedOutput, _optimizer);
+}
+finally
+{
+    SetTrainingMode(false);
+}
     }
 
-    /// <summary>
-    /// Trains for multiple epochs with batching. Used internally by PredictionModelBuilder
-    /// for production training workflows with full epoch/batch control.
-    /// </summary>
-    private void TrainEpochs(Tensor<T> input, Tensor<T> expectedOutput, int epochs, int batchSize)
-    {
-        // Normalize to 2D [batch, features] if needed
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-        if (expectedOutput.Rank == 1)
-            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
-
-        SetTrainingMode(true);
-
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += batchSize)
-            {
-                int batchEnd = Math.Min(batchStart + batchSize, input.Shape[0]);
-
-                Tensor<T> batchX;
-                Tensor<T> batchY;
-                if (input.Shape[0] == 1 || batchEnd - batchStart == input.Shape[0])
-                {
-                    batchX = input;
-                    batchY = expectedOutput;
-                }
-                else
-                {
-                    batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
-                    batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
-                }
-
-                // Single forward/backward per batch sample
-                int actualBatchSize = batchEnd - batchStart;
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    var x = Tensor<T>.FromVector(batchX.GetRow(i));
-                    var y = batchY.GetRow(i);
-
-                    var prediction = ForwardWithMemory(x);
-                    var predVector = prediction.ToVector();
-
-                    LastLoss = LossFunction.CalculateLoss(predVector, y);
-                    var grad = LossFunction.CalculateDerivative(predVector, y);
-                    Backpropagate(Tensor<T>.FromVector(grad));
-
-                    foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
-                    {
-                        layer.UpdateParameters(_learningRate);
-                    }
-                }
-            }
-        }
-
-        SetTrainingMode(false);
-    }
 
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
@@ -910,9 +839,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         // Create a new instance with the cloned architecture and the same parameters
         return new ResidualNeuralNetwork<T>(
             Architecture,
-            _learningRate,
             _epochs,
             _batchSize,
+            _optimizer,
             LossFunction
         );
     }

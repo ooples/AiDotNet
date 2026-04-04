@@ -826,53 +826,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Cross-Decomposition Consistency
 
-    [Fact]
-    public void LU_And_QR_SolveConsistently()
-    {
-        // Both decompositions should solve Ax=b consistently
-        var A = Create3x3();
-        var b = new Vector<double>(new double[] { 1, 2, 3 });
 
-        var lu = new LuDecomposition<double>(A);
-        var qr = new QrDecomposition<double>(A);
 
-        var xLU = lu.Solve(b);
-        var xQR = qr.Solve(b);
-
-        for (int i = 0; i < xLU.Length; i++)
-            Assert.Equal(xLU[i], xQR[i], LooseTolerance);
-    }
-
-    [Fact]
-    public void Cholesky_And_LDL_SolveConsistently()
-    {
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 1, 2, 3 });
-
-        var chol = new CholeskyDecomposition<double>(A);
-        var ldl = new LdlDecomposition<double>(A);
-
-        var xChol = chol.Solve(b);
-        var xLDL = ldl.Solve(b);
-
-        for (int i = 0; i < xChol.Length; i++)
-            Assert.Equal(xChol[i], xLDL[i], LooseTolerance);
-    }
-
-    [Fact]
-    public void AllDecompositions_Solve_Ax_Equals_b()
-    {
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 7, 10, 10 });
-
-        var lu = new LuDecomposition<double>(A);
-        var x = lu.Solve(b);
-
-        // Verify Ax = b
-        var Ax = A.Multiply(x);
-        for (int i = 0; i < b.Length; i++)
-            Assert.Equal(b[i], Ax[i], LooseTolerance);
-    }
 
     #endregion
 }

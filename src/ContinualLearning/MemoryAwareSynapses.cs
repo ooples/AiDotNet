@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -100,8 +100,11 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         Guard.NotNull(network);
         Guard.NotNull(taskData.inputs);
 
-        // Compute importance using output sensitivity (unsupervised)
-        var newOmega = ComputeOutputSensitivity(network, taskData.inputs);
+        // Compute importance using output sensitivity via tape-based gradients
+        var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
+        var newOmega = new Vector<T>(grads.Length);
+        for (int i = 0; i < grads.Length; i++)
+            newOmega[i] = _numOps.Abs(grads[i]); // Importance = |gradient|
 
         // Accumulate importance
         for (int i = 0; i < _omega.Length; i++)
@@ -175,53 +178,6 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes the importance of each parameter based on output sensitivity.
-    /// </summary>
-    /// <remarks>
-    /// This is the key difference from EWC: we compute gradients of the output norm
-    /// with respect to parameters, not gradients of the loss.
-    /// </remarks>
-    private Vector<T> ComputeOutputSensitivity(INeuralNetwork<T> network, Tensor<T> inputs)
-    {
-        var paramCount = network.ParameterCount;
-        var omega = new Vector<T>(paramCount);
-        var batchSize = inputs.Shape[0];
-
-        network.SetTrainingMode(true);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var singleInput = ExtractSample(inputs, i);
-
-            // Forward pass
-            var output = network.ForwardWithMemory(singleInput);
-
-            // Compute gradient of squared L2 norm of output with respect to parameters
-            // d||F(x)||²/dθ = 2 * F(x) * dF(x)/dθ
-            var outputGrad = ComputeOutputNormGradient(output);
-            network.Backpropagate(outputGrad);
-
-            // Get parameter gradients and accumulate absolute values
-            var grads = network.GetParameterGradients();
-            for (int j = 0; j < paramCount; j++)
-            {
-                var absGrad = _numOps.Abs(grads[j]);
-                omega[j] = _numOps.Add(omega[j], absGrad);
-            }
-        }
-
-        // Average over batch
-        var batchSizeT = _numOps.FromDouble(batchSize);
-        for (int j = 0; j < paramCount; j++)
-        {
-            omega[j] = _numOps.Divide(omega[j], batchSizeT);
-        }
-
-        network.SetTrainingMode(false);
-        return omega;
-    }
-
-    /// <summary>
     /// Computes the gradient of the output L2 norm.
     /// </summary>
     private Tensor<T> ComputeOutputNormGradient(Tensor<T> output)
@@ -235,7 +191,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
             gradData[i] = _numOps.Multiply(two, output[i]);
         }
 
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 
     /// <summary>

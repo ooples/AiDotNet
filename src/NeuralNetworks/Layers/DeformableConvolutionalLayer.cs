@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
-public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -53,7 +54,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     private readonly int _deformGroups;
 
     // Main convolution weights and bias
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     // Offset prediction convolution
@@ -79,50 +84,50 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     private Tensor<T>? _lastMask;
 
     // GPU caching for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private int[]? _gpuInputShape;
-    private IGpuTensor<T>? _gpuOffsets;
-    private IGpuTensor<T>? _gpuMask;
+    private Tensor<T>? _gpuOffsets;
+    private Tensor<T>? _gpuMask;
 
     #endregion
 
     #region GPU Weight Storage Fields
 
     // Main conv weights - GPU tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBias;
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuBias;
+    private Tensor<T>? _gpuWeightGradient;
+    private Tensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuWeightVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuWeightM;
+    private Tensor<T>? _gpuWeightV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     // Offset weights - GPU tensors
-    private GpuTensor<T>? _gpuOffsetWeights;
-    private GpuTensor<T>? _gpuOffsetBias;
-    private GpuTensor<T>? _gpuOffsetWeightGradient;
-    private GpuTensor<T>? _gpuOffsetBiasGradient;
-    private GpuTensor<T>? _gpuOffsetWeightVelocity;
-    private GpuTensor<T>? _gpuOffsetBiasVelocity;
-    private GpuTensor<T>? _gpuOffsetWeightM;
-    private GpuTensor<T>? _gpuOffsetWeightV;
-    private GpuTensor<T>? _gpuOffsetBiasM;
-    private GpuTensor<T>? _gpuOffsetBiasV;
+    private Tensor<T>? _gpuOffsetWeights;
+    private Tensor<T>? _gpuOffsetBias;
+    private Tensor<T>? _gpuOffsetWeightGradient;
+    private Tensor<T>? _gpuOffsetBiasGradient;
+    private Tensor<T>? _gpuOffsetWeightVelocity;
+    private Tensor<T>? _gpuOffsetBiasVelocity;
+    private Tensor<T>? _gpuOffsetWeightM;
+    private Tensor<T>? _gpuOffsetWeightV;
+    private Tensor<T>? _gpuOffsetBiasM;
+    private Tensor<T>? _gpuOffsetBiasV;
 
     // Mask weights - GPU tensors (only used if _useModulation)
-    private GpuTensor<T>? _gpuMaskWeights;
-    private GpuTensor<T>? _gpuMaskBias;
-    private GpuTensor<T>? _gpuMaskWeightGradient;
-    private GpuTensor<T>? _gpuMaskBiasGradient;
-    private GpuTensor<T>? _gpuMaskWeightVelocity;
-    private GpuTensor<T>? _gpuMaskBiasVelocity;
-    private GpuTensor<T>? _gpuMaskWeightM;
-    private GpuTensor<T>? _gpuMaskWeightV;
-    private GpuTensor<T>? _gpuMaskBiasM;
-    private GpuTensor<T>? _gpuMaskBiasV;
+    private Tensor<T>? _gpuMaskWeights;
+    private Tensor<T>? _gpuMaskBias;
+    private Tensor<T>? _gpuMaskWeightGradient;
+    private Tensor<T>? _gpuMaskBiasGradient;
+    private Tensor<T>? _gpuMaskWeightVelocity;
+    private Tensor<T>? _gpuMaskBiasVelocity;
+    private Tensor<T>? _gpuMaskWeightM;
+    private Tensor<T>? _gpuMaskWeightV;
+    private Tensor<T>? _gpuMaskBiasM;
+    private Tensor<T>? _gpuMaskBiasV;
 
     #endregion
 
@@ -278,7 +283,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// The main convolution operation stays on GPU, though offset and mask prediction
     /// requires a brief CPU round-trip due to the current DeformableConv2D GPU implementation.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -301,13 +306,13 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatchDimension = false;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -322,7 +327,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -342,11 +347,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             _padding, _padding,    // padH, padW
             1, 1,                  // dilationH, dilationW
             FusedActivationType.None);
-        var offsets = offsetsGpu.ToTensor();
+        var offsets = offsetsGpu;
 
         // Predict modulation mask if using DCNv2
         Tensor<T>? mask = null;
-        IGpuTensor<T>? maskGpu = null;
+        Tensor<T>? maskGpu = null;
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
             // Use FusedConv2DGpu with Sigmoid activation for mask prediction
@@ -358,7 +363,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                 _padding, _padding,    // padH, padW
                 1, 1,                  // dilationH, dilationW
                 FusedActivationType.Sigmoid);
-            mask = maskGpu.ToTensor();
+            mask = maskGpu;
         }
 
         // Store for potential backward pass
@@ -398,7 +403,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         if (addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [_outputChannels, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([_outputChannels, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
@@ -497,125 +502,6 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
     #region Backward Pass
 
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        if (_lastInput == null || _lastOffsets == null)
-            throw new InvalidOperationException("Forward must be called before Backward.");
-
-        // Ensure 4D tensors
-        var input4D = EnsureBatchDimension(_lastInput);
-        var gradOutput4D = EnsureBatchDimension(gradOutput);
-
-        int batch = input4D.Shape[0];
-        int inChannels = input4D.Shape[1];
-        int height = input4D.Shape[2];
-        int width = input4D.Shape[3];
-
-        int outChannels = gradOutput4D.Shape[1];
-        int outH = gradOutput4D.Shape[2];
-        int outW = gradOutput4D.Shape[3];
-
-        // Initialize gradients
-        _weightGradients = new Tensor<T>(_weights.Shape.ToArray());
-        _biasGradients = new Tensor<T>(_bias.Shape.ToArray());
-        _offsetWeightGradients = new Tensor<T>(_offsetWeights.Shape.ToArray());
-        _offsetBiasGradients = new Tensor<T>(_offsetBias.Shape.ToArray());
-
-        if (_useModulation)
-        {
-            var maskWeights = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
-            _maskWeightGradients = new Tensor<T>(maskWeights.Shape.ToArray());
-            var maskBias = _maskBias ?? throw new InvalidOperationException("_maskBias has not been initialized.");
-            _maskBiasGradients = new Tensor<T>(maskBias.Shape.ToArray());
-        }
-
-        // 1. Compute bias gradients (sum over batch and spatial dimensions)
-        ComputeBiasGradients(gradOutput4D);
-
-        // 2. Compute kernel gradients using IEngine
-        _weightGradients = _engine.DeformableConv2DBackwardKernel(
-            gradOutput4D,
-            input4D,
-            _lastOffsets,
-            _lastMask,
-            kernelShape: _weights.Shape.ToArray(),
-            stride: new[] { _stride, _stride },
-            padding: new[] { _padding, _padding },
-            dilation: new[] { 1, 1 });
-
-        // 3. Compute input gradients from deformable conv using IEngine
-        var gradInputFromDeform = _engine.DeformableConv2DBackwardInput(
-            gradOutput4D,
-            input4D,
-            _weights,
-            _lastOffsets,
-            _lastMask,
-            inputShape: input4D.Shape.ToArray(),
-            stride: new[] { _stride, _stride },
-            padding: new[] { _padding, _padding },
-            dilation: new[] { 1, 1 });
-
-        // 4. Compute offset gradients using IEngine
-        var gradOffsets = _engine.DeformableConv2DBackwardOffset(
-            gradOutput4D,
-            input4D,
-            _weights,
-            _lastOffsets,
-            _lastMask,
-            stride: new[] { _stride, _stride },
-            padding: new[] { _padding, _padding },
-            dilation: new[] { 1, 1 });
-
-        // 5. Compute mask gradients if using modulation
-        Tensor<T>? gradMask = null;
-        if (_useModulation && _lastMask != null)
-        {
-            gradMask = _engine.DeformableConv2DBackwardMask(
-                gradOutput4D,
-                input4D,
-                _weights,
-                _lastOffsets,
-                _lastMask,
-                stride: new[] { _stride, _stride },
-                padding: new[] { _padding, _padding },
-                dilation: new[] { 1, 1 });
-
-            // Backprop through sigmoid: gradMask * sigmoid(x) * (1 - sigmoid(x))
-            // _lastMask is already sigmoid output, so grad = gradMask * mask * (1 - mask)
-            var onesTensor = Tensor<T>.CreateDefault(_lastMask.Shape.ToArray(), NumOps.One);
-            var oneMinusMask = Engine.TensorSubtract(onesTensor, _lastMask);
-            var sigmoidDeriv = Engine.TensorMultiply(_lastMask, oneMinusMask);
-            gradMask = Engine.TensorMultiply(gradMask, sigmoidDeriv);
-        }
-
-        // 6. Backprop through offset prediction conv to get offset weight/bias gradients
-        // and input gradient contribution
-        var gradInputFromOffset = BackpropConvolution(
-            input4D, _offsetWeights, gradOffsets, _offsetWeightGradients, _offsetBiasGradients);
-
-        // 7. Backprop through mask prediction conv if using modulation
-        Tensor<T>? gradInputFromMask = null;
-        if (_useModulation && gradMask != null)
-        {
-            var maskW = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
-            var maskWeightGrad = _maskWeightGradients ?? throw new InvalidOperationException("_maskWeightGradients has not been initialized.");
-            var maskBiasGrad = _maskBiasGradients ?? throw new InvalidOperationException("_maskBiasGradients has not been initialized.");
-            gradInputFromMask = BackpropConvolution(
-                input4D, maskW, gradMask, maskWeightGrad, maskBiasGrad);
-        }
-
-        // 8. Sum all input gradient contributions using Engine tensor ops
-        var totalInputGrad = Engine.TensorAdd(gradInputFromDeform, gradInputFromOffset);
-        if (gradInputFromMask != null)
-        {
-            totalInputGrad = Engine.TensorAdd(totalInputGrad, gradInputFromMask);
-        }
-
-        // Remove batch dimension if original input didn't have one
-        return _lastInput.Rank == 3 ? RemoveBatchDimension(totalInputGrad) : totalInputGrad;
-    }
-
     private void ComputeBiasGradients(Tensor<T> gradOutput)
     {
         int batch = gradOutput.Shape[0];
@@ -699,333 +585,6 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         return gradInput;
     }
 
-    /// <summary>
-    /// GPU-resident backward pass for deformable convolution.
-    /// Computes gradients for input, weights, bias, offset weights/bias, and mask weights/bias.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer [batch, outChannels, outHeight, outWidth].</param>
-    /// <returns>Gradient for the input tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuOffsets == null || _gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (_engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Get dimensions from cached input shape
-        int batch = _gpuInputShape[0];
-        int inChannels = _gpuInputShape[1];
-        int inHeight = _gpuInputShape[2];
-        int inWidth = _gpuInputShape[3];
-
-        int outChannels = _outputChannels;
-        int outHeight = outputGradient.Shape[2];
-        int outWidth = outputGradient.Shape[3];
-
-        int kernelH = _kernelSize;
-        int kernelW = _kernelSize;
-
-        // Number of offset channels: 2 * kernel^2 * deformGroups
-        int offsetChannels = 2 * kernelH * kernelW * _deformGroups;
-        // Number of mask channels: kernel^2 * deformGroups
-        int maskChannels = kernelH * kernelW * _deformGroups;
-
-        // Get buffers
-        var gradOutputBuffer = outputGradient.Buffer;
-        var inputBuffer = _gpuInput.Buffer;
-        var offsetsBuffer = _gpuOffsets.Buffer;
-        IGpuBuffer? maskBuffer = _gpuMask?.Buffer;
-
-        // Upload weights to GPU
-        int inChannelsPerGroup = inChannels / _groups;
-        var weightsFlat = new float[outChannels * inChannelsPerGroup * kernelH * kernelW];
-        for (int i = 0; i < _weights.Length; i++)
-            weightsFlat[i] = NumOps.ToFloat(_weights.Data.Span[i]);
-        var weightsBuffer = backend.AllocateBuffer(weightsFlat);
-
-        // Allocate gradient buffers
-        int inputGradSize = batch * inChannels * inHeight * inWidth;
-        int weightGradSize = outChannels * inChannelsPerGroup * kernelH * kernelW;
-        int biasGradSize = outChannels;
-        int offsetGradSize = batch * offsetChannels * outHeight * outWidth;
-
-        IGpuBuffer? gradInputBuffer = null;
-        IGpuBuffer? gradWeightsBuffer = null;
-        IGpuBuffer? gradBiasBuffer = null;
-        IGpuBuffer? gradOffsetsBuffer = null;
-        IGpuBuffer? gradMaskBuffer = null;
-        IGpuBuffer? gradOffsetWeightsBuffer = null;
-        IGpuBuffer? gradOffsetBiasBuffer = null;
-        IGpuBuffer? gradInputFromOffset = null;
-        IGpuBuffer? offsetWeightsBuffer = null;
-        IGpuBuffer? gradMaskWeightsBuffer = null;
-        IGpuBuffer? gradMaskBiasBuffer = null;
-        IGpuBuffer? maskWeightsBuffer = null;
-        IGpuBuffer? gradInputFromMask = null;
-
-        try
-        {
-            gradInputBuffer = backend.AllocateBuffer(inputGradSize);
-            gradWeightsBuffer = backend.AllocateBuffer(weightGradSize);
-            gradBiasBuffer = backend.AllocateBuffer(biasGradSize);
-            gradOffsetsBuffer = backend.AllocateBuffer(offsetGradSize);
-
-            // Initialize gradient buffers to zero
-            backend.Fill(gradInputBuffer, 0.0f, inputGradSize);
-            backend.Fill(gradWeightsBuffer, 0.0f, weightGradSize);
-            backend.Fill(gradBiasBuffer, 0.0f, biasGradSize);
-            backend.Fill(gradOffsetsBuffer, 0.0f, offsetGradSize);
-
-            // 1. Compute bias gradients (sum over batch and spatial)
-            backend.LocallyConnectedConv2DBackwardBias(gradOutputBuffer, gradBiasBuffer,
-                batch, outChannels, outHeight, outWidth);
-
-            // 2. Compute main conv gradients via backend
-            backend.DeformableConv2DBackwardInput(
-                gradOutputBuffer, weightsBuffer, offsetsBuffer, maskBuffer, gradInputBuffer,
-                batch, inChannels, inHeight, inWidth,
-                outChannels, outHeight, outWidth,
-                kernelH, kernelW,
-                _stride, _stride, _padding, _padding,
-                1, 1, // dilation
-                _groups, _deformGroups);
-
-            backend.DeformableConv2DBackwardWeights(
-                gradOutputBuffer, inputBuffer, offsetsBuffer, maskBuffer, gradWeightsBuffer,
-                batch, inChannels, inHeight, inWidth,
-                outChannels, outHeight, outWidth,
-                kernelH, kernelW,
-                _stride, _stride, _padding, _padding,
-                1, 1, // dilation
-                _groups, _deformGroups);
-
-            backend.DeformableConv2DBackwardOffset(
-                gradOutputBuffer, inputBuffer, weightsBuffer, offsetsBuffer, maskBuffer, gradOffsetsBuffer,
-                batch, inChannels, inHeight, inWidth,
-                outChannels, outHeight, outWidth,
-                kernelH, kernelW,
-                _stride, _stride, _padding, _padding,
-                1, 1, // dilation
-                _groups, _deformGroups);
-
-            // 3. Compute mask gradients if using modulation
-            if (_useModulation && _gpuMask != null && maskBuffer != null)
-            {
-                int maskGradSize = batch * maskChannels * outHeight * outWidth;
-                gradMaskBuffer = backend.AllocateBuffer(maskGradSize);
-                backend.Fill(gradMaskBuffer, 0.0f, maskGradSize);
-
-                backend.DeformableConv2DBackwardMask(
-                    gradOutputBuffer, inputBuffer, weightsBuffer, offsetsBuffer, gradMaskBuffer,
-                    batch, inChannels, inHeight, inWidth,
-                    outChannels, outHeight, outWidth,
-                    kernelH, kernelW,
-                    _stride, _stride, _padding, _padding,
-                    1, 1, // dilation
-                    _groups, _deformGroups);
-
-                // Backprop through sigmoid: gradMask * mask * (1 - mask)
-                backend.SigmoidBackward(gradMaskBuffer, maskBuffer, gradMaskBuffer, maskGradSize);
-            }
-
-            // 4. Backprop through offset prediction convolution
-            // Upload offset weights
-            int offsetWeightSize = offsetChannels * inChannels * kernelH * kernelW;
-            var offsetWeightsFlat = new float[offsetWeightSize];
-            for (int i = 0; i < _offsetWeights.Length; i++)
-                offsetWeightsFlat[i] = NumOps.ToFloat(_offsetWeights.Data.Span[i]);
-            offsetWeightsBuffer = backend.AllocateBuffer(offsetWeightsFlat);
-
-            int offsetWeightGradSize = offsetChannels * inChannels * kernelH * kernelW;
-            int offsetBiasGradSize = offsetChannels;
-            gradOffsetWeightsBuffer = backend.AllocateBuffer(offsetWeightGradSize);
-            gradOffsetBiasBuffer = backend.AllocateBuffer(offsetBiasGradSize);
-            gradInputFromOffset = backend.AllocateBuffer(inputGradSize);
-
-            backend.Fill(gradOffsetWeightsBuffer, 0.0f, offsetWeightGradSize);
-            backend.Fill(gradOffsetBiasBuffer, 0.0f, offsetBiasGradSize);
-            backend.Fill(gradInputFromOffset, 0.0f, inputGradSize);
-
-            // Conv2D backward for offset prediction
-            backend.Conv2DBackwardInput(
-                gradOffsetsBuffer, offsetWeightsBuffer, gradInputFromOffset,
-                batch, inChannels, inHeight, inWidth,
-                offsetChannels, outHeight, outWidth,
-                kernelH, kernelW,
-                _stride, _stride, _padding, _padding,
-                1, 1); // dilation
-
-            backend.Conv2DBackwardKernel(
-                inputBuffer, gradOffsetsBuffer, gradOffsetWeightsBuffer,
-                batch, inChannels, inHeight, inWidth,
-                offsetChannels, outHeight, outWidth,
-                kernelH, kernelW,
-                _stride, _stride, _padding, _padding,
-                1, 1); // dilation
-
-            // Offset bias gradient
-            backend.LocallyConnectedConv2DBackwardBias(gradOffsetsBuffer, gradOffsetBiasBuffer,
-                batch, offsetChannels, outHeight, outWidth);
-
-            // Add offset input gradient contribution to total
-            backend.Add(gradInputBuffer, gradInputFromOffset, gradInputBuffer, inputGradSize);
-
-            // 5. Backprop through mask prediction convolution if using modulation
-            if (_useModulation && gradMaskBuffer != null && _maskWeights != null)
-            {
-                // Upload mask weights
-                int maskWeightSize = maskChannels * inChannels * kernelH * kernelW;
-                var maskWeightsFlat = new float[maskWeightSize];
-                for (int i = 0; i < _maskWeights.Length; i++)
-                    maskWeightsFlat[i] = NumOps.ToFloat(_maskWeights.Data.Span[i]);
-                maskWeightsBuffer = backend.AllocateBuffer(maskWeightsFlat);
-
-                int maskWeightGradSize = maskChannels * inChannels * kernelH * kernelW;
-                int maskBiasGradSize = maskChannels;
-                gradMaskWeightsBuffer = backend.AllocateBuffer(maskWeightGradSize);
-                gradMaskBiasBuffer = backend.AllocateBuffer(maskBiasGradSize);
-                gradInputFromMask = backend.AllocateBuffer(inputGradSize);
-
-                backend.Fill(gradMaskWeightsBuffer, 0.0f, maskWeightGradSize);
-                backend.Fill(gradMaskBiasBuffer, 0.0f, maskBiasGradSize);
-                backend.Fill(gradInputFromMask, 0.0f, inputGradSize);
-
-                // Conv2D backward for mask prediction
-                backend.Conv2DBackwardInput(
-                    gradMaskBuffer, maskWeightsBuffer, gradInputFromMask,
-                    batch, inChannels, inHeight, inWidth,
-                    maskChannels, outHeight, outWidth,
-                    kernelH, kernelW,
-                    _stride, _stride, _padding, _padding,
-                    1, 1); // dilation
-
-                backend.Conv2DBackwardKernel(
-                    inputBuffer, gradMaskBuffer, gradMaskWeightsBuffer,
-                    batch, inChannels, inHeight, inWidth,
-                    maskChannels, outHeight, outWidth,
-                    kernelH, kernelW,
-                    _stride, _stride, _padding, _padding,
-                    1, 1); // dilation
-
-                // Mask bias gradient
-                backend.LocallyConnectedConv2DBackwardBias(gradMaskBuffer, gradMaskBiasBuffer,
-                    batch, maskChannels, outHeight, outWidth);
-
-                // Add mask input gradient contribution to total
-                backend.Add(gradInputBuffer, gradInputFromMask, gradInputBuffer, inputGradSize);
-            }
-
-            // 6. Download gradients to CPU for UpdateParameters
-            var weightsGradFlat = new float[weightGradSize];
-            var biasGradFlat = new float[biasGradSize];
-            var offsetWeightsGradFlat = new float[offsetWeightGradSize];
-            var offsetBiasGradFlat = new float[offsetBiasGradSize];
-
-            backend.DownloadBuffer(gradWeightsBuffer, weightsGradFlat);
-            backend.DownloadBuffer(gradBiasBuffer, biasGradFlat);
-            backend.DownloadBuffer(gradOffsetWeightsBuffer, offsetWeightsGradFlat);
-            backend.DownloadBuffer(gradOffsetBiasBuffer, offsetBiasGradFlat);
-
-            // Convert to Tensor<T> gradients for UpdateParameters
-            _weightGradients = new Tensor<T>(_weights.Shape.ToArray());
-            _biasGradients = new Tensor<T>(_bias.Shape.ToArray());
-            _offsetWeightGradients = new Tensor<T>(_offsetWeights.Shape.ToArray());
-            _offsetBiasGradients = new Tensor<T>(_offsetBias.Shape.ToArray());
-
-            for (int i = 0; i < weightGradSize; i++)
-                _weightGradients.Data.Span[i] = NumOps.FromFloat(weightsGradFlat[i]);
-            for (int i = 0; i < biasGradSize; i++)
-                _biasGradients.Data.Span[i] = NumOps.FromFloat(biasGradFlat[i]);
-            for (int i = 0; i < offsetWeightGradSize; i++)
-                _offsetWeightGradients.Data.Span[i] = NumOps.FromFloat(offsetWeightsGradFlat[i]);
-            for (int i = 0; i < offsetBiasGradSize; i++)
-                _offsetBiasGradients.Data.Span[i] = NumOps.FromFloat(offsetBiasGradFlat[i]);
-
-            // Download mask gradients if using modulation
-            if (_useModulation && gradMaskWeightsBuffer != null && gradMaskBiasBuffer != null && _maskWeights != null && _maskBias != null)
-            {
-                int maskWeightGradSize = maskChannels * inChannels * kernelH * kernelW;
-                int maskBiasGradSize = maskChannels;
-                var maskWeightsGradFlat = new float[maskWeightGradSize];
-                var maskBiasGradFlat = new float[maskBiasGradSize];
-
-                backend.DownloadBuffer(gradMaskWeightsBuffer, maskWeightsGradFlat);
-                backend.DownloadBuffer(gradMaskBiasBuffer, maskBiasGradFlat);
-
-                _maskWeightGradients = new Tensor<T>(_maskWeights.Shape.ToArray());
-                _maskBiasGradients = new Tensor<T>(_maskBias.Shape.ToArray());
-
-                for (int i = 0; i < maskWeightGradSize; i++)
-                    _maskWeightGradients.Data.Span[i] = NumOps.FromFloat(maskWeightsGradFlat[i]);
-                for (int i = 0; i < maskBiasGradSize; i++)
-                    _maskBiasGradients.Data.Span[i] = NumOps.FromFloat(maskBiasGradFlat[i]);
-            }
-
-            // Store GPU gradient tensors for GPU-resident training (UpdateParametersGpu)
-            _gpuWeightGradient?.Dispose();
-            _gpuWeightGradient = new GpuTensor<T>(backend, gradWeightsBuffer, _weights.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-            gradWeightsBuffer = null; // Prevent disposal in finally block
-
-            _gpuBiasGradient?.Dispose();
-            _gpuBiasGradient = new GpuTensor<T>(backend, gradBiasBuffer, _bias.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-            gradBiasBuffer = null;
-
-            _gpuOffsetWeightGradient?.Dispose();
-            _gpuOffsetWeightGradient = new GpuTensor<T>(backend, gradOffsetWeightsBuffer, _offsetWeights.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-            gradOffsetWeightsBuffer = null;
-
-            _gpuOffsetBiasGradient?.Dispose();
-            _gpuOffsetBiasGradient = new GpuTensor<T>(backend, gradOffsetBiasBuffer, _offsetBias.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-            gradOffsetBiasBuffer = null;
-
-            if (_useModulation && gradMaskWeightsBuffer != null && gradMaskBiasBuffer != null && _maskWeights != null && _maskBias != null)
-            {
-                _gpuMaskWeightGradient?.Dispose();
-                _gpuMaskWeightGradient = new GpuTensor<T>(backend, gradMaskWeightsBuffer, _maskWeights.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-                gradMaskWeightsBuffer = null;
-
-                _gpuMaskBiasGradient?.Dispose();
-                _gpuMaskBiasGradient = new GpuTensor<T>(backend, gradMaskBiasBuffer, _maskBias.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-                gradMaskBiasBuffer = null;
-            }
-
-            // 7. Create output gradient tensor
-            var inputGradient = new GpuTensor<T>(backend, gradInputBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-
-            // Clear cached GPU tensors
-            _gpuInput = null;
-            _gpuInputShape = null;
-            _gpuOffsets?.Dispose();
-            _gpuOffsets = null;
-            _gpuMask?.Dispose();
-            _gpuMask = null;
-
-            return inputGradient;
-        }
-        finally
-        {
-            // Cleanup allocated buffers (except gradInputBuffer which is owned by result)
-            weightsBuffer?.Dispose();
-            gradWeightsBuffer?.Dispose();
-            gradBiasBuffer?.Dispose();
-            gradOffsetsBuffer?.Dispose();
-            gradMaskBuffer?.Dispose();
-            gradOffsetWeightsBuffer?.Dispose();
-            gradOffsetBiasBuffer?.Dispose();
-            gradInputFromOffset?.Dispose();
-            offsetWeightsBuffer?.Dispose();
-            gradMaskWeightsBuffer?.Dispose();
-            gradMaskBiasBuffer?.Dispose();
-            maskWeightsBuffer?.Dispose();
-            gradInputFromMask?.Dispose();
-        }
-    }
-
     #endregion
 
     #region Helper Methods
@@ -1060,10 +619,6 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _weights != null && _bias != null && _offsetWeights != null && _offsetBias != null;
-
     #endregion
 
     #region IChainableComputationGraph Implementation
@@ -1079,15 +634,6 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         int outH = (_inputHeight + 2 * _padding - _kernelSize) / _stride + 1;
         int outW = (_inputWidth + 2 * _padding - _kernelSize) / _stride + 1;
         return [_outputChannels, outH, outW];
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
-
-        return BuildComputationGraph(inputNodes[0], "");
     }
 
     /// <inheritdoc/>
@@ -1330,14 +876,14 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weights are initialized
-        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
-        _gpuBias ??= new GpuTensor<T>(backend, _bias, GpuTensorRole.Bias);
-        _gpuOffsetWeights ??= new GpuTensor<T>(backend, _offsetWeights, GpuTensorRole.Weight);
-        _gpuOffsetBias ??= new GpuTensor<T>(backend, _offsetBias, GpuTensorRole.Bias);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBias ??= GpuTensorHelper.UploadToGpu<T>(backend, _bias, GpuTensorRole.Bias);
+        _gpuOffsetWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _offsetWeights, GpuTensorRole.Weight);
+        _gpuOffsetBias ??= GpuTensorHelper.UploadToGpu<T>(backend, _offsetBias, GpuTensorRole.Bias);
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
-            _gpuMaskWeights ??= new GpuTensor<T>(backend, _maskWeights, GpuTensorRole.Weight);
-            _gpuMaskBias ??= new GpuTensor<T>(backend, _maskBias, GpuTensorRole.Bias);
+            _gpuMaskWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _maskWeights, GpuTensorRole.Weight);
+            _gpuMaskBias ??= GpuTensorHelper.UploadToGpu<T>(backend, _maskBias, GpuTensorRole.Bias);
         }
 
         // Check for gradients
@@ -1364,15 +910,15 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         }
 
         // Sync back to CPU tensors for compatibility
-        _weights = _gpuWeights.ToTensor();
-        _bias = _gpuBias.ToTensor();
-        _offsetWeights = _gpuOffsetWeights.ToTensor();
-        _offsetBias = _gpuOffsetBias.ToTensor();
+        _weights = _gpuWeights;
+        _bias = _gpuBias;
+        _offsetWeights = _gpuOffsetWeights;
+        _offsetBias = _gpuOffsetBias;
         if (_useModulation && _gpuMaskWeights != null && _gpuMaskBias != null &&
             _maskWeights != null && _maskBias != null)
         {
-            _maskWeights = _gpuMaskWeights.ToTensor();
-            _maskBias = _gpuMaskBias.ToTensor();
+            _maskWeights = _gpuMaskWeights;
+            _maskBias = _gpuMaskBias;
         }
     }
 
@@ -1394,14 +940,14 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
 
@@ -1409,34 +955,34 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // SquaredAvg/AccumulatedGrad buffers (reusing Velocity for these)
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
         }

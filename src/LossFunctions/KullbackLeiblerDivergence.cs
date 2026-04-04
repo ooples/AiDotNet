@@ -87,4 +87,18 @@ public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // KL = sum(target * log(target / predicted))
+        var eps = NumOps.FromDouble(1e-7);
+        var safePred = Engine.TensorAddScalar(predicted, eps);
+        var safeTarget = Engine.TensorAddScalar(target, eps);
+        var ratio = Engine.TensorDivide(safeTarget, safePred);
+        var logRatio = Engine.TensorLog(ratio);
+        var product = Engine.TensorMultiply(safeTarget, logRatio);
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        return Engine.ReduceSum(product, allAxes, keepDims: false);
+    }
 }

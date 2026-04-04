@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
-public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class RRDBLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -93,7 +93,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <summary>
     /// GPU cached input tensor for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
 
     #endregion
 
@@ -122,21 +122,6 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all RDB blocks support JIT
-            foreach (var rdb in _rdbBlocks)
-            {
-                if (!rdb.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
 
     #endregion
 
@@ -197,6 +182,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 inputHeight: inputHeight,
                 inputWidth: inputWidth,
                 residualScale: residualScale); // Each RDB also uses the same residual scale
+            RegisterSubLayer(_rdbBlocks[i]);
         }
     }
 
@@ -230,7 +216,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     /// <param name="inputs">GPU tensor inputs.</param>
     /// <returns>GPU tensor output after RRDB processing.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -269,86 +255,12 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         scaledBuffer.Dispose();
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion
 
     #region Backward Pass
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _rdb3Output == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Gradient through global residual:
-        // d(x * scale + input) / dx = scale
-        // d(x * scale + input) / dinput = 1
-        var rdb3Gradient = ScaleGradient(outputGradient, _residualScale);
-        var inputGradientFromResidual = outputGradient;
-
-        // Backward through RDB3, RDB2, RDB1
-        var grad = _rdbBlocks[2].Backward(rdb3Gradient);
-        grad = _rdbBlocks[1].Backward(grad);
-        grad = _rdbBlocks[0].Backward(grad);
-
-        // Add gradient from global residual connection
-        return AddTensors(grad, inputGradientFromResidual);
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuLastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        int size = outputGradient.ElementCount;
-
-        // Gradient through global residual:
-        // d(x * scale + input) / dx = scale
-        // d(x * scale + input) / dinput = 1
-
-        // Scale the gradient for the RDB path
-        var rdb3GradBuffer = backend.AllocateBuffer(size);
-        backend.Scale(outputGradient.Buffer, rdb3GradBuffer, (float)_residualScale, size);
-        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-
-        // Backward through RDB3, RDB2, RDB1
-        IGpuTensor<T> grad = rdb3Grad;
-        for (int i = 2; i >= 0; i--)
-        {
-            var rdbType = _rdbBlocks[i].GetType();
-            var backwardGpuMethod = rdbType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-            if (backwardGpuMethod != null)
-            {
-                grad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_rdbBlocks[i], new object[] { grad })
-                    ?? throw new InvalidOperationException("BackwardGpu returned null."));
-            }
-            else
-            {
-                // Fallback to CPU backward
-                var cpuGrad = grad.ToTensor();
-                var cpuResult = _rdbBlocks[i].Backward(cpuGrad);
-                grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-            }
-        }
-
-        // Add gradient from global residual connection
-        var resultBuffer = backend.AllocateBuffer(size);
-        backend.Add(grad.Buffer, outputGradient.Buffer, resultBuffer, size);
-
-        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-    }
 
     #endregion
 
@@ -446,23 +358,6 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
-    /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         // Pass through 3 Residual Dense Blocks sequentially
@@ -495,4 +390,5 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
 }

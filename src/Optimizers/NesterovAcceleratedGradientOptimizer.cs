@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -262,6 +264,28 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, _velocity);
 
         return updatedParams;
+    }
+
+    // Per-parameter velocity for tape-based NAG training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
+
+            // velocity = momentum * velocity + lr * grad
+            var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
+            Engine.TensorCopy(velNew, vel);
+
+            // param -= velocity
+            Engine.TensorSubtractInPlace(param, vel);
+        }
     }
 
     /// <summary>

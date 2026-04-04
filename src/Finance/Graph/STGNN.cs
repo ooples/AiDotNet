@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -483,7 +483,6 @@ public class STGNN<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -787,28 +786,6 @@ public class STGNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the STGNN model, Backward propagates gradients backward. This teaches the STGNN architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
-    }
-
-    /// <summary>
     /// Flattens input tensor for dense layer processing.
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -821,7 +798,7 @@ public class STGNN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -878,7 +855,7 @@ public class STGNN<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result));
     }
 
     #endregion
@@ -992,7 +969,7 @@ public class STGNN<T> : ForecastingModelBase<T>
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
+        return new Tensor<T>(input._shape, new Vector<T>(perturbed));
     }
 
     #endregion

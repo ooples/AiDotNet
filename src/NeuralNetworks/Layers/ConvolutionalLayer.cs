@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
-public class ConvolutionalLayer<T> : LayerBase<T>
+public partial class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
@@ -206,6 +206,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -227,6 +229,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -312,8 +316,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _gpuInputShape4D;
 
     /// <summary>
@@ -1011,7 +1015,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1037,12 +1041,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -1059,7 +1063,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -1092,8 +1096,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _gpuInputShape4D = input4D.Shape.ToArray();
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input4D.ToTensor();
-            _lastOutput = result.ToTensor();
+            _lastInput = input4D;
+            _lastOutput = result;
         }
 
         // Restore original shape if needed
@@ -1108,112 +1112,32 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = OutputDepth;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [OutputDepth, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
     }
 
     /// <summary>
-    /// Performs GPU-resident backward pass for the convolutional layer.
-    /// Computes gradients for kernels, biases, and input entirely on GPU - no CPU roundtrip.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_lastInputGpu == null || _gpuInputShape4D == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Ensure gradient is 4D for computation
-        IGpuTensor<T> gradient4D;
-        if (outputGradient.Shape.Length == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            gradient4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
-        }
-        else if (outputGradient.Shape.Length == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Flatten ND gradient to 4D
-            int flatBatch = 1;
-            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
-        }
-
-        // Apply activation backward if we have a fused activation
-        var fusedActivation = MapActivationToFused();
-        IGpuTensor<T> activationGradient;
-        if (fusedActivation != FusedActivationType.None && _lastOutputGpu != null)
-        {
-            activationGradient = ComputeConvActivationGradientGpu(gpuEngine, gradient4D, fusedActivation);
-        }
-        else
-        {
-            activationGradient = gradient4D;
-        }
-
-        // Stride, padding, dilation for convolution
-        int[] stride = [Stride, Stride];
-        int[] padding = [Padding, Padding];
-        int[] dilation = [1, 1];
-
-        // Step 1: Compute kernel gradient
-        int[] kernelShape = _kernels.Shape.ToArray().ToArray();
-        var kernelsGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(activationGradient, _lastInputGpu, kernelShape, stride, padding, dilation);
-        _kernelsGradient = kernelsGradGpu.ToTensor();
-
-        // Step 2: Compute bias gradient
-        var biasGradGpu = gpuEngine.Conv2DBackwardBiasGpu<T>(activationGradient);
-        _biasesGradient = biasGradGpu.ToTensor();
-
-        // Step 3: Compute input gradient
-        var inputGradient = gpuEngine.Conv2DBackwardInputGpu<T>(activationGradient, _kernels, _gpuInputShape4D, stride, padding, dilation);
-
-        // Reshape input gradient back to original shape if needed
-        if (_addedBatchDimension)
-        {
-            // Input was 3D [C, H, W], gradient should also be 3D
-            return inputGradient.CreateView(0, [inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3]]);
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            // Restore original shape for higher-rank input
-            return inputGradient.CreateView(0, _originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Computes activation gradient for convolutional layer using GPU-resident backward operations.
     /// </summary>
-    private IGpuTensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, FusedActivationType activation)
+    private Tensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, FusedActivationType activation)
     {
         // For convolutional layers, we need to reshape to 2D for activation backward, then reshape back
         // Most activations are element-wise, so we can flatten the tensor
-        int totalElements = gradOutput.ElementCount;
+        int totalElements = gradOutput.Length;
         var flat2DShape = new[] { totalElements, 1 };
-        var flatGrad = gradOutput.CreateView(0, flat2DShape);
+        var flatGrad = gradOutput.Reshape(flat2DShape);
         var lastOutputGpu = _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu has not been initialized.");
-        var flatOutput = lastOutputGpu.CreateView(0, flat2DShape);
+        var flatOutput = lastOutputGpu.Reshape(flat2DShape);
 
-        IGpuTensor<T> flatResult = activation switch
+        Tensor<T> flatResult = activation switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput), // ReLU uses pre-activation, but we only have post-activation here
             FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),
@@ -1225,228 +1149,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Calculates gradients for the input, kernels, and biases during backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the backward pass of the convolutional layer during training. It calculates
-    /// the gradient of the loss with respect to the input, kernel weights, and biases, and updates the
-    /// weights and biases accordingly. The calculated input gradient is returned for propagation to
-    /// earlier layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    ///
-    /// During the backward pass:
-    /// - The layer receives information about how wrong its output was
-    /// - It calculates how to adjust its pattern detectors to be more accurate
-    /// - It updates the kernels and biases to improve future predictions
-    /// - It passes information back to previous layers so they can learn too
-    ///
-    /// This is where the actual "learning" happens in the neural network.
-    /// The layer gradually improves its pattern recognition based on feedback
-    /// about its performance.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // If we added a batch dimension in Forward, add it to outputGradient too
-        var gradForBackward = outputGradient;
-        if (_addedBatchDimension && outputGradient.Shape.Length == 3)
-        {
-            // outputGradient is 3D [OutC, OutH, OutW], reshape to 4D [1, OutC, OutH, OutW]
-            gradForBackward = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
-        }
-
-        // Apply activation derivative to get delta
-        // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
-
-        // === GPU-Accelerated Backward Pass ===
-        // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations
-        // Achieves 50-500x speedup on GPU for large feature maps
-
-        int[] strideArr = [Stride, Stride];
-        int[] paddingArr = [Padding, Padding];
-        int[] dilationArr = [1, 1];
-
-        // Input gradient: dL/dX = ConvTranspose(dL/dY, W)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Kernel gradient: dL/dW = Conv(X, dL/dY) - correlation between input and output gradient
-        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Bias gradient: dL/db = sum over batch and spatial dimensions
-        // delta shape: [batch, outputDepth, outputH, outputW]
-        // Sum over axes [0, 2, 3] to get [outputDepth]
-        _biasesGradient = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
-
-        // Store gradients for UpdateParameters to consume (separation of concerns)
-        _kernelsGradient = kernelGradients;
-
-        // Restore original input shape for higher-rank tensors
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-        if (_addedBatchDimension && _originalInputShape != null && _originalInputShape.Length == 3)
-        {
-            // Restore original 3D input shape [C, H, W]
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use cached values from the forward pass to avoid
-    /// floating-point discrepancies from recomputing the forward pass.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle any-rank gradient input by reshaping to 4D
-        Tensor<T> gradient4D;
-        int gradRank = outputGradient.Shape.Length;
-        if (gradRank == 3)
-        {
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (gradRank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Higher-rank: flatten leading dimensions
-            int flatBatch = 1;
-            for (int d = 0; d < gradRank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
-                outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
-        }
-
-        // Convert parameters to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
-
-        // Forward pass using autodiff Conv2D operation
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
-        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, kernelNode, biasNode, stride, padding);
-
-        // Apply activation if present
-        Autodiff.ComputationNode<T> activated;
-        if (ScalarActivation != null)
-        {
-            // Apply scalar activation element-wise
-            activated = ApplyScalarActivationAutodiff(convOutput);
-        }
-        else if (VectorActivation != null)
-        {
-            // Vector activation would need special handling
-            // For now, fallback to manual
-            return BackwardManual(outputGradient);
-        }
-        else
-        {
-            activated = convOutput;
-        }
-
-        // Set output gradient (use 4D version)
-        activated.Gradient = gradient4D;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activated, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        if (kernelNode.Gradient != null)
-        {
-            _kernelsGradient = kernelNode.Gradient;
-        }
-
-        if (biasNode.Gradient != null)
-        {
-            _biasesGradient = biasNode.Gradient;
-        }
-
-        var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Input gradient was not computed during backward pass.");
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            return inputGrad.Reshape(_originalInputShape);
-        }
-
-        // Return with matching dimensions: remove batch dimension if added: [1, C, H, W] -> [C, H, W]
-        return _addedBatchDimension
-            ? inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3])
-            : inputGrad;
+        return flatResult.Reshape(gradOutput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1745,102 +1448,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _gpuInputShape4D = null;
     }
 
-    /// <summary>
-    /// Exports the convolutional layer's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the convolution operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method constructs a computation graph representation of the convolutional layer by:
-    /// 1. Validating input parameters and layer configuration
-    /// 2. Creating a symbolic input node with proper batch dimension
-    /// 3. Creating constant nodes for kernels and biases
-    /// 4. Applying Conv2D operation
-    /// 5. Applying activation function if configured
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the convolutional layer into a computation graph for JIT compilation.
-    ///
-    /// The computation graph describes:
-    /// - Input: A symbolic tensor with shape [1, InputDepth, Height, Width]
-    /// - Kernels: The learned filters [OutputDepth, InputDepth, KernelSize, KernelSize]
-    /// - Operation: 2D convolution with specified stride and padding
-    /// - Activation: Applied to the convolution output
-    /// - Output: Feature maps with shape [1, OutputDepth, OutputHeight, OutputWidth]
-    ///
-    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_kernels == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // ConvolutionalLayer expects input shape: [depth, height, width]
-        // Conv2D expects: [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for kernels and biases
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
-
-        // Apply Conv2D operation
-        var conv2dNode = TensorOperations<T>.Conv2D(
-            inputNode,
-            kernelNode,
-            biasNode,
-            stride: new int[] { Stride, Stride },
-            padding: new int[] { Padding, Padding });
-
-        // Apply activation function if configured
-        var activatedOutput = ApplyActivationToGraph(conv2dNode);
-        return activatedOutput;
-    }
-
-    /// <summary>
-    /// Gets whether this convolutional layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the layer and its activation function support JIT compilation.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
-    /// - The layer is properly initialized with weights
-    /// - The activation function (if any) supports JIT compilation
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The layer has been trained or initialized with weights
-    /// - The activation function (ReLU, etc.) supports JIT
-    ///
-    /// Conv2D operations are fully supported for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check if weights are initialized
-            if (_kernels == null || _biases == null)
-                return false;
-
-            // Check if activation supports JIT
-            IActivationFunction<T>? activation = ScalarActivation;
-            if (activation == null && VectorActivation != null)
-                activation = (IActivationFunction<T>)VectorActivation;
-
-            return activation?.SupportsJitCompilation ?? true;
-        }
-    }
 
     /// <summary>
     /// Returns layer-specific metadata for serialization purposes.
@@ -1852,6 +1459,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         metadata["FilterSize"] = KernelSize.ToString();
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
+        // Serialize activation type so deserialization restores it correctly
+        // (default is ReLU, but MobileNetV3 uses Identity)
+        if (ScalarActivation is not null)
+        {
+            metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName
+                ?? ScalarActivation.GetType().FullName ?? string.Empty;
+        }
         return metadata;
     }
 

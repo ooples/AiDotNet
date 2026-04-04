@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -422,7 +422,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ComputeSVDDGradient(Tensor<T> embedding)
     {
-        if (_svddCenter is null) return new Tensor<T>(embedding.Shape.ToArray());
+        if (_svddCenter is null) return new Tensor<T>(embedding._shape);
 
         int len = Math.Min(embedding.Length, _svddCenter.Length);
         var grad = new Tensor<T>([len]);
@@ -521,7 +521,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var realEmbedding = DiscriminatorForward(VectorToTensor(realRow), isTraining: true);
 
             var realGrad = ComputeSVDDGradient(realEmbedding);
-            BackwardDiscriminator(realGrad);
             UpdateDiscriminatorParameters(scaledLr);
 
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
@@ -535,7 +534,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             {
                 negFakeGrad[j] = NumOps.Negate(fakeGrad[j]);
             }
-            BackwardDiscriminator(negFakeGrad);
             UpdateDiscriminatorParameters(scaledLr);
 
             ApplyGradientPenalty(realRow, TensorToVector(fakeRow, _dataWidth), scaledLr);
@@ -557,7 +555,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
             _ = GeneratorForward(VectorToTensor(noise));
 
-            BackwardGenerator(discInputGrad);
             UpdateGeneratorParameters(scaledLr);
         }
     }
@@ -605,7 +602,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                     NumOps.ToDouble(penaltyEmbGrad[j]) * penaltyGradScale / (gradNorm + 1e-12));
             }
 
-            BackwardDiscriminator(penaltyEmbGrad);
             UpdateDiscriminatorParameters(scaledLr);
         }
     }
@@ -664,88 +660,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region Backward Passes
-
-    private void BackwardDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        if (_svddEmbeddingLayer is not null)
-        {
-            current = _svddEmbeddingLayer.Backward(current);
-        }
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _discPreActivations.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActivations[i]);
-            }
-            current = _discLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardGenerator(Tensor<T> gradOutput)
-    {
-        if (_usingCustomLayers)
-        {
-            var current = gradOutput;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                current = Layers[i].Backward(current);
-            }
-            return;
-        }
-
-        BackwardDefaultGenerator(gradOutput);
-    }
-
-    private void BackwardDefaultGenerator(Tensor<T> gradOutput)
-    {
-        int inputDim = _options.EmbeddingDimension;
-        var current = gradOutput;
-
-        current = Layers[^1].Backward(current);
-
-        int lastHiddenDim = current.Length - inputDim;
-        if (lastHiddenDim > 0)
-        {
-            var hiddenGrad = new Tensor<T>([lastHiddenDim]);
-            for (int j = 0; j < lastHiddenDim && j < current.Length; j++)
-            {
-                hiddenGrad[j] = current[j];
-            }
-            current = hiddenGrad;
-        }
-
-        for (int i = Layers.Count - 2; i >= 0; i--)
-        {
-            if (i < _genPreActivations.Count)
-            {
-                current = ApplyReLUDerivative(current, _genPreActivations[i]);
-            }
-
-            if (i < _genBNLayers.Count)
-            {
-                current = _genBNLayers[i].Backward(current);
-            }
-
-            current = Layers[i].Backward(current);
-
-            if (i > 0)
-            {
-                int prevDim = current.Length - inputDim;
-                if (prevDim > 0)
-                {
-                    var hiddenGrad = new Tensor<T>([prevDim]);
-                    for (int j = 0; j < prevDim && j < current.Length; j++)
-                    {
-                        hiddenGrad[j] = current[j];
-                    }
-                    current = hiddenGrad;
-                }
-            }
-        }
-    }
 
     private void UpdateGeneratorParameters(T learningRate)
     {
@@ -1071,33 +985,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region IJitCompilable Override
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation =>
-        IsFitted && Layers.Count > 1 && !_usingCustomLayers &&
-        _genBNLayers.Count > 0 &&
-        Layers.All(l => l.SupportsJitCompilation) &&
-        _genBNLayers.All(l => l.SupportsJitCompilation);
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} does not support JIT compilation in its current configuration.");
-        }
-
-        int genInputDim = _options.EmbeddingDimension;
-        var hiddenLayers = Layers.Take(Layers.Count - 1).ToList();
-
-        return TapeLayerBridge<T>.ExportMLPGeneratorGraph(
-            inputNodes, genInputDim, hiddenLayers,
-            _genBNLayers.Cast<ILayer<T>>().ToList(), Layers[^1],
-            TapeLayerBridge<T>.HiddenActivation.ReLU,
-            TapeLayerBridge<T>.HiddenActivation.None,
-            useResidualConcat: false);
-    }
 
     #endregion
 }

@@ -343,28 +343,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var output = Predict(input);
-        var flattenedOutput = output.ToVector();
-        var flattenedExpectedOutput = expectedOutput.ToVector();
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(flattenedOutput, flattenedExpectedOutput);
-        LastLoss = loss;
-
-        // Backward pass
-        var flattenedGradient = _lossFunction.CalculateDerivative(flattenedOutput, flattenedExpectedOutput);
-
-        // Unflatten the gradient to match the output shape
-        var gradient = new Tensor<T>(output.Shape.ToArray()).Unflatten(flattenedGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        // Update parameters using the optimizer (AdamW by default for transformer architectures)
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <summary>

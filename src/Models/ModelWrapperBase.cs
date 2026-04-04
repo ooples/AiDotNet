@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -31,6 +32,11 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// Numeric operations for type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Hardware-accelerated computation engine (CPU SIMD / GPU).
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The underlying full model being wrapped.

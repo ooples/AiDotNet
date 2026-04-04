@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -1853,83 +1853,5 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         };
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has decomposed components.
-    /// Prediction uses precomputed trend, seasonal, and cycle components.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> While UCM training uses Kalman filtering,
-    /// prediction combines precomputed components and can be JIT compiled.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _trend != null && _trend.Length > 0;
-
-    /// <summary>
-    /// Exports the UCM model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents: forecast = trend + seasonal + cycle
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (_trend == null || _trend.Length == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model has not been trained.");
-        }
-
-        // Create input node for time index
-        var timeIndexTensor = new Tensor<T>(new[] { 1 });
-        var timeIndexNode = TensorOperations<T>.Variable(timeIndexTensor, "time_index", requiresGradient: false);
-        inputNodes.Add(timeIndexNode);
-
-        // Get last trend value
-        var lastTrend = _trend[_trend.Length - 1];
-        var trendTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { lastTrend }));
-        var resultNode = TensorOperations<T>.Constant(trendTensor, "trend");
-
-        // Add average seasonal
-        if (_seasonal != null && _seasonal.Length > 0)
-        {
-            T avgSeasonal = NumOps.Zero;
-            int period = _ucOptions.SeasonalPeriod;
-            for (int i = Math.Max(0, _seasonal.Length - period); i < _seasonal.Length; i++)
-            {
-                avgSeasonal = NumOps.Add(avgSeasonal, _seasonal[i]);
-            }
-            avgSeasonal = NumOps.Divide(avgSeasonal, NumOps.FromDouble(Math.Min(period, _seasonal.Length)));
-            var seasonalTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgSeasonal }));
-            var seasonalNode = TensorOperations<T>.Constant(seasonalTensor, "seasonal");
-            resultNode = TensorOperations<T>.Add(resultNode, seasonalNode);
-        }
-
-        // Add average cycle
-        if (_cycle != null && _cycle.Length > 0)
-        {
-            T avgCycle = NumOps.Zero;
-            for (int i = 0; i < _cycle.Length; i++)
-            {
-                avgCycle = NumOps.Add(avgCycle, _cycle[i]);
-            }
-            avgCycle = NumOps.Divide(avgCycle, NumOps.FromDouble(_cycle.Length));
-            var cycleTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgCycle }));
-            var cycleNode = TensorOperations<T>.Constant(cycleTensor, "cycle");
-            resultNode = TensorOperations<T>.Add(resultNode, cycleNode);
-        }
-
-        return resultNode;
     }
 }

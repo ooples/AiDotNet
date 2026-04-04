@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1597,7 +1597,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
         Tensor<T> input,
         int targetClass = -1)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] featureMapShape = new[] { inputShape[0], 1, 1, 1 };
         return InterpretableModelHelper.GetGradCAMAsync(
             this, _enabledMethods, input, inputShape, featureMapShape, targetClass);
@@ -1731,78 +1731,6 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     }
 
     #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Gets a value indicating whether this model supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// VectorModel supports JIT compilation by converting its linear regression computation
-    /// (matrix-vector multiplication) to a computation graph. This enables 5-10x faster inference.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT compilation makes predictions much faster.
-    ///
-    /// Linear regression is simple: output = input @ coefficients
-    /// With JIT, this computation is compiled to optimized native code for maximum speed.
-    ///
-    /// Especially beneficial for:
-    /// - Processing large datasets
-    /// - Real-time prediction systems
-    /// - Production deployments
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the linear regression model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the linear regression computation into a computation graph:
-    /// output = input @ coefficients
-    ///
-    /// The graph represents a simple matrix-vector multiplication that the JIT compiler
-    /// can optimize and compile to native code.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts your linear model into a form the JIT compiler can optimize.
-    ///
-    /// The conversion:
-    /// 1. Converts Matrix/Vector to Tensor (JIT works with Tensors)
-    /// 2. Creates computation nodes for input and coefficients
-    /// 3. Builds a graph: output = MatMul(input, coefficients)
-    /// 4. Returns the output node
-    ///
-    /// Once converted, the JIT compiler can:
-    /// - Optimize the computation
-    /// - Generate fast native code
-    /// - Provide 5-10x faster predictions
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Convert coefficients Vector to Tensor
-        // Shape: (features,) -> (features, 1) for matrix multiplication
-        var coeffTensor = VectorToTensor(Coefficients);
-        var coeffNode = new ComputationNode<T>(coeffTensor);
-
-        // Create an input node representing a single batch
-        // Expected shape: (batch_size, features)
-        var inputShape = new int[] { 1, FeatureCount }; // Batch size 1, FeatureCount features
-        var inputTensor = new Tensor<T>(inputShape);
-        var inputNode = new ComputationNode<T>(inputTensor);
-        inputNodes.Add(inputNode);
-
-        // Linear regression: output = input @ coefficients
-        // This is a matrix-vector multiplication
-        var outputNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
-
-        return outputNode;
-    }
 
     /// <summary>
     /// Converts a Vector to a Tensor for use in computation graphs.

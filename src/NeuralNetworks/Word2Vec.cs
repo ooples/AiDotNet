@@ -289,26 +289,6 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Performs a backward pass through the network to calculate gradients for training.
-        /// </summary>
-        /// <param name="outputGradient">The error gradient from the loss function.</param>
-        /// <returns>The gradient calculated for the input.</returns>
-        /// <remarks>
-        /// <b>For Beginners:</b> After the model makes a guess, we tell it how wrong it was. 
-        /// This method takes that "wrongness" and works backward through the model's brain to 
-        /// figure out exactly which neurons need to be adjusted to make a better guess next time.
-        /// </remarks>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                outputGradient = Layers[i].Backward(outputGradient);
-            }
-
-            return outputGradient;
-        }
-
-        /// <summary>
         /// Updates the parameters of all layers in the network based on a provided update vector.
         /// </summary>
         /// <param name="parameters">A vector containing updated weights and biases.</param>
@@ -354,21 +334,15 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            var prediction = Predict(input);
-            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-            var gradients = new List<Tensor<T>>();
-            var currentGradient = outputGradientTensor;
-            for (int i = Layers.Count - 1; i >= 0; i--)
+            SetTrainingMode(true);
+            try
             {
-                currentGradient = Layers[i].Backward(currentGradient);
-                gradients.Insert(0, currentGradient);
+                TrainWithTape(input, expectedOutput, _optimizer);
             }
-
-            UpdateParameters(gradients);
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>

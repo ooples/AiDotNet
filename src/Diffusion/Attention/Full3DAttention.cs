@@ -109,15 +109,6 @@ public class Full3DAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        return _fullAttention.Backward(outputGradient);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _fullAttention.UpdateParameters(learningRate);
@@ -142,12 +133,5 @@ public class Full3DAttention<T> : LayerBase<T>
         _fullAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        return _fullAttention.ExportComputationGraph(inputNodes);
-    }
 }

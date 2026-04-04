@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -456,7 +456,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -736,7 +735,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
 
         // Normalize
-        var normalized = new Tensor<T>(input.Shape.ToArray());
+        var normalized = new Tensor<T>(input._shape);
         for (int i = 0; i < length; i++)
         {
             normalized.Data.Span[i] = NumOps.Divide(
@@ -808,33 +807,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Backpropagation computes how much each parameter
-    /// contributed to the prediction error. For TimeMachine, gradients flow back through:
-    /// - Output projection
-    /// - Multi-scale fusion
-    /// - Each scale's SSM layers
-    /// - Temporal decomposition
-    /// - Input embedding
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
     }
 
     /// <summary>
@@ -915,7 +887,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -994,7 +966,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)

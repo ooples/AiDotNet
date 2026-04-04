@@ -381,18 +381,6 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         return new Tensor<T>(concatenated, [numPoints, totalChannels]);
     }
 
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -465,29 +453,13 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        _globalFeatures = null;
-
-        var prediction = ForwardWithMemory(input);
-
-        if (LossFunction == null)
+        try
         {
-            throw new InvalidOperationException("Loss function not set.");
+            TrainWithTape(input, expectedOutput);
         }
-
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
-        LastLoss = loss;
-
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        // Basic SGD parameter update
-        foreach (var layer in Layers)
+        finally
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
+            SetTrainingMode(false);
         }
     }
 
@@ -824,61 +796,6 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         return new Tensor<T>(output, [numPoints, _outputChannels]);
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _knnIndices == null || _maxIndices == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int numPoints = _lastInput.Shape[0];
-        int k = _knnIndices.GetLength(1);
-
-        // Backprop through max pooling over neighbors
-        var edgeGradients = new T[numPoints * k * _outputChannels];
-        for (int i = 0; i < numPoints; i++)
-        {
-            for (int c = 0; c < _outputChannels; c++)
-            {
-                int maxIdx = _maxIndices[i, c];
-                int edgeIdx = (i * k + maxIdx) * _outputChannels + c;
-                edgeGradients[edgeIdx] = outputGradient.Data.Span[i * _outputChannels + c];
-            }
-        }
-
-        var edgeGradientTensor = new Tensor<T>(edgeGradients, [numPoints * k, _outputChannels]);
-        var edgeFeatureGradient = _mlp.Backward(edgeGradientTensor);
-
-        // Map edge feature gradients back to input features
-        var inputGradient = new T[numPoints * _inputChannels];
-        var numOps = NumOps;
-
-        for (int i = 0; i < numPoints; i++)
-        {
-            for (int kIdx = 0; kIdx < k; kIdx++)
-            {
-                int neighborIdx = _knnIndices[i, kIdx];
-                int baseIdx = (i * k + kIdx) * 2 * _inputChannels;
-
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    var gradSelf = edgeFeatureGradient.Data.Span[baseIdx + c];
-                    var gradDiff = edgeFeatureGradient.Data.Span[baseIdx + _inputChannels + c];
-
-                    inputGradient[i * _inputChannels + c] = numOps.Add(
-                        inputGradient[i * _inputChannels + c],
-                        numOps.Subtract(gradSelf, gradDiff));
-
-                    inputGradient[neighborIdx * _inputChannels + c] = numOps.Add(
-                        inputGradient[neighborIdx * _inputChannels + c],
-                        gradDiff);
-                }
-            }
-        }
-
-        return new Tensor<T>(inputGradient, [numPoints, _inputChannels]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         _mlp.UpdateParameters(learningRate);
@@ -911,14 +828,6 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         _knnIndices = null;
         _maxIndices = null;
         _mlp.ResetState();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "EdgeConvLayer does not support computation graph export due to dynamic k-NN construction.");
     }
 
     public override int ParameterCount => _mlp.ParameterCount;

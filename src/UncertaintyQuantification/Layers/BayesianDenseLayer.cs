@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -161,14 +161,12 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             }
         }
 
-        _sampledBias = new Vector<T>(_outputSize);
+        // Vectorized reparameterization trick: bias = mean + sqrt(exp(logvar)) * epsilon
+        var biasStd = (Vector<T>)Engine.Sqrt(Engine.Exp(_biasLogVar));
+        var biasEpsilon = new Vector<T>(_outputSize);
         for (int i = 0; i < _outputSize; i++)
-        {
-            var mean = _biasMean[i];
-            var std = NumOps.Sqrt(NumOps.Exp(_biasLogVar[i]));
-            var epsilon = NumOps.FromDouble(NextGaussian());
-            _sampledBias[i] = NumOps.Add(mean, NumOps.Multiply(std, epsilon));
-        }
+            biasEpsilon[i] = NumOps.FromDouble(NextGaussian());
+        _sampledBias = (Vector<T>)Engine.Add(_biasMean, Engine.Multiply(biasStd, biasEpsilon));
     }
 
     /// <summary>
@@ -295,107 +293,6 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         return ApplyActivation(preActivation);
     }
 
-    /// <summary>
-    /// Performs the backward pass and accumulates gradients.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _sampledWeights == null || _lastPreActivation == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batch;
-        if (_lastInput.Rank == 1)
-        {
-            batch = 1;
-        }
-        else
-        {
-            batch = _lastInput.Shape[0];
-            if (batch <= 0)
-            {
-                throw new ArgumentException("Expected last input tensor to have a positive batch dimension (Shape[0]).", nameof(outputGradient));
-            }
-        }
-
-        var expectedGradientLength = batch * _outputSize;
-        if (outputGradient.Length != expectedGradientLength)
-        {
-            throw new ArgumentException($"Expected output gradient length {expectedGradientLength} for batch {batch} and outputSize {_outputSize}, but got {outputGradient.Length}.", nameof(outputGradient));
-        }
-
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, outputGradient);
-        var flatInput = _lastInput.ToVector();
-        var flatGradient = activationGradient.ToVector();
-
-        // Accumulate gradients for weight means and log variances
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                // Gradient w.r.t. weight mean
-                var gradMean = NumOps.Zero;
-                for (int b = 0; b < batch; b++)
-                {
-                    var inputValue = flatInput[b * _inputSize + j];
-                    var gradValue = flatGradient[b * _outputSize + i];
-                    gradMean = NumOps.Add(gradMean, NumOps.Multiply(gradValue, inputValue));
-                }
-                _weightMeanGradient[i, j] = NumOps.Add(_weightMeanGradient[i, j], gradMean);
-
-                // Gradient w.r.t. weight log variance (from reparameterization trick)
-                var weightStd = NumOps.Sqrt(NumOps.Exp(_weightLogVar[i, j]));
-                var epsilon = NumOps.Divide(
-                    NumOps.Subtract(_sampledWeights[i, j], _weightMean[i, j]),
-                    NumOps.Add(weightStd, NumOps.FromDouble(1e-8))
-                );
-                var gradLogVar = NumOps.Multiply(
-                    NumOps.Multiply(gradMean, epsilon),
-                    NumOps.Multiply(NumOps.FromDouble(0.5), weightStd)
-                );
-                _weightLogVarGradient[i, j] = NumOps.Add(_weightLogVarGradient[i, j], gradLogVar);
-            }
-
-            // Gradient w.r.t. bias
-            var biasGradMean = NumOps.Zero;
-            for (int b = 0; b < batch; b++)
-            {
-                biasGradMean = NumOps.Add(biasGradMean, flatGradient[b * _outputSize + i]);
-            }
-            _biasMeanGradient[i] = NumOps.Add(_biasMeanGradient[i], biasGradMean);
-
-            var biasStd = NumOps.Sqrt(NumOps.Exp(_biasLogVar[i]));
-            var biasEpsilon = NumOps.Divide(
-                NumOps.Subtract(_sampledBias![i], _biasMean[i]),
-                NumOps.Add(biasStd, NumOps.FromDouble(1e-8))
-            );
-            var biasGradLogVar = NumOps.Multiply(
-                NumOps.Multiply(biasGradMean, biasEpsilon),
-                NumOps.Multiply(NumOps.FromDouble(0.5), biasStd)
-            );
-            _biasLogVarGradient[i] = NumOps.Add(_biasLogVarGradient[i], biasGradLogVar);
-        }
-
-        // Compute input gradient
-        var inputGradient = new Vector<T>(batch * _inputSize);
-        for (int b = 0; b < batch; b++)
-        {
-            var inputOffset = b * _inputSize;
-            var gradOffset = b * _outputSize;
-
-            for (int j = 0; j < _inputSize; j++)
-            {
-                var sum = NumOps.Zero;
-                for (int i = 0; i < _outputSize; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_sampledWeights[i, j], flatGradient[gradOffset + i]));
-                }
-                inputGradient[inputOffset + j] = sum;
-            }
-        }
-
-        return new Tensor<T>(_lastInput.Shape.ToArray(), inputGradient);
-    }
-
     /// <inheritdoc/>
     public void AddKLDivergenceGradients(T klScale)
     {
@@ -444,18 +341,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             }
         }
 
-        // Update biases
-        for (int i = 0; i < _outputSize; i++)
-        {
-            _biasMean[i] = NumOps.Subtract(
-                _biasMean[i],
-                NumOps.Multiply(learningRate, _biasMeanGradient[i])
-            );
-            _biasLogVar[i] = NumOps.Subtract(
-                _biasLogVar[i],
-                NumOps.Multiply(learningRate, _biasLogVarGradient[i])
-            );
-        }
+        // Update biases (vectorized SGD)
+        _biasMean = (Vector<T>)Engine.Subtract(_biasMean, Engine.Multiply(_biasMeanGradient, learningRate));
+        _biasLogVar = (Vector<T>)Engine.Subtract(_biasLogVar, Engine.Multiply(_biasLogVarGradient, learningRate));
 
         // Clear gradients after update
         ClearGradients();
@@ -566,11 +454,6 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _biasMeanGradient.Fill(NumOps.Zero);
         _biasLogVarGradient.Fill(NumOps.Zero);
     }
-
-    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 }

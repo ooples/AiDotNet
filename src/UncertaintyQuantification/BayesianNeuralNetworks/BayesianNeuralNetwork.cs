@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -88,61 +88,17 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure we're in training mode
         SetTrainingMode(true);
 
-        // Sample weights for Bayesian layers for this training step
+        // Sample weights for Bayesian layers (required before each forward pass)
         foreach (var bayesianLayer in Layers.OfType<IBayesianLayer<T>>())
         {
             bayesianLayer.SampleWeights();
         }
 
-        // Forward pass with memory for backpropagation
-        var outputTensor = ForwardWithMemory(input);
-        Vector<T> outputVector = outputTensor.ToVector();
+        TrainWithTape(input, expectedOutput);
 
-        // Be tolerant of 1D targets for single-output regression (common ergonomic contract).
-        var alignedExpected = expectedOutput;
-        if (expectedOutput.Rank == 1 &&
-            outputTensor.Rank == 2 &&
-            outputTensor.Shape.Length >= 2 &&
-            outputTensor.Shape[1] == 1 &&
-            expectedOutput.Length == outputTensor.Shape[0])
-        {
-            alignedExpected = expectedOutput.Reshape(outputTensor.Shape.ToArray());
-        }
-
-        Vector<T> expectedVector = alignedExpected.ToVector();
-        Vector<T> errorVector = new(expectedVector.Length);
-
-        for (int i = 0; i < expectedVector.Length; i++)
-        {
-            errorVector[i] = NumOps.Subtract(expectedVector[i], outputVector[i]);
-        }
-
-        var dataLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-        var kl = ComputeKLDivergence();
-
-        var batch = input.Rank == 1 ? 1 : Math.Max(1, input.Shape[0]);
-        var klScale = NumOps.Divide(NumOps.One, NumOps.FromDouble(batch));
-        LastLoss = NumOps.Add(dataLoss, NumOps.Multiply(klScale, kl));
-
-        Backpropagate(new Tensor<T>(outputTensor.Shape.ToArray(), errorVector));
-
-        // Add KL divergence gradients into Bayesian layers before applying updates.
-        foreach (var bayesianLayer in Layers.OfType<IBayesianLayer<T>>())
-        {
-            bayesianLayer.AddKLDivergenceGradients(klScale);
-        }
-
-        var learningRate = NumOps.FromDouble(0.01);
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -219,7 +175,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             aleatoricData[i] = NumOps.Multiply(aleatoricData[i], aleatoricFactor);
         }
 
-        return new Tensor<T>(variance.Shape.ToArray(), aleatoricData);
+        return new Tensor<T>(variance._shape, aleatoricData);
     }
 
     /// <summary>
@@ -257,7 +213,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             epistemicData[i] = NumOps.Multiply(epistemicData[i], epistemicFactor);
         }
 
-        return new Tensor<T>(variance.Shape.ToArray(), epistemicData);
+        return new Tensor<T>(variance._shape, epistemicData);
     }
 
     /// <summary>
@@ -268,7 +224,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var shape = predictions[0].Shape.ToArray();
+        var shape = predictions[0]._shape;
         var sum = Vector<T>.CreateDefault(predictions[0].Length, NumOps.Zero);
         foreach (var pred in predictions)
         {
@@ -293,7 +249,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var shape = mean.Shape.ToArray();
+        var shape = mean._shape;
         var meanData = mean.ToVector();
         var variance = Vector<T>.CreateDefault(meanData.Length, NumOps.Zero);
 

@@ -256,16 +256,14 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
-        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape.ToArray());
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        try
         {
-            currentGrad = Layers[i].Backward(currentGrad);
+            TrainWithTape(input, target);
         }
-
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

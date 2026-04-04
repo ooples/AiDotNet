@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -364,5 +365,12 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_CG_{_options.InitialLearningRate}_{_options.Tolerance}_{_iteration}";
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

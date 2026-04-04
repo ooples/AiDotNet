@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -142,7 +142,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("TimeDistributedLayer requires an input tensor.");
         var input = inputs[0];
@@ -178,80 +178,12 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input;
+            _lastOutput = output;
             _originalInputShape = input.Shape.ToArray();
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_originalInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batch = _originalInputShape[0];
-        int time = _originalInputShape[1];
-
-        // Apply activation backward if needed
-        IGpuTensor<T> gradAfterActivation = outputGradient;
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None && _lastOutput != null)
-        {
-            var lastOutputGpu = gpuEngine.UploadToGpu<T>(_lastOutput, GpuTensorRole.Activation);
-            gradAfterActivation = fusedOp switch
-            {
-                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, lastOutputGpu),
-                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, lastOutputGpu),
-                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, lastOutputGpu),
-                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, lastOutputGpu),
-                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, lastOutputGpu),
-                _ => outputGradient
-            };
-            lastOutputGpu.Dispose();
-        }
-
-        // Flatten time dimension for inner layer backward
-        int[] gradShape = gradAfterActivation.Shape.ToArray();
-        int[] flattenedGradShape = new int[gradShape.Length - 1];
-        flattenedGradShape[0] = batch * time;
-        Array.Copy(gradShape, 2, flattenedGradShape, 1, gradShape.Length - 2);
-
-        var reshapedGrad = gpuEngine.ReshapeGpu(gradAfterActivation, flattenedGradShape);
-
-        // Delegate to inner layer's BackwardGpu if available
-        IGpuTensor<T> innerGrad;
-        var innerLayerType = _innerLayer.GetType();
-        var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (backwardGpuMethod != null)
-        {
-            innerGrad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_innerLayer, new object[] { reshapedGrad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // Fallback: Convert to CPU, call CPU backward, convert back
-            var cpuGrad = reshapedGrad.ToTensor();
-            var cpuInnerGrad = _innerLayer.Backward(cpuGrad);
-            innerGrad = gpuEngine.UploadToGpu<T>(cpuInnerGrad, GpuTensorRole.Gradient);
-        }
-
-        // Reshape back to [batch, time, ...]
-        int[] outputGradShape = new int[_originalInputShape.Length];
-        outputGradShape[0] = batch;
-        outputGradShape[1] = time;
-        Array.Copy(_originalInputShape, 2, outputGradShape, 2, _originalInputShape.Length - 2);
-
-        return gpuEngine.ReshapeGpu(innerGrad, outputGradShape);
     }
 
     /// <summary>
@@ -470,42 +402,6 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the time distributed layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the time distributed layer, which is used during training to
-    /// propagate error gradients back through the network. It first computes the gradient with respect to the activation
-    /// function, then iterates over each time step, applies the inner layer's backward pass to that time step's gradient,
-    /// and collects the results into an input gradient sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change (outputGradient)
-    /// 2. It first adjusts this gradient based on the activation function
-    /// 3. For each step in the sequence:
-    ///    - It extracts just that step's gradient
-    ///    - It passes that gradient backward through the inner layer
-    ///    - It collects the resulting input gradient
-    /// 4. All the individual input gradients are combined back into a sequence
-    ///
-    /// This process tells the layer how its inputs should change to reduce errors,
-    /// while maintaining the same time-step-by-time-step processing as the forward pass.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
     /// Performs the backward pass using manual gradient computation.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -518,147 +414,6 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Vector<T>? _accumulatedGradients;
-
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int timeSteps = _lastInput.Shape[1];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        Tensor<T> outputGrad = outputGradient;
-        Tensor<T> lastOutput = _lastOutput;
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-        {
-            var innerOutputShape = _innerLayer.GetOutputShape();
-            var expandedShape = new[] { batchSize, 1 }.Concat(innerOutputShape).ToArray();
-            outputGrad = outputGradient.Reshape(expandedShape);
-            lastOutput = _lastOutput.Reshape(expandedShape);
-        }
-
-        if (ScalarActivation != null)
-        {
-            outputGrad = outputGrad.ElementwiseMultiply(lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
-        }
-        else if (VectorActivation != null)
-        {
-            outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
-        }
-
-        // Accumulate inner layer gradients across timesteps
-        _accumulatedGradients = null;
-        _innerLayer.ClearGradients();
-
-        for (int t = 0; t < timeSteps; t++)
-        {
-            var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
-            stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
-
-            // Re-forward this timestep to set inner layer's cached input
-            var stepInput = _lastInput.Slice(1, t, t + 1);
-            stepInput = SqueezeAxis(stepInput, 1);
-            _innerLayer.Forward(stepInput);
-
-            _innerLayer.ClearGradients();
-            var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
-            inputGradient.SetSlice(1, t, stepInputGradient);
-
-            // Accumulate weight gradients
-            var stepGrads = _innerLayer.GetParameterGradients();
-            if (_accumulatedGradients == null)
-            {
-                _accumulatedGradients = stepGrads.Clone();
-            }
-            else
-            {
-                for (int i = 0; i < _accumulatedGradients.Length; i++)
-                    _accumulatedGradients[i] = NumOps.Add(_accumulatedGradients[i], stepGrads[i]);
-            }
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-
-    /// <summary>
-    /// Performs the backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This implementation uses the TensorOperations autodiff framework to compute gradients automatically.
-    /// Since TimeDistributedLayer is a wrapper that applies the inner layer independently to each timestep,
-    /// the autodiff implementation simply delegates gradient computation to the inner layer for each timestep,
-    /// similar to the manual implementation. The inner layer is responsible for building its own computation
-    /// graph when autodiff is enabled.
-    /// </para>
-    /// <para>
-    /// Note: TimeDistributedLayer does not build a unified computation graph across all timesteps because:
-    /// 1. Each timestep is processed independently with no temporal dependencies
-    /// 2. The inner layer builds its own computation graph when it uses autodiff
-    /// 3. Slicing operations are not differentiable in the current TensorOperations framework
-    /// Therefore, this autodiff path effectively delegates to the inner layer's autodiff implementation
-    /// per timestep, while handling the activation function derivatives at the wrapper level.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int timeSteps = _lastInput.Shape[1];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        Tensor<T> outputGrad = outputGradient;
-        Tensor<T> lastOutput = _lastOutput;
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-        {
-            var innerOutputShape = _innerLayer.GetOutputShape();
-            var expandedShape = new[] { batchSize, 1 }.Concat(innerOutputShape).ToArray();
-            outputGrad = outputGradient.Reshape(expandedShape);
-            lastOutput = _lastOutput.Reshape(expandedShape);
-        }
-
-        if (ScalarActivation != null)
-        {
-            outputGrad = outputGrad.ElementwiseMultiply(lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
-        }
-        else if (VectorActivation != null)
-        {
-            outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
-        }
-
-        for (int t = 0; t < timeSteps; t++)
-        {
-            var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
-            stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
-            var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
-            inputGradient.SetSlice(1, t, stepInputGradient);
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
 
     private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)
     {
@@ -769,52 +524,5 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // Check if inner layer supports JIT
-        if (!_innerLayer.SupportsJitCompilation)
-            throw new NotSupportedException("TimeDistributed inner layer does not support JIT compilation.");
-
-        // TimeDistributedLayer JIT delegates to the inner layer:
-        // For a fixed sequence length, we apply the inner layer to the entire sequence
-        // treating the time dimension as part of the batch dimension.
-
-        var input = inputNodes[0];
-
-        // Apply inner layer's computation graph
-        // The inner layer will process the input with time steps treated as batch samples
-        var output = _innerLayer.ExportComputationGraph(inputNodes);
-
-        // Apply layer activation
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the inner layer supports JIT compilation; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for TimeDistributed delegates to the inner layer. The time
-    /// distributed behavior is achieved by reshaping the input so that time steps
-    /// are treated as batch samples, allowing the inner layer to process all
-    /// time steps in parallel.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _innerLayer.SupportsJitCompilation;
 
 }

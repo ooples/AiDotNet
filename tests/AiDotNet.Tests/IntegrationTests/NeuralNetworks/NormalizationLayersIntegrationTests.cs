@@ -72,25 +72,6 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(inferenceOutput));
     }
 
-    [Fact]
-    public void BatchNormalizationLayer_BackwardPass_ProducesGradients()
-    {
-        // Arrange
-        int batchSize = 4;
-        int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor([batchSize, numFeatures]);
-        layer.Forward(input);
-        var upstreamGradient = CreateRandomTensor([batchSize, numFeatures], seed: 123);
-
-        // Act
-        var gradients = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
-        Assert.False(ContainsNaN(gradients));
-    }
 
     [Fact]
     public void BatchNormalizationLayer_Clone_CreatesIdenticalLayer()
@@ -166,24 +147,6 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void LayerNormalizationLayer_BackwardPass_ProducesGradients()
-    {
-        // Arrange
-        int batchSize = 4;
-        int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
-        var input = CreateRandomTensor([batchSize, featureSize]);
-        layer.Forward(input);
-        var upstreamGradient = CreateRandomTensor([batchSize, featureSize], seed: 123);
-
-        // Act
-        var gradients = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
-        Assert.False(ContainsNaN(gradients));
-    }
 
     [Fact]
     public void LayerNormalizationLayer_Clone_CreatesIdenticalLayer()
@@ -277,25 +240,6 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GroupNormalizationLayer_BackwardPass_ProducesGradients()
-    {
-        // Arrange
-        int batchSize = 4;
-        int numChannels = 16;
-        int numGroups = 4;
-        var layer = new GroupNormalizationLayer<float>(numGroups, numChannels);
-        var input = CreateRandomTensor([batchSize, numChannels]);
-        layer.Forward(input);
-        var upstreamGradient = CreateRandomTensor([batchSize, numChannels], seed: 123);
-
-        // Act
-        var gradients = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
-        Assert.False(ContainsNaN(gradients));
-    }
 
     [Fact]
     public void GroupNormalizationLayer_Clone_CreatesIdenticalLayer()
@@ -397,24 +341,6 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void InstanceNormalizationLayer_BackwardPass_ProducesGradients()
-    {
-        // Arrange
-        int batchSize = 4;
-        int numChannels = 8;
-        var layer = new InstanceNormalizationLayer<float>(numChannels);
-        var input = CreateRandomTensor([batchSize, numChannels]);
-        layer.Forward(input);
-        var upstreamGradient = CreateRandomTensor([batchSize, numChannels], seed: 123);
-
-        // Act
-        var gradients = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
-        Assert.False(ContainsNaN(gradients));
-    }
 
     [Fact]
     public void InstanceNormalizationLayer_Clone_CreatesIdenticalLayer()
@@ -505,25 +431,6 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SpectralNormalizationLayer_BackwardPass_ProducesGradients()
-    {
-        // Arrange
-        int inputSize = 16;
-        int outputSize = 8;
-        var denseLayer = new DenseLayer<float>(inputSize, outputSize);
-        var layer = new SpectralNormalizationLayer<float>(denseLayer);
-        var input = CreateRandomTensor([4, inputSize]);
-        layer.Forward(input);
-        var upstreamGradient = CreateRandomTensor([4, outputSize], seed: 123);
-
-        // Act
-        var gradients = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
-        Assert.False(ContainsNaN(gradients));
-    }
 
     [Fact]
     public void SpectralNormalizationLayer_Clone_CreatesIdenticalLayer()

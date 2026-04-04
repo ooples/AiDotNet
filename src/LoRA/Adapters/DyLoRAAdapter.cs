@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -294,11 +294,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = MaskOutputToRank(fullLoraOutput, activeRank);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }
@@ -407,53 +403,6 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
-    }
-
-    /// <summary>
-    /// Performs the backward pass with nested dropout training.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// During training, gradients are computed for all components, but the nested dropout ensures
-    /// that only the active rank's components receive meaningful gradients. This trains all ranks
-    /// simultaneously while ensuring each smaller rank can function independently.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where DyLoRA learning happens! During backpropagation:
-    ///
-    /// 1. Gradients flow back through whichever rank was used in the forward pass
-    /// 2. Only those components get updated
-    /// 3. Over many iterations, all ranks get trained
-    /// 4. Smaller ranks learn to work without relying on larger rank components
-    ///
-    /// This is why you can deploy with any trained rank - each one was trained independently!
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_cachedInput == null)
-        {
-            throw new InvalidOperationException("Backward called without a preceding Forward call");
-        }
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Backward through LoRA with restricted rank
-        Tensor<T> loraInputGrad = BackwardWithRank(outputGradient, _cachedInput, _cachedActiveRank);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
-        for (int i = 0; i < baseInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(baseInputGrad[i], loraInputGrad[i]);
-        }
-
-        // Update parameter gradients from base and LoRA layers
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -729,14 +678,13 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Compute output gradient (simplified - assumes MSE loss)
-                    Tensor<T> outputGrad = new Tensor<T>(output.Shape.ToArray());
+                    Tensor<T> outputGrad = new Tensor<T>(output._shape);
                     for (int j = 0; j < output.Length; j++)
                     {
                         outputGrad[j] = NumOps.Subtract(output[j], targets[i][j]);
                     }
 
                     // Backward pass
-                    Backward(outputGrad);
 
                     // Update parameters
                     UpdateParameters(learningRate);

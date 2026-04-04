@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -264,7 +264,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
         var (compressedVector, vectorMetadata) = Compress(flatWeights);
 
         // Create tensor metadata including original shape (clone to avoid external modification)
-        var originalShape = (int[])weights.Shape.ToArray().Clone();
+        var originalShape = (int[])weights.Shape.ToArray();
         var tensorMetadata = new TensorCompressionMetadata<T>(
             originalShape: originalShape,
             innerMetadata: vectorMetadata);

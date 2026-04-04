@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -232,7 +232,7 @@ public abstract class TabRBase<T>
     {
         int batchSize = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
-        var normalized = new Tensor<T>(embeddings.Shape.ToArray());
+        var normalized = new Tensor<T>(embeddings._shape);
         var epsilon = NumOps.FromDouble(1e-12);
 
         for (int b = 0; b < batchSize; b++)
@@ -485,59 +485,6 @@ public abstract class TabRBase<T>
 
         _contextCache = context;
         return context;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TabR backbone.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from prediction head [batch_size, embedding_dim].</param>
-    /// <returns>Gradient with respect to input features [batch_size, num_features].</returns>
-    protected Tensor<T> BackwardBackbone(Tensor<T> outputGradient)
-    {
-        // Backward through context layers (reverse order)
-        var grad = outputGradient;
-
-        if (_contextNorm != null)
-        {
-            grad = _contextNorm.Backward(grad);
-        }
-
-        for (int i = _contextLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _contextLayers[i].Backward(grad);
-        }
-
-        // Split gradient for query and context parts
-        int batchSize = grad.Shape[0];
-        int embDim = Options.EmbeddingDimension;
-
-        var queryGrad = new Tensor<T>([batchSize, embDim]);
-        var contextGrad = new Tensor<T>([batchSize, embDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < embDim; d++)
-            {
-                queryGrad[b * embDim + d] = grad[b * embDim * 2 + d];
-                contextGrad[b * embDim + d] = grad[b * embDim * 2 + embDim + d];
-            }
-        }
-
-        // Backward through attention and projections (simplified - full implementation would be more complex)
-        // For now, just propagate query gradient through encoder
-
-        // Backward through encoder layers
-        if (_encoderNorm != null)
-        {
-            queryGrad = _encoderNorm.Backward(queryGrad);
-        }
-
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            queryGrad = _encoderLayers[i].Backward(queryGrad);
-        }
-
-        return queryGrad;
     }
 
     /// <summary>

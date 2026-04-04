@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -566,7 +566,7 @@ internal class SqueezeExcitation<T>
         excited = ApplySigmoid(excited);
 
         // Scale input channels
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         for (int n = 0; n < batch; n++)
         {
             for (int c = 0; c < channels; c++)

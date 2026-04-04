@@ -283,19 +283,6 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Propagates error signal backward through the shared encoder layers.
-        /// </summary>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                outputGradient = Layers[i].Backward(outputGradient);
-            }
-
-            return outputGradient;
-        }
-
-        /// <summary>
         /// Updates the shared parameters of the dual encoders.
         /// </summary>
         public override void UpdateParameters(Vector<T> parameters)
@@ -332,43 +319,15 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            if (input.Shape[0] < 2)
-                throw new ArgumentException("Siamese training requires a pair of inputs in the first dimension.", nameof(input));
-
-            // Split input into two separate sequences
-            var input1 = input.Slice(0, 0, 1);
-            var input2 = input.Slice(0, 1, 1);
-
-            // Forward pass for both inputs through the shared encoder
-            var prediction1 = Predict(input1);
-            var prediction2 = Predict(input2);
-
-            // Pool outputs to get embeddings
-            var emb1 = PoolOutput(prediction1);
-            var emb2 = PoolOutput(prediction2);
-
-            T label = expectedOutput[0];
-
-            if (_lossFunction is ContrastiveLoss<T> contrastiveLoss)
+            SetTrainingMode(true);
+            try
             {
-                LastLoss = contrastiveLoss.CalculateLoss(emb1, emb2, label);
-                var (grad1, grad2) = contrastiveLoss.CalculateDerivative(emb1, emb2, label);
-
-                // Backpropagate through both branches (shared parameters)
-                Backpropagate(new Tensor<T>(prediction1.Shape.ToArray(), grad1));
-                Backpropagate(new Tensor<T>(prediction2.Shape.ToArray(), grad2));
+                TrainWithTape(input, expectedOutput, _optimizer);
             }
-            else
+            finally
             {
-                // Fallback for other loss functions
-                var prediction = Predict(input);
-                LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
+                SetTrainingMode(false);
             }
-
-            _optimizer.UpdateParameters(Layers);
         }
 
         private Vector<T> PoolOutput(Tensor<T> output)

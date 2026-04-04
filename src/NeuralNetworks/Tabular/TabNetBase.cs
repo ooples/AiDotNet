@@ -76,10 +76,10 @@ public abstract class TabNetBase<T>
     private readonly List<GhostBatchNormalization<T>> _sharedBNLayers;
 
     // Feature Transformers for each decision step
-    private readonly List<FeatureTransformer<T>> _featureTransformers;
+    private readonly List<FeatureTransformerLayer<T>> _featureTransformers;
 
     // Attentive Transformers for each decision step
-    private readonly List<AttentiveTransformer<T>> _attentiveTransformers;
+    private readonly List<AttentiveTransformerLayer<T>> _attentiveTransformers;
 
     // Final output layer
     private readonly FullyConnectedLayer<T> _outputLayer;
@@ -177,7 +177,7 @@ public abstract class TabNetBase<T>
         {
             // Feature Transformer: processes masked features
             // Uses shared layers for efficiency
-            var featureTransformer = new FeatureTransformer<T>(
+            var featureTransformer = new FeatureTransformerLayer<T>(
                 InputDim,
                 Options.FeatureDimension + Options.OutputDimension, // Split between attention and output
                 _sharedFCLayers.Count > 0 ? _sharedFCLayers : null,
@@ -193,7 +193,7 @@ public abstract class TabNetBase<T>
             // (not needed for the last step)
             if (step < Options.NumDecisionSteps - 1)
             {
-                var attentiveTransformer = new AttentiveTransformer<T>(
+                var attentiveTransformer = new AttentiveTransformerLayer<T>(
                     Options.FeatureDimension,
                     InputDim,
                     Options.RelaxationFactor,
@@ -339,48 +339,6 @@ public abstract class TabNetBase<T>
         var output = _outputLayer.Forward(aggregatedOutput);
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TabNet model.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to the output.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    public virtual Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through output layer
-        var aggregatedGrad = _outputLayer.Backward(outputGradient);
-
-        // Initialize input gradient accumulator
-        Tensor<T>? inputGrad = null;
-
-        // Backward through decision steps (reverse order)
-        for (int step = Options.NumDecisionSteps - 1; step >= 0; step--)
-        {
-            // Apply ReLU derivative
-            var stepOutput = _stepOutputs[step];
-            var stepGrad = ApplyReLUDerivative(aggregatedGrad, stepOutput);
-
-            // Backward through Feature Transformer
-            var maskedInputGrad = _featureTransformers[step].Backward(stepGrad);
-
-            // Backward through mask (gradient flows to input through attention)
-            var attentionMask = _stepAttentionMasks[step];
-            var unmaskGrad = ApplyMaskBackward(maskedInputGrad, attentionMask);
-
-            // Accumulate input gradient
-            if (inputGrad == null)
-            {
-                inputGrad = unmaskGrad;
-            }
-            else
-            {
-                inputGrad = AddTensors(inputGrad, unmaskGrad);
-            }
-        }
-
-        // Backward through initial batch normalization
-        return _initialBN.Backward(inputGrad ?? throw new InvalidOperationException("No gradients computed"));
     }
 
     /// <summary>
@@ -668,7 +626,7 @@ public abstract class TabNetBase<T>
         return offset + count;
     }
 
-    private int SetComponentParameters(FeatureTransformer<T> ft, Vector<T> parameters, int offset)
+    private int SetComponentParameters(FeatureTransformerLayer<T> ft, Vector<T> parameters, int offset)
     {
         int count = ft.ParameterCount;
         var componentParams = new Vector<T>(count);
@@ -680,7 +638,7 @@ public abstract class TabNetBase<T>
         return offset + count;
     }
 
-    private int SetComponentParameters(AttentiveTransformer<T> at, Vector<T> parameters, int offset)
+    private int SetComponentParameters(AttentiveTransformerLayer<T> at, Vector<T> parameters, int offset)
     {
         int count = at.ParameterCount;
         var componentParams = new Vector<T>(count);

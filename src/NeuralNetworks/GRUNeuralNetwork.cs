@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -30,6 +31,8 @@ namespace AiDotNet.NeuralNetworks;
 /// - Speech recognition
 /// - Any task where the order and context of data matters
 /// </para>
+/// <para><b>Reference:</b> Cho et al., "Learning Phrase Representations using RNN Encoder-Decoder
+/// for Statistical Machine Translation" (EMNLP 2014). <see href="https://arxiv.org/abs/1406.1078"/></para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -52,6 +55,8 @@ namespace AiDotNet.NeuralNetworks;
 public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GRUOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private T _learningRate;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -92,11 +97,13 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new GRUOptions();
         Options = _options;
+        _learningRate = NumOps.FromDouble(learningRate);
         InitializeGRULayers();
     }
 
@@ -254,44 +261,21 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Persistent Adam optimizer for stable convergence across Train() calls.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Propagate training mode to all layers for proper state caching
         foreach (var layer in Layers)
         {
+            layer.ResetState();
             layer.SetTrainingMode(true);
         }
 
-        // Single forward/backward pass
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
+        TrainWithTape(input, expectedOutput, _optimizer);
 
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass using proper loss gradient, reshaped to match forward output.
-        // Clip the loss gradient before backprop to prevent exploding gradients in recurrent paths
-        // (Pascanu et al., 2013 "On the difficulty of training recurrent neural networks").
-        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = ClipGradient(Tensor<T>.FromVector(lossGradient));
-        if (gradTensor.Rank < output.Rank)
-        {
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-        }
-        Backpropagate(gradTensor);
-
-        // Use layer-level optimizer API for correct parameter-gradient association.
-        // The vector-level API (UpdateParameters(params, grads)) can have ordering mismatches
-        // when concatenating multi-layer gradients into flat vectors.
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _trainOptimizer.UpdateParameters(Layers);
-
-        // Set network back to inference mode
         SetTrainingMode(false);
     }
 
@@ -380,6 +364,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        writer.Write(Convert.ToDouble(_learningRate));
     }
 
     /// <summary>
@@ -402,6 +387,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
@@ -425,6 +411,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GRUNeuralNetwork<T>(this.Architecture);
+        return new GRUNeuralNetwork<T>(
+            Architecture,
+            lossFunction: LossFunction,
+            options: _options,
+            learningRate: NumOps.ToDouble(_learningRate));
     }
 }

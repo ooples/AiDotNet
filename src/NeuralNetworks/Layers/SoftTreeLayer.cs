@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -63,9 +63,6 @@ public class SoftTreeLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;  // Complex tree structure not easily JIT-compiled
 
     /// <inheritdoc/>
     private Tensor<T>? _cachedRightProbs;
@@ -133,6 +130,10 @@ public class SoftTreeLayer<T> : LayerBase<T>
             double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             _leafValues[i] = NumOps.FromDouble(normal * scale);
         }
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_splitBiases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -227,100 +228,6 @@ public class SoftTreeLayer<T> : LayerBase<T>
 
         _cachedNodeProbs = nodeProbs;
         return pathProbs;
-    }
-
-    /// <summary>
-    /// Backward pass through the soft tree.
-    /// </summary>
-    /// <param name="outputGradient">Gradient with respect to output [batchSize, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _pathProbabilities == null)
-        {
-            throw new InvalidOperationException("Forward must be called before Backward");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-
-        // Initialize gradients
-        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape.ToArray());
-        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape.ToArray());
-        _leafValuesGrad = new Tensor<T>(_leafValues.Shape.ToArray());
-
-        // Gradient w.r.t. leaf values: pathProbs^T @ outputGradient
-        // pathProbs: [batchSize, numLeaves], outputGradient: [batchSize, outputDim]
-        var pathProbsT = Engine.TensorTranspose(_pathProbabilities);
-        _leafValuesGrad = Engine.TensorMatMul(pathProbsT, outputGradient);
-
-        // Gradient w.r.t. path probabilities: outputGradient @ leafValues^T
-        var leafValuesT = Engine.TensorTranspose(_leafValues);
-        var pathProbsGrad = Engine.TensorMatMul(outputGradient, leafValuesT);
-
-        // Backpropagate pathProbsGrad through the tree to get dL/d(rightProbs)
-        // Each internal node n with rightProb r_n sends:
-        //   left child: nodeProb * (1-r_n), right child: nodeProb * r_n
-        // Gradient: dL/d(r_n) = sum over descendants of (dL/d(leafProb) * d(leafProb)/d(r_n))
-        var dRightProbs = new Tensor<T>([batchSize, _numInternalNodes]);
-        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape.ToArray());
-
-        // Seed leaf gradients from pathProbsGrad
-        for (int b = 0; b < batchSize; b++)
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-                dNodeProbs[b * dNodeProbs.Shape[1] + _numInternalNodes + leaf] = pathProbsGrad[b * _numLeaves + leaf];
-
-        // Backprop through tree (reverse level order)
-        for (int node = _numInternalNodes - 1; node >= 0; node--)
-        {
-            int leftChild = 2 * node + 1;
-            int rightChild = 2 * node + 2;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                T nodeProb = _cachedNodeProbs[b * _cachedNodeProbs.Shape[1] + node];
-                T rightP = _cachedRightProbs![b * _numInternalNodes + node];
-                T leftP = NumOps.Subtract(NumOps.One, rightP);
-
-                T dLeft = (leftChild < dNodeProbs.Shape[1]) ? dNodeProbs[b * dNodeProbs.Shape[1] + leftChild] : NumOps.Zero;
-                T dRight = (rightChild < dNodeProbs.Shape[1]) ? dNodeProbs[b * dNodeProbs.Shape[1] + rightChild] : NumOps.Zero;
-
-                // dL/d(rightProb_n) = dRight * nodeProb - dLeft * nodeProb
-                dRightProbs[b * _numInternalNodes + node] = NumOps.Multiply(nodeProb, NumOps.Subtract(dRight, dLeft));
-
-                // dL/d(nodeProb_n) += dLeft * leftP + dRight * rightP
-                // (propagate gradient to parent)
-                int parent = (node - 1) / 2;
-                if (node > 0)
-                {
-                    T dNode = NumOps.Add(NumOps.Multiply(dLeft, leftP), NumOps.Multiply(dRight, rightP));
-                    dNodeProbs[b * dNodeProbs.Shape[1] + node] = NumOps.Add(
-                        dNodeProbs[b * dNodeProbs.Shape[1] + node], dNode);
-                }
-            }
-        }
-
-        // dL/d(splitLogits) = dL/d(rightProbs) * sigmoid'(splitLogits) / temperature
-        // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-        var sigmoidDeriv = new Tensor<T>([batchSize, _numInternalNodes]);
-        T invTemp = NumOps.FromDouble(1.0 / _temperature);
-        for (int i = 0; i < batchSize * _numInternalNodes; i++)
-        {
-            T s = _cachedRightProbs![i];
-            sigmoidDeriv[i] = NumOps.Multiply(NumOps.Multiply(s, NumOps.Subtract(NumOps.One, s)), invTemp);
-        }
-        var dSplitLogits = Engine.TensorMultiply(dRightProbs, sigmoidDeriv);
-
-        // dL/d(W_split) = input^T @ dSplitLogits  [inputDim, numInternalNodes]
-        var inputT = Engine.TensorTranspose(_lastInput);
-        _splitWeightsGrad = Engine.TensorTranspose(Engine.TensorMatMul(inputT, dSplitLogits));
-
-        // dL/d(b_split) = sum_batch(dSplitLogits)  [numInternalNodes]
-        _splitBiasesGrad = Engine.ReduceSum(dSplitLogits, new[] { 0 });
-
-        // Input gradient: dSplitLogits @ W_split  [batchSize, inputDim]
-        var inputGrad = Engine.TensorMatMul(dSplitLogits, _splitWeights);
-
-        return inputGrad;
     }
 
     /// <inheritdoc/>
@@ -472,15 +379,6 @@ public class SoftTreeLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_splitWeights);
         Engine.InvalidatePersistentTensor(_splitBiases);
         Engine.InvalidatePersistentTensor(_leafValues);
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        // Soft tree structure is complex and not easily represented as a static computation graph
-        // For JIT compilation, we would need to unroll the tree structure
-        throw new NotSupportedException(
-            "SoftTreeLayer does not support JIT compilation. Use standard Forward() for inference.");
     }
 
     /// <summary>

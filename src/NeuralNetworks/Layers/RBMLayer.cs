@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RBMLayer<T> : LayerBase<T>
+public partial class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the number of units in the visible layer.
@@ -95,6 +95,8 @@ public class RBMLayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to capture patterns in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -118,6 +120,8 @@ public class RBMLayer<T> : LayerBase<T>
     /// the biases for those background pixels would become negative during training.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _visibleBiases;
 
     /// <summary>
@@ -353,6 +357,10 @@ public class RBMLayer<T> : LayerBase<T>
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
         shiftTensor.Fill(NumOps.FromDouble(range / 2.0));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_visibleBiases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_hiddenBiases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -417,7 +425,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -442,15 +450,15 @@ public class RBMLayer<T> : LayerBase<T>
             flatBatch *= input.Shape[d];
 
         // Reshape input to 2D [batch, visibleUnits] for matrix multiply
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         if (rank == 1)
         {
-            input2D = input.CreateView(0, [1, _visibleUnits]);
+            input2D = input.Reshape([1, _visibleUnits]);
             flatBatch = 1;
         }
         else if (rank > 2)
         {
-            input2D = input.CreateView(0, [flatBatch, _visibleUnits]);
+            input2D = input.Reshape([flatBatch, _visibleUnits]);
         }
 
         // Transpose weights for FusedLinearGpu (expects [inputFeatures, outputFeatures])
@@ -463,16 +471,16 @@ public class RBMLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
-            _lastVisibleInput = input.ToTensor();
+            _lastVisibleInput = input;
             if (_lastVisibleInput.Shape.Length != 2)
                 _lastVisibleInput = _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
-            _lastHiddenOutput = result.ToTensor();
+            _lastHiddenOutput = result;
         }
 
         // Reshape output to match expected shape
         if (rank == 1)
         {
-            return result.CreateView(0, [_hiddenUnits]);
+            return result.Reshape([_hiddenUnits]);
         }
         else if (rank > 2)
         {
@@ -480,7 +488,7 @@ public class RBMLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 1; d++)
                 outputShape[d] = _originalInputShape[d];
             outputShape[rank - 1] = _hiddenUnits;
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         return result;
@@ -629,205 +637,6 @@ public class RBMLayer<T> : LayerBase<T>
         var probTensor = new Tensor<T>([probabilities.Length], probabilities);
         var samplesTensor = SampleBinaryStatesTensor(probTensor);
         return new Vector<T>(samplesTensor.ToArray());
-    }
-
-    /// <summary>
-    /// Computes the backward pass of the RBM layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the RBM layer. In the context of RBM training,
-    /// it is used to compute a reconstruction of the visible units given the hidden unit activations.
-    /// This is part of the contrastive divergence training algorithm.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method reconstructs the input based on the detected patterns.
-    /// 
-    /// During the backward pass:
-    /// - The RBM takes the pattern detections (hidden units)
-    /// - It tries to recreate the original input that would produce these patterns
-    /// - The result is the RBM's "imagination" of what the input should look like
-    /// - Both the reconstruction and its corresponding pattern detections are saved for training
-    /// 
-    /// This is like the RBM saying "if these patterns exist, this is what the input should look like."
-    /// The difference between this reconstruction and the original input drives the learning process.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        int rank = outputGradient.Shape.Length;
-        if (rank < 1)
-            throw new ArgumentException("Output gradient must have at least one dimension.", nameof(outputGradient));
-
-        int hiddenSize = outputGradient.Shape[^1];
-        if (hiddenSize != _hiddenUnits)
-            throw new ArgumentException($"Expected hidden gradient size {_hiddenUnits} but got {hiddenSize}.", nameof(outputGradient));
-
-        int flatBatch = 1;
-        for (int d = 0; d < rank - 1; d++)
-            flatBatch *= outputGradient.Shape[d];
-
-        var outGrad2D = rank == 1
-            ? outputGradient.Reshape([1, _hiddenUnits])
-            : outputGradient.Reshape([flatBatch, _hiddenUnits]);
-
-        // Forward was: hidden = sigmoid(input @ W^T + b_h)
-        // Backprop through sigmoid: dPreAct = outGrad * sigmoid'(preAct) = outGrad * hidden * (1 - hidden)
-        // We need the hidden activations from forward. Recompute from _lastVisibleInput:
-        if (_lastVisibleInput != null)
-        {
-            var input2D = _lastVisibleInput.Shape.Length == 1
-                ? _lastVisibleInput.Reshape([1, _visibleUnits])
-                : _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
-
-            // Recompute pre-activation and sigmoid derivative
-            var preAct = Engine.TensorAdd(
-                Engine.TensorMatMul(input2D, Engine.TensorTranspose(_weights)),
-                Engine.TensorRepeatElements(_hiddenBiases.Reshape([1, _hiddenUnits]), flatBatch, axis: 0));
-            var hidden = new Tensor<T>(preAct.Shape.ToArray());
-            for (int i = 0; i < hidden.Length; i++)
-                hidden[i] = MathHelper.Sigmoid(preAct[i]);
-
-            // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-            var ones = new Tensor<T>(hidden.Shape.ToArray());
-            ones.Fill(NumOps.One);
-            var sigmoidDeriv = Engine.TensorMultiply(hidden, Engine.TensorSubtract(ones, hidden));
-            var dPreAct = Engine.TensorMultiply(outGrad2D, sigmoidDeriv);
-
-            // Weight gradients: dW = input^T @ dPreAct (note: W is [hidden, visible] so transpose)
-            _weightsGradient = Engine.TensorTranspose(Engine.TensorMatMul(Engine.TensorTranspose(input2D), dPreAct));
-            _hiddenBiasesGradient = Engine.ReduceSum(dPreAct, [0], keepDims: false);
-            _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray()); // visible biases don't affect forward
-
-            // Input gradient: dInput = dPreAct @ W
-            var inputGrad = Engine.TensorMatMul(dPreAct, _weights);
-
-            if (_originalInputShape == null)
-                return inputGrad;
-            if (_originalInputShape.Length == 1)
-                return inputGrad.Reshape([_visibleUnits]);
-            var outputShape = (int[])_originalInputShape.Clone();
-            outputShape[^1] = _visibleUnits;
-            return inputGrad.Reshape(outputShape);
-        }
-
-        // Fallback: reconstruction-based backward (legacy)
-        var hidden2D = outGrad2D;
-        _reconstructedHidden = hidden2D;
-        Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hidden2D);
-        _reconstructedVisible = visibleProbs;
-
-        if (_originalInputShape == null)
-            return visibleProbs;
-
-        if (_originalInputShape.Length == 1)
-            return visibleProbs.Reshape([_visibleUnits]);
-
-        var fallbackShape = (int[])_originalInputShape.Clone();
-        fallbackShape[^1] = _visibleUnits;
-        return visibleProbs.Reshape(fallbackShape);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients for the mean-field forward pass.
-    /// This enables discriminative fine-tuning of the RBM using standard backpropagation, distinct from
-    /// the Contrastive Divergence training used for generative learning.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastVisibleInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastVisibleInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_hiddenBiases, "hBias", requiresGradient: true);
-
-        var weightsT = Autodiff.TensorOperations<T>.Transpose(weightsNode);
-        var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weightsT);
-        var preActivation = Autodiff.TensorOperations<T>.Add(weighted, biasNode);
-        var output = Autodiff.TensorOperations<T>.Sigmoid(preActivation);
-
-        Tensor<T> gradient = outputGradient;
-        if (outputGradient.Shape.Length != 2)
-        {
-            int rank = outputGradient.Shape.Length;
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient = outputGradient.Reshape([flatBatch, _hiddenUnits]);
-        }
-
-        output.Gradient = gradient;
-
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((output, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        _weightsGradient = weightsNode.Gradient;
-        _hiddenBiasesGradient = biasNode.Gradient;
-        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray());
-        _visibleBiasesGradient.Fill(NumOps.Zero);
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        if (_originalInputShape != null)
-            return inputGradient.Reshape(_originalInputShape);
-
-        return inputGradient;
     }
 
 
@@ -1134,64 +943,4 @@ public class RBMLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // RBMLayer JIT uses mean-field inference (deterministic approximation):
-        // Instead of stochastic sampling, we use hidden probabilities directly
-        // hidden_probs = sigmoid(W @ visible + hidden_bias)
-        // This provides a differentiable deterministic forward pass
-
-        var input = inputNodes[0];
-
-        // Storage is already Tensor<T>, use directly
-        var weightsNode = TensorOperations<T>.Constant(_weights, "rbm_weights");
-        var biasNode = TensorOperations<T>.Constant(_hiddenBiases, "rbm_hidden_bias");
-
-        // Reshape input to column vector for matrix multiplication
-        var inputReshaped = TensorOperations<T>.Reshape(input, _visibleUnits, 1);
-
-        // W @ visible
-        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
-
-        // Reshape weighted to match bias
-        var weightedFlat = TensorOperations<T>.Reshape(weighted, _hiddenUnits);
-
-        // W @ visible + bias
-        var preActivation = TensorOperations<T>.Add(weightedFlat, biasNode);
-
-        // Apply sigmoid for mean-field inference (probability of hidden unit being active)
-        var hiddenProbs = TensorOperations<T>.Sigmoid(preActivation);
-
-        // Apply layer activation if different from sigmoid
-        var output = ApplyActivationToGraph(hiddenProbs);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. RBM uses mean-field inference for JIT compilation.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for RBM uses mean-field inference instead of stochastic sampling.
-    /// This provides a deterministic forward pass where hidden probabilities are computed
-    /// directly using sigmoid(W*v + b) without sampling. Training still uses Contrastive
-    /// Divergence with sampling, but inference/forward pass can be JIT compiled.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
 }

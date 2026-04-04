@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -395,5 +396,12 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
             byte[] previousUpdateData = reader.ReadBytes(previousUpdateLength);
             _previousUpdate = Vector<T>.Deserialize(previousUpdateData);
         }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

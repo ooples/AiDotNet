@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelLoading;
@@ -65,7 +65,7 @@ public class ParameterRegistry<T>
         {
             Register(
                 $"{prefix}.weight",
-                weights.Shape.ToArray(),
+                weights._shape,
                 () => layer.GetWeights(),
                 tensor => SetLayerWeights(layer, tensor));
         }
@@ -75,7 +75,7 @@ public class ParameterRegistry<T>
         {
             Register(
                 $"{prefix}.bias",
-                biases.Shape.ToArray(),
+                biases._shape,
                 () => layer.GetBiases(),
                 tensor => SetLayerBiases(layer, tensor));
         }
@@ -149,7 +149,7 @@ public class ParameterRegistry<T>
 
         // Validate shape
         var expectedShape = accessor.Shape;
-        var actualShape = value.Shape.ToArray();
+        var actualShape = value._shape;
         if (!ShapesMatch(expectedShape, actualShape))
         {
             throw new ArgumentException(

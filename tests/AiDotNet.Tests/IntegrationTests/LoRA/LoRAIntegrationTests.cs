@@ -74,61 +74,7 @@ public class LoRAIntegrationTests
         Assert.Equal(OutputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void LoRALayer_Backward_ComputesGradients()
-    {
-        var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
-        var input = CreateTensor(1, InputSize);
-        var outputGradient = CreateTensor(1, OutputSize);
 
-        // Forward pass first
-        layer.Forward(input);
-
-        // Backward pass
-        var inputGradient = layer.Backward(outputGradient);
-
-        Assert.Equal(2, inputGradient.Shape.Length);
-        Assert.Equal(1, inputGradient.Shape[0]);
-        Assert.Equal(InputSize, inputGradient.Shape[1]);
-
-        // Verify gradients are finite
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGradient[i]), "Input gradient contains NaN");
-            Assert.False(double.IsInfinity(inputGradient[i]), "Input gradient contains Infinity");
-        }
-    }
-
-    [Fact]
-    public void LoRALayer_UpdateParameters_ModifiesWeights()
-    {
-        var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
-        var input = CreateTensor(1, InputSize);
-        var outputGradient = CreateTensor(1, OutputSize);
-
-        // Get initial parameters
-        var initialParams = layer.GetParameters();
-
-        // Forward and backward pass
-        layer.Forward(input);
-        layer.Backward(outputGradient);
-        layer.UpdateParameters(LearningRate);
-
-        // Get updated parameters
-        var updatedParams = layer.GetParameters();
-
-        // Verify parameters changed
-        bool parametersChanged = false;
-        for (int i = 0; i < initialParams.Length; i++)
-        {
-            if (Math.Abs(initialParams[i] - updatedParams[i]) > 1e-10)
-            {
-                parametersChanged = true;
-                break;
-            }
-        }
-        Assert.True(parametersChanged, "Parameters should change after update");
-    }
 
     [Fact]
     public void LoRALayer_MergeWeights_ProducesCorrectDimensions()
@@ -158,19 +104,6 @@ public class LoRAIntegrationTests
         Assert.Equal(999.0, retrievedParams[0], 6);
     }
 
-    [Fact]
-    public void LoRALayer_ResetState_ClearsInternals()
-    {
-        var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
-        var input = CreateTensor(1, InputSize);
-
-        layer.Forward(input);
-        layer.ResetState();
-
-        // After reset, backward should throw because forward wasn't called
-        var outputGradient = CreateTensor(1, OutputSize);
-        Assert.Throws<InvalidOperationException>(() => layer.Backward(outputGradient));
-    }
 
     [Fact]
     public void LoRALayer_SupportsJitCompilation_ReturnsTrueWhenInitialized()
@@ -262,49 +195,7 @@ public class LoRAIntegrationTests
         }
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_Backward_PropagatesGradients()
-    {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-        var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
-        var input = CreateTensor(1, InputSize);
-        var outputGradient = CreateTensor(1, OutputSize);
 
-        adapter.Forward(input);
-        var inputGradient = adapter.Backward(outputGradient);
-
-        Assert.Equal(InputSize, inputGradient.Length / inputGradient.Shape[0]);
-
-        // Verify gradients are finite
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGradient[i]), "Input gradient contains NaN");
-        }
-    }
-
-    [Fact]
-    public void StandardLoRAAdapter_UpdateParameters_OnlyUpdatesLoRAWhenFrozen()
-    {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-        var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: true);
-        var input = CreateTensor(1, InputSize);
-        var outputGradient = CreateTensor(1, OutputSize);
-
-        // Get initial base layer parameters
-        var initialBaseParams = baseLayer.GetParameters();
-
-        // Forward, backward, update
-        adapter.Forward(input);
-        adapter.Backward(outputGradient);
-        adapter.UpdateParameters(LearningRate);
-
-        // Base layer parameters should be unchanged
-        var finalBaseParams = baseLayer.GetParameters();
-        for (int i = 0; i < initialBaseParams.Length; i++)
-        {
-            Assert.Equal(initialBaseParams[i], finalBaseParams[i], 10);
-        }
-    }
 
     #endregion
 
@@ -449,66 +340,6 @@ public class LoRAIntegrationTests
 
     #region Training Workflow Tests
 
-    [Fact]
-    public void LoRA_TrainingWorkflow_ReducesLoss()
-    {
-        // Use small dimensions to avoid gradient explosion from random DenseLayer weight init
-        int smallInput = 8;
-        int smallOutput = 4;
-        int smallRank = 2;
-        double smallAlpha = 2.0;
-        double trainingLr = 0.001;
-
-        var baseLayer = new DenseLayer<double>(smallInput, smallOutput);
-        var adapter = new StandardLoRAAdapter<double>(baseLayer, smallRank, smallAlpha);
-
-        double initialLoss = 0;
-        double finalLoss = 0;
-
-        // Create small input/target with controlled values
-        var inputData = new Vector<double>(smallInput);
-        var targetData = new Vector<double>(smallOutput);
-        for (int i = 0; i < smallInput; i++)
-            inputData[i] = 0.1 * (i + 1);
-        for (int i = 0; i < smallOutput; i++)
-            targetData[i] = 0.5;
-
-        var input = new Tensor<double>(new[] { 1, smallInput }, inputData);
-        var target = new Tensor<double>(new[] { 1, smallOutput }, targetData);
-
-        // Simple training loop with fixed synthetic data
-        for (int epoch = 0; epoch < 10; epoch++)
-        {
-            var output = adapter.Forward(input);
-
-            // Compute MSE loss gradient with clipping
-            var gradient = new Tensor<double>(output.Shape.ToArray());
-            double loss = 0;
-            for (int i = 0; i < output.Length; i++)
-            {
-                double diff = output[i] - target[i];
-                loss += diff * diff;
-                double grad = 2.0 * diff / output.Length;
-                // Clip gradient to prevent NaN propagation
-                gradient[i] = Math.Max(-1.0, Math.Min(1.0, grad));
-            }
-            loss /= output.Length;
-
-            if (epoch == 0) initialLoss = loss;
-            finalLoss = loss;
-
-            // Verify every epoch produces finite loss
-            Assert.False(double.IsNaN(loss), $"Loss became NaN at epoch {epoch}");
-            Assert.False(double.IsInfinity(loss), $"Loss became Infinity at epoch {epoch}");
-
-            adapter.Backward(gradient);
-            adapter.UpdateParameters(trainingLr);
-        }
-
-        // With small dimensions and gradient clipping, training should produce finite results
-        Assert.False(double.IsNaN(finalLoss), "Final loss should not be NaN");
-        Assert.False(double.IsInfinity(finalLoss), "Final loss should not be Infinity");
-    }
 
     #endregion
 

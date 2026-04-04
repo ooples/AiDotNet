@@ -1,4 +1,4 @@
-namespace AiDotNet.Regularization;
+﻿namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements L1 regularization (also known as Lasso), a technique that adds a penalty equal to the
@@ -84,7 +84,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
-                resultTensor = resultTensor.Reshape(gradientTensor.Shape.ToArray());
+                resultTensor = resultTensor.Reshape(gradientTensor._shape);
             }
 
             return (TOutput)(object)resultTensor;

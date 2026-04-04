@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -204,66 +204,6 @@ public class TNetLayer<T> : LayerBase<T>
         return new Tensor<T>(output, [numPoints, numFeatures]);
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _transformMatrix == null || _lastTransformVector == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int numPoints = outputGradient.Shape[0];
-        int numFeatures = outputGradient.Shape[1];
-        var inputGradient = new T[numPoints * numFeatures];
-        var transformGrad = new T[_transformDim * _transformDim];
-        var numOps = NumOps;
-
-        for (int n = 0; n < numPoints; n++)
-        {
-            for (int outF = 0; outF < _transformDim; outF++)
-            {
-                var outGrad = outputGradient.Data.Span[n * numFeatures + outF];
-                for (int inF = 0; inF < _transformDim; inF++)
-                {
-                    var transformVal = _transformMatrix[inF, outF];
-                    var inputVal = _lastInput.Data.Span[n * numFeatures + inF];
-                    inputGradient[n * numFeatures + inF] = numOps.Add(
-                        inputGradient[n * numFeatures + inF],
-                        numOps.Multiply(outGrad, transformVal));
-                    int tIndex = inF * _transformDim + outF;
-                    transformGrad[tIndex] = numOps.Add(
-                        transformGrad[tIndex],
-                        numOps.Multiply(inputVal, outGrad));
-                }
-            }
-
-            for (int f = _transformDim; f < numFeatures; f++)
-            {
-                inputGradient[n * numFeatures + f] = outputGradient.Data.Span[n * numFeatures + f];
-            }
-        }
-
-        var transformGradTensor = new Tensor<T>(transformGrad, _lastTransformVector.Shape.ToArray());
-        Tensor<T> layerGradient = transformGradTensor;
-        for (int i = _fcLayers.Count - 1; i >= 0; i--)
-        {
-            layerGradient = _fcLayers[i].Backward(layerGradient);
-        }
-
-        layerGradient = _maxPooling.Backward(layerGradient);
-        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
-        {
-            layerGradient = _mlpLayers[i].Backward(layerGradient);
-        }
-
-        var layerGradData = layerGradient.Data.Span;
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = numOps.Add(inputGradient[i], layerGradData[i]);
-        }
-
-        return new Tensor<T>(inputGradient, [numPoints, numFeatures]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in _mlpLayers)
@@ -364,14 +304,6 @@ public class TNetLayer<T> : LayerBase<T>
         }
 
         _maxPooling.ResetState();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "TNetLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount

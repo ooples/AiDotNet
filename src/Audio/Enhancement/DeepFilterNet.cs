@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -523,8 +523,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Backward pass and update
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
-        BackwardNative(gradientTensor);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
         _optimizer?.UpdateParameters(Layers);
 
@@ -612,44 +611,6 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Backward pass through native layers.
-    /// </summary>
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        // Backward through gain layer
-        if (_gainLayer is not null)
-        {
-            grad = _gainLayer.Backward(grad);
-        }
-
-        // Backward through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            grad = _decoder[i].Backward(grad);
-        }
-
-        // Backward through DF layers
-        for (int i = _dfLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _dfLayers[i].Backward(grad);
-        }
-
-        // Backward through GRU layers
-        for (int i = _gruLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _gruLayers[i].Backward(grad);
-        }
-
-        // Backward through encoder
-        for (int i = _erbEncoder.Count - 1; i >= 0; i--)
-        {
-            grad = _erbEncoder[i].Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Computes STFT of audio signal using ShortTimeFourierTransform.
     /// </summary>
     private Tensor<Complex<T>> ComputeSTFT(Tensor<T> audio)
@@ -708,7 +669,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int dfCoeffSize = _dfBins * _dfOrder * 2;
 
         // Apply ERB gains and deep filtering to complex STFT
-        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft.Shape.ToArray());
+        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft._shape);
 
         for (int frame = 0; frame < numFrames; frame++)
         {

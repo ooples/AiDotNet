@@ -145,43 +145,8 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7Block Backward Tests
 
-    [Fact]
-    public void Block_Backward_ProducesValidGradients()
-    {
-        var block = new RWKV7Block<float>(4, 32, 4);
-        var input = CreateRandomTensor(new[] { 1, 4, 32 });
-        var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
 
-    [Fact]
-    public void Block_Backward_ThrowsWithoutForward()
-    {
-        var block = new RWKV7Block<float>(4, 32, 4);
-        var grad = CreateRandomTensor(new[] { 1, 4, 32 });
-        Assert.Throws<InvalidOperationException>(() => block.Backward(grad));
-    }
-
-    [Fact]
-    public void Block_FullTrainingStep_NoErrors()
-    {
-        var block = new RWKV7Block<float>(4, 16, 2);
-        var input = CreateRandomTensor(new[] { 1, 4, 16 });
-
-        var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        block.Backward(grad);
-        block.UpdateParameters(0.001f);
-
-        block.ResetState();
-        var output2 = block.Forward(input);
-        Assert.Equal(output.Shape.ToArray(), output2.Shape.ToArray());
-        Assert.False(ContainsNaN(output2));
-    }
 
     #endregion
 
@@ -388,35 +353,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Backward Tests
 
-    [Fact]
-    public void Model_Backpropagate_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int vocabSize = 30;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
-
-        model.SetTrainingMode(true);
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Predict(input);
-        model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = model.Backpropagate(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Model_Backpropagate_ThrowsWithoutTrainingMode()
-    {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(30), 30, 16, 2, 2, maxSeqLength: 4);
-        var grad = CreateRandomTensor(new[] { 1, 4, 30 });
-        Assert.Throws<InvalidOperationException>(() => model.Backpropagate(grad));
-    }
 
     [Fact]
     public void Model_Train_ForwardBackwardUpdate_NoErrors()

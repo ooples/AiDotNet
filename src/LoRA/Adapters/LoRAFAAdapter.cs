@@ -149,65 +149,6 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass, computing gradients only for matrix B (matrix A is frozen).
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass differs from standard LoRA in that gradients for matrix A are not computed
-    /// or stored, since matrix A is frozen. Only gradients for matrix B and (if not frozen) the base
-    /// layer are computed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where LoRA-FA saves computation and memory!
-    ///
-    /// During learning, the backward pass normally computes gradients for both matrix A and B.
-    /// But in LoRA-FA, we skip the gradient computation for matrix A entirely because:
-    /// 1. Matrix A is frozen (won't be updated anyway)
-    /// 2. No need to store gradients we won't use
-    /// 3. Less computation = faster training
-    /// 4. Less memory = can train larger models
-    ///
-    /// We still compute:
-    /// - Gradients for matrix B (the only trainable LoRA component)
-    /// - Gradients for the base layer (if not frozen)
-    /// - Input gradients to pass to earlier layers
-    ///
-    /// This is the key optimization that makes LoRA-FA more efficient than standard LoRA!
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Let the base implementation handle the backward pass
-        // The LoRA layer will compute gradients for both A and B
-        Tensor<T> inputGradient = base.Backward(outputGradient);
-
-        // After base backward pass, we need to zero out the gradients for matrix A
-        // since it's frozen and shouldn't be updated
-        // The ParameterGradients vector contains [baseLayerGrads (if not frozen), matrixAGrads, matrixBGrads]
-        // We need to zero out the matrix A gradients
-
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        int rank = _loraLayer.Rank;
-        int matrixAParamCount = inputSize * rank;
-
-        // Calculate offset to matrix A gradients in the parameter gradients vector
-        int offset = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-
-        // Zero out matrix A gradients (they won't be used in updates anyway, but this keeps things clean)
-        if (ParameterGradients != null)
-        {
-            for (int i = 0; i < matrixAParamCount; i++)
-            {
-                ParameterGradients[offset + i] = NumOps.Zero;
-            }
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Updates parameters, but only for matrix B (matrix A remains frozen).
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>

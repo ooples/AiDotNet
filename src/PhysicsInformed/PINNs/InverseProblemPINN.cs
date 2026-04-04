@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -85,8 +85,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
 
         // Trainable parameters (the unknowns we're trying to find)
-        private T[] _parameters;
-        private T[]? _parameterGradients;
+        private Vector<T> _parameters;
+        private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied
         private IPDESpecification<T>? _currentPDE;
@@ -159,7 +159,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _usesDefaultOptimizer = optimizer == null;
 
             // Initialize unknown parameters with initial guesses
-            _parameters = _inverseProblem.InitialParameterGuesses.ToArray();
+            _parameters = new Vector<T>(_inverseProblem.InitialParameterGuesses.ToArray());
             _parameterHistory = new List<T[]>();
 
             InitializeLayers();
@@ -420,7 +420,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
 
                 // Compute PDE residual
-                T residual = _currentPDE.ComputeResidual(inputArray, outputArray, derivatives);
+                T residual = _currentPDE.ComputeResidual(new Vector<T>(inputArray), new Vector<T>(outputArray), derivatives);
                 loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
             }
 
@@ -451,8 +451,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             for (int d = 0; d < inputDim; d++)
             {
-                var plusInput = new Tensor<T>(input.Shape.ToArray());
-                var minusInput = new Tensor<T>(input.Shape.ToArray());
+                var plusInput = new Tensor<T>(input._shape);
+                var minusInput = new Tensor<T>(input._shape);
 
                 for (int i = 0; i < inputDim; i++)
                 {
@@ -572,30 +572,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private void UpdateUnknownParameters()
         {
             // Compute parameter gradients using finite differences
-            _parameterGradients = ComputeParameterGradients();
+            _parameterGradients = new Vector<T>(ComputeParameterGradients());
 
             T paramLR = NumOps.FromDouble(_options.ParameterLearningRate);
 
+            // Vectorized SGD step: params = params - lr * gradients
+            _parameters = (Vector<T>)Engine.Subtract(_parameters, Engine.Multiply(_parameterGradients, paramLR));
+
+            // Apply bounds clamping if specified
+            var lowerBounds = _inverseProblem.ParameterLowerBounds;
+            var upperBounds = _inverseProblem.ParameterUpperBounds;
             for (int i = 0; i < _parameters.Length; i++)
             {
-                // Gradient descent step
-                _parameters[i] = NumOps.Subtract(
-                    _parameters[i],
-                    NumOps.Multiply(paramLR, _parameterGradients[i]));
-
-                // Apply bounds if specified
-                var lowerBounds = _inverseProblem.ParameterLowerBounds;
-                var upperBounds = _inverseProblem.ParameterUpperBounds;
-
                 if (lowerBounds != null && NumOps.LessThan(_parameters[i], lowerBounds[i]))
-                {
                     _parameters[i] = lowerBounds[i];
-                }
-
                 if (upperBounds != null && NumOps.GreaterThan(_parameters[i], upperBounds[i]))
-                {
                     _parameters[i] = upperBounds[i];
-                }
             }
         }
 
@@ -728,23 +720,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-
-            try
-            {
-                var prediction = ForwardWithMemory(input);
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                Backpropagate(outputGradient);
-                _optimizer.UpdateParameters(Layers);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+            try { TrainWithTape(input, expectedOutput); }
+            finally { SetTrainingMode(false); }
         }
 
         /// <inheritdoc/>
@@ -907,8 +884,5 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
     }
 }

@@ -187,4 +187,33 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x)))
         );
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// For NCE, `predicted` contains target logits [N] and `target` contains noise logits [N, K]
+    /// where K = numNoiseSamples. The loss is:
+    /// L = -mean( log(sigma(predicted)) + sum_j(log(1 - sigma(target[:,j]))) )
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Target term: -log(sigma(predicted))
+        var targetSigmoid = Engine.TensorSigmoid(predicted);
+        var eps = NumOps.FromDouble(1e-7);
+        var targetLog = Engine.TensorLog(Engine.TensorAddScalar(targetSigmoid, eps));
+        var negTargetLog = Engine.TensorNegate(targetLog);
+
+        // Noise term: -sum_j(log(1 - sigma(target[:,j])))
+        // target shape [N, K]: sigma for each noise sample, then log(1 - sigma), then sum over K
+        var noiseSigmoid = Engine.TensorSigmoid(target);
+        var oneMinusNoise = Engine.ScalarMinusTensor(NumOps.One, noiseSigmoid);
+        var noiseLog = Engine.TensorLog(Engine.TensorAddScalar(oneMinusNoise, eps));
+        var negNoiseLog = Engine.TensorNegate(noiseLog);
+        // Sum over noise dimension (axis 1)
+        var noiseSummed = Engine.ReduceSum(negNoiseLog, new[] { 1 }, keepDims: false);
+
+        // Total: mean over batch
+        var totalPerSample = Engine.TensorAdd(negTargetLog, noiseSummed);
+        var allAxes = Enumerable.Range(0, totalPerSample.Shape.Length).ToArray();
+        return Engine.ReduceMean(totalPerSample, allAxes, keepDims: false);
+    }
 }

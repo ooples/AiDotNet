@@ -1,9 +1,11 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -45,12 +47,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConvLSTMLayer<T> : LayerBase<T>
+public partial class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;
     private readonly int _filters;
     private readonly int _padding;
     private readonly int _strides;
+
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
 
     private Tensor<T> _weightsFi; // Forget gate input weights
     private Tensor<T> _weightsIi; // Input gate input weights
@@ -61,6 +66,9 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T> _weightsIh; // Input gate hidden weights
     private Tensor<T> _weightsCh; // Cell state hidden weights
     private Tensor<T> _weightsOh; // Output gate hidden weights
+
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
 
     private Tensor<T> _biasF; // Forget gate bias
     private Tensor<T> _biasI; // Input gate bias
@@ -86,7 +94,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape for backward pass.
@@ -142,72 +150,72 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeightsFi;
-    private GpuTensor<T>? _gpuWeightsIi;
-    private GpuTensor<T>? _gpuWeightsCi;
-    private GpuTensor<T>? _gpuWeightsOi;
-    private GpuTensor<T>? _gpuWeightsFh;
-    private GpuTensor<T>? _gpuWeightsIh;
-    private GpuTensor<T>? _gpuWeightsCh;
-    private GpuTensor<T>? _gpuWeightsOh;
-    private GpuTensor<T>? _gpuBiasF;
-    private GpuTensor<T>? _gpuBiasI;
-    private GpuTensor<T>? _gpuBiasC;
-    private GpuTensor<T>? _gpuBiasO;
+    private Tensor<T>? _gpuWeightsFi;
+    private Tensor<T>? _gpuWeightsIi;
+    private Tensor<T>? _gpuWeightsCi;
+    private Tensor<T>? _gpuWeightsOi;
+    private Tensor<T>? _gpuWeightsFh;
+    private Tensor<T>? _gpuWeightsIh;
+    private Tensor<T>? _gpuWeightsCh;
+    private Tensor<T>? _gpuWeightsOh;
+    private Tensor<T>? _gpuBiasF;
+    private Tensor<T>? _gpuBiasI;
+    private Tensor<T>? _gpuBiasC;
+    private Tensor<T>? _gpuBiasO;
 
     // GPU gradient tensors from BackwardGpu
-    private GpuTensor<T>? _gpuWeightsFiGradient;
-    private GpuTensor<T>? _gpuWeightsIiGradient;
-    private GpuTensor<T>? _gpuWeightsCiGradient;
-    private GpuTensor<T>? _gpuWeightsOiGradient;
-    private GpuTensor<T>? _gpuWeightsFhGradient;
-    private GpuTensor<T>? _gpuWeightsIhGradient;
-    private GpuTensor<T>? _gpuWeightsChGradient;
-    private GpuTensor<T>? _gpuWeightsOhGradient;
-    private GpuTensor<T>? _gpuBiasFGradient;
-    private GpuTensor<T>? _gpuBiasIGradient;
-    private GpuTensor<T>? _gpuBiasCGradient;
-    private GpuTensor<T>? _gpuBiasOGradient;
+    private Tensor<T>? _gpuWeightsFiGradient;
+    private Tensor<T>? _gpuWeightsIiGradient;
+    private Tensor<T>? _gpuWeightsCiGradient;
+    private Tensor<T>? _gpuWeightsOiGradient;
+    private Tensor<T>? _gpuWeightsFhGradient;
+    private Tensor<T>? _gpuWeightsIhGradient;
+    private Tensor<T>? _gpuWeightsChGradient;
+    private Tensor<T>? _gpuWeightsOhGradient;
+    private Tensor<T>? _gpuBiasFGradient;
+    private Tensor<T>? _gpuBiasIGradient;
+    private Tensor<T>? _gpuBiasCGradient;
+    private Tensor<T>? _gpuBiasOGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
-    private GpuTensor<T>? _gpuWeightsFiVelocity;
-    private GpuTensor<T>? _gpuWeightsIiVelocity;
-    private GpuTensor<T>? _gpuWeightsCiVelocity;
-    private GpuTensor<T>? _gpuWeightsOiVelocity;
-    private GpuTensor<T>? _gpuWeightsFhVelocity;
-    private GpuTensor<T>? _gpuWeightsIhVelocity;
-    private GpuTensor<T>? _gpuWeightsChVelocity;
-    private GpuTensor<T>? _gpuWeightsOhVelocity;
-    private GpuTensor<T>? _gpuBiasFVelocity;
-    private GpuTensor<T>? _gpuBiasIVelocity;
-    private GpuTensor<T>? _gpuBiasCVelocity;
-    private GpuTensor<T>? _gpuBiasOVelocity;
+    private Tensor<T>? _gpuWeightsFiVelocity;
+    private Tensor<T>? _gpuWeightsIiVelocity;
+    private Tensor<T>? _gpuWeightsCiVelocity;
+    private Tensor<T>? _gpuWeightsOiVelocity;
+    private Tensor<T>? _gpuWeightsFhVelocity;
+    private Tensor<T>? _gpuWeightsIhVelocity;
+    private Tensor<T>? _gpuWeightsChVelocity;
+    private Tensor<T>? _gpuWeightsOhVelocity;
+    private Tensor<T>? _gpuBiasFVelocity;
+    private Tensor<T>? _gpuBiasIVelocity;
+    private Tensor<T>? _gpuBiasCVelocity;
+    private Tensor<T>? _gpuBiasOVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
-    private GpuTensor<T>? _gpuWeightsFiM;
-    private GpuTensor<T>? _gpuWeightsFiV;
-    private GpuTensor<T>? _gpuWeightsIiM;
-    private GpuTensor<T>? _gpuWeightsIiV;
-    private GpuTensor<T>? _gpuWeightsCiM;
-    private GpuTensor<T>? _gpuWeightsCiV;
-    private GpuTensor<T>? _gpuWeightsOiM;
-    private GpuTensor<T>? _gpuWeightsOiV;
-    private GpuTensor<T>? _gpuWeightsFhM;
-    private GpuTensor<T>? _gpuWeightsFhV;
-    private GpuTensor<T>? _gpuWeightsIhM;
-    private GpuTensor<T>? _gpuWeightsIhV;
-    private GpuTensor<T>? _gpuWeightsChM;
-    private GpuTensor<T>? _gpuWeightsChV;
-    private GpuTensor<T>? _gpuWeightsOhM;
-    private GpuTensor<T>? _gpuWeightsOhV;
-    private GpuTensor<T>? _gpuBiasFM;
-    private GpuTensor<T>? _gpuBiasFV;
-    private GpuTensor<T>? _gpuBiasIM;
-    private GpuTensor<T>? _gpuBiasIV;
-    private GpuTensor<T>? _gpuBiasCM;
-    private GpuTensor<T>? _gpuBiasCV;
-    private GpuTensor<T>? _gpuBiasOM;
-    private GpuTensor<T>? _gpuBiasOV;
+    private Tensor<T>? _gpuWeightsFiM;
+    private Tensor<T>? _gpuWeightsFiV;
+    private Tensor<T>? _gpuWeightsIiM;
+    private Tensor<T>? _gpuWeightsIiV;
+    private Tensor<T>? _gpuWeightsCiM;
+    private Tensor<T>? _gpuWeightsCiV;
+    private Tensor<T>? _gpuWeightsOiM;
+    private Tensor<T>? _gpuWeightsOiV;
+    private Tensor<T>? _gpuWeightsFhM;
+    private Tensor<T>? _gpuWeightsFhV;
+    private Tensor<T>? _gpuWeightsIhM;
+    private Tensor<T>? _gpuWeightsIhV;
+    private Tensor<T>? _gpuWeightsChM;
+    private Tensor<T>? _gpuWeightsChV;
+    private Tensor<T>? _gpuWeightsOhM;
+    private Tensor<T>? _gpuWeightsOhV;
+    private Tensor<T>? _gpuBiasFM;
+    private Tensor<T>? _gpuBiasFV;
+    private Tensor<T>? _gpuBiasIM;
+    private Tensor<T>? _gpuBiasIV;
+    private Tensor<T>? _gpuBiasCM;
+    private Tensor<T>? _gpuBiasCV;
+    private Tensor<T>? _gpuBiasOM;
+    private Tensor<T>? _gpuBiasOV;
 
     #endregion
 
@@ -657,7 +665,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// needed by BackwardGpu to perform full BPTT on GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -975,7 +983,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
                 outputShape = [batchSize, timeSteps, outHeight, outWidth, _filters];
             }
 
-            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         catch
         {
@@ -1080,701 +1088,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         // Transpose output back to [B, H, W, outC]
         return outputNCHW.Transpose(new[] { 0, 2, 3, 1 }).Contiguous();
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the ConvLSTM layer, computing gradients for all parameters.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer with shape [batchSize, timeSteps, height, width, filters]</param>
-    /// <returns>Gradient with respect to the input with shape [batchSize, timeSteps, height, width, channels]</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements backpropagation through time (BPTT) for the ConvLSTM layer:
-    /// 1. Initializes gradient tensors for all parameters
-    /// 2. Iterates backward through time steps
-    /// 3. Computes gradients for each time step using BackwardStep
-    /// 4. Accumulates gradients across all time steps
-    /// 5. Stores gradients for later use in parameter updates
-    /// </para>
-    /// <para><b>For Beginners:</b> This method figures out how to improve the layer during training.
-    ///
-    /// During the backward pass:
-    /// - The layer receives information about how to adjust its output to reduce errors
-    /// - It works backwards through the sequence (from the most recent frame to the earliest)
-    /// - It calculates how each of its internal values (weights and biases) should change
-    /// - It also calculates how the input should have been different to reduce errors
-    ///
-    /// Think of it like a coach reviewing a game film backwards, noting what each player
-    /// should have done differently at each moment to get a better outcome.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated backward pass for ConvLSTM using Backpropagation Through Time (BPTT).
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor with gradient from next layer [batch, timesteps, H, W, filters].</param>
-    /// <returns>GPU tensor with input gradients [batch, timesteps, H, W, channels].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when ForwardGpu has not been called in training mode.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements full BPTT on GPU, computing gradients through all timesteps
-    /// in reverse order. It uses the cached gate values, hidden states, and cell states
-    /// from the forward pass.
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        // Validate cached states exist
-        if (_gpuInputSlices == null || _gpuHiddenStates == null || _gpuCellStates == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (_gpuForgetGates == null || _gpuInputGates == null || _gpuOutputGates == null || _gpuCandidateCells == null)
-            throw new InvalidOperationException("Gate values not cached. Ensure ForwardGpu was called in training mode.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Retrieve cached dimensions
-        int batchSize = _gpuBatchSize;
-        int timeSteps = _gpuTimeSteps;
-        int height = _gpuHeight;
-        int width = _gpuWidth;
-        int channels = _gpuChannels;
-        int outHeight = height;
-        int outWidth = width;
-
-        int stateSize = batchSize * _filters * outHeight * outWidth;
-        int inputSliceSize = batchSize * channels * height * width;
-        int outputGradSize = outputGradient.ElementCount;
-
-        // Prepare NCHW-format weight buffers for backward convolutions
-        var weightsFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
-        var weightsIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
-        var weightsCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
-        var weightsOiNCHW = _weightsOi.Transpose([3, 2, 0, 1]);
-        var weightsFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
-        var weightsIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
-        var weightsChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
-        var weightsOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
-
-        // Upload weights to GPU
-        using var wFiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFiNCHW.ToArray()));
-        using var wIiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIiNCHW.ToArray()));
-        using var wCiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsCiNCHW.ToArray()));
-        using var wOiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOiNCHW.ToArray()));
-        using var wFhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFhNCHW.ToArray()));
-        using var wIhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIhNCHW.ToArray()));
-        using var wChBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsChNCHW.ToArray()));
-        using var wOhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOhNCHW.ToArray()));
-
-        // Allocate gradient buffers for weights (accumulate over timesteps)
-        using var gradWFi = backend.AllocateBuffer(_weightsFi.Length);
-        using var gradWIi = backend.AllocateBuffer(_weightsIi.Length);
-        using var gradWCi = backend.AllocateBuffer(_weightsCi.Length);
-        using var gradWOi = backend.AllocateBuffer(_weightsOi.Length);
-        using var gradWFh = backend.AllocateBuffer(_weightsFh.Length);
-        using var gradWIh = backend.AllocateBuffer(_weightsIh.Length);
-        using var gradWCh = backend.AllocateBuffer(_weightsCh.Length);
-        using var gradWOh = backend.AllocateBuffer(_weightsOh.Length);
-
-        // Allocate gradient buffers for biases
-        using var gradBF = backend.AllocateBuffer(_filters);
-        using var gradBI = backend.AllocateBuffer(_filters);
-        using var gradBC = backend.AllocateBuffer(_filters);
-        using var gradBO = backend.AllocateBuffer(_filters);
-
-        // Initialize all gradient buffers to zero
-        backend.Fill(gradWFi, 0.0f, _weightsFi.Length);
-        backend.Fill(gradWIi, 0.0f, _weightsIi.Length);
-        backend.Fill(gradWCi, 0.0f, _weightsCi.Length);
-        backend.Fill(gradWOi, 0.0f, _weightsOi.Length);
-        backend.Fill(gradWFh, 0.0f, _weightsFh.Length);
-        backend.Fill(gradWIh, 0.0f, _weightsIh.Length);
-        backend.Fill(gradWCh, 0.0f, _weightsCh.Length);
-        backend.Fill(gradWOh, 0.0f, _weightsOh.Length);
-        backend.Fill(gradBF, 0.0f, _filters);
-        backend.Fill(gradBI, 0.0f, _filters);
-        backend.Fill(gradBC, 0.0f, _filters);
-        backend.Fill(gradBO, 0.0f, _filters);
-
-        // Allocate input gradient buffer [batch, timesteps, H, W, channels]
-        int inputGradSize = batchSize * timeSteps * height * width * channels;
-        var inputGradBuffer = backend.AllocateBuffer(inputGradSize);
-        backend.Fill(inputGradBuffer, 0.0f, inputGradSize);
-
-        // Temporary buffers for BPTT
-        using var dHNext = backend.AllocateBuffer(stateSize);
-        using var dCNext = backend.AllocateBuffer(stateSize);
-        using var dH = backend.AllocateBuffer(stateSize);
-        using var dC = backend.AllocateBuffer(stateSize);
-        using var temp1 = backend.AllocateBuffer(stateSize);
-        using var temp2 = backend.AllocateBuffer(stateSize);
-        using var dO = backend.AllocateBuffer(stateSize);
-        using var dF = backend.AllocateBuffer(stateSize);
-        using var dI = backend.AllocateBuffer(stateSize);
-        using var dCTilde = backend.AllocateBuffer(stateSize);
-        using var tanhC = backend.AllocateBuffer(stateSize);
-        using var gradInputNCHW = backend.AllocateBuffer(inputSliceSize);
-        using var gradTempWi = backend.AllocateBuffer(_weightsFi.Length);
-        using var gradTempWh = backend.AllocateBuffer(_weightsFh.Length);
-
-        // Initialize dHNext and dCNext to zero
-        backend.Fill(dHNext, 0.0f, stateSize);
-        backend.Fill(dCNext, 0.0f, stateSize);
-
-        try
-        {
-            // BPTT loop - process timesteps in reverse order
-            for (int t = timeSteps - 1; t >= 0; t--)
-            {
-                // Get output gradient slice for this timestep
-                // Output is [batch, timesteps, H, W, filters] - NHWC format
-                int outputOffset = t * batchSize * outHeight * outWidth * _filters;
-                var outGradSlice = outputGradient.CreateView(outputOffset, [batchSize, outHeight, outWidth, _filters]);
-
-                // Convert output gradient to NCHW
-                using var outGradNCHW = backend.AllocateBuffer(stateSize);
-                backend.Permute(outGradSlice.Buffer, outGradNCHW, [batchSize, outHeight, outWidth, _filters], [0, 3, 1, 2]);
-
-                // Add incoming gradients: dH = dOut + dHNext
-                backend.Add(outGradNCHW, dHNext, dH, stateSize);
-
-                // Get cached values for this timestep
-                var forgetGate = _gpuForgetGates[t];
-                var inputGate = _gpuInputGates[t];
-                var outputGate = _gpuOutputGates[t];
-                var candidateCell = _gpuCandidateCells[t];
-                var cellState = _gpuCellStates[t + 1]; // t+1 because we have h0, c0 at index 0
-                var prevCellState = _gpuCellStates[t];
-                var prevHiddenState = _gpuHiddenStates[t];
-                var inputSlice = _gpuInputSlices[t];
-
-                // Compute tanh(c_t) for output gate gradient
-                backend.Tanh(cellState, tanhC, stateSize);
-
-                // dO = dH * tanh(c_t) * sigmoid_deriv(o)
-                // sigmoid_deriv(o) = o * (1 - o)
-                backend.Multiply(dH, tanhC, temp1, stateSize);
-                backend.SigmoidBackward(outputGate, temp1, dO, stateSize);
-
-                // dC += dH * o * tanh_deriv(c_t) + dCNext
-                // tanh_deriv(c) = 1 - tanh(c)^2
-                backend.TanhBackward(tanhC, temp1, temp2, stateSize); // temp2 = dH * o * tanh'(c)
-                backend.Multiply(dH, outputGate, temp1, stateSize);
-                backend.Multiply(temp1, temp2, dC, stateSize);
-                backend.Add(dC, dCNext, dC, stateSize);
-
-                // dF = dC * c_{t-1} * sigmoid_deriv(f)
-                backend.Multiply(dC, prevCellState, temp1, stateSize);
-                backend.SigmoidBackward(forgetGate, temp1, dF, stateSize);
-
-                // dI = dC * c_tilde * sigmoid_deriv(i)
-                backend.Multiply(dC, candidateCell, temp1, stateSize);
-                backend.SigmoidBackward(inputGate, temp1, dI, stateSize);
-
-                // dC_tilde = dC * i * tanh_deriv(c_tilde)
-                backend.Multiply(dC, inputGate, temp1, stateSize);
-                backend.TanhBackward(candidateCell, temp1, dCTilde, stateSize);
-
-                // Compute gradients for input weights using Conv2DBackwardKernel
-                // dW_fi += Conv2DBackward(dF, x_t)
-                backend.Conv2DBackwardKernel(inputSlice, dF, gradTempWi,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWFi, gradTempWi, gradWFi, _weightsFi.Length);
-
-                // dW_ii += Conv2DBackward(dI, x_t)
-                backend.Conv2DBackwardKernel(inputSlice, dI, gradTempWi,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWIi, gradTempWi, gradWIi, _weightsIi.Length);
-
-                // dW_ci += Conv2DBackward(dC_tilde, x_t)
-                backend.Conv2DBackwardKernel(inputSlice, dCTilde, gradTempWi,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWCi, gradTempWi, gradWCi, _weightsCi.Length);
-
-                // dW_oi += Conv2DBackward(dO, x_t)
-                backend.Conv2DBackwardKernel(inputSlice, dO, gradTempWi,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWOi, gradTempWi, gradWOi, _weightsOi.Length);
-
-                // Compute gradients for hidden weights using Conv2DBackwardKernel
-                // dW_fh += Conv2DBackward(dF, h_{t-1})
-                backend.Conv2DBackwardKernel(prevHiddenState, dF, gradTempWh,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWFh, gradTempWh, gradWFh, _weightsFh.Length);
-
-                // dW_ih += Conv2DBackward(dI, h_{t-1})
-                backend.Conv2DBackwardKernel(prevHiddenState, dI, gradTempWh,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWIh, gradTempWh, gradWIh, _weightsIh.Length);
-
-                // dW_ch += Conv2DBackward(dC_tilde, h_{t-1})
-                backend.Conv2DBackwardKernel(prevHiddenState, dCTilde, gradTempWh,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWCh, gradTempWh, gradWCh, _weightsCh.Length);
-
-                // dW_oh += Conv2DBackward(dO, h_{t-1})
-                backend.Conv2DBackwardKernel(prevHiddenState, dO, gradTempWh,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradWOh, gradTempWh, gradWOh, _weightsOh.Length);
-
-                // Compute bias gradients by summing over batch and spatial dimensions
-                backend.LocallyConnectedConv2DBackwardBias(dF, gradBF, batchSize, _filters, outHeight, outWidth);
-                backend.LocallyConnectedConv2DBackwardBias(dI, gradBI, batchSize, _filters, outHeight, outWidth);
-                backend.LocallyConnectedConv2DBackwardBias(dCTilde, gradBC, batchSize, _filters, outHeight, outWidth);
-                backend.LocallyConnectedConv2DBackwardBias(dO, gradBO, batchSize, _filters, outHeight, outWidth);
-
-                // Compute input gradient using Conv2DBackwardInput
-                backend.Fill(gradInputNCHW, 0.0f, inputSliceSize);
-
-                // dX += Conv2DBackwardInput(dF, W_fi)
-                using var tempInputGrad = backend.AllocateBuffer(inputSliceSize);
-                backend.Conv2DBackwardInput(dF, wFiBuffer, tempInputGrad,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
-
-                // dX += Conv2DBackwardInput(dI, W_ii)
-                backend.Conv2DBackwardInput(dI, wIiBuffer, tempInputGrad,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
-
-                // dX += Conv2DBackwardInput(dC_tilde, W_ci)
-                backend.Conv2DBackwardInput(dCTilde, wCiBuffer, tempInputGrad,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
-
-                // dX += Conv2DBackwardInput(dO, W_oi)
-                backend.Conv2DBackwardInput(dO, wOiBuffer, tempInputGrad,
-                    batchSize, channels, height, width, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
-
-                // Convert input gradient from NCHW to NHWC and store
-                int inputOffset = t * batchSize * height * width * channels;
-                using var gradInputNHWC = backend.AllocateBuffer(inputSliceSize);
-                backend.Permute(gradInputNCHW, gradInputNHWC, [batchSize, channels, height, width], [0, 2, 3, 1]);
-                backend.Copy2DStrided(gradInputNHWC, inputGradBuffer, 1, inputSliceSize, inputGradSize, inputOffset);
-
-                // Compute dHNext for previous timestep
-                // dH_prev = sum of Conv2DBackwardInput for all gates with hidden weights
-                backend.Fill(dHNext, 0.0f, stateSize);
-                using var tempHGrad = backend.AllocateBuffer(stateSize);
-
-                backend.Conv2DBackwardInput(dF, wFhBuffer, tempHGrad,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
-
-                backend.Conv2DBackwardInput(dI, wIhBuffer, tempHGrad,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
-
-                backend.Conv2DBackwardInput(dCTilde, wChBuffer, tempHGrad,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
-
-                backend.Conv2DBackwardInput(dO, wOhBuffer, tempHGrad,
-                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
-                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
-                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
-
-                // Compute dCNext for previous timestep
-                // dC_prev = dC * f
-                backend.Multiply(dC, forgetGate, dCNext, stateSize);
-            }
-
-            // Store gradients as GPU tensors for UpdateParametersGpu
-            // Note: Gradients are in NCHW format [outC, inC, kH, kW]
-            int inputWeightSize = _filters * channels * _kernelSize * _kernelSize;
-            int hiddenWeightSize = _filters * _filters * _kernelSize * _kernelSize;
-            _gpuWeightsFiGradient = new GpuTensor<T>(backend, gradWFi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsIiGradient = new GpuTensor<T>(backend, gradWIi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsCiGradient = new GpuTensor<T>(backend, gradWCi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsOiGradient = new GpuTensor<T>(backend, gradWOi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsFhGradient = new GpuTensor<T>(backend, gradWFh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsIhGradient = new GpuTensor<T>(backend, gradWIh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsChGradient = new GpuTensor<T>(backend, gradWCh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWeightsOhGradient = new GpuTensor<T>(backend, gradWOh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBiasFGradient = new GpuTensor<T>(backend, gradBF, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBiasIGradient = new GpuTensor<T>(backend, gradBI, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBiasCGradient = new GpuTensor<T>(backend, gradBC, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBiasOGradient = new GpuTensor<T>(backend, gradBO, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
-
-            // Also download to CPU for _gradients dictionary compatibility
-            var gradWFiData = backend.DownloadBuffer(gradWFi);
-            var gradWIiData = backend.DownloadBuffer(gradWIi);
-            var gradWCiData = backend.DownloadBuffer(gradWCi);
-            var gradWOiData = backend.DownloadBuffer(gradWOi);
-            var gradWFhData = backend.DownloadBuffer(gradWFh);
-            var gradWIhData = backend.DownloadBuffer(gradWIh);
-            var gradWChData = backend.DownloadBuffer(gradWCh);
-            var gradWOhData = backend.DownloadBuffer(gradWOh);
-            var gradBFData = backend.DownloadBuffer(gradBF);
-            var gradBIData = backend.DownloadBuffer(gradBI);
-            var gradBCData = backend.DownloadBuffer(gradBC);
-            var gradBOData = backend.DownloadBuffer(gradBO);
-
-            // Convert back to NHWC format for weights [kH, kW, inC, outC] from [outC, inC, kH, kW]
-            // and store in gradients dictionary
-            _gradients = new Dictionary<string, object>
-            {
-                ["weightsFi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFiData), _weightsFi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsIi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIiData), _weightsIi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsCi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWCiData), _weightsCi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsOi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOiData), _weightsOi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsFh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFhData), _weightsFh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsIh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIhData), _weightsIh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsCh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWChData), _weightsCh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["weightsOh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOhData), _weightsOh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
-                ["biasF"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBFData), _biasF.Shape.ToArray()),
-                ["biasI"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBIData), _biasI.Shape.ToArray()),
-                ["biasC"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBCData), _biasC.Shape.ToArray()),
-                ["biasO"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBOData), _biasO.Shape.ToArray())
-            };
-
-            // Clear GPU cache
-            ClearGpuCache();
-
-            // Determine output shape
-            int[] inputGradShape = _gpuInputShape ?? [batchSize, timeSteps, height, width, channels];
-
-            return new GpuTensor<T>(backend, inputGradBuffer, inputGradShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        }
-        catch
-        {
-            inputGradBuffer.Dispose();
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with proper BPTT graph construction.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements Backpropagation Through Time (BPTT) by unrolling the computation graph
-    /// across all time steps. It correctly handles:
-    /// - Temporal dependencies (hidden and cell states)
-    /// - Spatial convolutions (using correct NHWC/NCHW conversions)
-    /// - Complex gating logic
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Normalize outputGradient to 5D to match canonical _lastInput shape
-        var outGrad5D = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length == 4)
-        {
-            // 4D output gradient -> 5D (add batch dim)
-            outGrad5D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]]);
-        }
-        else if (_originalInputShape != null && _originalInputShape.Length > 5)
-        {
-            // Higher-rank output gradient -> 5D (flatten leading dims)
-            int flatBatch = 1;
-            for (int d = 0; d < _originalInputShape.Length - 4; d++)
-                flatBatch *= _originalInputShape[d];
-            outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
-        }
-
-        // 1. Create Variables for all parameters
-        var wFi = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", true);
-        var wIi = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", true);
-        var wCi = Autodiff.TensorOperations<T>.Variable(_weightsCi, "weightsCi", true);
-        var wOi = Autodiff.TensorOperations<T>.Variable(_weightsOi, "weightsOi", true);
-
-        var wFh = Autodiff.TensorOperations<T>.Variable(_weightsFh, "weightsFh", true);
-        var wIh = Autodiff.TensorOperations<T>.Variable(_weightsIh, "weightsIh", true);
-        var wCh = Autodiff.TensorOperations<T>.Variable(_weightsCh, "weightsCh", true);
-        var wOh = Autodiff.TensorOperations<T>.Variable(_weightsOh, "weightsOh", true);
-
-        var bF = Autodiff.TensorOperations<T>.Variable(_biasF, "biasF", true);
-        var bI = Autodiff.TensorOperations<T>.Variable(_biasI, "biasI", true);
-        var bC = Autodiff.TensorOperations<T>.Variable(_biasC, "biasC", true);
-        var bO = Autodiff.TensorOperations<T>.Variable(_biasO, "biasO", true);
-
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", true);
-
-        // 2. Pre-process weights for Conv2D (NHWC -> NCHW equivalent for kernels: [kH, kW, In, Out] -> [Out, In, kH, kW])
-        // _weightsFi shape: [kH, kW, In, Out]
-        // Target: [Out, In, kH, kW] => Permute(3, 2, 0, 1)
-        var wFi_T = Autodiff.TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
-        var wIi_T = Autodiff.TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
-        var wCi_T = Autodiff.TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
-        var wOi_T = Autodiff.TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
-
-        var wFh_T = Autodiff.TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
-        var wIh_T = Autodiff.TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
-        var wCh_T = Autodiff.TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
-        var wOh_T = Autodiff.TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
-
-        // Reshape biases for broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1] (NCHW)
-        // Input bias is [1, 1, 1, F]
-        var bF_T = Autodiff.TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
-        var bI_T = Autodiff.TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
-        var bC_T = Autodiff.TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
-        var bO_T = Autodiff.TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
-
-        int batchSize = _lastInput.Shape[0];
-        int timeSteps = _lastInput.Shape[1];
-        int height = _lastInput.Shape[2];
-        int width = _lastInput.Shape[3];
-        int channels = _lastInput.Shape[4];
-
-        // Initialize states (Zero tensors)
-        var hiddenState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "h0"); // NCHW for internal
-        var cellState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "c0");   // NCHW for internal
-
-        var outputNodes = new List<Autodiff.ComputationNode<T>>();
-        var stride = new int[] { _strides, _strides };
-        var padding = new int[] { _padding, _padding };
-
-        // 3. Unroll BPTT Loop
-        for (int t = 0; t < timeSteps; t++)
-        {
-            // Slice time step t: [Batch, 1, H, W, C] -> [Batch, H, W, C]
-            // Note: Using axis 1 for time dimension slice
-            var xt_raw = Autodiff.TensorOperations<T>.Slice(inputNode, t, 1, 1, axis: 1);
-            var xt_NHWC = Autodiff.TensorOperations<T>.Reshape(xt_raw, batchSize, height, width, channels);
-
-            // Permute input to NCHW: [Batch, C, H, W]
-            var xt = Autodiff.TensorOperations<T>.Permute(xt_NHWC, 0, 3, 1, 2);
-
-            // Gates Calculation (All in NCHW format)
-            // Forget Gate
-            var f_x = Autodiff.TensorOperations<T>.Conv2D(xt, wFi_T, bF_T, stride, padding);
-            var f_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wFh_T, stride: stride, padding: padding);
-            var f_sum = Autodiff.TensorOperations<T>.Add(f_x, f_h);
-            var f = Autodiff.TensorOperations<T>.Sigmoid(f_sum);
-
-            // Input Gate
-            var i_x = Autodiff.TensorOperations<T>.Conv2D(xt, wIi_T, bI_T, stride, padding);
-            var i_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wIh_T, stride: stride, padding: padding);
-            var i_sum = Autodiff.TensorOperations<T>.Add(i_x, i_h);
-            var i_gate = Autodiff.TensorOperations<T>.Sigmoid(i_sum);
-
-            // Cell Candidate
-            var c_x = Autodiff.TensorOperations<T>.Conv2D(xt, wCi_T, bC_T, stride, padding);
-            var c_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wCh_T, stride: stride, padding: padding);
-            var c_sum = Autodiff.TensorOperations<T>.Add(c_x, c_h);
-            // Apply layer activation (defaults to Tanh for cell candidate in standard LSTM)
-            // But constructor allows custom activation. LayerBase ApplyActivation uses it.
-            // Standard ConvLSTM uses Tanh/Sigmoid/Tanh structure.
-            // We'll use Tanh for standard compliance or ApplyActivationToGraph if it matches?
-            // The constructor sets base activation to TanhActivation.
-            // Let's use Tanh directly as per standard LSTM logic, or delegate?
-            // Forward uses ApplyActivation for candidate cell.
-            var c_cand = ApplyActivationToGraph(c_sum);
-
-            // Output Gate
-            var o_x = Autodiff.TensorOperations<T>.Conv2D(xt, wOi_T, bO_T, stride, padding);
-            var o_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wOh_T, stride: stride, padding: padding);
-            var o_sum = Autodiff.TensorOperations<T>.Add(o_x, o_h);
-            var o = Autodiff.TensorOperations<T>.Sigmoid(o_sum);
-
-            // Update Cell State
-            var c_forget = Autodiff.TensorOperations<T>.ElementwiseMultiply(f, cellState);
-            var c_input = Autodiff.TensorOperations<T>.ElementwiseMultiply(i_gate, c_cand);
-            var newC = Autodiff.TensorOperations<T>.Add(c_forget, c_input);
-
-            // Update Hidden State
-            // Forward uses ApplyActivation(newCellState) ... usually Tanh
-            var c_activated = ApplyActivationToGraph(newC);
-            var newH = Autodiff.TensorOperations<T>.ElementwiseMultiply(o, c_activated);
-
-            // Store for next step
-            cellState = newC;
-            hiddenState = newH;
-
-            // Convert Output back to NHWC for consistency with layer output
-            var output_NHWC = Autodiff.TensorOperations<T>.Permute(newH, 0, 2, 3, 1);
-
-            // Reshape to [Batch, 1, H, W, C] for concatenation
-            var output_step = Autodiff.TensorOperations<T>.Reshape(output_NHWC, batchSize, 1, height, width, _filters);
-            outputNodes.Add(output_step);
-        }
-
-        // 4. Concatenate outputs along time axis (axis 1)
-        var finalOutput = Autodiff.TensorOperations<T>.Concat(outputNodes, axis: 1);
-
-        // 5. Backward Pass
-        finalOutput.Gradient = outGrad5D;
-
-        // Topo sort and execute backward
-        finalOutput.Backward(); // Uses built-in topo sort and execution
-
-        // 6. Extract and Store Gradients in Dictionary
-        _gradients = new Dictionary<string, object>
-        {
-            ["weightsFi"] = wFi.Gradient ?? Tensor<T>.CreateDefault(_weightsFi.Shape.ToArray(), NumOps.Zero),
-            ["weightsIi"] = wIi.Gradient ?? Tensor<T>.CreateDefault(_weightsIi.Shape.ToArray(), NumOps.Zero),
-            ["weightsCi"] = wCi.Gradient ?? Tensor<T>.CreateDefault(_weightsCi.Shape.ToArray(), NumOps.Zero),
-            ["weightsOi"] = wOi.Gradient ?? Tensor<T>.CreateDefault(_weightsOi.Shape.ToArray(), NumOps.Zero),
-            ["weightsFh"] = wFh.Gradient ?? Tensor<T>.CreateDefault(_weightsFh.Shape.ToArray(), NumOps.Zero),
-            ["weightsIh"] = wIh.Gradient ?? Tensor<T>.CreateDefault(_weightsIh.Shape.ToArray(), NumOps.Zero),
-            ["weightsCh"] = wCh.Gradient ?? Tensor<T>.CreateDefault(_weightsCh.Shape.ToArray(), NumOps.Zero),
-            ["weightsOh"] = wOh.Gradient ?? Tensor<T>.CreateDefault(_weightsOh.Shape.ToArray(), NumOps.Zero),
-            ["biasF"] = bF.Gradient ?? Tensor<T>.CreateDefault(_biasF.Shape.ToArray(), NumOps.Zero),
-            ["biasI"] = bI.Gradient ?? Tensor<T>.CreateDefault(_biasI.Shape.ToArray(), NumOps.Zero),
-            ["biasC"] = bC.Gradient ?? Tensor<T>.CreateDefault(_biasC.Shape.ToArray(), NumOps.Zero),
-            ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape.ToArray(), NumOps.Zero)
-        };
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalInputShape != null && _originalInputShape.Length != 5)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for ConvLSTM.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass using manual gradient calculations optimized for
-    /// ConvLSTM networks. It performs backpropagation through time (BPTT), processing the
-    /// sequence in reverse order and computing gradients for all convolutional gate parameters,
-    /// hidden states, and cell states.
-    /// </para>
-    /// <para>
-    /// Autodiff Note: ConvLSTM backward pass combines the complexity of LSTM gates with
-    /// convolutional operations across spatial dimensions. Implementing this with automatic
-    /// differentiation would require handling temporal dependencies, spatial convolutions,
-    /// and gate-specific gradient flows. The manual implementation provides efficient and
-    /// correct gradient calculations for all ConvLSTM components.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // Normalize outputGradient to 5D to match canonical _lastInput shape
-        var outGrad5D = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length == 4)
-        {
-            // 4D output gradient -> 5D (add batch dim)
-            outGrad5D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]]);
-        }
-        else if (_originalInputShape != null && _originalInputShape.Length > 5)
-        {
-            // Higher-rank output gradient -> 5D (flatten leading dims)
-            int flatBatch = 1;
-            for (int d = 0; d < _originalInputShape.Length - 4; d++)
-                flatBatch *= _originalInputShape[d];
-            outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
-        }
-
-        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
-        int batchSize = lastInput.Shape[0];
-        int timeSteps = lastInput.Shape[1];
-
-        var dInput = TensorAllocator.Rent<T>(lastInput.Shape.ToArray());
-        var dWeightsFi = new Tensor<T>(_weightsFi.Shape.ToArray());
-        var dWeightsIi = new Tensor<T>(_weightsIi.Shape.ToArray());
-        var dWeightsCi = new Tensor<T>(_weightsCi.Shape.ToArray());
-        var dWeightsOi = new Tensor<T>(_weightsOi.Shape.ToArray());
-        var dWeightsFh = new Tensor<T>(_weightsFh.Shape.ToArray());
-        var dWeightsIh = new Tensor<T>(_weightsIh.Shape.ToArray());
-        var dWeightsCh = new Tensor<T>(_weightsCh.Shape.ToArray());
-        var dWeightsOh = new Tensor<T>(_weightsOh.Shape.ToArray());
-        var dBiasF = new Tensor<T>(_biasF.Shape.ToArray());
-        var dBiasI = new Tensor<T>(_biasI.Shape.ToArray());
-        var dBiasC = new Tensor<T>(_biasC.Shape.ToArray());
-        var dBiasO = new Tensor<T>(_biasO.Shape.ToArray());
-
-        var lastHiddenState = _lastHiddenState ?? throw new InvalidOperationException("_lastHiddenState has not been initialized.");
-        var dNextH = new Tensor<T>(lastHiddenState.Shape.ToArray());
-        var lastCellState = _lastCellState ?? throw new InvalidOperationException("_lastCellState has not been initialized.");
-        var dNextC = new Tensor<T>(lastCellState.Shape.ToArray());
-
-        for (int t = timeSteps - 1; t >= 0; t--)
-        {
-            var currentDh = outGrad5D.GetSlice(t).Add(dNextH);
-            var xt = lastInput.GetSlice(t);
-            var prevH = t > 0 ? lastHiddenState.GetSlice(t - 1) : new Tensor<T>(lastHiddenState.Shape.ToArray());
-            var prevC = t > 0 ? lastCellState.GetSlice(t - 1) : new Tensor<T>(lastCellState.Shape.ToArray());
-
-            var (dxt, dprevH, dprevC, cellGrads) = BackwardStep(xt, prevH, prevC, currentDh, dNextC);
-
-            dInput.SetSlice(t, dxt);
-            if (t > 0)
-            {
-                dNextH = dprevH;
-                dNextC = dprevC;
-            }
-
-            // Accumulate gradients
-            dWeightsFi = dWeightsFi.Add(cellGrads.dWfi);
-            dWeightsIi = dWeightsIi.Add(cellGrads.dWii);
-            dWeightsCi = dWeightsCi.Add(cellGrads.dWci);
-            dWeightsOi = dWeightsOi.Add(cellGrads.dWoi);
-            dWeightsFh = dWeightsFh.Add(cellGrads.dWfh);
-            dWeightsIh = dWeightsIh.Add(cellGrads.dWih);
-            dWeightsCh = dWeightsCh.Add(cellGrads.dWch);
-            dWeightsOh = dWeightsOh.Add(cellGrads.dWoh);
-            dBiasF = dBiasF.Add(cellGrads.dbf);
-            dBiasI = dBiasI.Add(cellGrads.dbi);
-            dBiasC = dBiasC.Add(cellGrads.dbc);
-            dBiasO = dBiasO.Add(cellGrads.dbo);
-        }
-
-        // Store gradients for use in UpdateParameters
-        _gradients = new Dictionary<string, object>
-        {
-            ["weightsFi"] = dWeightsFi,
-            ["weightsIi"] = dWeightsIi,
-            ["weightsCi"] = dWeightsCi,
-            ["weightsOi"] = dWeightsOi,
-            ["weightsFh"] = dWeightsFh,
-            ["weightsIh"] = dWeightsIh,
-            ["weightsCh"] = dWeightsCh,
-            ["weightsOh"] = dWeightsOh,
-            ["biasF"] = dBiasF,
-            ["biasI"] = dBiasI,
-            ["biasC"] = dBiasC,
-            ["biasO"] = dBiasO
-        };
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalInputShape != null && _originalInputShape.Length != 5)
-        {
-            return dInput.Reshape(_originalInputShape);
-        }
-
-        return dInput;
     }
 
     /// <summary>
@@ -2525,190 +1838,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Exports the ConvLSTM computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which input nodes will be added. The method adds:
-    /// <list type="bullet">
-    /// <item><description>x_t: Current input tensor [batch, height, width, channels]</description></item>
-    /// <item><description>h_prev: Previous hidden state [batch, height, width, filters]</description></item>
-    /// <item><description>c_prev: Previous cell state [batch, height, width, filters]</description></item>
-    /// </list>
-    /// </param>
-    /// <returns>A computation node representing the new hidden state h_t.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method exports a single timestep of the ConvLSTM cell for JIT compilation.
-    /// The computation graph implements the full ConvLSTM equations using Conv2D operations:
-    /// </para>
-    /// <para>
-    /// <b>Gates (all use Conv2D operations):</b>
-    /// <list type="bullet">
-    /// <item><description>Forget gate: f_t = σ(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f)</description></item>
-    /// <item><description>Input gate: i_t = σ(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i)</description></item>
-    /// <item><description>Cell candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c)</description></item>
-    /// <item><description>Output gate: o_t = σ(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o)</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <b>State updates:</b>
-    /// <list type="bullet">
-    /// <item><description>Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t</description></item>
-    /// <item><description>Hidden state: h_t = o_t ⊙ tanh(c_t)</description></item>
-    /// </list>
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a blueprint for running ConvLSTM faster.
-    ///
-    /// For processing sequences:
-    /// 1. Initialize h_prev and c_prev to zeros for the first timestep
-    /// 2. Call the JIT-compiled graph for each timestep in your sequence
-    /// 3. Pass the output hidden state as h_prev for the next timestep
-    /// 4. Track cell state separately if needed for stateful operation
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // ConvLSTM expects input shape: [batch, height, width, channels]
-        // For JIT, we work with single-timestep input (no time dimension)
-        int height = InputShape[1];
-        int width = InputShape[2];
-        int inputChannels = InputShape[3];
-
-        // Create input placeholder: x_t with shape [batch, height, width, channels]
-        var inputPlaceholder = new Tensor<T>([1, height, width, inputChannels]);
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
-        inputNodes.Add(inputNode);
-
-        // Create previous hidden state placeholder: h_{t-1} with shape [batch, height, width, filters]
-        int outHeight = OutputShape[1];
-        int outWidth = OutputShape[2];
-        var prevHiddenPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
-        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
-        inputNodes.Add(prevHiddenNode);
-
-        // Create previous cell state placeholder: c_{t-1} with shape [batch, height, width, filters]
-        var prevCellPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
-        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
-        inputNodes.Add(prevCellNode);
-
-        // Create variable nodes for all weights (input weights)
-        var wFi = TensorOperations<T>.Variable(_weightsFi, "W_fi");
-        var wIi = TensorOperations<T>.Variable(_weightsIi, "W_ii");
-        var wCi = TensorOperations<T>.Variable(_weightsCi, "W_ci");
-        var wOi = TensorOperations<T>.Variable(_weightsOi, "W_oi");
-
-        // Create variable nodes for all weights (hidden/recurrent weights)
-        var wFh = TensorOperations<T>.Variable(_weightsFh, "W_fh");
-        var wIh = TensorOperations<T>.Variable(_weightsIh, "W_ih");
-        var wCh = TensorOperations<T>.Variable(_weightsCh, "W_ch");
-        var wOh = TensorOperations<T>.Variable(_weightsOh, "W_oh");
-
-        // Create variable nodes for biases
-        var bF = TensorOperations<T>.Variable(_biasF, "b_f");
-        var bI = TensorOperations<T>.Variable(_biasI, "b_i");
-        var bC = TensorOperations<T>.Variable(_biasC, "b_c");
-        var bO = TensorOperations<T>.Variable(_biasO, "b_o");
-
-        // Pre-process weights for Conv2D: [kH, kW, In, Out] -> [Out, In, kH, kW]
-        // This matches the permutation used in BackwardViaAutodiff for consistency
-        var wFi_T = TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
-        var wIi_T = TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
-        var wCi_T = TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
-        var wOi_T = TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
-
-        var wFh_T = TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
-        var wIh_T = TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
-        var wCh_T = TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
-        var wOh_T = TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
-
-        // Reshape biases for NCHW broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1]
-        var bF_T = TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
-        var bI_T = TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
-        var bC_T = TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
-        var bO_T = TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
-
-        // Permute inputs from NHWC to NCHW for Conv2D operations
-        var inputNCHW = TensorOperations<T>.Permute(inputNode, 0, 3, 1, 2);
-        var prevHiddenNCHW = TensorOperations<T>.Permute(prevHiddenNode, 0, 3, 1, 2);
-        var prevCellNCHW = TensorOperations<T>.Permute(prevCellNode, 0, 3, 1, 2);
-
-        // Stride and padding arrays for Conv2D
-        var stride = new int[] { _strides, _strides };
-        var padding = new int[] { _padding, _padding };
-
-        // ========== Forget Gate: f_t = sigmoid(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f) ==========
-        var f_input = TensorOperations<T>.Conv2D(inputNCHW, wFi_T, bF_T, stride, padding);
-        var f_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wFh_T, stride: stride, padding: padding);
-        var f_preact = TensorOperations<T>.Add(f_input, f_hidden);
-        var f_t = TensorOperations<T>.Sigmoid(f_preact);
-
-        // ========== Input Gate: i_t = sigmoid(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i) ==========
-        var i_input = TensorOperations<T>.Conv2D(inputNCHW, wIi_T, bI_T, stride, padding);
-        var i_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wIh_T, stride: stride, padding: padding);
-        var i_preact = TensorOperations<T>.Add(i_input, i_hidden);
-        var i_t = TensorOperations<T>.Sigmoid(i_preact);
-
-        // ========== Cell Candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c) ==========
-        var c_input = TensorOperations<T>.Conv2D(inputNCHW, wCi_T, bC_T, stride, padding);
-        var c_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wCh_T, stride: stride, padding: padding);
-        var c_preact = TensorOperations<T>.Add(c_input, c_hidden);
-        var c_tilde = TensorOperations<T>.Tanh(c_preact);
-
-        // ========== Output Gate: o_t = sigmoid(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o) ==========
-        var o_input = TensorOperations<T>.Conv2D(inputNCHW, wOi_T, bO_T, stride, padding);
-        var o_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wOh_T, stride: stride, padding: padding);
-        var o_preact = TensorOperations<T>.Add(o_input, o_hidden);
-        var o_t = TensorOperations<T>.Sigmoid(o_preact);
-
-        // ========== Cell State: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t ==========
-        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNCHW);
-        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
-        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
-
-        // ========== Hidden State: h_t = o_t ⊙ tanh(c_t) ==========
-        var c_t_activated = TensorOperations<T>.Tanh(c_t);
-        var h_t_NCHW = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
-
-        // Permute output from NCHW back to NHWC for consistency with layer output format
-        var h_t = TensorOperations<T>.Permute(h_t_NCHW, 0, 2, 3, 1);
-
-        // Apply layer activation if configured (typically identity for ConvLSTM)
-        var output = ApplyActivationToGraph(h_t);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. ConvLSTMLayer exports a single-step LSTM cell computation
-    /// with full Conv2D operations for all gates.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for ConvLSTM exports a single timestep of the LSTM cell computation.
-    /// The exported graph uses proper Conv2D operations for all gate computations, matching
-    /// the behavior of the Forward method.
-    /// </para>
-    /// <para>
-    /// For processing sequences with the JIT-compiled graph:
-    /// <list type="number">
-    /// <item><description>Initialize hidden and cell states to zero tensors</description></item>
-    /// <item><description>For each timestep, call the compiled graph with (input, h_prev, c_prev)</description></item>
-    /// <item><description>The output is the new hidden state h_t</description></item>
-    /// <item><description>Track cell state c_t for the next iteration (available from intermediate computation)</description></item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     #region GPU Parameter Update
 
     /// <summary>
@@ -2742,18 +1871,18 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var wOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
 
         // Ensure GPU weight tensors exist
-        _gpuWeightsFi ??= new GpuTensor<T>(backend, wFiNCHW, GpuTensorRole.Weight);
-        _gpuWeightsIi ??= new GpuTensor<T>(backend, wIiNCHW, GpuTensorRole.Weight);
-        _gpuWeightsCi ??= new GpuTensor<T>(backend, wCiNCHW, GpuTensorRole.Weight);
-        _gpuWeightsOi ??= new GpuTensor<T>(backend, wOiNCHW, GpuTensorRole.Weight);
-        _gpuWeightsFh ??= new GpuTensor<T>(backend, wFhNCHW, GpuTensorRole.Weight);
-        _gpuWeightsIh ??= new GpuTensor<T>(backend, wIhNCHW, GpuTensorRole.Weight);
-        _gpuWeightsCh ??= new GpuTensor<T>(backend, wChNCHW, GpuTensorRole.Weight);
-        _gpuWeightsOh ??= new GpuTensor<T>(backend, wOhNCHW, GpuTensorRole.Weight);
-        _gpuBiasF ??= new GpuTensor<T>(backend, _biasF, GpuTensorRole.Bias);
-        _gpuBiasI ??= new GpuTensor<T>(backend, _biasI, GpuTensorRole.Bias);
-        _gpuBiasC ??= new GpuTensor<T>(backend, _biasC, GpuTensorRole.Bias);
-        _gpuBiasO ??= new GpuTensor<T>(backend, _biasO, GpuTensorRole.Bias);
+        _gpuWeightsFi ??= GpuTensorHelper.UploadToGpu<T>(backend, wFiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsIi ??= GpuTensorHelper.UploadToGpu<T>(backend, wIiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsCi ??= GpuTensorHelper.UploadToGpu<T>(backend, wCiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsOi ??= GpuTensorHelper.UploadToGpu<T>(backend, wOiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsFh ??= GpuTensorHelper.UploadToGpu<T>(backend, wFhNCHW, GpuTensorRole.Weight);
+        _gpuWeightsIh ??= GpuTensorHelper.UploadToGpu<T>(backend, wIhNCHW, GpuTensorRole.Weight);
+        _gpuWeightsCh ??= GpuTensorHelper.UploadToGpu<T>(backend, wChNCHW, GpuTensorRole.Weight);
+        _gpuWeightsOh ??= GpuTensorHelper.UploadToGpu<T>(backend, wOhNCHW, GpuTensorRole.Weight);
+        _gpuBiasF ??= GpuTensorHelper.UploadToGpu<T>(backend, _biasF, GpuTensorRole.Bias);
+        _gpuBiasI ??= GpuTensorHelper.UploadToGpu<T>(backend, _biasI, GpuTensorRole.Bias);
+        _gpuBiasC ??= GpuTensorHelper.UploadToGpu<T>(backend, _biasC, GpuTensorRole.Bias);
+        _gpuBiasO ??= GpuTensorHelper.UploadToGpu<T>(backend, _biasO, GpuTensorRole.Bias);
 
         // Ensure optimizer state buffers exist
         EnsureConvLstmOptimizerState(backend, config.OptimizerType);
@@ -2773,18 +1902,18 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBiasO.Buffer, _gpuBiasOGradient.Buffer, BuildConvLstmOptimizerState("Bo"), _biasO.Length);
 
         // Sync back to CPU tensors for compatibility (convert back to NHWC)
-        _weightsFi = _gpuWeightsFi.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsIi = _gpuWeightsIi.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsCi = _gpuWeightsCi.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsOi = _gpuWeightsOi.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsFh = _gpuWeightsFh.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsIh = _gpuWeightsIh.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsCh = _gpuWeightsCh.ToTensor().Transpose([2, 3, 1, 0]);
-        _weightsOh = _gpuWeightsOh.ToTensor().Transpose([2, 3, 1, 0]);
-        _biasF = _gpuBiasF.ToTensor();
-        _biasI = _gpuBiasI.ToTensor();
-        _biasC = _gpuBiasC.ToTensor();
-        _biasO = _gpuBiasO.ToTensor();
+        _weightsFi = _gpuWeightsFi.Transpose([2, 3, 1, 0]);
+        _weightsIi = _gpuWeightsIi.Transpose([2, 3, 1, 0]);
+        _weightsCi = _gpuWeightsCi.Transpose([2, 3, 1, 0]);
+        _weightsOi = _gpuWeightsOi.Transpose([2, 3, 1, 0]);
+        _weightsFh = _gpuWeightsFh.Transpose([2, 3, 1, 0]);
+        _weightsIh = _gpuWeightsIh.Transpose([2, 3, 1, 0]);
+        _weightsCh = _gpuWeightsCh.Transpose([2, 3, 1, 0]);
+        _weightsOh = _gpuWeightsOh.Transpose([2, 3, 1, 0]);
+        _biasF = _gpuBiasF;
+        _biasI = _gpuBiasI;
+        _biasC = _gpuBiasC;
+        _biasO = _gpuBiasO;
     }
 
     /// <summary>
@@ -2802,65 +1931,65 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuWeightsFiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsCiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsFhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsChVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasFVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasIVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasCVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasOVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuWeightsFiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsFiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsCiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsCiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsFhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsFhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsChM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsChV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasFM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasFV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasIM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasIV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasCM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasCV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasOM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasOV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFiM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFiV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // SquaredAvg buffers for RMSprop/Adagrad
-                _gpuWeightsFiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsCiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsFhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsIhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsChVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsOhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasFVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasIVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasCVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasOVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -507,7 +507,6 @@ public class DeepState<T> : ForecastingModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -839,71 +838,6 @@ public class DeepState<T> : ForecastingModelBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Performs the backward pass through DeepState.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation computes how each parameter contributed
-    /// to the prediction error, allowing the optimizer to update them.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Output layer backward
-        if (_outputLayer is not null)
-            current = _outputLayer.Backward(current);
-
-        Tensor<T>? rnnGradient = null;
-
-        // Observation layer backward (shares gradient with main path)
-        if (_observationLayer is not null)
-        {
-            var obsGrad = _observationLayer.Backward(current);
-            rnnGradient = obsGrad;
-        }
-
-        // State evolution backward
-        if (_stateEvolutionLayer is not null)
-            current = _stateEvolutionLayer.Backward(current);
-
-        // Transition layer backward (shares gradient with main path)
-        if (_transitionLayer is not null)
-        {
-            var transGrad = _transitionLayer.Backward(current);
-            rnnGradient = rnnGradient == null ? transGrad : AddTensors(rnnGradient, transGrad);
-        }
-
-        // Initial state path backward
-        if (_initialStateLayer is not null)
-        {
-            var initGrad = _initialStateLayer.Backward(current);
-            rnnGradient = rnnGradient == null ? initGrad : AddTensors(rnnGradient, initGrad);
-        }
-        else
-        {
-            rnnGradient = rnnGradient == null ? current : AddTensors(rnnGradient, current);
-        }
-
-        var gradToRnn = rnnGradient ?? current;
-
-        // RNN layers backward
-        for (int i = _rnnLayers.Count - 1; i >= 0; i--)
-        {
-            gradToRnn = _rnnLayers[i].Backward(gradToRnn);
-        }
-
-        // Input projection backward
-        if (_inputProjection is not null)
-            gradToRnn = _inputProjection.Backward(gradToRnn);
-
-        return gradToRnn;
-    }
-
     #endregion
 
     #region Inference Methods
@@ -941,7 +875,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Defensive check: verify OnnxSession.InputMetadata is not null/empty
         var inputMeta = OnnxSession.InputMetadata;
@@ -1038,7 +972,7 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         int steps = Math.Min(stepsUsed, _lookbackWindow);
         int shift = steps * _numFeatures;

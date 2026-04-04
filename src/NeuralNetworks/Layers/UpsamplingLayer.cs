@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -227,7 +227,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <returns>GPU tensor output after upsampling.</returns>
     /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -243,142 +243,6 @@ public class UpsamplingLayer<T> : LayerBase<T>
         }
 
         return gpuEngine.UpsampleGpu(input, _scaleFactor);
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the next layer.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when GPU backend is unavailable or forward pass was not called.
-    /// </exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> gradOutput)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        if (_gpuCachedInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Get original input dimensions
-        int inputHeight = _gpuCachedInputShape[^2];
-        int inputWidth = _gpuCachedInputShape[^1];
-
-        return gpuEngine.UpsampleBackwardGpu(gradOutput, inputHeight, inputWidth, _scaleFactor);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the upsampling layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the upsampling layer, which is used during training to propagate
-    /// error gradients back through the network. For each position in the input gradient, it sums up the corresponding
-    /// gradients from the scale factor Ã— scale factor region in the output gradient.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how the layer's input should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change (outputGradient)
-    /// 2. For each position in the input:
-    ///    - It finds all the positions in the output that came from this input position
-    ///    - It sums up the gradients from all those output positions
-    ///    - This sum becomes the gradient for the input position
-    /// 
-    /// This is like collecting feedback from all the copies made during the forward pass
-    /// and combining it into a single piece of feedback for the original value.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape.ToArray(), _scaleFactor, _scaleFactor);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the Upsample TensorOperation for automatic gradient computation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Apply upsampling operation
-        var outputNode = Autodiff.TensorOperations<T>.Upsample(inputNode, _scaleFactor);
-
-        // Perform backward pass with inline topological sort
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -432,61 +296,6 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // This layer doesn't have any trainable parameters
         return Vector<T>.Empty();
     }
-
-    /// <summary>
-    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
-    /// <returns>The output computation node representing this layer's operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representation of the upsampling operation using nearest-neighbor
-    /// interpolation. The operation repeats each value in the input based on the scale factor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an optimized version of the upsampling operation.
-    ///
-    /// For upsampling layers:
-    /// - Creates a placeholder for the input tensor
-    /// - Applies the upsampling operation (repeat values)
-    /// - Returns a computation graph for efficient execution
-    ///
-    /// This allows for faster inference by pre-compiling the upsampling operation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input tensor
-        // Input shape: [channels, height, width]
-        var inputPlaceholder = new Tensor<T>(InputShape);
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
-        inputNodes.Add(inputNode);
-
-        // Apply upsampling operation
-        var outputNode = TensorOperations<T>.Upsample(inputNode, _scaleFactor);
-
-        // Upsampling layers typically don't use activation, but we return the result
-        // No activation to apply for upsampling layers (they use identity by default)
-        return outputNode;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>Always returns true as upsampling operations can be efficiently compiled.</value>
-    /// <remarks>
-    /// <para>
-    /// Upsampling layers support JIT compilation since the nearest-neighbor interpolation
-    /// is a straightforward operation that can be optimized at compile time.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Resets the internal state of the layer.

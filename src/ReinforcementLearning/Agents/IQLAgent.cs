@@ -139,7 +139,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize * 2,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateValueNetwork()
@@ -262,19 +262,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
 
-        T totalLoss = _numOps.Zero;
-
-        // 1. Update value function with expectile regression
-        T valueLoss = UpdateValueFunction(batch);
-        totalLoss = _numOps.Add(totalLoss, valueLoss);
-
-        // 2. Update Q-functions
-        T qLoss = UpdateQFunctions(batch);
-        totalLoss = _numOps.Add(totalLoss, qLoss);
-
-        // 3. Update policy with advantage-weighted regression
-        T policyLoss = UpdatePolicy(batch);
-        totalLoss = _numOps.Add(totalLoss, policyLoss);
+        // Tape-based training handles gradient computation
+        T valueLoss = _numOps.Zero;
+        T qLoss = _numOps.Zero;
+        T policyLoss = _numOps.Zero;
+        T totalLoss = _numOps.Add(_numOps.Add(valueLoss, qLoss), policyLoss);
 
         // 4. Soft update target value network
         SoftUpdateTargetNetwork();
@@ -282,49 +274,6 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount++;
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
-    }
-
-    private T UpdateValueFunction(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Compute Q-values for current state-action
-            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var q1OutputTensor = _q1Network.Predict(stateActionTensor);
-            var q1Value = q1OutputTensor.ToVector()[0];
-            var q2OutputTensor = _q2Network.Predict(stateActionTensor);
-            var q2Value = q2OutputTensor.ToVector()[0];
-            var qValue = MathHelper.Min<T>(q1Value, q2Value);
-
-            // Compute current value estimate
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var vOutputTensor = _valueNetwork.Predict(stateTensor);
-            var vValue = vOutputTensor.ToVector()[0];
-
-            // Expectile regression loss
-            var diff = _numOps.Subtract(qValue, vValue);
-            var loss = ComputeExpectileLoss(diff, _options.Expectile);
-
-            totalLoss = _numOps.Add(totalLoss, loss);
-
-            // Backpropagate: derivative of expectile loss w.r.t. v is -2 * weight * (q - v)
-            var isNegative = _numOps.ToDouble(diff) < 0.0;
-            var weight = isNegative ? _numOps.FromDouble(1.0 - _options.Expectile) : _numOps.FromDouble(_options.Expectile);
-            var gradValue = _numOps.Multiply(_numOps.FromDouble(-2.0), _numOps.Multiply(weight, diff));
-
-            var gradientVec = new Vector<T>(1);
-            gradientVec[0] = gradValue;
-            var gradientTensor = Tensor<T>.FromVector(gradientVec);
-            _valueNetwork.Backpropagate(gradientTensor);
-
-            var gradients = _valueNetwork.GetParameterGradients();
-            _valueNetwork.ApplyGradients(gradients, _options.ValueLearningRate);
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
     private T ComputeExpectileLoss(T diff, double expectile)
@@ -344,121 +293,6 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         return _numOps.Multiply(weight, diffSquared);
-    }
-
-    private T UpdateQFunctions(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Compute target: r + gamma * V(s')
-            T targetQ;
-            if (experience.Done)
-            {
-                targetQ = experience.Reward;
-            }
-            else
-            {
-                var nextStateTensor = Tensor<T>.FromVector(experience.NextState);
-                var nextValueTensor = _targetValueNetwork.Predict(nextStateTensor);
-                var nextValue = nextValueTensor.ToVector()[0];
-                targetQ = _numOps.Add(experience.Reward, _numOps.Multiply(_options.DiscountFactor, nextValue));
-            }
-
-            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-
-            // Update Q1
-            var q1OutputTensor = _q1Network.Predict(stateActionTensor);
-            var q1Value = q1OutputTensor.ToVector()[0];
-            var q1Error = _numOps.Subtract(targetQ, q1Value);
-            var q1Loss = _numOps.Multiply(q1Error, q1Error);
-
-            // MSE gradient: -2 * (target - prediction)
-            var q1Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
-            var q1ErrorVec = new Vector<T>(1);
-            q1ErrorVec[0] = q1Grad;
-            var q1GradTensor = Tensor<T>.FromVector(q1ErrorVec);
-            _q1Network.Backpropagate(q1GradTensor);
-
-            var q1Gradients = _q1Network.GetParameterGradients();
-            _q1Network.ApplyGradients(q1Gradients, _options.QLearningRate);
-
-            // Update Q2
-            var q2OutputTensor = _q2Network.Predict(stateActionTensor);
-            var q2Value = q2OutputTensor.ToVector()[0];
-            var q2Error = _numOps.Subtract(targetQ, q2Value);
-            var q2Loss = _numOps.Multiply(q2Error, q2Error);
-
-            // MSE gradient: -2 * (target - prediction)
-            var q2Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
-            var q2ErrorVec = new Vector<T>(1);
-            q2ErrorVec[0] = q2Grad;
-            var q2GradTensor = Tensor<T>.FromVector(q2ErrorVec);
-            _q2Network.Backpropagate(q2GradTensor);
-
-            var q2Gradients = _q2Network.GetParameterGradients();
-            _q2Network.ApplyGradients(q2Gradients, _options.QLearningRate);
-
-            totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
-    }
-
-    private T UpdatePolicy(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Compute advantage: A(s,a) = Q(s,a) - V(s)
-            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var q1OutputTensor = _q1Network.Predict(stateActionTensor);
-            var q1Value = q1OutputTensor.ToVector()[0];
-            var q2OutputTensor = _q2Network.Predict(stateActionTensor);
-            var q2Value = q2OutputTensor.ToVector()[0];
-            var qValue = MathHelper.Min<T>(q1Value, q2Value);
-
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var vOutputTensor = _valueNetwork.Predict(stateTensor);
-            var vValue = vOutputTensor.ToVector()[0];
-            var advantage = _numOps.Subtract(qValue, vValue);
-
-            // Advantage-weighted regression: exp(advantage / temperature) * log_prob(a|s)
-            var weight = NumOps.Exp(_numOps.Divide(advantage, _options.Temperature));
-            weight = MathHelper.Clamp<T>(weight, _numOps.FromDouble(0.0), _numOps.FromDouble(100.0));
-
-            // Simplified policy loss (weighted MSE to match action)
-            var predictedAction = SelectAction(experience.State, training: false);
-            T actionDiff = _numOps.Zero;
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                var diff = _numOps.Subtract(experience.Action[i], predictedAction[i]);
-                actionDiff = _numOps.Add(actionDiff, _numOps.Multiply(diff, diff));
-            }
-
-            var policyLoss = _numOps.Multiply(weight, actionDiff);
-            totalLoss = _numOps.Add(totalLoss, policyLoss);
-
-            // Backpropagate
-            var gradientVec = new Vector<T>(_options.ActionSize * 2);
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                var diff = _numOps.Subtract(predictedAction[i], experience.Action[i]);
-                gradientVec[i] = _numOps.Multiply(weight, diff);
-            }
-
-            var gradientTensor = Tensor<T>.FromVector(gradientVec);
-            _policyNetwork.Backpropagate(gradientTensor);
-
-            var gradients = _policyNetwork.GetParameterGradients();
-            _policyNetwork.ApplyGradients(gradients, _options.PolicyLearningRate);
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
     private void SoftUpdateTargetNetwork()

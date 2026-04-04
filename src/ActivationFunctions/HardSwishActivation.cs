@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -148,12 +148,6 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>False because TensorOperations.Minimum is not yet implemented.</value>
-    public override bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>
@@ -186,29 +180,6 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
     {
         backend.Hardswish(input, output, size);
-    }
-
-    /// <summary>
-    /// Calculates the HardSwish backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for HardSwish (can be null). HardSwish backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// HardSwish backward on GPU:
-    /// - For input &lt;= -3: gradInput[i] = 0
-    /// - For input &gt;= 3: gradInput[i] = gradOutput[i]
-    /// - Otherwise: gradInput[i] = gradOutput[i] * (2 * input[i] + 3) / 6
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "HardSwish backward requires the input from forward pass.");
-
-        backend.HardswishBackward(gradOutput, input, gradInput, size);
     }
 
     #endregion

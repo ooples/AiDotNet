@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -124,22 +124,6 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
 
         return jacobian;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Softmin provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Softmin supports JIT compilation with full gradient computation.
-    /// The backward pass computes gradients similar to softmax but with negation for the input transformation.
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

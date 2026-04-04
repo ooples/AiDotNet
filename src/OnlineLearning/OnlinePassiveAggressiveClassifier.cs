@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -91,11 +91,6 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-
-    /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Initializes a new instance of the OnlinePassiveAggressiveClassifier class.
@@ -390,78 +385,6 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
     #endregion
 
     #region JIT Compilation Support
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the raw score (decision function).</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Passive-Aggressive classifier's decision function is w·x + b.
-    /// The raw score can be JIT compiled for faster batch inference. For classification:
-    /// - score > 0 → predict class +1
-    /// - score ≤ 0 → predict class -1
-    ///
-    /// The computation graph returns the raw score, and the caller can apply sign()
-    /// for classification or use the raw score for ranking.
-    ///
-    /// For a differentiable approximation of sign, the graph uses tanh with a steepness
-    /// parameter that approximates the step function.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!IsInitialized || _weights is null)
-        {
-            throw new InvalidOperationException(
-                "Model must be fitted before exporting computation graph.");
-        }
-
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        // Create input placeholder for features: [batchSize, numFeatures]
-        var inputTensor = new Tensor<T>(new int[] { 1, NumFeatures });
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "features");
-        inputNodes.Add(inputNode);
-
-        // Create constant node for weights: [numFeatures, 1]
-        var weightsTensor = new Tensor<T>(new int[] { NumFeatures, 1 });
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            weightsTensor[i, 0] = _weights[i];
-        }
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
-        inputNodes.Add(weightsNode);
-
-        // Create constant node for bias: [1, 1]
-        var biasTensor = new Tensor<T>(new int[] { 1, 1 });
-        biasTensor[0, 0] = _bias;
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
-        inputNodes.Add(biasNode);
-
-        // Matrix multiplication: linearPred = X @ W, shape [batchSize, 1]
-        var linearPredNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-
-        // Add bias: score = linearPred + bias
-        var scoreNode = TensorOperations<T>.Add(linearPredNode, biasNode);
-
-        // Apply tanh for differentiable approximation of sign
-        // tanh(steepness * x) approaches sign(x) as steepness → ∞
-        // Use steepness = 10 for a good approximation that's still differentiable
-        var steepnessTensor = new Tensor<T>(new int[] { 1, 1 });
-        steepnessTensor[0, 0] = NumOps.FromDouble(10.0);
-        var steepnessNode = TensorOperations<T>.Constant(steepnessTensor, "steepness");
-
-        var scaledScoreNode = TensorOperations<T>.ElementwiseMultiply(scoreNode, steepnessNode);
-        var outputNode = TensorOperations<T>.Tanh(scaledScoreNode);
-        outputNode.Name = "decision_function";
-
-        return outputNode;
-    }
 
     #endregion
 

@@ -52,7 +52,7 @@ public interface IInputGradientComputable<T>
     /// to perturb the input in a direction that maximizes misclassification.
     /// </para>
     /// </remarks>
-    Vector<T> ComputeInputGradient(Vector<T> input, Vector<T> outputGradient);
+    // ComputeInputGradient removed — use tape-based autodiff.
 
     /// <summary>
     /// Computes the gradient of the model output with respect to the input using tensor format.
@@ -60,5 +60,4 @@ public interface IInputGradientComputable<T>
     /// <param name="input">The input tensor for which to compute gradients.</param>
     /// <param name="outputGradient">The gradient tensor with respect to the output.</param>
     /// <returns>The gradient tensor with respect to the input.</returns>
-    Tensor<T> ComputeInputGradient(Tensor<T> input, Tensor<T> outputGradient);
 }

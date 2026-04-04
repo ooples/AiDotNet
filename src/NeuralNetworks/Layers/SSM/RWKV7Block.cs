@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -670,151 +670,6 @@ public class RWKV7Block<T> : LayerBase<T>
     {
         var shaped = input.Reshape([batchSize, seqLen, _modelDimension]);
         return Engine.LayerNorm(shaped, gamma, beta, 1e-6, out _, out _);
-    }
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        grad3D = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
-
-        InitializeGradients();
-
-        // === Channel mixing backward ===
-        // Forward: output = afterTimeMix + channelMixOut
-        //          channelMixOut = ChannelMixing(LayerNorm2(afterTimeMix))
-        // Both paths (residual + channelMix) get the full upstream gradient
-        var dChannelMixOut = grad3D;
-        var dAfterTimeMix = grad3D; // residual path contribution
-
-        if (_lastNormed2 != null && _lastChannelMixOutput != null && _lastAfterTimeMix != null)
-        {
-            // Accumulate channel mixing weight gradients
-            AccumulateChannelMixGradients(dChannelMixOut, _lastNormed2, batchSize, seqLen);
-
-            // Compute gradient flowing back THROUGH channel mixing to normed2 input
-            // output_t = rGate * vProj, where rGate = sigmoid(W_r @ rInput), vProj = W_v @ SiLU(W_k @ kInput)
-            // rInput = channelMixR * x + (1-channelMixR) * xPrev
-            // kInput = channelMixK * x + (1-channelMixK) * xPrev
-            var dNormed2 = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-            if (_cachedChannelRGate is null || _cachedChannelSiLU is null || _cachedChannelVProj is null || _cachedChannelKProj is null)
-            {
-                dNormed2 = dChannelMixOut; // fallback
-            }
-            else
-            for (int t = 0; t < seqLen; t++)
-            {
-                var dOut_t = dChannelMixOut.GetSliceAlongDimension(t, 1).Clone();
-                var rGate_t = _cachedChannelRGate.GetSliceAlongDimension(t, 1).Clone();
-                var siLU_t = _cachedChannelSiLU.GetSliceAlongDimension(t, 1).Clone();
-                var vProj_t = _cachedChannelVProj.GetSliceAlongDimension(t, 1).Clone();
-
-                // dRGate = dOut * vProj, dVProj = dOut * rGate
-                var dVProj = Engine.TensorMultiply(dOut_t, rGate_t);
-                var dRGate = Engine.TensorMultiply(dOut_t, vProj_t);
-
-                // dKSiLU = dVProj @ W_v^T
-                var dKSiLU = Engine.TensorMatMul(dVProj, _channelValueWeights.Transpose(new[] { 1, 0 }));
-
-                // dRProj = dRGate * sigmoid'(rProj) = dRGate * rGate * (1-rGate)
-                var ones = Tensor<T>.CreateDefault(rGate_t.Shape.ToArray(), NumOps.One);
-                var sigDeriv = Engine.TensorMultiply(rGate_t, Engine.TensorSubtract(ones, rGate_t));
-                var dRProj = Engine.TensorMultiply(dRGate, sigDeriv);
-
-                // dRInput = dRProj @ W_r^T → dX_from_r = dRInput * channelMixR
-                var dRInput = Engine.TensorMatMul(dRProj, _channelReceptanceWeights.Transpose(new[] { 1, 0 }));
-
-                // dKProj = dKSiLU * SiLU'(kProj) where SiLU'(x) = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
-                var kProj_t = _cachedChannelKProj.GetSliceAlongDimension(t, 1).Clone();
-                var dKProj = new Tensor<T>(new[] { batchSize, _ffnDimension });
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    for (int fd = 0; fd < _ffnDimension; fd++)
-                    {
-                        double x = NumOps.ToDouble(kProj_t[new[] { bi, fd }]);
-                        double sig = 1.0 / (1.0 + Math.Exp(-x));
-                        double siluDeriv = sig + x * sig * (1.0 - sig);
-                        dKProj[new[] { bi, fd }] = NumOps.Multiply(
-                            dKSiLU[new[] { bi, fd }], NumOps.FromDouble(siluDeriv));
-                    }
-                }
-                // dKInput = dKProj @ W_k^T
-                var dKInput = Engine.TensorMatMul(dKProj, _channelKeyWeights.Transpose(new[] { 1, 0 }));
-
-                // Token shift: rInput = mixR * x[t] + (1-mixR) * x[t-1]
-                // d(x[t]) += dRInput * mixR + dKInput * mixK  (current token contribution)
-                // d(x[t-1]) += dRInput * (1-mixR) + dKInput * (1-mixK)  (previous token contribution)
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    for (int d = 0; d < _modelDimension; d++)
-                    {
-                        T fromR_curr = NumOps.Multiply(dRInput[new[] { bi, d }], _channelMixR[d]);
-                        T fromK_curr = NumOps.Multiply(dKInput[new[] { bi, d }], _channelMixK[d]);
-                        dNormed2[new[] { bi, t, d }] = NumOps.Add(
-                            dNormed2[new[] { bi, t, d }],
-                            NumOps.Add(fromR_curr, fromK_curr));
-
-                        // Propagate to previous timestep via token shift
-                        if (t > 0)
-                        {
-                            T fromR_prev = NumOps.Multiply(dRInput[new[] { bi, d }],
-                                NumOps.Subtract(NumOps.One, _channelMixR[d]));
-                            T fromK_prev = NumOps.Multiply(dKInput[new[] { bi, d }],
-                                NumOps.Subtract(NumOps.One, _channelMixK[d]));
-                            dNormed2[new[] { bi, t - 1, d }] = NumOps.Add(
-                                dNormed2[new[] { bi, t - 1, d }],
-                                NumOps.Add(fromR_prev, fromK_prev));
-                        }
-                    }
-                }
-            }
-
-            // LayerNorm2 backward: dAfterTimeMix += LN2.backward(dNormed2)
-            // This is the MISSING gradient path that was causing 5-40% errors
-            var dAfterTimeMixFromLN2 = LayerNormBackward(dNormed2, _lastAfterTimeMix,
-                _normGamma2, batchSize, seqLen);
-
-            // Accumulate LN2 gamma/beta gradients
-            AccumulateLayerNormGradients(dChannelMixOut, _lastAfterTimeMix, _normGamma2,
-                ref _normGamma2Grad, ref _normBeta2Grad, batchSize, seqLen);
-
-            // Total gradient for afterTimeMix = residual + LN2 path
-            dAfterTimeMix = Engine.TensorAdd(dAfterTimeMix, dAfterTimeMixFromLN2);
-        }
-
-        // === Time mixing backward ===
-        // Forward: afterTimeMix = input + timeMixOut
-        var dTimeMixOut = dAfterTimeMix;
-        var dInput = dAfterTimeMix; // residual path
-
-        if (_lastNormed1 != null && _cachedWkvOut != null && _cachedR != null)
-        {
-            AccumulateTimeMixGradients(dTimeMixOut, _lastNormed1, batchSize, seqLen);
-
-            // Compute all time mixing parameter gradients
-            AccumulateTimeMixParameterGradients(dTimeMixOut, _lastNormed1, batchSize, seqLen);
-        }
-
-        // Accumulate LN1 gamma/beta gradients
-        AccumulateLayerNormGradients(dTimeMixOut, _lastInput, _normGamma1,
-            ref _normGamma1Grad, ref _normBeta1Grad, batchSize, seqLen);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput.Reshape(_originalInputShape);
-
-        return dInput;
     }
 
     /// <summary>
@@ -1516,25 +1371,6 @@ public class RWKV7Block<T> : LayerBase<T>
         _channelKeyWeightsGrad, _channelValueWeightsGrad, _channelReceptanceWeightsGrad,
         _normGamma1Grad, _normBeta1Grad, _normGamma2Grad, _normBeta2Grad
     ];
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "rwkv7_input");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "rwkv7_W_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-
-        return TensorOperations<T>.MatrixMultiply(xNode, outWeightsNode);
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

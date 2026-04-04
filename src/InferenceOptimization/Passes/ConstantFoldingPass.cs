@@ -1,4 +1,4 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.Core;
 using AiDotNet.LinearAlgebra;
@@ -168,7 +168,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         try
         {
             // Use elementwise addition - tensors must have compatible shapes
-            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
+            if (!left._shape.SequenceEqual(right._shape))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -213,7 +213,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor subtraction using Engine operations
         try
         {
-            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
+            if (!left._shape.SequenceEqual(right._shape))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -260,7 +260,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor multiplication (elementwise) using Engine operations
         try
         {
-            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
+            if (!left._shape.SequenceEqual(right._shape))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -305,7 +305,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor division using Engine operations
         try
         {
-            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
+            if (!left._shape.SequenceEqual(right._shape))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -371,7 +371,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
                 if (baseValue == null || exponentValue == null) return null;
 
-                if (!baseValue.Shape.ToArray().SequenceEqual(exponentValue.Shape.ToArray()))
+                if (!baseValue._shape.SequenceEqual(exponentValue._shape))
                 {
                     return null;
                 }

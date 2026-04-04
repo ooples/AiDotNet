@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -51,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly DifferentiableNeuralComputerOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -425,11 +427,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int memoryWordSize,
         int controllerSize,
         int readHeads,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
         DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DifferentiableNeuralComputerOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -502,11 +506,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int memoryWordSize,
         int controllerSize,
         int readHeads,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
         DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DifferentiableNeuralComputerOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -900,7 +906,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <summary>
     /// Persistent Adam optimizer for stable convergence across Train() calls.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -908,47 +916,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Reset memory for clean training pass (prevents stale memory from previous calls)
+        // Reset memory for clean training pass
         ResetMemoryState();
 
-        // Process the input through the network
-        Tensor<T> output = ProcessInput(input, true);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
-        // Calculate error/loss
-        var flattenedPredictions = output.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // Calculate and store the loss value
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Calculate gradients from the loss
-        Vector<T> outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-
-        // Backpropagate the error through the layers
-        Tensor<T> inputGradientsTensor = Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Update layer parameters via persistent Adam
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
-        var parameterGradients = GetParameterGradients();
-        var currentParameters = GetParameters();
-        var updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
-        UpdateParameters(updatedParameters);
-
-        // Update _outputWeights directly (outside layer system, gradient computed manually).
-        // Output y[i] = Σ_j W[j,i] * combined[j], so ∂L/∂W[j,i] = combined[j] * ∂L/∂y[i]
-        if (_lastCombinedVector != null)
-        {
-            T lr = NumOps.FromDouble(0.0001);
-            for (int j = 0; j < _outputWeights.Rows; j++)
-            {
-                for (int i = 0; i < _outputWeights.Columns; i++)
-                {
-                    T grad = NumOps.Multiply(_lastCombinedVector[j], outputGradients[i]);
-                    _outputWeights[j, i] = NumOps.Subtract(_outputWeights[j, i], NumOps.Multiply(lr, grad));
-                }
-            }
-        }
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -1251,11 +1224,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Combine content and allocation weightings
         _writeWeighting = CombineWeightings(contentWeighting, allocationWeighting, signals.AllocationGate);
 
-        // Apply the write gate
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _writeWeighting[i] = NumOps.Multiply(_writeWeighting[i], signals.WriteGate);
-        }
+        // Apply the write gate (vectorized)
+        _writeWeighting = (Vector<T>)Engine.Multiply(_writeWeighting, signals.WriteGate);
 
         // Write to memory
         WriteToMemory(signals.WriteVector, signals.EraseVector);
@@ -1444,11 +1414,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             similarityScores[i] = NumOps.FromDouble(VectorHelper.CosineSimilarity(key, memoryRow));
         }
 
-        // Apply strength (temperature) to similarities
-        for (int i = 0; i < _memorySize; i++)
-        {
-            similarityScores[i] = NumOps.Multiply(similarityScores[i], strength);
-        }
+        // Apply strength (temperature) to similarities (vectorized)
+        similarityScores = (Vector<T>)Engine.Multiply(similarityScores, strength);
 
         // Apply softmax to get weights
         return Softmax(similarityScores);
@@ -1640,12 +1607,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         Vector<T> combinedWeighting = new Vector<T>(_memorySize);
 
-        for (int i = 0; i < _memorySize; i++)
-        {
-            T contentComponent = NumOps.Multiply(contentWeighting[i], NumOps.Subtract(NumOps.One, allocationGate));
-            T allocationComponent = NumOps.Multiply(allocationWeighting[i], allocationGate);
-            combinedWeighting[i] = NumOps.Add(contentComponent, allocationComponent);
-        }
+        // Vectorized: combined = content*(1-allocGate) + allocation*allocGate
+        var contentComp = (Vector<T>)Engine.Multiply(contentWeighting, NumOps.Subtract(NumOps.One, allocationGate));
+        var allocComp = (Vector<T>)Engine.Multiply(allocationWeighting, allocationGate);
+        combinedWeighting = (Vector<T>)Engine.Add(contentComp, allocComp);
 
         return combinedWeighting;
     }
@@ -1725,16 +1690,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private void UpdateUsage()
     {
-        for (int i = 0; i < _memorySize; i++)
-        {
-            // Reduce free usage based on write weighting
-            _usageFree[i] = NumOps.Multiply(_usageFree[i], NumOps.Subtract(NumOps.One, _writeWeighting[i]));
+        // Vectorized usage update: u = u * (1 - w) + (1 - u) * (1 - decay)
+        var ones = Vector<T>.CreateDefault(_memorySize, NumOps.One);
+        var oneMinusWrite = (Vector<T>)Engine.Subtract(ones, _writeWeighting);
+        _usageFree = (Vector<T>)Engine.Multiply(_usageFree, oneMinusWrite);
 
-            // Optionally include a small decay factor to gradually free up memory over time
-            T decayFactor = NumOps.FromDouble(0.99); // Slight decay
-            _usageFree[i] = NumOps.Add(_usageFree[i], NumOps.Multiply(NumOps.Subtract(NumOps.One, _usageFree[i]),
-                NumOps.Subtract(NumOps.One, decayFactor)));
-        }
+        T decayFactor = NumOps.FromDouble(0.99);
+        var oneMinusDecay = NumOps.Subtract(NumOps.One, decayFactor);
+        var oneMinusUsage = (Vector<T>)Engine.Subtract(ones, _usageFree);
+        _usageFree = (Vector<T>)Engine.Add(_usageFree, Engine.Multiply(oneMinusUsage, oneMinusDecay));
     }
 
     /// <summary>
@@ -1760,19 +1724,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private void UpdatePrecedence()
     {
-        // Decay old precedence values
-        T decay = NumOps.FromDouble(0.9); // Decay factor
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _precedenceWeighting[i] = NumOps.Multiply(_precedenceWeighting[i], decay);
-        }
-
-        // Increase precedence for locations currently being written to
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _precedenceWeighting[i] = NumOps.Add(_precedenceWeighting[i],
-                NumOps.Multiply(_writeWeighting[i], NumOps.Subtract(NumOps.One, decay)));
-        }
+        // Vectorized precedence update: p = decay*p + (1-decay)*w
+        T decay = NumOps.FromDouble(0.9);
+        _precedenceWeighting = (Vector<T>)Engine.Multiply(_precedenceWeighting, decay);
+        var writeScaled = (Vector<T>)Engine.Multiply(_writeWeighting, NumOps.Subtract(NumOps.One, decay));
+        _precedenceWeighting = (Vector<T>)Engine.Add(_precedenceWeighting, writeScaled);
     }
 
     /// <summary>
@@ -2353,8 +2309,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
-                _lossFunction,
-                _activationFunction
+                lossFunction: _lossFunction,
+                activationFunction: _activationFunction
             );
         }
         else
@@ -2365,8 +2321,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
-                _lossFunction,
-                _vectorActivationFunction
+                lossFunction: _lossFunction,
+                vectorActivationFunction: _vectorActivationFunction
             );
         }
     }

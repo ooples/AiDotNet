@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -158,21 +158,6 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
         return jacobian;
     }
 
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.ELU.</value>
-    /// <remarks>
-    /// <para>
-    /// ELU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation uses IEngine for GPU acceleration
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
@@ -217,30 +202,6 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     {
         float alpha = (float)NumOps.ToDouble(_alpha);
         backend.Elu(input, output, alpha, size);
-    }
-
-    /// <summary>
-    /// Calculates the ELU backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">The output buffer from the forward pass.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// ELU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] > 0 ? 1 : output[i] + alpha)
-    /// Note: ELU backward needs both input and output from forward pass.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "ELU backward requires the input from forward pass.");
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "ELU backward requires the output from forward pass.");
-
-        float alpha = (float)NumOps.ToDouble(_alpha);
-        backend.EluBackward(gradOutput, input, output, gradInput, alpha, size);
     }
 
     #endregion

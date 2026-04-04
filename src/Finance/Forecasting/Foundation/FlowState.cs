@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -248,7 +248,6 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally
@@ -381,7 +380,7 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;
@@ -428,26 +427,6 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
 
         if (_outputProjection is not null)
             current = _outputProjection.Forward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-        return current;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        bool addedBatchDim = false;
-        if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
-
-        if (_outputProjection is not null)
-            current = _outputProjection.Backward(current);
-
-        for (int i = _ssmLayers.Count - 1; i >= 0; i--)
-            current = _ssmLayers[i].Backward(current);
-
-        if (_inputProjection is not null)
-            current = _inputProjection.Backward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

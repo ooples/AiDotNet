@@ -98,15 +98,6 @@ public class QuantizedAttentionTests
         Assert.Null(quantized.GetBiases());
     }
 
-    [Fact]
-    public void QuantizedAttention_Backward_ThrowsNotSupported()
-    {
-        var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
-        var quantized = new QuantizedAttentionLayer(mha);
-
-        Assert.Throws<NotSupportedException>(() =>
-            quantized.Backward(CreateRandomTensor(new[] { 4, 32 })));
-    }
 
     [Fact]
     public void QuantizedAttention_UpdateParameters_ThrowsNotSupported()

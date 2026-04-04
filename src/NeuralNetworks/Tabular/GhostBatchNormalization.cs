@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -139,14 +139,14 @@ public class GhostBatchNormalization<T>
             throw new ArgumentException($"Expected {_numFeatures} features, got {features}", nameof(input));
         }
 
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         // Determine number of virtual batches
         _numVirtualBatches = Math.Max(1, (batchSize + _virtualBatchSize - 1) / _virtualBatchSize);
         int actualVirtualSize = (batchSize + _numVirtualBatches - 1) / _numVirtualBatches;
 
         _inputCache = input;
-        _normalizedCache = new Tensor<T>(input.Shape.ToArray());
+        _normalizedCache = new Tensor<T>(input._shape);
         _batchMeans = new Vector<T>[_numVirtualBatches];
         _batchVars = new Vector<T>[_numVirtualBatches];
 
@@ -231,7 +231,7 @@ public class GhostBatchNormalization<T>
     {
         int batchSize = input.Shape[0];
         int features = input.Shape[1];
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -248,92 +248,6 @@ public class GhostBatchNormalization<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients.
-    /// </summary>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        if (_inputCache == null || _normalizedCache == null || _batchMeans == null || _batchVars == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = gradOutput.Shape[0];
-        int features = gradOutput.Shape[1];
-        var gradInput = new Tensor<T>(gradOutput.Shape.ToArray());
-
-        // Initialize gradients
-        _gammaGrad = new Vector<T>(_numFeatures);
-        _betaGrad = new Vector<T>(_numFeatures);
-
-        int actualVirtualSize = (batchSize + _numVirtualBatches - 1) / _numVirtualBatches;
-
-        // Process each virtual batch
-        for (int vb = 0; vb < _numVirtualBatches; vb++)
-        {
-            int startIdx = vb * actualVirtualSize;
-            int endIdx = Math.Min(startIdx + actualVirtualSize, batchSize);
-            int virtualSize = endIdx - startIdx;
-
-            if (virtualSize <= 0) continue;
-
-            var mean = _batchMeans[vb];
-            var variance = _batchVars[vb];
-
-            for (int f = 0; f < features; f++)
-            {
-                // Compute gradients for gamma and beta
-                var dGamma = _numOps.Zero;
-                var dBeta = _numOps.Zero;
-
-                for (int b = startIdx; b < endIdx; b++)
-                {
-                    dGamma = _numOps.Add(dGamma, _numOps.Multiply(gradOutput[b * features + f], _normalizedCache[b * features + f]));
-                    dBeta = _numOps.Add(dBeta, gradOutput[b * features + f]);
-                }
-
-                _gammaGrad[f] = _numOps.Add(_gammaGrad[f], dGamma);
-                _betaGrad[f] = _numOps.Add(_betaGrad[f], dBeta);
-
-                // Compute gradient with respect to input
-                var std = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(variance[f]) + _epsilon));
-                var invStd = _numOps.Divide(_numOps.One, std);
-
-                // Sum terms for batch gradient
-                var sumDy = _numOps.Zero;
-                var sumDyXhat = _numOps.Zero;
-
-                for (int b = startIdx; b < endIdx; b++)
-                {
-                    var dy = _numOps.Multiply(gradOutput[b * features + f], _gamma[f]);
-                    sumDy = _numOps.Add(sumDy, dy);
-                    sumDyXhat = _numOps.Add(sumDyXhat, _numOps.Multiply(dy, _normalizedCache[b * features + f]));
-                }
-
-                var n = _numOps.FromDouble(virtualSize);
-
-                for (int b = startIdx; b < endIdx; b++)
-                {
-                    var dy = _numOps.Multiply(gradOutput[b * features + f], _gamma[f]);
-                    var xhat = _normalizedCache[b * features + f];
-
-                    // dx = (1/std) * (dy - mean(dy) - xhat * mean(dy * xhat))
-                    var dx = _numOps.Multiply(invStd,
-                        _numOps.Subtract(dy,
-                            _numOps.Add(
-                                _numOps.Divide(sumDy, n),
-                                _numOps.Multiply(xhat, _numOps.Divide(sumDyXhat, n)))));
-
-                    gradInput[b * features + f] = dx;
-                }
-            }
-        }
-
-        return gradInput;
     }
 
     /// <summary>

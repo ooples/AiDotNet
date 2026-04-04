@@ -552,29 +552,15 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
                 "without modelPath parameter to train natively.");
         }
 
-        // Set training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Compute loss and gradients
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-
-        // Backward pass
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        try
         {
-            gradientTensor = Layers[i].Backward(gradientTensor);
+            TrainWithTape(input, expected);
         }
-
-        // Update parameters using optimizer
-        _optimizer?.UpdateParameters(Layers);
-
-        // Set inference mode
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

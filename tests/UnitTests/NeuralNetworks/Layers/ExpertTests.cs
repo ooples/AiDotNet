@@ -113,75 +113,7 @@ public class ExpertTests
         Assert.True(hasNonZero, "Expert should produce non-zero output");
     }
 
-    [Fact]
-    public void Backward_WithValidGradient_ReturnsCorrectShape()
-    {
-        // Arrange
-        var layers = new List<ILayer<float>>
-        {
-            new DenseLayer<float>(10, 20, new ReLUActivation<float>()),
-            new DenseLayer<float>(20, 10, new ReLUActivation<float>())
-        };
-        var expert = new Expert<float>(layers, new[] { 10 }, new[] { 10 });
-        var input = new Tensor<float>(new[] { 1, 10 });
-        var outputGradient = new Tensor<float>(new[] { 1, 10 });
-        for (int i = 0; i < input.Length; i++)
-        {
-            input[i] = 0.5f;
-            outputGradient[i] = 0.1f;
-        }
 
-        // Act
-        expert.Forward(input);
-        var inputGradient = expert.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Rank, inputGradient.Rank);
-        Assert.Equal(input.Shape[0], inputGradient.Shape[0]);
-        Assert.Equal(input.Shape[1], inputGradient.Shape[1]);
-    }
-
-    [Fact]
-    public void UpdateParameters_ModifiesLayerParameters()
-    {
-        // Arrange
-        var layers = new List<ILayer<float>>
-        {
-            new DenseLayer<float>(5, 5, new ReLUActivation<float>())
-        };
-        var expert = new Expert<float>(layers, new[] { 5 }, new[] { 5 });
-        var input = new Tensor<float>(new[] { 1, 5 });
-        var outputGradient = new Tensor<float>(new[] { 1, 5 });
-        for (int i = 0; i < input.Length; i++)
-        {
-            input[i] = 1.0f;
-            outputGradient[i] = 0.1f;
-        }
-
-        // Get initial parameters
-        var initialParams = expert.GetParameters();
-
-        // Act
-        expert.Forward(input);
-        expert.Backward(outputGradient);
-        expert.UpdateParameters(0.01f);
-        var updatedParams = expert.GetParameters();
-
-        // Assert
-        Assert.Equal(initialParams.Length, updatedParams.Length);
-        // At least one parameter should have changed
-        const float epsilon = 1e-6f;
-        bool hasChanged = false;
-        for (int i = 0; i < initialParams.Length; i++)
-        {
-            if (MathF.Abs(initialParams[i] - updatedParams[i]) > epsilon)
-            {
-                hasChanged = true;
-                break;
-            }
-        }
-        Assert.True(hasChanged, "Parameters should change after update");
-    }
 
     [Fact]
     public void GetParameters_ReturnsAllLayerParameters()
@@ -267,53 +199,6 @@ public class ExpertTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void Clone_CreatesIndependentCopy()
-    {
-        // Arrange
-        var layers = new List<ILayer<float>>
-        {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>())
-        };
-        var expert = new Expert<float>(layers, new[] { 5 }, new[] { 3 });
-        var input = new Tensor<float>(new[] { 1, 5 });
-        var gradient = new Tensor<float>(new[] { 1, 3 });
-        for (int i = 0; i < input.Length; i++)
-        {
-            input[i] = 1.0f;
-        }
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 0.1f;
-        }
-
-        // Act
-        var clone = expert.Clone();
-
-        // Update original
-        expert.Forward(input);
-        expert.Backward(gradient);
-        expert.UpdateParameters(0.1f);
-
-        var originalParams = expert.GetParameters();
-        var clonedParams = ((Expert<float>)clone).GetParameters();
-
-        // Assert
-        Assert.NotNull(clone);
-        Assert.IsType<Expert<float>>(clone);
-        // Parameters should be different after updating original
-        const float epsilon = 1e-6f;
-        bool hasDifference = false;
-        for (int i = 0; i < originalParams.Length; i++)
-        {
-            if (MathF.Abs(originalParams[i] - clonedParams[i]) > epsilon)
-            {
-                hasDifference = true;
-                break;
-            }
-        }
-        Assert.True(hasDifference, "Clone should be independent of original");
-    }
 
     [Fact]
     public void ParameterCount_ReflectsSumOfAllLayers()

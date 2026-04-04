@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -107,7 +108,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// <summary>
     /// The GPU mask tensor from the last GPU forward pass (for backward pass caching).
     /// </summary>
-    private IGpuTensor<T>? _lastMaskGpu;
+    private Tensor<T>? _lastMaskGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -206,7 +207,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// All computations stay on the GPU. Uses NotEqualScalar to create the mask
     /// and Multiply for element-wise application.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -220,7 +221,7 @@ public class MaskingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int size = input.ElementCount;
+        int size = input.Length;
 
         // Create mask buffer: 1 where input != maskValue, 0 where input == maskValue
         var maskBuffer = backend.AllocateBuffer(size);
@@ -234,7 +235,7 @@ public class MaskingLayer<T> : LayerBase<T>
         // Store mask GPU tensor for backward pass (if training)
         if (IsTrainingMode)
         {
-            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
+            _lastMaskGpu = GpuTensorHelper.UploadToGpu<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
         }
         else
         {
@@ -242,149 +243,7 @@ public class MaskingLayer<T> : LayerBase<T>
             maskBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// The backward pass applies the same mask to the gradient that was used in the forward pass,
-    /// ensuring that gradients for masked values remain zero.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_lastMaskGpu == null)
-            throw new InvalidOperationException("Forward pass must be called in training mode before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Apply mask to gradient: gradInput = outputGradient * mask
-        int size = outputGradient.ElementCount;
-        var gradInputBuffer = backend.AllocateBuffer(size);
-        backend.Multiply(outputGradient.Buffer, _lastMaskGpu.Buffer, gradInputBuffer, size);
-
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the masking layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the masking layer, which is used during training to propagate
-    /// error gradients back through the network. It applies the same mask to the output gradient that was used
-    /// in the forward pass, ensuring that gradients for masked values remain zero.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method handles the flow of error information during training.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives information about how its output affected the overall error
-    /// - It applies the same mask to this gradient information
-    /// - This ensures that no gradient flows back through the masked values
-    /// 
-    /// This process is important because:
-    /// - We don't want the network to learn from the masked (padding) values
-    /// - The mask stops error information from flowing back through those values
-    /// - This helps keep the training focused only on the real data
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastMask == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        return ApplyMask(outputGradient, _lastMask);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Masking is implemented as element-wise multiplication between input and binary mask.
-    /// The gradient flows through the mask via ElementwiseMultiply operation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMask == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var maskNode = Autodiff.TensorOperations<T>.Variable(_lastMask, "mask", requiresGradient: false);
-
-        // Forward pass: output = input * mask (element-wise multiplication)
-        var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, maskNode);
-
-        // Set gradient at output
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -521,46 +380,5 @@ public class MaskingLayer<T> : LayerBase<T>
             disposable.Dispose();
         }
         _lastMaskGpu = null;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because masking is a simple element-wise operation that can be JIT compiled.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the masking layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the masked result.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the masking operation.
-    /// The mask is applied element-wise: masked_output = input * mask.
-    /// For JIT compilation, we assume a pre-computed mask or identity (no masking).
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input data
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        inputNodes.Add(inputNode);
-
-        // For JIT compilation, masking is typically not applied (inference mode)
-        // If masking is needed, it would require a Multiply operation with a mask tensor
-        // For now, return input unchanged (identity function)
-        // TODO: Implement mask application if needed for specific use cases
-        return inputNode;
     }
 }

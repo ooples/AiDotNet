@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -592,7 +592,6 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1020,7 +1019,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
             // Before final Dense layer, flatten if needed (GRU outputs 3D)
             if (i == Layers.Count - 1 && layer is DenseLayer<T> && current.Rank > 2)
             {
-                _preOutputShape = current.Shape.ToArray();
+                _preOutputShape = current._shape;
                 current = current.Reshape(new[] { current.Length });
             }
 
@@ -1032,50 +1031,6 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
 
     // Store shape before output layer for backward pass
     private int[]? _preOutputShape;
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Propagates gradients backward through all layers,
-    /// computing how each layer's parameters should change to reduce the loss.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        // Flatten gradient to match forward pass layer shapes
-        var current = FlattenInput(gradOutput);
-
-        // Backward through layers in reverse
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            var layer = Layers[i];
-
-            // Before Dense (output) backward, if GRU produced 3D, reshape to match
-            if (i == Layers.Count - 1 && layer is DenseLayer<T> && _preOutputShape is not null)
-            {
-                // Dense expects flat input, we already have it flattened
-            }
-
-            current = layer.Backward(current);
-
-            // After Dense (output) backward, reshape to 3D for GRU backward
-            if (i == Layers.Count - 1 && _preOutputShape is not null && current.Length == _preOutputShape.Aggregate(1, (a, b) => a * b))
-            {
-                current = current.Reshape(_preOutputShape);
-            }
-
-            // After GRU backward, flatten back to 1D for Dropout and earlier layers
-            if (layer is GRULayer<T> && current.Rank > 2)
-            {
-                current = current.Reshape(new[] { current.Length });
-            }
-        }
-
-        return current;
-    }
 
     /// <summary>
     /// Performs native mode forecasting.
@@ -1298,7 +1253,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -1469,7 +1424,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
                 newData[dstIdx] = prediction.Data.Span[i];
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
+        return new Tensor<T>(input._shape, new Vector<T>(newData));
     }
 
     /// <summary>

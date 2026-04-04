@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -215,8 +215,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <inheritdoc/>
         protected override void InitializeLayers()
         {
-            // MultiScalePINN uses sub-networks instead of traditional layers
-            // The Layers collection remains empty as computation is done via scale networks
+            ClearLayers();
+            // Register all scale network layers for proper parameter management
+            foreach (var scaleNet in _scaleNetworks)
+            {
+                Layers.AddRange(scaleNet.Layers);
+            }
         }
 
         /// <summary>
@@ -675,29 +679,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-
-            try
-            {
-                var prediction = ForwardWithMemory(input);
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                // Backpropagate through all active scale networks
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                // Distribute gradients to each scale network
-                for (int scale = 0; scale < _currentActiveScales; scale++)
-                {
-                    _scaleNetworks[scale].Backpropagate(outputGradient);
-                }
-
-                UpdateAllScaleNetworks();
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+            try { TrainWithTape(input, expectedOutput); }
+            finally { SetTrainingMode(false); }
         }
 
         /// <inheritdoc/>
@@ -809,8 +792,5 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
     }
 }

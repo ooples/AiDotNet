@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Interfaces;
 
@@ -126,6 +127,34 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     /// momentum or adaptive learning rates.
     /// </remarks>
     void UpdateParameters(List<ILayer<T>> layers);
+
+    /// <summary>
+    /// Gets the optimizer's current learning rate, which may have been adjusted by a scheduler.
+    /// </summary>
+    double GetCurrentLearningRate();
+
+    /// <summary>
+    /// Performs a parameter update step using the optimizer's update rule and the provided
+    /// training context. This is the unified entry point for tape-based training that supports
+    /// both first-order and second-order optimizers via the Liskov Substitution Principle.
+    /// </summary>
+    /// <param name="context">The training step context containing parameters, gradients, loss,
+    /// and optional re-evaluation/HVP capabilities for second-order optimizers.</param>
+    /// <remarks>
+    /// <para>
+    /// This replaces PyTorch's <c>optimizer.step(closure=...)</c> with a structured, type-safe
+    /// context object. First-order optimizers (Adam, SGD, etc.) read <c>context.Parameters</c>
+    /// and <c>context.Gradients</c>, update parameters in-place, and ignore the rest.
+    /// Second-order optimizers (L-BFGS, Trust Region) additionally call <c>context.Reevaluate()</c>
+    /// for line search and <c>context.HessianVectorProduct()</c> for curvature information.
+    /// </para>
+    /// <para><b>For Beginners:</b> After the gradient tape figures out how to improve each parameter,
+    /// this method actually applies those improvements. Different optimizers apply them differently —
+    /// Adam uses adaptive learning rates per parameter, SGD uses a fixed rate, L-BFGS explores
+    /// multiple step sizes to find the best one.
+    /// </para>
+    /// </remarks>
+    void Step(TapeStepContext<T> context);
 
     /// <summary>
     /// Gets the gradients computed during the last optimization step.

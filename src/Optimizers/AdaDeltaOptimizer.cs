@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -337,6 +339,42 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
 
         return updatedParams;
+    }
+
+    // Per-parameter AdaDelta state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqUpd = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        T rho = NumOps.FromDouble(_options.Rho);
+        T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqGrad; }
+            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = accSqUpd; }
+
+            // accSqGrad = rho * accSqGrad + (1 - rho) * grad^2
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(accSqGrad, rho), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusRho)), accSqGrad);
+
+            // updateUnscaled = (sqrt(accSqUpd + eps) / sqrt(accSqGrad + eps)) * grad
+            var rmsUpd = Engine.TensorSqrt(Engine.TensorAddScalar(accSqUpd, epsilon));
+            var rmsGrad = Engine.TensorSqrt(Engine.TensorAddScalar(accSqGrad, epsilon));
+            var updateUnscaled = Engine.TensorMultiply(Engine.TensorDivide(rmsUpd, rmsGrad), grad);
+
+            // accSqUpd = rho * accSqUpd + (1 - rho) * updateUnscaled^2
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(accSqUpd, rho), Engine.TensorMultiplyScalar(Engine.TensorMultiply(updateUnscaled, updateUnscaled), oneMinusRho)), accSqUpd);
+
+            // param -= lr * updateUnscaled
+            var scaledUpdate = Engine.TensorMultiplyScalar(updateUnscaled, CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, scaledUpdate);
+        }
     }
 
     #region GPU Optimizer Support

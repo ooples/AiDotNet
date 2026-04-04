@@ -4,7 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.Helpers;
@@ -422,6 +421,8 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
 
     public bool SupportsJitCompilation => false;
 
+    public T GetLastLoss() => _ops.Zero;
+
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }
 
@@ -565,13 +566,15 @@ public class MockLayer<T> : ILayer<T>
 
     public bool SupportsJitCompilation => false;
 
-    // IGpuExecutable<T>
+    // GPU execution
     public bool CanExecuteOnGpu => false;
 
-    public IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         throw new NotSupportedException("Mock layer does not support GPU execution");
     }
+
+    public IReadOnlyList<ILayer<T>> GetSubLayers() => Array.Empty<ILayer<T>>();
 
     // IDiagnosticsProvider
     public Dictionary<string, string> GetDiagnostics()

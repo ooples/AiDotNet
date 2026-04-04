@@ -1,4 +1,4 @@
-using AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Interfaces;
 
@@ -459,86 +459,9 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         loraOutput = ScaleTensor(loraOutput, scaling);
 
         // Sum the outputs: output = base + lora_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the LoRA-XS adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for the trainable R matrix and propagates gradients back.
-    ///
-    /// Gradient computation:
-    ///   dL/dR = (Σ_r * U_r^T * outputGrad) * (V_r^T * input)^T * scaling
-    ///   dL/dinput = base_grad + V_r * R^T * Σ_r * U_r^T * outputGrad * scaling
-    ///
-    /// Note: U, Σ, and V are frozen, so no gradients computed for them.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is backpropagation for LoRA-XS!
-    ///
-    /// What happens:
-    /// 1. Gradients flow back from the next layer
-    /// 2. We compute how to adjust R matrix to reduce error
-    ///    (U, Σ, V are frozen so we don't compute gradients for them)
-    /// 3. We pass gradients back to the previous layer
-    ///
-    /// The key: only R learns! This is why training is so efficient.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (!_initializedFromSVD)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-
-        // Scale the gradient by the LoRA scaling factor
-        Tensor<T> scaledGrad = ScaleTensor(outputGradient, scaling);
-
-        // Backward through base layer (always needed for input gradients)
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Backward through LoRA-XS path
-        // Current flow: U_r * Σ_r * R * V_r^T
-        // Gradient flow (backward): V_r * R^T * Σ_r * U_r^T
-
-        // Step 1: grad_x3 = U_r^T * scaledGrad [rank × batchSize]
-        Tensor<T> gradX3 = MatrixVectorMultiply((_frozenU ?? throw new InvalidOperationException("_frozenU has not been initialized.")).Transpose(), scaledGrad);
-
-        // Step 2: grad_x2 = Σ_r * grad_x3 (diagonal multiplication) [rank × batchSize]
-        Tensor<T> gradX2 = ApplySigmaScaling(_frozenSigma!, gradX3);
-
-        // Step 3: Compute gradient for R: dL/dR = grad_x2 * _cachedVtInput^T [rank × rank]
-        _trainableRGradient = ComputeMatrixGradient(gradX2, _cachedVtInput!);
-
-        // Step 4: grad_x1 = R^T * grad_x2 [rank × batchSize]
-        Tensor<T> gradX1 = MatrixVectorMultiply(_trainableR.Transpose(), gradX2);
-
-        // Step 5: input_grad_lora = V_r^T^T * grad_x1 = V_r * grad_x1 [inputSize × batchSize]
-        Tensor<T> loraInputGrad = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt has not been initialized.")).Transpose(), gradX1);
-
-        // Sum input gradients from base and LoRA paths
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromR();
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -642,53 +565,33 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute LoRA-XS weight delta: delta = U_r * Σ_r * R * V_r^T * scaling
-        // Where scaling = alpha / rank
         int outputSize = _frozenU.Rows;
         int inputSize = _frozenVt.Columns;
         int rank = Rank;
         double scaling = Alpha / rank;
 
-        // Step 1: Compute R * V_r^T (rank × inputSize)
-        var RVt = new Matrix<T>(rank, inputSize);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < rank; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_trainableR[i, k], _frozenVt[k, j]));
-                }
-                RVt[i, j] = sum;
-            }
-        }
+        // Step 1: R * V_r^T — vectorized Engine.TensorMatMul
+        var rTensor = Tensor<T>.FromMatrix(_trainableR);
+        var vtTensor = Tensor<T>.FromMatrix(_frozenVt);
+        var RVtTensor = Engine.TensorMatMul(rTensor, vtTensor);
 
-        // Step 2: Compute Σ_r * (R * V_r^T) - diagonal scaling (rank × inputSize)
-        var SigmaRVt = new Matrix<T>(rank, inputSize);
+        // Step 2: Σ_r * (R * V_r^T) — diagonal scaling per row
         for (int i = 0; i < rank; i++)
         {
             T sigma = _frozenSigma[i];
             for (int j = 0; j < inputSize; j++)
             {
-                SigmaRVt[i, j] = NumOps.Multiply(sigma, RVt[i, j]);
+                RVtTensor[i, j] = NumOps.Multiply(sigma, RVtTensor[i, j]);
             }
         }
 
-        // Step 3: Compute U_r * (Σ_r * R * V_r^T) (outputSize × inputSize)
-        var loraWeights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < rank; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_frozenU[i, k], SigmaRVt[k, j]));
-                }
-                // Apply scaling factor
-                loraWeights[i, j] = NumOps.Multiply(sum, NumOps.FromDouble(scaling));
-            }
-        }
+        // Step 3: U_r * (Σ_r * R * V_r^T) — vectorized Engine.TensorMatMul
+        var uTensor = Tensor<T>.FromMatrix(_frozenU);
+        var loraWeightsTensor = Engine.TensorMatMul(uTensor, RVtTensor);
+
+        // Apply scaling factor
+        loraWeightsTensor = Engine.TensorMultiplyScalar(loraWeightsTensor, NumOps.FromDouble(scaling));
+        var loraWeights = loraWeightsTensor.ToMatrix();
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
@@ -747,25 +650,13 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
                 $"Matrix columns ({matrix.Columns}) must match tensor vector size ({vectorSize})");
         }
 
-        int outputSize = matrix.Rows;
-        Vector<T> resultData = new Vector<T>(batchSize * outputSize);
+        // Batched matmul: [batchSize, vectorSize] @ matrix^T = [batchSize, outputSize]
+        // Reshape tensor to [batchSize, vectorSize] if needed
+        var input2D = tensor.Rank == 2 ? tensor : tensor.Reshape(batchSize, vectorSize);
+        var matTensor = Tensor<T>.FromMatrix(matrix).Transpose(new[] { 1, 0 });
+        var result = Engine.TensorMatMul(input2D, matTensor);
 
-        // Perform batched matrix-vector multiplication
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < outputSize; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < vectorSize; j++)
-                {
-                    int inputIdx = b * vectorSize + j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], tensor[inputIdx]));
-                }
-                resultData[b * outputSize + i] = sum;
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, resultData);
+        return result;
     }
 
     /// <summary>

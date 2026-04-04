@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -85,22 +85,6 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Add(firstTerm, NumOps.One);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.BentIdentity.</value>
-    /// <remarks>
-    /// <para>
-    /// BentIdentity supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is x / (2 * sqrt(x² + 1)) + 1, which is always > 1
-    /// - It prevents dead neurons with its always-positive gradient
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

@@ -235,55 +235,6 @@ public class TabMRegression<T> : TabMBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for MSE loss.
-    /// </summary>
-    /// <param name="targets">Target values [batch_size, output_dim].</param>
-    /// <returns>Gradient with respect to input features [batch_size, num_features].</returns>
-    public Tensor<T> Backward(Tensor<T> targets)
-    {
-        if (_predictionsCache == null || _memberPredictionsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _predictionsCache.Shape[0];
-        int expandedBatchSize = batchSize * Options.NumEnsembleMembers;
-
-        // Gradient of MSE w.r.t averaged predictions
-        var avgPredGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(2.0 / (batchSize * _outputDimension));
-
-        for (int i = 0; i < _predictionsCache.Length; i++)
-        {
-            avgPredGrad[i] = NumOps.Multiply(
-                NumOps.Subtract(_predictionsCache[i], targets[i]),
-                scale);
-        }
-
-        // Expand gradient back to all members
-        var memberPredGrad = new Tensor<T>([expandedBatchSize, _outputDimension]);
-        var memberScale = NumOps.FromDouble(1.0 / Options.NumEnsembleMembers);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int m = 0; m < Options.NumEnsembleMembers; m++)
-            {
-                for (int j = 0; j < _outputDimension; j++)
-                {
-                    memberPredGrad[(b * Options.NumEnsembleMembers + m) * _outputDimension + j] =
-                        NumOps.Multiply(avgPredGrad[b * _outputDimension + j], memberScale);
-                }
-            }
-        }
-
-        // Backward through regression head
-        var backboneGrad = _regressionHead.Backward(memberPredGrad);
-
-        // Backward through backbone
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step using MSE loss.
     /// </summary>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
@@ -295,7 +246,6 @@ public class TabMRegression<T> : TabMBase<T>
         var loss = ComputeMSELoss(predictions, targets);
 
         // Backward pass
-        _ = Backward(targets);
 
         // Update parameters
         UpdateParameters(learningRate);

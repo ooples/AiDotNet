@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -439,7 +439,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -741,58 +740,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the Crossformer network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through final norm
-        if (_finalNorm is not null)
-        {
-            grad = _finalNorm.Backward(grad);
-        }
-
-        // Backward through TSA layers (in reverse order)
-        for (int i = _crossTimeAttentionLayers.Count - 1; i >= 0; i--)
-        {
-            // Dropout backward
-            if (i < _dropoutLayers.Count)
-            {
-                grad = _dropoutLayers[i].Backward(grad);
-            }
-
-            // Cross-Dimension Attention backward
-            if (i < _crossDimAttentionLayers.Count)
-            {
-                grad = _crossDimAttentionLayers[i].Backward(grad);
-            }
-
-            // Cross-Time Attention backward
-            grad = _crossTimeAttentionLayers[i].Backward(grad);
-        }
-
-        // Backward through DSE
-        if (_dseLayer is not null)
-        {
-            _dseLayer.Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <param name="input">Input historical data.</param>
@@ -832,7 +779,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -911,7 +858,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape.ToArray());
+            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -949,7 +896,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape.ToArray());
+            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

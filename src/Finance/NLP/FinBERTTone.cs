@@ -217,23 +217,8 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad, output.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
-    }
-
-    /// <summary>
-    /// Executes Backward for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, Backward propagates gradients backward. This teaches the FinBERTTone architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> outputGradient)
-    {
-        var grad = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--) grad = Layers[i].Backward(grad);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -106,6 +106,9 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         // Layer normalization over embedding dimension
         _norm = new LayerNormalizationLayer<T>(embedDim);
+
+        RegisterSubLayer(_projection);
+        RegisterSubLayer(_norm);
     }
 
     /// <summary>
@@ -147,45 +150,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         var normalized = _norm.Forward(sequence);
 
         return normalized;
-    }
-
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient for the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int batch = outputGradient.Shape[0];
-        int numPatches = outputGradient.Shape[1];
-
-        // Backward through layer norm
-        var normGrad = _norm.Backward(outputGradient);
-
-        // Reshape back to conv output shape: [batch, embedDim, patchH, patchW]
-        int patchH = PatchGridHeight;
-        int patchW = PatchGridWidth;
-        var convGrad = new Tensor<T>([batch, _embedDim, patchH, patchW]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < patchH; h++)
-            {
-                for (int w = 0; w < patchW; w++)
-                {
-                    int seqIdx = h * patchW + w;
-                    for (int c = 0; c < _embedDim; c++)
-                    {
-                        convGrad[b, c, h, w] = normGrad[b, seqIdx, c];
-                    }
-                }
-            }
-        }
-
-        // Backward through projection conv
-        var inputGrad = _projection.Backward(convGrad);
-
-        return inputGrad;
     }
 
     /// <inheritdoc/>
@@ -252,33 +216,5 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         _norm.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _projection != null && _projection.SupportsJitCompilation &&
-        _norm != null && _norm.SupportsJitCompilation;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input node for image: [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>([1, _inputChannels, _inputHeight, _inputWidth]);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "swin_patch_embed_input");
-        inputNodes.Add(inputNode);
-
-        // Export projection convolution graph
-        var projectedNode = _projection.ExportComputationGraph(inputNodes);
-
-        // The reshape from [batch, embedDim, H/patchSize, W/patchSize] to [batch, numPatches, embedDim]
-        // is a structural operation that would be represented as a reshape node
-        var reshapeNode = TensorOperations<T>.Reshape(projectedNode, [1, NumPatches, _embedDim]);
-
-        // Export norm graph - create a subgraph for layer normalization
-        var normInputNodes = new List<ComputationNode<T>> { reshapeNode };
-        var outputNode = _norm.ExportComputationGraph(normInputNodes);
-
-        return outputNode;
-    }
+    /// <inheritdoc />
 }

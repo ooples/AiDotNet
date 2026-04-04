@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.Document;
@@ -268,7 +268,7 @@ public class DocumentPreprocessor<T> : IDisposable
             result[i] = _numOps.FromDouble((val - min) / range);
         }
 
-        return new Tensor<T>(image.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(image._shape, new Vector<T>(result));
     }
 
     private T SampleNearest(Tensor<T> image, int channel, double x, double y)

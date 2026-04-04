@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -104,17 +104,6 @@ public class SparseLinearLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// JIT compilation is supported by converting sparse weights to dense format at export time.
-    /// This enables JIT compilation while preserving correct functionality, though the sparse
-    /// memory benefits are not retained in the compiled graph.
-    /// Returns true only if the activation function also supports JIT compilation.
-    /// </remarks>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
-
-    /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.
     /// </summary>
     /// <param name="inputFeatures">Number of input features.</param>
@@ -148,6 +137,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _biases = new Vector<T>(outputFeatures);
         // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -275,115 +266,6 @@ public class SparseLinearLayer<T> : LayerBase<T>
 
         _lastOutput = activated;
         return activated;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the layer.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Backward called before Forward.");
-        }
-
-        // For single-sample (1D) output, expand to 2D before applying activation derivative.
-        // Forward processes internally in 2D (batch format), so _cachedPreActivationInput is 2D
-        // even when the returned output is 1D. We must match ranks for the derivative computation.
-        bool outputWas1D = _lastOutput.Rank == 1;
-        Tensor<T> activOutput = _lastOutput;
-        Tensor<T> outGrad = outputGradient;
-
-        if (outputWas1D)
-        {
-            activOutput = new Tensor<T>([1, OutputFeatures]);
-            outGrad = new Tensor<T>([1, OutputFeatures]);
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                activOutput[0, o] = _lastOutput[o];
-                outGrad[0, o] = outputGradient[o];
-            }
-        }
-
-        // Apply activation derivative to get the true gradient (chain rule)
-        var delta = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
-
-        // delta is now always 2D (we expanded 1D inputs above), use directly
-        bool wasSingleSample = outputWas1D;
-        int batchSize = delta.Rank == 1 ? 1 : delta.Shape[0];
-        Tensor<T> gradTensor;
-
-        if (delta.Rank == 1)
-        {
-            // Should not happen after expansion, but handle gracefully
-            gradTensor = new Tensor<T>([1, OutputFeatures]);
-            for (int o = 0; o < OutputFeatures; o++)
-                gradTensor[0, o] = delta[o];
-        }
-        else
-        {
-            gradTensor = delta;
-        }
-
-        // Initialize gradients
-        _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        _biasesGradient = new Vector<T>(OutputFeatures);
-
-        // Compute gradients
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                T gradOut = gradTensor[b, o];
-
-                // Bias gradient: sum over batch
-                _biasesGradient[o] = _numOps.Add(_biasesGradient[o], gradOut);
-
-                // Weight gradient: only update non-zero positions
-                for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-                {
-                    int row = _weights.RowIndices[nz];
-                    int col = _weights.ColumnIndices[nz];
-                    if (row == o)
-                    {
-                        T inputVal = _lastInput.Rank == 1 ? _lastInput[col] : _lastInput[b, col];
-                        var contrib = _numOps.Multiply(gradOut, inputVal);
-                        _weightsGradient[row, col] = _numOps.Add(_weightsGradient[row, col], contrib);
-                    }
-                }
-            }
-        }
-
-        // Compute input gradient using transpose of weights
-        var transposedWeights = _engine.SparseTranspose(_weights);
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var gradVector = new Vector<T>(OutputFeatures);
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                gradVector[o] = gradTensor[b, o];
-            }
-
-            var inputGradVec = _engine.SpMV(transposedWeights, gradVector);
-
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                if (_lastInput.Rank == 1)
-                {
-                    inputGradient[i] = _numOps.Add(inputGradient[i], inputGradVec[i]);
-                }
-                else
-                {
-                    inputGradient[b, i] = inputGradVec[i];
-                }
-            }
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -530,72 +412,6 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
-    }
-
-    /// <summary>
-    /// Exports the layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the linear transformation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts sparse weights to dense format at export time to enable JIT compilation.
-    /// The resulting computation graph performs a standard dense matrix multiplication:
-    /// output = input * W^T + bias
-    /// </para>
-    /// <para>
-    /// While this approach loses the memory benefits of sparse storage during inference,
-    /// it ensures correct functionality and enables JIT optimization of the compiled graph.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batchSize, inputFeatures]
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputFeatures });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Convert sparse weights to dense tensor [outputFeatures, inputFeatures]
-        var denseWeights = new Tensor<T>(new int[] { OutputFeatures, InputFeatures });
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-        {
-            int row = _weights.RowIndices[nz];
-            int col = _weights.ColumnIndices[nz];
-            denseWeights[row, col] = _weights.Values[nz];
-        }
-        var weightsNode = TensorOperations<T>.Constant(denseWeights, "weights");
-
-        // Create bias tensor [outputFeatures]
-        var biasTensor = new Tensor<T>(new int[] { OutputFeatures });
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            biasTensor[o] = _biases[o];
-        }
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
-
-        // Transpose weights for matrix multiplication: W^T [inputFeatures, outputFeatures]
-        var weightsTransposed = TensorOperations<T>.Transpose(weightsNode);
-
-        // Perform matrix multiplication: input [batch, inputFeatures] @ W^T [inputFeatures, outputFeatures]
-        // Result: [batch, outputFeatures]
-        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
-
-        // Add bias (broadcast along batch dimension)
-        var outputNode = TensorOperations<T>.Add(matmulResult, biasNode);
-
-        // Apply activation function if needed
-        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
-        {
-            outputNode = ApplyActivationToComputationNode(outputNode);
-        }
-
-        return outputNode;
     }
 
     /// <summary>

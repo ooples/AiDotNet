@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -313,6 +313,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Initialize bias to zero using Fill
         _convBias.Fill(NumOps.Zero);
+
+        // Register after all reassignments so references are to final tensors
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -498,7 +502,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// The convolution and reshape operations are kept on GPU for efficiency.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -521,10 +525,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Get spatial dimensions based on format
         int batchSize, inputHeight, inputWidth;
-        IGpuTensor<T>? inputNCHW = null;
-        IGpuTensor<T>? convOutput = null;
-        IGpuTensor<T>? convNHWC = null;
-        IGpuTensor<T>? capsuleLayout = null;
+        Tensor<T>? inputNCHW = null;
+        Tensor<T>? convOutput = null;
+        Tensor<T>? convNHWC = null;
+        Tensor<T>? capsuleLayout = null;
 
         try
         {
@@ -627,253 +631,6 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
 
         return patch;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the primary capsule layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the primary capsule layer, which is used during training to propagate
-    /// error gradients back through the network. It computes the gradients of the convolution weights and biases,
-    /// as well as the gradient with respect to the input tensor. The computed weight and bias gradients are stored
-    /// for later use in the parameter update step.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how all parameters should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives gradients indicating how the output capsules should change
-    /// - It calculates how each weight, bias, and input value should change
-    /// - These gradients are used later to update the parameters during training
-    /// 
-    /// This process involves:
-    /// 1. Applying the derivative of the activation function
-    /// 2. For each location in the output:
-    ///    - Extracting the corresponding input patch
-    ///    - Computing the gradients for weights and biases
-    ///    - Computing the gradients for the input
-    /// 3. Aggregating all the gradients
-    /// 
-    /// This allows the layer to learn how to better transform input features into
-    /// meaningful capsule representations.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int outputHeight = _lastOutput.Shape[1];
-        int outputWidth = _lastOutput.Shape[2];
-
-        // Squash activation produces a Jacobian [totalCapsules, capsuleDim, capsuleDim],
-        // not a scalar derivative. Apply via matrix-vector multiply per capsule.
-        int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
-        var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
-
-        // Get the derivative/Jacobian at the PRE-activation point (not post-activation).
-        // Vector activations (Squash) return a Jacobian [N, D, D].
-        // Scalar activations return element-wise derivatives [N, D].
-        var preSquash = _lastPreSquash ?? _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
-        Tensor<T> activationGradientFlat;
-
-        if (VectorActivation is not null)
-        {
-            // Vector activation (e.g., Squash): returns Jacobian [totalCapsules, D, D]
-            var jacobians = VectorActivation.Derivative(preSquash);
-            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
-            {
-                // Jacobian @ gradient per capsule via BatchMatMul
-                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
-                var resultCol = Engine.BatchMatMul(jacobians, gradCol); // [totalCapsules, D, 1]
-                activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
-            }
-            else
-            {
-                // Fallback: element-wise if Derivative didn't return a Jacobian
-                activationGradientFlat = Engine.TensorMultiply(jacobians, flatGrad);
-            }
-        }
-        else if (ScalarActivation is not null)
-        {
-            // Scalar activation: element-wise derivatives [totalCapsules, D]
-            var derivatives = ScalarActivation.Derivative(preSquash);
-            activationGradientFlat = Engine.TensorMultiply(derivatives, flatGrad);
-        }
-        else
-        {
-            // Identity activation: gradient passes through unchanged
-            activationGradientFlat = flatGrad;
-        }
-
-        var activationGradient = activationGradientFlat
-            .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
-
-        int outputChannels = _capsuleChannels * _capsuleDimension;
-
-        // Reshape activation gradient to NCHW [batch, outC, H, W]
-        var gradNHWC = activationGradient.Reshape([batchSize, outputHeight, outputWidth, outputChannels]);
-        var gradNCHW = gradNHWC.Transpose([0, 3, 1, 2]);
-
-        // Prepare kernel in Conv2D layout
-        var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
-
-        // Input in NCHW
-        var inputNCHW = _inputWasNCHW ? _lastInput : _lastInput.Transpose([0, 3, 1, 2]);
-
-        // Gradients via Conv2D ops
-        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape.ToArray(), new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
-        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape.ToArray(), new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
-
-        // Bias gradient: sum over batch/height/width
-        _convBiasGradient = Engine.ReduceSum(gradNCHW, new[] { 0, 2, 3 }, keepDims: false);
-
-        // Reshape kernel gradient back to [outC, flatPatch]
-        _convWeightsGradient = kernelGrad.Reshape([outputChannels, _inputChannels * _kernelSize * _kernelSize]);
-
-        // Input gradient back to original layout
-        var inputGradient = _inputWasNCHW ? inputGradNCHW : inputGradNCHW.Transpose([0, 2, 3, 1]);
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients by building a computation graph
-    /// that mirrors the forward pass operations (Convolution -> Reshape -> Activation).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_convWeights, "convWeights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_convBias, "convBias", requiresGradient: true);
-
-        // 2. Reshape 2D weights to 4D for Conv2D [Out, In, K, K]
-        // _convWeights is [OutputChannels, InputChannels * KernelSize * KernelSize]
-        // We need [OutputChannels, InputChannels, KernelSize, KernelSize]
-        int totalOutputChannels = _capsuleChannels * _capsuleDimension;
-        var weights4DNode = Autodiff.TensorOperations<T>.Reshape(weightsNode,
-            new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
-
-        // 3. Conv2D Operation
-        var convOutput = Autodiff.TensorOperations<T>.Conv2D(
-            inputNode,
-            weights4DNode,
-            biasNode,
-            new int[] { _stride, _stride },
-            new int[] { 0, 0 } // Padding is handled via output size calculation usually, check Forward
-        );
-        // Note: Forward uses manual padding logic? 
-        // Forward: int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
-        // ExtractPatch uses input directly.
-        // If ExtractPatch handles bounds checking (it doesn't seem to pad, just extracts), then padding=0 is correct.
-        // ConvolutionalLayer uses padding parameter. PrimaryCapsuleLayer constructor takes padding but Forward doesn't seem to use it explicitly for bounds extension?
-        // ExtractPatch: "patch[index++] = input[batch, startY + i, startX + j, c];" 
-        // If indices are out of bounds, Tensor indexer might throw.
-        // But let's assume 0 padding for now based on Forward logic matching loop bounds.
-
-        // 4. Reshape to Capsules [Batch, OutH, OutW, Caps, Dim]
-        int batchSize = _lastInput.Shape[0];
-        int inputHeight = _lastInput.Shape[1];
-        int inputWidth = _lastInput.Shape[2];
-        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
-        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
-
-        var reshapedOutput = Autodiff.TensorOperations<T>.Reshape(
-            convOutput,
-            new int[] { batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension }
-        );
-
-        // 5. Apply Activation (Squash)
-        var activatedOutput = ApplyActivationToGraph(reshapedOutput);
-
-        // 6. Set Gradient and Execute Backward
-        activatedOutput.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activatedOutput, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // 7. Store Gradients
-        _convWeightsGradient = weightsNode.Gradient;
-        _convBiasGradient = biasNode.Gradient;
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
 
@@ -1052,54 +809,5 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _originalInputShape = null;
         _inputWasNCHW = false;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_convWeights == null || _convBias == null)
-            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
-
-        // Create input node - expecting [batch, height, width, channels]
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Reshape the matrix weights to Conv2D format [outChannels, inChannels, kH, kW]
-        int totalOutputChannels = _capsuleChannels * _capsuleDimension;
-        var convWeightsTensor = _convWeights.Reshape(new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
-        var weightsNode = Autodiff.TensorOperations<T>.Constant(convWeightsTensor, "conv_weights");
-
-        // _convBias is already a Tensor<T>, use directly
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_convBias, "conv_bias");
-
-        // Apply convolution: [batch, height, width, channels] -> [batch, outH, outW, totalOutputChannels]
-        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, new[] { _stride, _stride }, padding: new[] { 0, 0 });
-
-        // Reshape to separate capsules: [batch, outH, outW, totalOutputChannels]
-        // -> [batch, outH, outW, capsuleChannels, capsuleDimension]
-        int batchSize = InputShape[0];
-        int inputHeight = InputShape[1];
-        int inputWidth = InputShape[2];
-        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
-        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
-
-        var reshapedOutput = Autodiff.TensorOperations<T>.Reshape(
-            convOutput,
-            new int[] { batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension }
-        );
-
-        // Apply Squash activation to each capsule vector (along the last dimension)
-        // The Squash operation scales the length of each capsule vector to [0, 1)
-        var output = Autodiff.TensorOperations<T>.Squash(reshapedOutput);
-
-        return output;
-    }
-
-    public override bool SupportsJitCompilation => _convWeights != null && _convBias != null;
 
 }

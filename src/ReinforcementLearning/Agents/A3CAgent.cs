@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -134,7 +135,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -158,7 +159,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -388,40 +389,74 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         INeuralNetwork<T> localPolicy,
         INeuralNetwork<T> localValue)
     {
-        // Implement A3C gradient computation
-        // Policy gradient: ∇θ log π(a|s) * advantage
-        // Value gradient: ∇φ (V(s) - return)^2
+        int stateSize = _options.StateSize;
+        int trajLen = trajectory.Count;
 
-        for (int i = 0; i < trajectory.Count; i++)
+        // Build batched tensors
+        var batchStates = new Tensor<T>([trajLen, stateSize]);
+        var batchReturns = new Tensor<T>([trajLen, 1]);
+        var advantagesTensor = new Tensor<T>([trajLen]);
+
+        for (int i = 0; i < trajLen; i++)
         {
-            var exp = trajectory[i];
-            var advantage = advantages[i];
-            var targetReturn = returns[i];
-
-            // Compute policy gradient
-            var stateTensor1 = Tensor<T>.FromVector(exp.state);
-            var policyOutputTensor = localPolicy.Predict(stateTensor1);
-            var policyOutput = policyOutputTensor.ToVector();
-            var policyGradient = ComputeA3CPolicyGradient(policyOutput, exp.action, advantage);
-            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-            localPolicy.Backpropagate(policyGradientTensor);
-
-            // Compute value gradient
-            var stateTensor2 = Tensor<T>.FromVector(exp.state);
-            var predictedValueTensor = localValue.Predict(stateTensor2);
-            var predictedValue = predictedValueTensor.ToVector()[0];
-            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
-            var valueGradient = new Vector<T>(1);
-            valueGradient[0] = NumOps.Divide(
-                NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
-                NumOps.FromDouble(trajectory.Count));
-            var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
-            localValue.Backpropagate(valueGradientTensor);
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = trajectory[i].state[j];
+            batchReturns[i, 0] = returns[i];
+            advantagesTensor[i] = advantages[i];
         }
 
-        // Update global networks with local gradients
-        UpdateNetworkParameters(_globalPolicyNetwork, localPolicy, _options.PolicyLearningRate);
-        UpdateNetworkParameters(_globalValueNetwork, localValue, _options.ValueLearningRate);
+        // --- Train local value network (MSE on returns) ---
+        localValue.Train(batchStates, batchReturns);
+
+        // --- Train local policy network (policy gradient via engine ops) ---
+        int[] actionIndices = _options.IsContinuous ? Array.Empty<int>() : new int[trajLen];
+        Tensor<T>? actionsTensor = null;
+
+        if (_options.IsContinuous)
+        {
+            actionsTensor = new Tensor<T>([trajLen, _options.ActionSize]);
+            for (int i = 0; i < trajLen; i++)
+                for (int j = 0; j < _options.ActionSize; j++)
+                    actionsTensor[i, j] = trajectory[i].action[j];
+        }
+        else
+        {
+            for (int i = 0; i < trajLen; i++)
+            {
+                var act = trajectory[i].action;
+                int bestIdx = 0;
+                for (int k = 1; k < act.Length; k++)
+                    if (NumOps.GreaterThan(act[k], act[bestIdx]))
+                        bestIdx = k;
+                actionIndices[i] = bestIdx;
+            }
+        }
+
+        var trainablePolicy = (NeuralNetworkBase<T>)localPolicy;
+        trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
+        {
+            Tensor<T> logProbs;
+            if (_options.IsContinuous)
+            {
+                int actSize = _options.ActionSize;
+                var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+            }
+            else
+            {
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+            }
+
+            var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
+            var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
+            var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
+            return Engine.TensorNegate(mean);
+        });
+
+        // Copy local network parameters to global networks (A3C async update)
+        _globalPolicyNetwork.UpdateParameters(localPolicy.GetParameters());
+        _globalValueNetwork.UpdateParameters(localValue.GetParameters());
     }
 
 
@@ -511,19 +546,8 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         return maxIdx;
     }
 
-    private void UpdateNetworkParameters(INeuralNetwork<T> globalNetwork, INeuralNetwork<T> localNetwork, T learningRate)
-    {
-        var globalParams = globalNetwork.GetParameters();
-        var localGrads = localNetwork.GetParameterGradients();
-
-        for (int i = 0; i < globalParams.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, localGrads[i]);
-            globalParams[i] = NumOps.Subtract(globalParams[i], update);
-        }
-
-        globalNetwork.UpdateParameters(globalParams);
-    }
+    // UpdateNetworkParameters removed — networks trained via Train()/TrainWithCustomLoss,
+    // then local parameters copied to global networks.
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {

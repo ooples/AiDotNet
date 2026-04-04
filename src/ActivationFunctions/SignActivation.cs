@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -154,7 +154,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
         int totalElements = input.Length;
 
         for (int i = 0; i < totalElements; i++)
@@ -186,7 +186,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         int[] outputShape = new int[input.Shape.Length + 1];
-        Array.Copy(input.Shape.ToArray(), outputShape, input.Shape.Length);
+        Array.Copy(input._shape, outputShape, input.Shape.Length);
         outputShape[outputShape.Length - 1] = input.Shape[input.Shape.Length - 1];
 
         Tensor<T> output = new Tensor<T>(outputShape);
@@ -214,20 +214,6 @@ public class SignActivation<T> : ActivationFunctionBase<T>
 
         return output;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Sign provides surrogate gradient support for training.</value>
-    /// <remarks>
-    /// <para>
-    /// Sign supports JIT compilation using surrogate gradients. The forward pass produces
-    /// the hard sign function (-1, 0, or 1), while the backward pass uses a sigmoid surrogate
-    /// for gradient flow. This enables training despite the discontinuous nature of the sign function.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

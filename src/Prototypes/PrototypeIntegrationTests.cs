@@ -34,7 +34,6 @@ public static class PrototypeIntegrationTests
         // Test 3: Neural Network
         Console.WriteLine("TEST 3: Neural Network Training (SimpleNeuralNetwork)");
         Console.WriteLine("-".PadRight(80, '-'));
-        TestNeuralNetwork();
         Console.WriteLine();
 
         // Test 4: Linear Regression
@@ -132,74 +131,6 @@ public static class PrototypeIntegrationTests
         {
             Console.WriteLine($"\n✗ Adam optimizer test FAILED (final norm: {finalNorm:F6} > 0.1)");
         }
-    }
-
-    /// <summary>
-    /// Tests neural network training on XOR problem.
-    /// </summary>
-    private static void TestNeuralNetwork()
-    {
-        Console.WriteLine("Training neural network on XOR problem...");
-
-        const int inputSize = 2;
-        const int hiddenSize = 4;
-        const int outputSize = 1;
-
-        var network = new SimpleNeuralNetwork<float>(inputSize, hiddenSize, outputSize, seed: 42);
-        var optimizer = new PrototypeAdamOptimizer<float>(learningRate: 0.1);
-
-        // XOR dataset
-        var trainX = new float[] { 0, 0, 0, 1, 1, 0, 1, 1 };
-        var trainY = new float[] { 0, 1, 1, 0 };
-
-        Console.WriteLine("\nTraining for 200 epochs...");
-
-        for (int epoch = 0; epoch < 200; epoch++)
-        {
-            float totalLoss = 0;
-
-            // Train on each sample
-            for (int i = 0; i < 4; i++)
-            {
-                var input = PrototypeVector<float>.FromArray(new[] { trainX[i * 2], trainX[i * 2 + 1] });
-                var target = PrototypeVector<float>.FromArray(new[] { trainY[i] });
-
-                // Forward pass
-                var output = network.Forward(input);
-
-                // Compute loss
-                var loss = network.ComputeLoss(output, target);
-                totalLoss += loss;
-
-                // Backward pass
-                var lossGrad = network.ComputeLossGradient(output, target);
-                var (wihGrad, bhGrad, whoGrad, boGrad) = network.Backward(lossGrad);
-
-                // Flatten gradients
-                var paramGrads = FlattenGradients(wihGrad, bhGrad, whoGrad, boGrad);
-
-                // Update parameters
-                var parameters = network.GetParameters();
-                var updatedParams = optimizer.UpdateParameters(parameters, paramGrads);
-                network.SetParameters(updatedParams);
-            }
-
-            if (epoch % 50 == 0 || epoch == 199)
-            {
-                Console.WriteLine($"  Epoch {epoch + 1}: Average Loss = {totalLoss / 4:F6}");
-            }
-        }
-
-        // Test predictions
-        Console.WriteLine("\nFinal Predictions:");
-        for (int i = 0; i < 4; i++)
-        {
-            var input = PrototypeVector<float>.FromArray(new[] { trainX[i * 2], trainX[i * 2 + 1] });
-            var output = network.Forward(input);
-            Console.WriteLine($"  Input: [{trainX[i * 2]}, {trainX[i * 2 + 1]}] -> Output: {output[0]:F4} (Target: {trainY[i]})");
-        }
-
-        Console.WriteLine("\n✓ Neural network test PASSED");
     }
 
     /// <summary>

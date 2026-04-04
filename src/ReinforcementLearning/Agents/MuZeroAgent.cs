@@ -416,7 +416,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             var predictionGradient = new Vector<T>(_options.ActionSize + 1);
             predictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
             var predictionGradTensor = Tensor<T>.FromVector(predictionGradient);
-            _predictionNetwork.Backpropagate(predictionGradTensor);
 
             // Step 3: Unroll dynamics for K steps
             for (int k = 0; k < _options.UnrollSteps; k++)
@@ -446,7 +445,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var dynamicsGradient = new Vector<T>(_options.LatentStateSize + 1);
                 dynamicsGradient[_options.LatentStateSize] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
                 var dynamicsGradTensor = Tensor<T>.FromVector(dynamicsGradient);
-                _dynamicsNetwork.Backpropagate(dynamicsGradTensor);
 
                 // Prediction Network at next state
                 var nextPredictionTensor = Tensor<T>.FromVector(nextHiddenState);
@@ -465,7 +463,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var nextPredictionGradient = new Vector<T>(_options.ActionSize + 1);
                 nextPredictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), nextValueDiff);
                 var nextPredictionGradTensor = Tensor<T>.FromVector(nextPredictionGradient);
-                _predictionNetwork.Backpropagate(nextPredictionGradTensor);
 
                 // Move to next state
                 hiddenState = nextHiddenState;
@@ -476,7 +473,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             var representationGradient = new Vector<T>(_options.LatentStateSize);
             representationGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
             var representationGradTensor = Tensor<T>.FromVector(representationGradient);
-            _representationNetwork.Backpropagate(representationGradTensor);
         }
 
         _updateCount++;

@@ -1,6 +1,7 @@
 #if NET8_0_OR_GREATER
 using System;
 using System.Diagnostics;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -62,20 +63,20 @@ internal static class GpuResidentQuickHarness
         var vectorA = new Tensor<float>(CreateData(VectorSize, VectorSize), new[] { VectorSize });
         var vectorB = new Tensor<float>(CreateData(VectorSize, VectorSize + 999), new[] { VectorSize });
 
-        GpuTensor<float>? gpuMatrixA = null;
-        GpuTensor<float>? gpuMatrixB = null;
-        GpuTensor<float>? gpuVectorA = null;
-        GpuTensor<float>? gpuVectorB = null;
+        Tensor<float>? gpuMatrixA = null;
+        Tensor<float>? gpuMatrixB = null;
+        Tensor<float>? gpuVectorA = null;
+        Tensor<float>? gpuVectorB = null;
         IGpuBuffer? addOutput = null;
         IGpuBuffer? multiplyOutput = null;
-        GpuTensor<float>? gpuConvInput = null;
+        Tensor<float>? gpuConvInput = null;
 
         try
         {
-            gpuMatrixA = gpuEngine.UploadToContext(matrixA, GpuTensorRole.Activation);
-            gpuMatrixB = gpuEngine.UploadToContext(matrixB, GpuTensorRole.Activation);
-            gpuVectorA = gpuEngine.UploadToContext(vectorA, GpuTensorRole.Activation);
-            gpuVectorB = gpuEngine.UploadToContext(vectorB, GpuTensorRole.Activation);
+            gpuMatrixA = GpuTensorHelper.UploadToGpu(backend,matrixA, GpuTensorRole.Activation);
+            gpuMatrixB = GpuTensorHelper.UploadToGpu(backend,matrixB, GpuTensorRole.Activation);
+            gpuVectorA = GpuTensorHelper.UploadToGpu(backend,vectorA, GpuTensorRole.Activation);
+            gpuVectorB = GpuTensorHelper.UploadToGpu(backend,vectorB, GpuTensorRole.Activation);
 
             if (gpuMatrixA == null || gpuMatrixB == null || gpuVectorA == null || gpuVectorB == null)
             {
@@ -88,7 +89,7 @@ internal static class GpuResidentQuickHarness
 
             var convInput = CreateConvInput();
             var convKernel = CreateConvKernel();
-            gpuConvInput = gpuEngine.UploadToContext(convInput, GpuTensorRole.Activation);
+            gpuConvInput = GpuTensorHelper.UploadToGpu(backend,convInput, GpuTensorRole.Activation);
 
             if (gpuConvInput == null)
             {

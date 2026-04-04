@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -177,6 +177,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _mlpBias2 = new Tensor<T>([_outputFeatures]);
 
         InitializeParameters();
+
+        RegisterTrainableParameter(_mlpWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_mlpWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_mlpBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_mlpBias2, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -350,278 +355,6 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int features = bias.Length;
         var biasReshaped = bias.Reshape([1, 1, features]);
         return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
-    }
-
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Forward reshapes 2D→3D internally but returns 2D.
-        // Backward receives 2D gradient but internal state is 3D.
-        // Reshape gradient to 3D for internal computation, then reshape result to original input rank.
-        bool needsReshape = _originalInputShape != null && outputGradient.Rank < 3;
-        if (needsReshape && _lastOutput != null)
-        {
-            outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        var result = UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-
-        // Reshape result back to original input rank
-        if (needsReshape && _originalInputShape != null)
-        {
-            result = result.Reshape(_originalInputShape);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Manual backward pass with full gradient computation using fully vectorized Engine operations.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastAggregated == null || _lastMlpHidden == null || _lastMlpHiddenPreRelu == null ||
-            _lastNeighborSum == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Gradient through MLP Layer 2 bias: sum over batch and nodes
-        _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Gradient through MLP Layer 2 weights: per-batch matmul (Engine.BatchMatMul has issues)
-        _mlpWeights2Gradient = new Tensor<T>(_mlpWeights2.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            var hiddenB = _lastMlpHidden.GetSliceAlongDimension(b, 0);
-            var gradB = activationGradient.GetSliceAlongDimension(b, 0);
-            _mlpWeights2Gradient = _mlpWeights2Gradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(hiddenB), gradB));
-        }
-
-        // Gradient to hidden layer: grad @ weights2^T (broadcasting over batch)
-        var weights2T = Engine.TensorTranspose(_mlpWeights2);
-        var hiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
-
-        // Gradient through ReLU: element-wise vectorized
-        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
-        Engine.TensorFill(zeroTensor, NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
-        Engine.TensorFill(oneTensor, NumOps.One);
-        var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
-        var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
-
-        // Gradient through MLP Layer 1 bias: sum over batch and nodes
-        _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
-
-        // Gradient through MLP Layer 1 weights: per-batch matmul
-        _mlpWeights1Gradient = new Tensor<T>(_mlpWeights1.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            var aggB = _lastAggregated.GetSliceAlongDimension(b, 0);
-            var hGradB = hiddenGrad.GetSliceAlongDimension(b, 0);
-            _mlpWeights1Gradient = _mlpWeights1Gradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(aggB), hGradB));
-        }
-
-        // Gradient to aggregated: hiddenGrad @ weights1^T (broadcasting over batch)
-        var weights1T = Engine.TensorTranspose(_mlpWeights1);
-        var aggregatedGrad = Engine.TensorMatMul(hiddenGrad, weights1T);
-
-        // Gradient through aggregation: (1 + epsilon) * h_v + neighbor_sum
-        T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
-
-        // Self gradient: (1 + epsilon) * aggregatedGrad
-        var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
-
-        // Neighbor gradient: A^T @ aggregatedGrad (batched via permute)
-        // Ensure adjacency is 3D [batch, nodes, nodes] for batched operations
-        var adj3D = _adjacencyMatrix.Rank == 2
-            ? _adjacencyMatrix.Reshape([1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]])
-            : _adjacencyMatrix;
-        var adjT = Engine.TensorPermute(adj3D, [0, 2, 1]);
-        var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
-
-        // Combine gradients: fully vectorized addition
-        var inputGradient = Engine.TensorAdd(selfGrad, neighborGrad);
-
-        // Epsilon gradient (if learnable): fully vectorized
-        if (_learnEpsilon)
-        {
-            var epsilonGradTensor = Engine.TensorMultiply(_lastInput, aggregatedGrad);
-            var epsilonGradSum = Engine.ReduceSum(epsilonGradTensor, [0, 1, 2], keepDims: false);
-            _epsilonGradient = epsilonGradSum[0];
-        }
-        else
-        {
-            _epsilonGradient = NumOps.Zero;
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation with computation graph.
-    /// </summary>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastAggregated == null || _lastMlpHidden == null || _lastMlpHiddenPreRelu == null ||
-            _lastNeighborSum == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Create computation nodes for autodiff
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weights1Node = Autodiff.TensorOperations<T>.Variable(_mlpWeights1, "weights1", requiresGradient: true);
-        var weights2Node = Autodiff.TensorOperations<T>.Variable(_mlpWeights2, "weights2", requiresGradient: true);
-        var bias1Node = Autodiff.TensorOperations<T>.Variable(_mlpBias1, "bias1", requiresGradient: true);
-        var bias2Node = Autodiff.TensorOperations<T>.Variable(_mlpBias2, "bias2", requiresGradient: true);
-
-        var allNodes = new List<Autodiff.ComputationNode<T>>
-        {
-            inputNode, weights1Node, weights2Node, bias1Node, bias2Node
-        };
-
-        // Build computation graph
-
-        // Use cached aggregated features
-        var aggregatedNode = Autodiff.TensorOperations<T>.Variable(_lastAggregated, "aggregated", requiresGradient: true);
-        allNodes.Add(aggregatedNode);
-
-        // MLP Layer 1: aggregated @ weights1 + bias1
-        var hidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(aggregatedNode, weights1Node);
-        allNodes.Add(hidden1);
-
-        var bias1Broadcast = BroadcastBias(_mlpBias1, batchSize, numNodes);
-        var bias1BroadcastNode = Autodiff.TensorOperations<T>.Variable(bias1Broadcast, "bias1_broadcast", requiresGradient: true);
-        allNodes.Add(bias1BroadcastNode);
-
-        var hidden1WithBias = Autodiff.TensorOperations<T>.Add(hidden1, bias1BroadcastNode);
-        allNodes.Add(hidden1WithBias);
-
-        // ReLU activation
-        var hidden1Activated = Autodiff.TensorOperations<T>.ReLU(hidden1WithBias);
-        allNodes.Add(hidden1Activated);
-
-        // MLP Layer 2: hidden @ weights2 + bias2
-        var hidden2 = Autodiff.TensorOperations<T>.MatrixMultiply(hidden1Activated, weights2Node);
-        allNodes.Add(hidden2);
-
-        var bias2Broadcast = BroadcastBias(_mlpBias2, batchSize, numNodes);
-        var bias2BroadcastNode = Autodiff.TensorOperations<T>.Variable(bias2Broadcast, "bias2_broadcast", requiresGradient: true);
-        allNodes.Add(bias2BroadcastNode);
-
-        var outputNode = Autodiff.TensorOperations<T>.Add(hidden2, bias2BroadcastNode);
-        allNodes.Add(outputNode);
-
-        // Set gradient on output node
-        outputNode.Gradient = activationGradient;
-
-        // Topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-
-        foreach (var node in allNodes)
-        {
-            if (!visited.Contains(node))
-            {
-                stack.Push((node, false));
-
-                while (stack.Count > 0)
-                {
-                    var (currentNode, processed) = stack.Pop();
-                    if (visited.Contains(currentNode)) continue;
-
-                    if (processed)
-                    {
-                        visited.Add(currentNode);
-                        topoOrder.Add(currentNode);
-                    }
-                    else
-                    {
-                        stack.Push((currentNode, true));
-                        if (currentNode.Parents != null)
-                        {
-                            foreach (var parent in currentNode.Parents)
-                            {
-                                if (!visited.Contains(parent))
-                                {
-                                    stack.Push((parent, false));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        _mlpBias2Gradient = bias2Node.Gradient != null
-            ? Engine.ReduceSum(bias2Node.Gradient, [0, 1], keepDims: false)
-            : Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        _mlpBias1Gradient = bias1Node.Gradient != null
-            ? Engine.ReduceSum(bias1Node.Gradient, [0, 1], keepDims: false)
-            : new Tensor<T>([_mlpHiddenDim]);
-
-        _mlpWeights2Gradient = weights2Node.Gradient ?? new Tensor<T>([_mlpHiddenDim, _outputFeatures]);
-        _mlpWeights1Gradient = weights1Node.Gradient ?? new Tensor<T>([_inputFeatures, _mlpHiddenDim]);
-
-        // If autodiff didn't compute gradients properly, compute them using Engine
-        if (NumOps.Equals(_mlpWeights1Gradient[0], NumOps.Zero))
-        {
-            ComputeGradientsViaEngine(activationGradient, batchSize, numNodes);
-        }
-
-        // Compute input gradient from aggregated gradient
-        var aggregatedGrad = aggregatedNode.Gradient ?? new Tensor<T>(_lastAggregated.Shape.ToArray());
-
-        // Gradient through aggregation
-        T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
-        var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
-        var adjT = Engine.TensorTranspose(_adjacencyMatrix);
-        var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
-        var inputGradient = Engine.TensorAdd(selfGrad, neighborGrad);
-
-        // Epsilon gradient
-        if (_learnEpsilon)
-        {
-            var epsilonGradTensor = Engine.TensorMultiply(_lastInput, aggregatedGrad);
-            var epsilonGradSum = Engine.ReduceSum(epsilonGradTensor, [0, 1, 2], keepDims: false);
-            _epsilonGradient = epsilonGradSum[0];
-        }
-        else
-        {
-            _epsilonGradient = NumOps.Zero;
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -841,7 +574,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// The MLP is a two-layer network with ReLU activation.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1015,7 +748,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     #region GPU Helper Methods
@@ -1056,46 +789,4 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     #endregion
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export MLP parameters as constants
-        var weights1Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights1, "weights1");
-        var weights2Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights2, "weights2");
-        var bias1Node = Autodiff.TensorOperations<T>.Constant(_mlpBias1, "bias1");
-        var bias2Node = Autodiff.TensorOperations<T>.Constant(_mlpBias2, "bias2");
-
-        // Build MLP computation graph (self-path only for JIT)
-        // Layer 1: input @ weights1 + bias1
-        var hidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weights1Node);
-        var hidden1WithBias = Autodiff.TensorOperations<T>.Add(hidden1, bias1Node);
-        var hidden1Activated = Autodiff.TensorOperations<T>.ReLU(hidden1WithBias);
-
-        // Layer 2: hidden @ weights2 + bias2
-        var hidden2 = Autodiff.TensorOperations<T>.MatrixMultiply(hidden1Activated, weights2Node);
-        var output = Autodiff.TensorOperations<T>.Add(hidden2, bias2Node);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
 }

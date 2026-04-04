@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
@@ -212,7 +212,7 @@ public sealed class FinancialPreprocessor<T>
         }
 
         stats = (new Vector<T>(min), new Vector<T>(max));
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(normalized));
+        return new Tensor<T>(input._shape, new Vector<T>(normalized));
     }
 
     /// <summary>
@@ -280,7 +280,7 @@ public sealed class FinancialPreprocessor<T>
         }
 
         stats = (new Vector<T>(mean), new Vector<T>(std));
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(normalized));
+        return new Tensor<T>(input._shape, new Vector<T>(normalized));
     }
 
     /// <summary>

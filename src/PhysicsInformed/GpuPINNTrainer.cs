@@ -146,8 +146,8 @@ public class GpuPINNTrainer<T>
     /// <param name="verbose">Whether to print progress.</param>
     /// <returns>Training history with loss values per epoch.</returns>
     public GpuTrainingHistory<T> Train(
-        T[,]? dataInputs = null,
-        T[,]? dataOutputs = null,
+        Tensor<T>? dataInputs = null,
+        Tensor<T>? dataOutputs = null,
         int epochs = 10000,
         double learningRate = 0.001,
         bool verbose = true)
@@ -168,18 +168,18 @@ public class GpuPINNTrainer<T>
 
         try
         {
-            // Use the PINN's built-in Solve method for training
-            // The GPU acceleration comes from the tensor operations in the layers
-            var pinnHistory = _pinn.Solve(
-                dataInputs,
-                dataOutputs,
-                epochs,
-                learningRate,
-                verbose,
-                _options.BatchSizeGpu);
+            // Train the PINN using tape-based training for each epoch
+            var pinnLosses = new List<T>();
+            var trainInputs = dataInputs ?? new Tensor<T>([64, _pinn.Architecture.InputSize]);
+            var trainOutputs = dataOutputs ?? new Tensor<T>([trainInputs.Shape[0], _pinn.Architecture.OutputSize]);
+            for (int epoch = 0; epoch < epochs; epoch++)
+            {
+                _pinn.Train(trainInputs, trainOutputs);
+                pinnLosses.Add(_pinn.GetLastLoss());
+            }
 
             // Copy results to GPU-aware history and track memory growth
-            foreach (var loss in pinnHistory.Losses)
+            foreach (var loss in pinnLosses)
             {
                 history.AddEpoch(loss);
 

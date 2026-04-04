@@ -261,20 +261,14 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var predicted = Predict(input);
-
-        // Calculate loss gradient
-        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
-
-        // Backward pass
-        BackwardPass(lossGradient);
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
+        SetTrainingMode(true);
+        try
         {
-            layer.UpdateParameters(lr);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -396,129 +390,6 @@ public class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass with proper gradient routing through all parallel branches.
-    /// </summary>
-    /// <remarks>
-    /// The RIFE architecture has multiple parallel branches:
-    /// 1. Encoder branch: processes concatenated frames to features
-    /// 2. Flow decoder branch: decodes features to optical flow
-    /// 3. Context encoder branch: extracts context features independently
-    /// 4. Warping branch: warps frames using predicted flow
-    /// 5. Flow blocks: refine features using flow information
-    ///
-    /// Gradient routing must properly split at branch points and accumulate at merge points.
-    /// </remarks>
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        // 1. Backward through output convolution
-        var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        gradient = rifeOutputConv.Backward(gradient);
-
-        // 2. Backward through flow blocks with gradient accumulation for flow
-        var cachedFlow = _cachedFlow ?? throw new InvalidOperationException("Cached flow has not been initialized.");
-        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape.ToArray());
-        var fusedGradient = gradient;
-
-        for (int i = _flowBlocks.Count - 1; i >= 0; i--)
-        {
-            // Flow block input was [fused, flow] concatenated
-            var blockGradient = _flowBlocks[i].Backward(fusedGradient);
-
-            // Split gradient for fused and flow components
-            // The block input was [fused, flow], so fused channels = blockInput channels - flow channels
-            int fusedChannels = _cachedFlowBlockInputs[i].Shape[1] - cachedFlow.Shape[1];
-            var (fusedGrad, flowGrad) = SplitConcatenatedGradient(
-                blockGradient,
-                fusedChannels,
-                cachedFlow.Shape[1]);
-
-            // Accumulate flow gradients
-            flowGradAccumulator = AddTensors(flowGradAccumulator, flowGrad);
-
-            // Use fused gradient for next iteration
-            fusedGradient = fusedGrad;
-        }
-
-        // 3. Backward through fusion layer
-        var fusionLayer = _fusion ?? throw new InvalidOperationException("Fusion layer has not been initialized.");
-        var fusionGradient = fusionLayer.Backward(fusedGradient);
-
-        // Split fusion gradient: [frame1_warped, frame2_warped, context, flow]
-        int warpedChannels = _channels;
-        var cachedContext = _cachedContext ?? throw new InvalidOperationException("Cached context has not been initialized.");
-        int contextChannels = cachedContext.Shape[1];
-        int flowChannels = cachedFlow.Shape[1];
-
-        var (warpedGradients, contextFlowGrad) = SplitConcatenatedGradient(
-            fusionGradient,
-            warpedChannels * 2,
-            contextChannels + flowChannels);
-
-        var (frame1WarpedGrad, frame2WarpedGrad) = SplitConcatenatedGradient(
-            warpedGradients, warpedChannels, warpedChannels);
-
-        var (contextGrad, flowGradFromFusion) = SplitConcatenatedGradient(
-            contextFlowGrad, contextChannels, flowChannels);
-
-        // Accumulate flow gradient from fusion
-        flowGradAccumulator = AddTensors(flowGradAccumulator, flowGradFromFusion);
-
-        // 4. Backward through context encoder
-        var contextEncoderGrad = contextGrad;
-        for (int i = _contextEncoder.Count - 1; i >= 0; i--)
-        {
-            contextEncoderGrad = _contextEncoder[i].Backward(contextEncoderGrad);
-        }
-
-        // 5. Backward through warping operations
-        // Compute gradients w.r.t. frames and flow from warping
-        var cachedFrame1 = _cachedFrame1 ?? throw new InvalidOperationException("Cached frame 1 has not been initialized.");
-        var cachedFrame2 = _cachedFrame2 ?? throw new InvalidOperationException("Cached frame 2 has not been initialized.");
-        var cachedFlowT0 = _cachedFlow_t_0 ?? throw new InvalidOperationException("Cached flow t0 has not been initialized.");
-        var cachedFlowT1 = _cachedFlow_t_1 ?? throw new InvalidOperationException("Cached flow t1 has not been initialized.");
-        var (frame1Grad, flowGrad1) = WarpBackward(
-            frame1WarpedGrad, cachedFrame1, cachedFlowT0);
-        var (frame2Grad, flowGrad2) = WarpBackward(
-            frame2WarpedGrad, cachedFrame2, cachedFlowT1);
-
-        // Scale flow gradients by timestep (chain rule for flow scaling)
-        var t = NumOps.FromDouble(_cachedTimestep);
-        var oneMinusT = NumOps.FromDouble(1.0 - _cachedTimestep);
-        flowGrad1 = ScaleFlow(flowGrad1, t);
-        flowGrad2 = ScaleFlow(flowGrad2, oneMinusT);
-
-        // Combine flow gradients for flow_0_1 and flow_1_0
-        var flowGradCombined = CombineFlowGradients(flowGrad1, flowGrad2, flowGradAccumulator);
-
-        // 6. Backward through flow decoder
-        var flowDecoderGrad = flowGradCombined;
-        for (int i = _flowDecoder.Count - 1; i >= 0; i--)
-        {
-            // Handle upsampling backward (downsample gradient)
-            if (i < _flowDecoder.Count - 1)
-            {
-                flowDecoderGrad = BilinearDownsample(flowDecoderGrad, 2);
-            }
-            flowDecoderGrad = _flowDecoder[i].Backward(flowDecoderGrad);
-        }
-
-        // 7. Backward through encoder
-        var encoderGrad = flowDecoderGrad;
-        for (int i = _encoder.Count - 1; i >= 0; i--)
-        {
-            encoderGrad = _encoder[i].Backward(encoderGrad);
-        }
-
-        // 8. Accumulate gradients from encoder, context encoder, and frame warping
-        // All these branches feed back to the concatenated frames input
-        var inputGrad = AccumulateInputGradients(
-            encoderGrad,
-            contextEncoderGrad,
-            frame1Grad,
-            frame2Grad);
-    }
-
-    /// <summary>
     /// Computes gradients through the warping operation.
     /// </summary>
     private (Tensor<T> frameGrad, Tensor<T> flowGrad) WarpBackward(
@@ -531,8 +402,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = outputGrad.Shape[2];
         int width = outputGrad.Shape[3];
 
-        var frameGrad = new Tensor<T>(inputFrame.Shape.ToArray());
-        var flowGrad = new Tensor<T>(flow.Shape.ToArray());
+        var frameGrad = new Tensor<T>(inputFrame._shape);
+        var flowGrad = new Tensor<T>(flow._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -698,7 +569,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = encoderGrad.Shape[2];
         int width = encoderGrad.Shape[3];
 
-        var result = new Tensor<T>(encoderGrad.Shape.ToArray());
+        var result = new Tensor<T>(encoderGrad._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -858,7 +729,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -978,6 +849,13 @@ public class RIFE<T> : FrameInterpolationBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        foreach (var layer in _contextEncoder) Layers.Add(layer);
+        if (_fusion is not null) Layers.Add(_fusion);
+        if (_outputConv is not null) Layers.Add(_outputConv);
+        foreach (var layer in _flowBlocks) Layers.Add(layer);
     }
 
     /// <inheritdoc/>

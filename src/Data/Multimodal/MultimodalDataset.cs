@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Helpers;
+﻿using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Multimodal;
 
@@ -201,7 +201,7 @@ public class MultimodalDataset<T>
         var firstSample = this[startIndex];
         if (firstSample.Label is null) return null;
 
-        int[] labelShape = firstSample.Label.Shape.ToArray();
+        int[] labelShape = firstSample.Label._shape;
         int elementsPerLabel = 1;
         try
         {

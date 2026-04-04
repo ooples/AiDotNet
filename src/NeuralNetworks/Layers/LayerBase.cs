@@ -1,5 +1,4 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -31,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>, IDisposable
+public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -48,6 +47,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
 
+    /// <summary>
     /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
@@ -309,8 +309,30 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// Collection of tensors that have been registered as persistent with the engine.
     /// These will be unregistered when the layer is disposed.
+    /// Also serves as the backing store for <see cref="GetTrainableParameters"/> — any tensor
+    /// registered here is automatically visible to the gradient tape for training.
+    /// This is the equivalent of PyTorch's <c>nn.Module.parameters()</c> auto-registration.
     /// </summary>
-    private readonly List<object> _registeredTensors = new();
+    private readonly List<Tensor<T>> _registeredTensors = new();
+
+    /// <summary>
+    /// Child layers registered via <see cref="RegisterSubLayer"/>. Returned by <see cref="GetSubLayers"/>
+    /// for recursive parameter discovery, equivalent to PyTorch's <c>nn.Module.children()</c>.
+    /// </summary>
+    private readonly List<ILayer<T>> _registeredSubLayers = new();
+
+    /// <summary>
+    /// Non-trainable persistent state tensors registered via <see cref="RegisterBuffer"/>.
+    /// These are included in model serialization and GPU transfer but NOT in
+    /// <see cref="GetTrainableParameters"/> — they are not passed to the optimizer
+    /// or tracked by the gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the equivalent of PyTorch's <c>nn.Module.register_buffer()</c>.</para>
+    /// <para>Examples: BatchNorm running mean/variance, positional encoding tables,
+    /// Hebbian/STDP connection weights, precomputed frequency tensors.</para>
+    /// </remarks>
+    private readonly List<(string Name, Tensor<T> Tensor)> _registeredBuffers = new();
 
     /// <summary>
     /// Gets or sets the initialization strategy for this layer.
@@ -737,6 +759,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual int[] GetInputShape() =>
         InputShape != null && InputShape.Length > 0 ? InputShape : InputShapes[0];
 
+
     /// <summary>
     /// Gets all input shapes for this layer.
     /// </summary>
@@ -844,7 +867,12 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// All layers are required to implement this method, even if they set SupportsJitCompilation = false.
     /// </para>
     /// </remarks>
-    public abstract ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement ExportComputationGraph. " +
+            "Use GradientTape-based autodiff instead.");
+    }
 
     /// <summary>
     /// Gets whether this layer supports JIT compilation.
@@ -866,7 +894,71 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// When false, the layer will use the standard Forward() method instead.
     /// </para>
     /// </remarks>
-    public abstract bool SupportsJitCompilation { get; }
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Declares the named input ports this layer accepts.
+    /// Default: single port named "input" with the layer's input shape.
+    /// Override for multi-input layers (e.g., DiffusionResBlock, CrossAttention).
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedInputPorts;
+    public virtual IReadOnlyList<LayerPort> InputPorts =>
+        _cachedInputPorts ??= [new LayerPort("input", GetInputShape())];
+
+    /// <summary>
+    /// Declares the named output ports this layer produces.
+    /// Default: single port named "output" with the layer's output shape.
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedOutputPorts;
+    public virtual IReadOnlyList<LayerPort> OutputPorts =>
+        _cachedOutputPorts ??= [new LayerPort("output", GetOutputShape())];
+
+    /// <summary>
+    /// Multi-input forward pass. Receives inputs by name, enabling layers that
+    /// need multiple distinct tensors (time embeddings, conditioning, Q/K/V, etc.).
+    /// </summary>
+    /// <param name="inputs">Named input tensors matching <see cref="InputPorts"/>.</param>
+    /// <returns>Output tensor.</returns>
+    public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return Forward(input);
+
+        if (inputs.Count == 1)
+            return Forward(inputs.Values.First());
+
+        var missing = InputPorts
+            .Where(p => p.Required && !inputs.ContainsKey(p.Name))
+            .Select(p => p.Name)
+            .ToList();
+
+        if (missing.Count > 0)
+            throw new ArgumentException(
+                $"{GetType().Name} requires input ports: {string.Join(", ", missing)}. " +
+                $"Provided: {string.Join(", ", inputs.Keys)}.");
+
+        throw new NotSupportedException(
+            $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+            $"Forward(IReadOnlyDictionary). Override it to handle: " +
+            $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
+    }
+
+    /// <summary>
+    /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
+    /// </summary>
+    public virtual Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return ForwardGpu(input);
+
+        if (inputs.Count == 1)
+            return ForwardGpu(inputs.Values.First());
+
+        throw new NotSupportedException(
+            $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
+    }
+
+
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>
@@ -1285,29 +1377,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         };
     }
 
-    /// <summary>
-    /// Performs the backward pass of the layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This abstract method must be implemented by derived classes to define the backward pass of the layer.
-    /// The backward pass propagates error gradients from the output of the layer back to its input,
-    /// and calculates gradients for any trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output contributed to errors
-    /// 2. It calculates how its parameters should change to reduce errors
-    /// 3. It calculates how its input should change, which will be used by earlier layers
-    /// 
-    /// This is the core of how neural networks learn from their mistakes during training.
-    /// </para>
-    /// </remarks>
-    public abstract Tensor<T> Backward(Tensor<T> outputGradient);
+    // Backward() removed — tape-based autodiff via ITrainableLayer<T> replaces manual backward.
 
     #region GPU Training Infrastructure
 
@@ -1398,42 +1468,10 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// Override this in derived classes that support GPU acceleration.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public virtual Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         throw new NotSupportedException(
             $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the layer on GPU.
-    /// </summary>
-    /// <param name="outputGradient">The GPU-resident gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The GPU-resident gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs the layer's backward computation entirely on GPU, including:
-    /// <list type="bullet">
-    /// <item><description>Computing input gradients to pass to previous layers</description></item>
-    /// <item><description>Computing and storing weight gradients on GPU (for layers with trainable parameters)</description></item>
-    /// <item><description>Computing and storing bias gradients on GPU</description></item>
-    /// </list>
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like Backward() but runs entirely on GPU.
-    /// 
-    /// During GPU training:
-    /// 1. Output gradients come in (on GPU)
-    /// 2. Input gradients are computed (stay on GPU)
-    /// 3. Weight/bias gradients are computed and stored (on GPU)
-    /// 4. Input gradients are returned for the previous layer
-    /// 
-    /// All data stays on GPU - no CPU round-trips needed!
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        throw new NotSupportedException(
-            $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
     }
 
     /// <summary>
@@ -2095,16 +2133,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
             var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
 
+            // Batched matrix-vector multiply: inputGrad[i] = derivative[i] @ gradient[i]
             for (int i = 0; i < batchElements; i++)
             {
+                // Extract [vectorLength, vectorLength] slice and [vectorLength, 1] column
+                var derivSlice = flatDerivative.Slice(0, i, i + 1).Reshape(vectorLength, vectorLength);
+                var gradCol = flatOutputGrad.Slice(0, i, i + 1).Reshape(vectorLength, 1);
+                var result = Engine.TensorMatMul(derivSlice, gradCol).Reshape(vectorLength);
+
+                // Copy result into output
+                int offset = i * vectorLength;
                 for (int j = 0; j < vectorLength; j++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < vectorLength; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(flatDerivative[i, j, k], flatOutputGrad[i, k]));
-                    }
-                    flatInputGrad[i, j] = sum;
+                    flatInputGrad[offset + j] = result[j];
                 }
             }
 
@@ -2134,7 +2175,16 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         if (ScalarActivation is IOutputDerivative<T> outputDeriv)
         {
-            return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
+            var deriv = outputDeriv.DerivativeFromOutput(output);
+            // Reshape derivative to match gradient shape if needed (e.g., CapsuleNet
+            // flattened reconstruction layer outputs different rank than gradient)
+            if (deriv.Length == outputGradient.Length && deriv.Rank != outputGradient.Rank)
+            {
+                deriv = deriv.Reshape(outputGradient.Shape.ToArray());
+            }
+            // Pop the cached pre-activation to keep cache balanced
+            if (_preActivationCache.Count > 0) _preActivationCache.Pop();
+            return Engine.TensorMultiply(deriv, outputGradient);
         }
         // Use cached pre-activation input if available, otherwise fall back to output.
         // This prevents computing f'(f(x)) instead of f'(x) for activations like GELU
@@ -2680,8 +2730,155 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             throw new ArgumentNullException(nameof(tensor));
 
         Engine.RegisterPersistentTensor(tensor, role);
+
+        // Deduplicate by reference identity: constructors and EnsureInitialized may both register
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            if (ReferenceEquals(_registeredTensors[i], tensor))
+                return;
+        }
         _registeredTensors.Add(tensor);
     }
+
+    /// <summary>
+    /// Registers a child layer for automatic discovery by the recursive parameter collection system.
+    /// This is the equivalent of assigning an <c>nn.Module</c> as an attribute in PyTorch —
+    /// the framework automatically discovers it via <see cref="GetSubLayers"/>.
+    /// </summary>
+    /// <param name="subLayer">The child layer to register.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this in the constructor for each sub-layer your composite layer contains.
+    /// The gradient tape training system will recursively walk these sub-layers to discover
+    /// all trainable parameters without requiring manual <c>ITrainableLayer</c> overrides.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your layer contains other layers inside it (like a
+    /// Transformer block containing Attention + FeedForward layers), call this method for
+    /// each inner layer. The training system will automatically find all the weights inside
+    /// those inner layers and include them in training.</para>
+    /// </remarks>
+    protected void RegisterSubLayer(ILayer<T> subLayer)
+    {
+        if (subLayer is null)
+            throw new ArgumentNullException(nameof(subLayer));
+        _registeredSubLayers.Add(subLayer);
+    }
+
+    /// <summary>
+    /// Removes a previously registered sub-layer. Used when a sub-layer is dynamically
+    /// replaced after construction (e.g., positional encoding reconfiguration).
+    /// </summary>
+    protected bool UnregisterSubLayer(ILayer<T> subLayer)
+    {
+        return _registeredSubLayers.Remove(subLayer);
+    }
+
+    /// <summary>
+    /// Registers a non-trainable persistent tensor (buffer) with this layer.
+    /// Buffers are included in model serialization and GPU persistence but are NOT
+    /// returned by <see cref="GetTrainableParameters"/> — they are not passed to the
+    /// optimizer or tracked by the gradient tape during training.
+    /// </summary>
+    /// <param name="tensor">The tensor to register as a buffer.</param>
+    /// <param name="name">A unique name for this buffer within the layer, used for
+    /// serialization and diagnostics (e.g., "running_mean", "positional_encoding").</param>
+    /// <param name="role">The GPU persistence role hint. Defaults to
+    /// <see cref="PersistentTensorRole.Constant"/> for non-trainable state.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the equivalent of PyTorch's <c>nn.Module.register_buffer(name, tensor)</c>.
+    /// Use this for:
+    /// <list type="bullet">
+    /// <item>Running statistics (BatchNorm mean/variance)</item>
+    /// <item>Precomputed constants (positional encodings, frequency tables)</item>
+    /// <item>Non-gradient-based learned state (Hebbian/STDP connection weights)</item>
+    /// <item>Cached computations that should persist across forward passes</item>
+    /// </list>
+    /// </para>
+    /// <para><b>Difference from RegisterTrainableParameter:</b>
+    /// <list type="bullet">
+    /// <item>Parameters: trained by optimizer via gradient tape, included in GetTrainableParameters</item>
+    /// <item>Buffers: NOT trained, NOT in GetTrainableParameters, but serialized and GPU-persistent</item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> Some tensors in a layer need to be saved with the model
+    /// and kept on the GPU, but they aren't weights that the optimizer adjusts during training.
+    /// For example, BatchNorm keeps a running average of the data it's seen — this average
+    /// needs to be saved and loaded with the model, but it's not something the optimizer
+    /// should try to change. Use RegisterBuffer for these kinds of tensors.</para>
+    /// </remarks>
+    protected void RegisterBuffer(Tensor<T> tensor, string name, PersistentTensorRole role = PersistentTensorRole.Constant)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Buffer name must not be empty.", nameof(name));
+
+        Engine.RegisterPersistentTensor(tensor, role);
+        _registeredBuffers.Add((name, tensor));
+    }
+
+    /// <summary>
+    /// Gets all registered buffers (non-trainable persistent tensors) for this layer.
+    /// Used by serialization and model state management.
+    /// </summary>
+    /// <returns>Read-only list of (name, tensor) pairs for all registered buffers.</returns>
+    public IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers() => _registeredBuffers;
+
+    #region ITrainableLayer<T> Implementation
+
+    /// <summary>
+    /// Returns all trainable parameter tensors registered via <see cref="RegisterTrainableParameter"/>.
+    /// This is the automatic implementation — layers that register their parameters in the constructor
+    /// get tape-based training support with zero additional code.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Layers that need custom parameter ordering or conditional parameters can override this method.
+    /// For most layers, the automatic registration is sufficient.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
+
+    /// <summary>
+    /// Replaces this layer's trainable parameter tensors with the provided tensors.
+    /// Used by <see cref="AiDotNet.Tensors.Engines.Autodiff.ParameterBuffer{T}"/> to replace
+    /// independently-allocated tensors with views into a contiguous buffer.
+    /// </summary>
+    /// <param name="parameters">Replacement tensors in the same order as <see cref="GetTrainableParameters"/>.</param>
+    /// <remarks>
+    /// <para>
+    /// The default implementation replaces tensors in the registered parameter list.
+    /// Layers with private field references to their parameters should override this
+    /// to also update those fields.
+    /// </para>
+    /// </remarks>
+    public virtual void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (parameters.Count != _registeredTensors.Count)
+            throw new ArgumentException(
+                $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Count}.");
+
+        for (int i = 0; i < parameters.Count; i++)
+            _registeredTensors[i] = parameters[i];
+    }
+
+    /// <summary>
+    /// Clears all accumulated gradients. Default implementation is a no-op since
+    /// tape-based training computes fresh gradients each step. Layers with explicit
+    /// gradient tensor fields should override to zero/null them.
+    /// </summary>
+    public virtual void ZeroGrad() { }
+
+    #endregion
+
+    /// <summary>
+    /// Returns all child layers registered via <see cref="RegisterSubLayer"/>.
+    /// The recursive parameter collection system walks these to discover all trainable
+    /// parameters in composite layer hierarchies.
+    /// Override in composite layers that need to expose sub-layers not registered via RegisterSubLayer.
+    /// </summary>
+    public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => _registeredSubLayers;
 
     /// <summary>
     /// Notifies the engine that a registered persistent tensor's data has changed.
@@ -2768,40 +2965,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Applies the layer's activation function backward pass on GPU using the activation's own GPU method.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass (needed for some activations).</param>
-    /// <param name="output">The output buffer from the forward pass (needed for some activations).</param>
-    /// <param name="gradInput">The buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <returns>True if the backward pass was applied on GPU; false if no activation or GPU not supported.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method follows the Open/Closed Principle by delegating to the activation function's
-    /// own GPU backward implementation. Each activation function knows what it needs:
-    /// - ReLU, GELU, Swish, LeakyReLU, SiLU, Mish, etc.: Need the input from forward pass
-    /// - Sigmoid, Tanh: Need the output from forward pass
-    /// - ELU: Needs both input and output from forward pass
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> During training, we need to compute how the activation affects
-    /// the gradients. Each activation function handles this differently, and by delegating
-    /// to the activation's BackwardGpu method, we don't need to know the details here.
-    /// </para>
-    /// </remarks>
-    protected bool ApplyActivationBackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (ScalarActivation is not { SupportsGpuTraining: true })
-        {
-            return false;
-        }
-
-        ScalarActivation.BackwardGpu(backend, gradOutput, input, output, gradInput, size);
-        return true;
-    }
 
     #endregion
 
@@ -3046,18 +3209,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         if (disposing)
         {
-            // Unregister all persistent tensors from the engine
+            // Unregister all persistent tensors (parameters + buffers) from the engine
             // This releases GPU memory that was cached for these tensors
-            foreach (var tensorObj in _registeredTensors)
+            foreach (var tensor in _registeredTensors)
             {
-                // Use reflection to call the generic UnregisterPersistentTensor method
-                // since we stored tensors as object to support multiple generic types
-                if (tensorObj is Tensor<T> tensor)
-                {
-                    Engine.UnregisterPersistentTensor(tensor);
-                }
+                Engine.UnregisterPersistentTensor(tensor);
             }
             _registeredTensors.Clear();
+
+            foreach (var (_, tensor) in _registeredBuffers)
+            {
+                Engine.UnregisterPersistentTensor(tensor);
+            }
+            _registeredBuffers.Clear();
         }
 
         _disposed = true;

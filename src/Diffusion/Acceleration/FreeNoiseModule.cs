@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Acceleration;
@@ -140,7 +140,7 @@ public class FreeNoiseModule<T>
     public Tensor<T>? GetBaseNoise()
     {
         if (_baseNoise is null) return null;
-        var copy = new Tensor<T>(_baseNoise.Shape.ToArray());
+        var copy = new Tensor<T>(_baseNoise._shape);
         _baseNoise.Data.Span.CopyTo(copy.Data.Span);
         return copy;
     }

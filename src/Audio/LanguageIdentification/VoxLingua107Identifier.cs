@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Enums;
@@ -431,7 +431,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
+        return new Tensor<T>(probs, modelOutput._shape);
     }
 
     /// <inheritdoc/>
@@ -465,9 +465,8 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
-        BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
@@ -657,93 +656,6 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         return output;
     }
 
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        // Backward through classifier
-        if (_classifierLayer is not null)
-            grad = _classifierLayer.Backward(grad);
-
-        // Backward through final batch norm
-        if (_finalBatchNorm is not null)
-            grad = _finalBatchNorm.Backward(grad);
-
-        // Backward through pooling layer
-        if (_poolingLayer is not null)
-            grad = _poolingLayer.Backward(grad);
-
-        // MFA gradient splitting: the forward pass concatenated outputs from each block
-        // We need to split the gradient back to each block's portion
-        var blockGradients = new List<Tensor<T>>();
-        int gradOffset = 0;
-        foreach (int blockLen in _blockOutputLengths)
-        {
-            var blockGrad = new T[blockLen];
-            for (int i = 0; i < blockLen && gradOffset + i < grad.Length; i++)
-            {
-                blockGrad[i] = grad.GetFlat(gradOffset + i);
-            }
-            blockGradients.Add(new Tensor<T>(blockGrad, [blockLen]));
-            gradOffset += blockLen;
-        }
-
-        // Backward through each SE-Res2 block (in reverse order)
-        Tensor<T>? tdnnGrad = null;
-        for (int blockIdx = _blockOutputLengths.Count - 1; blockIdx >= 0; blockIdx--)
-        {
-            var blockGrad = blockGradients[blockIdx];
-
-            // Backward through SE block for this block
-            int seIdx = blockIdx * 2;
-            if (seIdx + 1 < _seBlocks.Count)
-            {
-                blockGrad = _seBlocks[seIdx + 1].Backward(blockGrad);
-            }
-            if (seIdx < _seBlocks.Count)
-            {
-                blockGrad = _seBlocks[seIdx].Backward(blockGrad);
-            }
-
-            // Backward through res block layers (6 layers per block)
-            for (int i = 5; i >= 0; i--)
-            {
-                int layerIdx = blockIdx * 6 + i;
-                if (layerIdx < _resBlocks.Count)
-                {
-                    blockGrad = _resBlocks[layerIdx].Backward(blockGrad);
-                }
-            }
-
-            // Accumulate gradient for TDNN output (residual connection)
-            if (tdnnGrad is null)
-            {
-                tdnnGrad = blockGrad;
-            }
-            else
-            {
-                // Add gradients from multiple blocks
-                var combined = new T[Math.Max(tdnnGrad.Length, blockGrad.Length)];
-                for (int i = 0; i < combined.Length; i++)
-                {
-                    T val1 = i < tdnnGrad.Length ? tdnnGrad.GetFlat(i) : _numOps.Zero;
-                    T val2 = i < blockGrad.Length ? blockGrad.GetFlat(i) : _numOps.Zero;
-                    combined[i] = _numOps.Add(val1, val2);
-                }
-                tdnnGrad = new Tensor<T>(combined, [combined.Length]);
-            }
-        }
-
-        // Backward through TDNN layers
-        if (tdnnGrad is not null)
-        {
-            for (int i = _tdnnLayers.Count - 1; i >= 0; i--)
-            {
-                tdnnGrad = _tdnnLayers[i].Backward(tdnnGrad);
-            }
-        }
-    }
-
     private IEnumerable<ILayer<T>> GetAllLayers()
     {
         foreach (var layer in _tdnnLayers) yield return layer;
@@ -794,7 +706,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             }
         }
 
-        return new Tensor<T>(output, input.Shape.ToArray());
+        return new Tensor<T>(output, input._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

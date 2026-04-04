@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -152,40 +152,9 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         var sigmoid = Activate(input);
-        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One), sigmoid);
+        var oneMinusSigmoid = Engine.ScalarMinusTensor(NumOps.One, sigmoid);
         return Engine.TensorMultiply(sigmoid, oneMinusSigmoid);
     }
-
-    /// <summary>
-    /// Calculates the backward pass gradient for Sigmoid using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Sigmoid backward uses forward output: grad = gradOutput * output * (1 - output)
-        var sigmoidOutput = Activate(input);
-        return Engine.SigmoidBackward(outputGradient, sigmoidOutput);
-    }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because Sigmoid gradient computation is fully implemented and tested.</value>
-    /// <remarks>
-    /// <para>
-    /// Sigmoid supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation is well-defined and differentiable
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -230,27 +199,6 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
         backend.Sigmoid(input, output, size);
     }
 
-    /// <summary>
-    /// Calculates the Sigmoid backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">Not used for Sigmoid (can be null). Sigmoid backward uses forward output.</param>
-    /// <param name="output">The output buffer from the forward pass.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// Sigmoid backward on GPU: gradInput[i] = gradOutput[i] * output[i] * (1 - output[i])
-    /// Note: Sigmoid backward uses the forward output, not the input.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "Sigmoid backward requires the output from forward pass.");
-
-        backend.SigmoidBackward(gradOutput, output, gradInput, size);
-    }
-
     #endregion
 
     /// <summary>
@@ -258,8 +206,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     /// </summary>
     public Tensor<T> DerivativeFromOutput(Tensor<T> output)
     {
-        var ones = new Tensor<T>(output.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        return output.ElementwiseMultiply(ones.Subtract(output));
+        var oneMinusOutput = Engine.ScalarMinusTensor(NumOps.One, output);
+        return Engine.TensorMultiply(output, oneMinusOutput);
     }
 }

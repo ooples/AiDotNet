@@ -115,117 +115,14 @@ public class LinearProjector<T> : IProjectorHead<T>
 
         _lastInput = input;
 
-        var batchSize = input.Shape[0];
-        var result = new T[batchSize * _outputDim];
-
-        // Pre-extract weight columns for Engine.DotProduct
-        var weightCols = new Vector<T>[_outputDim];
-        for (int o = 0; o < _outputDim; o++)
+        // Vectorized: output = input @ weight + bias
+        var output = Engine.TensorMatMul(input, _weight);
+        if (_useBias && _bias is not null)
         {
-            weightCols[o] = new Vector<T>(_inputDim);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                weightCols[o][i] = _weight[i, o];
-            }
+            var bias2D = _bias.Reshape(1, _outputDim);
+            output = Engine.TensorBroadcastAdd(output, bias2D);
         }
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract input row
-            var inputRow = new Vector<T>(_inputDim);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                inputRow[i] = input[b, i];
-            }
-
-            for (int o = 0; o < _outputDim; o++)
-            {
-                T bias = _useBias && _bias is not null ? _bias[o] : NumOps.Zero;
-                result[b * _outputDim + o] = NumOps.Add(bias, Engine.DotProduct(inputRow, weightCols[o]));
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, _outputDim]);
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradients)
-    {
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        if (_lastInput is null) throw new InvalidOperationException("Forward must be called before Backward");
-
-        var batchSize = gradients.Shape[0];
-
-        // Pre-extract weight rows for input gradient computation
-        var weightRows = new Vector<T>[_inputDim];
-        for (int i = 0; i < _inputDim; i++)
-        {
-            weightRows[i] = new Vector<T>(_outputDim);
-            for (int o = 0; o < _outputDim; o++)
-            {
-                weightRows[i][o] = _weight[i, o];
-            }
-        }
-
-        // Input gradient: gradients @ weight.T
-        var inputGrad = new T[batchSize * _inputDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract gradient row
-            var gradRow = new Vector<T>(_outputDim);
-            for (int o = 0; o < _outputDim; o++)
-            {
-                gradRow[o] = gradients[b, o];
-            }
-
-            for (int i = 0; i < _inputDim; i++)
-            {
-                inputGrad[b * _inputDim + i] = Engine.DotProduct(gradRow, weightRows[i]);
-            }
-        }
-
-        // Weight gradient: input.T @ gradients
-        var weightGrad = new T[_inputDim * _outputDim];
-        for (int i = 0; i < _inputDim; i++)
-        {
-            // Extract input column (all batches for feature i)
-            var inputCol = new Vector<T>(batchSize);
-            for (int b = 0; b < batchSize; b++)
-            {
-                inputCol[b] = _lastInput[b, i];
-            }
-
-            for (int o = 0; o < _outputDim; o++)
-            {
-                // Extract gradient column (all batches for output o)
-                var gradCol = new Vector<T>(batchSize);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    gradCol[b] = gradients[b, o];
-                }
-                weightGrad[i * _outputDim + o] = Engine.DotProduct(inputCol, gradCol);
-            }
-        }
-
-        _gradWeight = new Tensor<T>(weightGrad, [_inputDim, _outputDim]);
-
-        // Bias gradient: sum over batch
-        if (_useBias)
-        {
-            var biasGrad = new T[_outputDim];
-            for (int o = 0; o < _outputDim; o++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    sum = NumOps.Add(sum, gradients[b, o]);
-                }
-                biasGrad[o] = sum;
-            }
-            _gradBias = new Tensor<T>(biasGrad, [_outputDim]);
-        }
-
-        return new Tensor<T>(inputGrad, [batchSize, _inputDim]);
+        return output;
     }
 
     /// <inheritdoc />

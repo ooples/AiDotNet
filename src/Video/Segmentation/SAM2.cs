@@ -579,26 +579,14 @@ public class SAM2<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
         }
 
-        var predicted = Predict(input);
-
-        // Compute loss gradient via configured loss function
-        var predFlat = new Vector<T>(predicted.Length);
-        var targetFlat = new Vector<T>(expectedOutput.Length);
-        for (int i = 0; i < predicted.Length; i++)
-            predFlat[i] = predicted[i];
-        int copyLen = Math.Min(expectedOutput.Length, targetFlat.Length);
-        for (int i = 0; i < copyLen; i++)
-            targetFlat[i] = expectedOutput[i];
-        var gradVec = LossFunction.CalculateDerivative(predFlat, targetFlat);
-        var lossGradient = new Tensor<T>(predicted.Shape.ToArray());
-        for (int i = 0; i < gradVec.Length; i++)
-            lossGradient[i] = gradVec[i];
-
-        BackwardPass(lossGradient);
-
-        if (_optimizer != null)
+        SetTrainingMode(true);
+        try
         {
-            _optimizer.UpdateParameters(Layers);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -641,7 +629,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image._shape);
         var inputMeta = _onnxSession.InputMetadata;
 
         // SAM2 encoder typically has 'image' as input name
@@ -737,7 +725,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Average pool memory features
-        var memoryAggregate = new Tensor<T>(currentFeatures.Shape.ToArray());
+        var memoryAggregate = new Tensor<T>(currentFeatures._shape);
         foreach (var memory in _memoryBank)
         {
             memoryAggregate = AddTensors(memoryAggregate, memory);
@@ -1053,20 +1041,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
-    }
-
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        // Backward through decoder and output heads
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     #endregion

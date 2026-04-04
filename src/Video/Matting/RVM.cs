@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -210,7 +210,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         int h = foreground.Rank == 4 ? foreground.Shape[2] : foreground.Shape[1];
         int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
 
-        var composite = new Tensor<T>(foreground.Shape.ToArray());
+        var composite = new Tensor<T>(foreground._shape);
 
         for (int y = 0; y < h; y++)
         {
@@ -283,7 +283,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         var result = input;
 
         // Use hidden state for temporal consistency if available
-        if (_hiddenState != null && _hiddenState.Shape.ToArray().SequenceEqual(input.Shape.ToArray()))
+        if (_hiddenState != null && _hiddenState._shape.SequenceEqual(input._shape))
         {
             // Blend with previous state for temporal smoothing
             for (int i = 0; i < Math.Min(result.Length, _hiddenState.Length); i++)
@@ -297,7 +297,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers) result = layer.Forward(result);
 
         // Update hidden state for next frame
-        _hiddenState = new Tensor<T>(result.Shape.ToArray());
+        _hiddenState = new Tensor<T>(result._shape);
         result.Data.Span.CopyTo(_hiddenState.Data.Span);
 
         return result;
@@ -310,7 +310,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -327,15 +327,15 @@ public class RVM<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

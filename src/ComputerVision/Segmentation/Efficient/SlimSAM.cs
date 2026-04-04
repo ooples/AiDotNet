@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -189,9 +189,16 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
+        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
     #endregion
 
@@ -211,7 +218,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
@@ -221,9 +228,6 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
-
-    private void BackwardPass(Tensor<T> gradient)
-    { if (!_useNativeMode || Layers.Count == 0) return; if (gradient.Rank == 3) gradient = AddBatchDimension(gradient); for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
@@ -461,7 +465,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 
     private Tensor<T> ModulateFeatures(Tensor<T> features, Tensor<T> spatialMask, int numC, int h, int w)
     {
-        var modulated = new Tensor<T>(features.Shape.ToArray());
+        var modulated = new Tensor<T>(features._shape);
         for (int c = 0; c < numC; c++)
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)

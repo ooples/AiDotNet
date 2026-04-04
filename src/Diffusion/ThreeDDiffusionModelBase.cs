@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -231,7 +231,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
             var viewEmbedding = CreateViewEmbedding(azimuth, elevation);
 
             // Generate noise for this view
-            var latents = DiffusionNoiseHelper<T>.SampleGaussian(imageLatent.Shape.ToArray(), rng);
+            var latents = DiffusionNoiseHelper<T>.SampleGaussian(imageLatent._shape, rng);
 
             // Set up scheduler
             Scheduler.SetTimesteps(numInferenceSteps);
@@ -245,7 +245,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
                 var latentVector = latents.ToVector();
                 var noiseVector = noisePrediction.ToVector();
                 latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-                latents = new Tensor<T>(imageLatent.Shape.ToArray(), latentVector);
+                latents = new Tensor<T>(imageLatent._shape, latentVector);
             }
 
             novelViews[v] = DecodeFromLatent(latents);
@@ -276,9 +276,9 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         var latents = EncodeToLatent(renderedViews, sampleMode: false);
 
         // Add noise at specified timestep
-        var noise = DiffusionNoiseHelper<T>.SampleGaussian(latents.Shape.ToArray(), RandomGenerator);
+        var noise = DiffusionNoiseHelper<T>.SampleGaussian(latents._shape, RandomGenerator);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), timestep);
-        var noisyLatentsTensor = new Tensor<T>(latents.Shape.ToArray(), noisyLatents);
+        var noisyLatentsTensor = new Tensor<T>(latents._shape, noisyLatents);
 
         // Predict noise with and without conditioning
         var condNoisePred = NoisePredictor.PredictNoise(noisyLatentsTensor, timestep, promptEmbedding);
@@ -318,7 +318,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         if (Conditioner == null)
             throw new InvalidOperationException("Point cloud colorization requires a conditioning module.");
 
-        var pointShape = pointCloud.Shape.ToArray();
+        var pointShape = pointCloud._shape;
         var numPoints = pointShape[1];
 
         // Encode prompt
@@ -506,7 +506,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
     protected virtual Tensor<T> NormalizePointCloud(Tensor<T> pointCloud)
     {
         var span = pointCloud.AsSpan();
-        var result = new Tensor<T>(pointCloud.Shape.ToArray());
+        var result = new Tensor<T>(pointCloud._shape);
         var resultSpan = result.AsWritableSpan();
 
         // Find bounding box
@@ -553,7 +553,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
     /// </summary>
     protected virtual Tensor<T> NormalizeColors(Tensor<T> colors)
     {
-        var result = new Tensor<T>(colors.Shape.ToArray());
+        var result = new Tensor<T>(colors._shape);
         var span = colors.AsSpan();
         var resultSpan = result.AsWritableSpan();
 
@@ -571,7 +571,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
     /// </summary>
     protected virtual Tensor<T> ConcatenatePointsAndColors(Tensor<T> points, Tensor<T> colors)
     {
-        var pointShape = points.Shape.ToArray();
+        var pointShape = points._shape;
         var numPoints = pointShape[1];
 
         var outputShape = new[] { pointShape[0], numPoints, 6 }; // XYZ + RGB
@@ -646,7 +646,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
     /// </summary>
     protected virtual Mesh3D<T> CreateSimpleMeshFromPoints(Tensor<T> pointCloud)
     {
-        var pointShape = pointCloud.Shape.ToArray();
+        var pointShape = pointCloud._shape;
         var numPoints = pointShape[1];
         var pointSpan = pointCloud.AsSpan();
 

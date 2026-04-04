@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 
@@ -47,7 +47,7 @@ public class SelfAttentionGuidance<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var result = new Tensor<T>(unconditional.Shape.ToArray());
+        var result = new Tensor<T>(unconditional._shape);
         var uncondSpan = unconditional.AsSpan();
         var condSpan = conditional.AsSpan();
         var resultSpan = result.AsWritableSpan();

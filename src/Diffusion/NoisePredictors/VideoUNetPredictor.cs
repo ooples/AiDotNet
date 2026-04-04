@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -630,7 +630,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
         // Apply temporal layer to the video tensor
-        var result = new Tensor<T>(video.Shape.ToArray());
+        var result = new Tensor<T>(video._shape);
         video.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
@@ -646,7 +646,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
         // Video shape: [batch, channels, frames, height, width] (NCFHW)
-        var shape = video.Shape.ToArray();
+        var shape = video._shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -688,7 +688,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddImageCondition(Tensor<T> videoFeatures, Tensor<T> imageCond, int numFrames)
     {
-        var result = new Tensor<T>(videoFeatures.Shape.ToArray());
+        var result = new Tensor<T>(videoFeatures._shape);
         var resultSpan = result.AsWritableSpan();
         var videoSpan = videoFeatures.AsSpan();
         var imageSpan = imageCond.AsSpan();
@@ -1071,6 +1071,50 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         return Clone();
+    }
+
+    #endregion
+
+    #region Layer-Level Backpropagation
+
+    private static void BackwardBlock(VideoBlock block, ref Tensor<T> grad)
+    {
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        AddLayerGradients(gradients, _inputConv);
+        AddLayerGradients(gradients, _timeEmbedMlp1);
+        AddLayerGradients(gradients, _timeEmbedMlp2);
+        AddLayerGradients(gradients, _imageCondProjection);
+
+        foreach (var block in _encoderBlocks) AddBlockGradients(gradients, block);
+        foreach (var block in _middleBlocks) AddBlockGradients(gradients, block);
+        foreach (var block in _decoderBlocks) AddBlockGradients(gradients, block);
+
+        AddLayerGradients(gradients, _outputConv);
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+    }
+
+    private void AddBlockGradients(List<T> gradients, VideoBlock block)
+    {
+        AddLayerGradients(gradients, block.SpatialResBlock);
+        AddLayerGradients(gradients, block.TemporalResBlock);
+        AddLayerGradients(gradients, block.SpatialAttention);
+        AddLayerGradients(gradients, block.TemporalAttention);
+        AddLayerGradients(gradients, block.CrossAttention);
+        AddLayerGradients(gradients, block.Downsample);
+        AddLayerGradients(gradients, block.Upsample);
     }
 
     #endregion

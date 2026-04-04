@@ -199,20 +199,7 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            var output = Predict(input);
-            var ov = output.ToVector();
-            var ev = expected.ToVector();
-            if (ov.Length != ev.Length)
-            {
-                int minLen = Math.Min(ov.Length, ev.Length);
-                ov = ov.Slice(0, minLen);
-                ev = ev.Slice(0, minLen);
-            }
-            var g = LossFunction.CalculateDerivative(ov, ev);
-            var gt = Tensor<T>.FromVector(g);
-            for (int i = Layers.Count - 1; i >= 0; i--)
-                gt = Layers[i].Backward(gt);
-            _optimizer?.UpdateParameters(Layers);
+            TrainWithTape(input, expected);
         }
         finally
         {

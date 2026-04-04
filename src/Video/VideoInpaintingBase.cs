@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 
@@ -97,7 +97,7 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         int height = frames.Shape[2];
         int width = frames.Shape[3];
 
-        var result = new Tensor<T>(frames.Shape.ToArray());
+        var result = new Tensor<T>(frames._shape);
 
         // Copy original frames
         for (int i = 0; i < frames.Length; i++)

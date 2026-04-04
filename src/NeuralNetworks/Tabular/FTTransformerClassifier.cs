@@ -255,56 +255,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for the classification loss.
-    /// </summary>
-    /// <param name="targets">Target class indices [batch_size].</param>
-    /// <returns>Gradient with respect to numerical input [batch_size, num_numerical].</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass computes how to adjust the model weights
-    /// to reduce the loss. It propagates gradients backward through:
-    /// 1. Softmax (probability computation)
-    /// 2. Classification head
-    /// 3. Transformer layers
-    /// 4. Feature tokenizer
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(int[] targets)
-    {
-        if (_probabilitiesCache == null || _logitsCache == null || _clsOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _probabilitiesCache.Shape[0];
-
-        // Gradient of cross-entropy + softmax: probabilities - one_hot(targets)
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = _probabilitiesCache[b * _numClasses + c];
-                var oneHot = targets[b] == c ? NumOps.One : NumOps.Zero;
-                logitsGrad[b * _numClasses + c] = NumOps.Subtract(prob, oneHot);
-            }
-        }
-
-        // Scale by 1/batch_size
-        var scale = NumOps.FromDouble(1.0 / batchSize);
-        for (int i = 0; i < logitsGrad.Length; i++)
-        {
-            logitsGrad[i] = NumOps.Multiply(logitsGrad[i], scale);
-        }
-
-        // Backward through classification head
-        var clsGrad = _classificationHead.Backward(logitsGrad);
-
-        // Backward through backbone
-        return BackwardBackbone(clsGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step.
     /// </summary>
     /// <param name="numericalFeatures">Numerical features tensor [batch_size, num_numerical].</param>
@@ -325,7 +275,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
 
         // Backward pass
-        _ = Backward(targets);
 
         // Update parameters
         UpdateParameters(learningRate);

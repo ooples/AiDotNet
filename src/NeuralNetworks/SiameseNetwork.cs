@@ -3,6 +3,7 @@ global using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -47,6 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly SiameseNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -153,10 +155,11 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
     }
 
-    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
+    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null,
         SiameseNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new SiameseNetworkOptions();
         Options = _options;
         // Use CNN for 2D/3D input (images), FFNN for 1D input (features)
@@ -181,7 +184,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
-        // The layers are initialized in the subnetwork constructor
+        ClearLayers();
+        // Register subnetwork layers and output layer for proper parameter management
+        Layers.AddRange(_subnetwork.Layers);
+        Layers.Add(_outputLayer);
     }
 
     /// <summary>
@@ -448,7 +454,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             if (input.Shape.Length < 2 || input.Shape[1] != 2)
             {
                 throw new ArgumentException(
-                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape.ToArray())}");
+                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input._shape)}");
             }
 
             int batchSize = input.Shape[0];
@@ -500,110 +506,15 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure we're in training mode
         SetTrainingMode(true);
-
-        // Validate input shape and expected output shape
-        if (input.Shape.Length < 2 || input.Shape[1] != 2)
+        try
         {
-            throw new ArgumentException(
-                $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape.ToArray())}");
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        if (expectedOutput.Shape.Length != 2 || expectedOutput.Shape[0] != input.Shape[0] || expectedOutput.Shape[1] != 1)
+        finally
         {
-            throw new ArgumentException(
-                $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape.ToArray())}");
+            SetTrainingMode(false);
         }
-
-        int batchSize = input.Shape[0];
-
-        // Clear cached embedding pairs for this training batch
-        if (UseAuxiliaryLoss)
-        {
-            _cachedEmbeddingPairs.Clear();
-        }
-
-        // Forward pass to get predictions
-        var predictions = Predict(input);
-
-        // Calculate loss using the loss function
-        Vector<T> predictedVector = predictions.ToVector();
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(predictedVector, expectedVector);
-
-        // Calculate error gradients
-        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Error = expected - predicted
-            outputGradients[b, 0] = NumOps.Subtract(expectedOutput[b, 0], predictions[b, 0]);
-        }
-
-        // Process each pair in the batch for the backward pass
-        _subnetwork.SetTrainingMode(true);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract the pair - GetSlice returns a tensor
-            var input1 = input.GetSlice(b).GetSlice(0);
-            var input2 = input.GetSlice(b).GetSlice(1);
-
-            // Forward pass through the subnetwork
-            var embedding1 = _subnetwork.Predict(input1).ToVector();
-            var embedding2 = _subnetwork.Predict(input2).ToVector();
-
-            // Cache embeddings and label for contrastive loss computation
-            if (UseAuxiliaryLoss)
-            {
-                T label = expectedOutput[b, 0];
-                _cachedEmbeddingPairs.Add((embedding1, embedding2, label));
-            }
-
-            // Combine embeddings
-            var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
-
-            // Backpropagate through output layer
-            var outputGradient = new Tensor<T>(new[] { 1, 1 });
-            outputGradient[0, 0] = outputGradients[b, 0];
-            var embeddingGradients = _outputLayer.Backward(outputGradient).ToVector();
-
-            // Split gradients for each embedding
-            int embeddingSize = embedding1.Length;
-            var embedding1Gradients = new Vector<T>(embeddingSize);
-            var embedding2Gradients = new Vector<T>(embeddingSize);
-
-            for (int i = 0; i < embeddingSize; i++)
-            {
-                embedding1Gradients[i] = embeddingGradients[i];
-                embedding2Gradients[i] = embeddingGradients[i + embeddingSize];
-            }
-
-            // Backpropagate through the subnetwork for each input
-            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape.ToArray()));
-            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape.ToArray()));
-        }
-
-        // Get the learning rate from the architecture or use default
-        T learningRate = NumOps.FromDouble(0.001);
-
-        // Update parameters for the subnetwork
-        // Assume the subnetwork has internal logic to update all its layers
-        Vector<T> subnetworkGradients = _subnetwork.GetParameterGradients();
-        Vector<T> subnetworkParameters = _subnetwork.GetParameters();
-
-        // Apply learning rate to gradients using vectorized operations
-        var gradientStep = (Vector<T>)Engine.Multiply(subnetworkGradients, learningRate);
-        var updatedParameters = (Vector<T>)Engine.Add(subnetworkParameters, gradientStep);
-
-        // Update the subnetwork with new parameters
-        _subnetwork.UpdateParameters(updatedParameters);
-
-        // Update output layer parameters directly using the learning rate
-        _outputLayer.UpdateParameters(learningRate);
-
-        // Reset training mode
-        _subnetwork.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -736,6 +647,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new SiameseNetwork<T>(Architecture, LossFunction);
+        return new SiameseNetwork<T>(Architecture, lossFunction: LossFunction);
     }
 }

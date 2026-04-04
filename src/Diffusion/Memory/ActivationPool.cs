@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Diffusion.Memory;
@@ -117,7 +117,7 @@ public class ActivationPool<T> : IDisposable
 
             while (pool.TryTake(out var pooledTensor))
             {
-                if (pooledTensor.Tensor is not null && ShapeMatches(pooledTensor.Tensor.Shape.ToArray(), shape))
+                if (pooledTensor.Tensor is not null && ShapeMatches(pooledTensor.Tensor._shape, shape))
                 {
                     // Return non-matching tensors back to pool before returning
                     foreach (var pt in toReturn)
@@ -174,7 +174,7 @@ public class ActivationPool<T> : IDisposable
         if (tensor == null)
             return;
 
-        var totalElements = CalculateTotalElements(tensor.Shape.ToArray());
+        var totalElements = CalculateTotalElements(tensor._shape);
         var sizeClass = GetSizeClass(totalElements);
 
         var pool = _pools.GetOrAdd(sizeClass, _ => new ConcurrentBag<PooledTensor<T>>());

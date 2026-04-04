@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PDEs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.PDEs;
@@ -41,8 +42,8 @@ public class PDEAnalyticalSolutionTests
         double dudt = -alpha * k * k * expFactor * Math.Sin(k * x);
         double d2udx2 = -k * k * expFactor * Math.Sin(k * x);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { k * expFactor * Math.Cos(k * x), dudt } },
             new[, ,] { { { d2udx2, 0 }, { 0, 0 } } });
@@ -85,8 +86,8 @@ public class PDEAnalyticalSolutionTests
         double d2udx2 = -k * k * Math.Sin(k * x) * Math.Cos(c * k * t);
         double d2udt2 = -c * c * k * k * Math.Sin(k * x) * Math.Cos(c * k * t);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { dudx, dudt } },
             new[, ,] { { { d2udx2, 0 }, { 0, d2udt2 } } });
@@ -117,8 +118,8 @@ public class PDEAnalyticalSolutionTests
         double dudx = 2 * x;  // ∂u/∂x = 2x
         double d2udx2 = 2.0;  // ∂²u/∂x² = 2
 
-        var inputs = new[] { x };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 1,
             new[,] { { dudx } },
             new[, ,] { { { d2udx2 } } });
@@ -146,8 +147,8 @@ public class PDEAnalyticalSolutionTests
         double dudx = k * Math.Cos(k * x);
         double d2udx2 = -k * k * Math.Sin(k * x);
 
-        var inputs = new[] { x };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 1,
             new[,] { { dudx } },
             new[, ,] { { { d2udx2 } } });
@@ -178,8 +179,8 @@ public class PDEAnalyticalSolutionTests
         double t = 0.1;
 
         // Constant solution: all derivatives are zero
-        var inputs = new[] { x, t };
-        var outputs = new[] { u0 };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
@@ -210,8 +211,8 @@ public class PDEAnalyticalSolutionTests
         double t = 0.1;
 
         // At equilibrium with flat profile: all derivatives are zero
-        var inputs = new[] { x, t };
-        var outputs = new[] { u0 };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
@@ -253,8 +254,8 @@ public class PDEAnalyticalSolutionTests
         double v = 0.0;
         double p = 0.0;  // Reference pressure
 
-        var inputs = new[] { x, y, t };
-        var outputs = new[] { u, v, p };
+        var inputs = new Vector<double>(new double[] { x, y, t });
+        var outputs = new Vector<double>(new double[] { u, v, p });
 
         // First derivatives: [output_idx, input_idx] where inputs are [x=0, y=1, t=2]
         double dudx = 0.0;
@@ -310,8 +311,8 @@ public class PDEAnalyticalSolutionTests
         double v = -x;
         double p = 0.0;
 
-        var inputs = new[] { x, y, t };
-        var outputs = new[] { u, v, p };
+        var inputs = new Vector<double>(new double[] { x, y, t });
+        var outputs = new Vector<double>(new double[] { u, v, p });
 
         var firstDerivatives = new double[3, 3];
         firstDerivatives[0, 0] = 0.0;  // ∂u/∂x
@@ -367,8 +368,8 @@ public class PDEAnalyticalSolutionTests
         double Ey = E0 * Math.Sin(phase);
         double Bz = E0 * Math.Sin(phase);  // For c = 1
 
-        var inputs = new[] { x, y, t };
-        var outputs = new[] { Ex, Ey, Bz };
+        var inputs = new Vector<double>(new double[] { x, y, t });
+        var outputs = new Vector<double>(new double[] { Ex, Ey, Bz });
 
         // First derivatives: [output_idx, input_idx] where inputs are [x=0, y=1, t=2]
         var firstDerivatives = new double[3, 3];
@@ -412,8 +413,8 @@ public class PDEAnalyticalSolutionTests
         double Ey = 0.0;
         double Bz = 0.0;
 
-        var inputs = new[] { 0.5, 0.5, 0.0 };
-        var outputs = new[] { Ex, Ey, Bz };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
+        var outputs = new Vector<double>(new double[] { Ex, Ey, Bz });
 
         // All derivatives are zero for uniform static field
         var firstDerivatives = new double[3, 3];
@@ -454,8 +455,8 @@ public class PDEAnalyticalSolutionTests
         double psiR = Math.Cos(phase);
         double psiI = Math.Sin(phase);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { psiR, psiI };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { psiR, psiI });
 
         // First derivatives
         double dPsiRdx = -k * Math.Sin(phase);
@@ -516,8 +517,8 @@ public class PDEAnalyticalSolutionTests
         double psiR = Math.Cos(phase);
         double psiI = Math.Sin(phase);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { psiR, psiI };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { psiR, psiI });
 
         // First derivatives
         double dPsiRdx = -k * Math.Sin(phase);
@@ -564,8 +565,8 @@ public class PDEAnalyticalSolutionTests
         double alpha = 1.5;
         var pde = new HeatEquation<double>(alpha);
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
             new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.0 } } });
@@ -588,8 +589,8 @@ public class PDEAnalyticalSolutionTests
         double c = 2.0;
         var pde = new WaveEquation<double>(c);
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
             new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.1 } } });

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -630,153 +630,6 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the MoE layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// The backward pass:
-    /// 1. Applies the derivative of the activation function
-    /// 2. Computes gradients for each expert's contribution
-    /// 3. Backpropagates through active experts
-    /// 4. Computes gradients for the router
-    /// 5. Backpropagates through the router
-    /// 6. Returns the combined input gradient
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the MoE layer learns from its mistakes.
-    ///
-    /// The backward pass works in reverse:
-    ///
-    /// 1. <b>Receive Error Signal:</b> Get information about how wrong the output was
-    ///    - This comes from layers after this one (or from the loss function)
-    ///
-    /// 2. <b>Activation Gradient:</b> Account for the activation function
-    ///    - If we applied ReLU, apply its derivative
-    ///    - This adjusts the error signal appropriately
-    ///
-    /// 3. <b>Expert Gradients:</b> Calculate how each expert should improve
-    ///    - Weight the error by how much each expert contributed
-    ///    - Expert with weight 0.7 gets more of the blame/credit than one with 0.1
-    ///    - Send these weighted errors back through each expert
-    ///
-    /// 4. <b>Router Gradients:</b> Calculate how routing should improve
-    ///    - If expert 1 was useful, increase its future routing weight for similar inputs
-    ///    - If expert 3 was harmful, decrease its future routing weight
-    ///    - This helps the router make better decisions next time
-    ///
-    /// 5. <b>Combine Input Gradients:</b> Sum up gradients from router and experts
-    ///    - This tells earlier layers how they should adjust
-    ///
-    /// After backward pass completes, all components know how to improve, but haven't
-    /// changed yet. The actual changes happen in UpdateParameters().
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null || _lastPreActivation == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Step 1: Apply activation derivative
-        var normalizedOutputGradient = NormalizeOutputGradient(outputGradient);
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
-
-        // Step 2: Backpropagate through experts
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        for (int i = 0; i < _experts.Count; i++)
-        {
-            // Weight the gradient by the routing weight for this expert
-            var weightedGradient = WeightGradientByRouting(activationGradient, _lastRoutingWeights, i);
-
-            // Only backprop through expert if it was active
-            bool wasActive = _topK == 0 || IsExpertUsedInBatch(i);
-
-            if (wasActive)
-            {
-                var expertInputGradient = _experts[i].Backward(weightedGradient);
-                inputGradientFromExperts = inputGradientFromExperts.Add(expertInputGradient);
-            }
-        }
-
-        // Step 3: Compute router gradient
-        var routerGradient = ComputeRouterGradient(activationGradient, _lastExpertOutputs, _lastRoutingWeights, _lastRoutingLogits);
-
-        // Step 4: Backpropagate through router
-        var inputGradientFromRouter = _router.Backward(routerGradient);
-
-        // Step 5: Combine gradients from both paths
-        var totalInputGradient = inputGradientFromExperts.Add(inputGradientFromRouter);
-
-        return ReshapeToOriginalInput(totalInputGradient);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the expert layers and router network. Each sublayer will use its own autodiff if available.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null || _lastPreActivation == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Step 1: Apply activation derivative
-        var normalizedOutputGradient = NormalizeOutputGradient(outputGradient);
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
-
-        // Step 2: Backpropagate through experts (composite - each expert handles its own autodiff)
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        for (int i = 0; i < _experts.Count; i++)
-        {
-            // Weight the gradient by the routing weight for this expert
-            var weightedGradient = WeightGradientByRouting(activationGradient, _lastRoutingWeights, i);
-
-            // Only backprop through expert if it was active
-            bool wasActive = _topK == 0 || IsExpertUsedInBatch(i);
-
-            if (wasActive)
-            {
-                var expertInputGradient = _experts[i].Backward(weightedGradient);
-                inputGradientFromExperts = inputGradientFromExperts.Add(expertInputGradient);
-            }
-        }
-
-        // Step 3: Compute router gradient
-        var routerGradient = ComputeRouterGradient(activationGradient, _lastExpertOutputs, _lastRoutingWeights, _lastRoutingLogits);
-
-        // Step 4: Backpropagate through router (will use its own autodiff)
-        var inputGradientFromRouter = _router.Backward(routerGradient);
-
-        // Step 5: Combine gradients from both paths
-        var totalInputGradient = inputGradientFromExperts.Add(inputGradientFromRouter);
-
-        return ReshapeToOriginalInput(totalInputGradient);
     }
 
 
@@ -1848,7 +1701,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Only downloads to CPU in training mode for gradient caching.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1861,7 +1714,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int numExperts = _experts.Count;
 
         // Step 1: Route input through router to get logits (GPU-resident)
-        IGpuTensor<T> routingLogitsGpu;
+        Tensor<T> routingLogitsGpu;
         if (_router is LayerBase<T> routerBase && routerBase.CanExecuteOnGpu)
         {
             routingLogitsGpu = routerBase.ForwardGpu(input);
@@ -1869,7 +1722,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else
         {
             // CPU fallback for router (uncommon path)
-            var cpuInput = input.ToTensor();
+            var cpuInput = input;
             var cpuLogits = _router.Forward(cpuInput);
             routingLogitsGpu = gpuEngine.UploadToGpu(cpuLogits, GpuTensorRole.Activation);
         }
@@ -1878,8 +1731,8 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var routingWeightsGpu = gpuEngine.SoftmaxGpu(routingLogitsGpu);
 
         // Step 3: Apply Top-K selection on GPU if enabled
-        IGpuTensor<int>? topKIndicesGpu = null;
-        IGpuTensor<T>? topKValuesGpu = null;
+        Tensor<int>? topKIndicesGpu = null;
+        Tensor<T>? topKValuesGpu = null;
         int[]? topKIndicesFlat = null;
 
         if (_topK > 0)
@@ -1893,7 +1746,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Download indices ONCE - tiny data (~256 bytes for batch=32, topK=2)
             // This is essential for MoE efficiency: run only selected experts, not all N
-            topKIndicesFlat = topKIndicesGpu.ToTensor().Data.ToArray();
+            topKIndicesFlat = topKIndicesGpu.Data.ToArray();
 
             // Cache 2D array for backward pass in training mode
             if (IsTrainingMode)
@@ -1915,7 +1768,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Step 4: Process through each expert on GPU (GPU-resident)
-        var expertOutputsGpu = new List<IGpuTensor<T>>();
+        var expertOutputsGpu = new List<Tensor<T>>();
 
         // Determine which experts are active using downloaded indices
         HashSet<int> activeExperts = new HashSet<int>();
@@ -1939,7 +1792,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (activeExperts.Contains(i))
             {
-                IGpuTensor<T> expertOutput;
+                Tensor<T> expertOutput;
                 if (_experts[i] is LayerBase<T> expertBase && expertBase.CanExecuteOnGpu)
                 {
                     expertOutput = expertBase.ForwardGpu(input);
@@ -1947,7 +1800,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 else
                 {
                     // CPU fallback for this expert
-                    var cpuInput = input.ToTensor();
+                    var cpuInput = input;
                     var cpuOutput = _experts[i].Forward(cpuInput);
                     expertOutput = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
                 }
@@ -1964,7 +1817,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 5: Combine expert outputs using routing weights on GPU
         // For Top-K: Use sparse weights from topKValuesGpu and pre-downloaded indices
         // For dense routing: Use full routingWeightsGpu
-        IGpuTensor<T> combinedGpu;
+        Tensor<T> combinedGpu;
         if (_topK > 0 && topKValuesGpu != null && topKIndicesFlat != null)
         {
             combinedGpu = CombineExpertOutputsGpuSparse(
@@ -1978,7 +1831,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 6: Apply activation function on GPU
         var activationType = MapActivationToFused();
-        IGpuTensor<T> resultGpu;
+        Tensor<T> resultGpu;
         if (activationType == FusedActivationType.ReLU)
         {
             resultGpu = gpuEngine.ReluGpu(combinedGpu);
@@ -1995,11 +1848,11 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache for backward pass (only in training mode - download to CPU)
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastRoutingLogits = routingLogitsGpu.ToTensor();
-            _lastRoutingWeights = routingWeightsGpu.ToTensor();
-            _lastPreActivation = combinedGpu.ToTensor();
-            _lastExpertOutputs = expertOutputsGpu.Select(e => e.ToTensor()).ToList();
+            _lastInput = input;
+            _lastRoutingLogits = routingLogitsGpu;
+            _lastRoutingWeights = routingWeightsGpu;
+            _lastPreActivation = combinedGpu;
+            _lastExpertOutputs = expertOutputsGpu.Select(e => e).ToList();
         }
 
         return resultGpu;
@@ -2009,10 +1862,10 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Combines expert outputs using sparse routing weights (Top-K) on GPU.
     /// Uses pre-downloaded indices to avoid additional GPU-to-CPU transfers.
     /// </summary>
-    private IGpuTensor<T> CombineExpertOutputsGpuSparse(
+    private Tensor<T> CombineExpertOutputsGpuSparse(
         DirectGpuTensorEngine gpuEngine,
-        List<IGpuTensor<T>> expertOutputsGpu,
-        IGpuTensor<T> topKValuesGpu,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> topKValuesGpu,
         int[] topKIndicesFlat,
         int batchSize,
         int numExperts)
@@ -2065,10 +1918,10 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Combines expert outputs using dense routing weights on GPU.
     /// </summary>
-    private IGpuTensor<T> CombineExpertOutputsGpuDense(
+    private Tensor<T> CombineExpertOutputsGpuDense(
         DirectGpuTensorEngine gpuEngine,
-        List<IGpuTensor<T>> expertOutputsGpu,
-        IGpuTensor<T> routingWeightsGpu,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> routingWeightsGpu,
         int batchSize)
     {
         // For dense routing, combine all experts weighted by their routing weights
@@ -2101,14 +1954,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Divides tensor A by broadcast of tensor B along axis 1.
     /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
     /// </summary>
-    private IGpuTensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> a, IGpuTensor<T> b)
+    private Tensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, Tensor<T> a, Tensor<T> b)
     {
         // For normalization: a / b where b is [batchSize, 1]
         // We can compute 1/b then multiply
         // But we need an inverse operation. For now, download, compute, upload
         // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
-        var aData = a.ToTensor();
-        var bData = b.ToTensor();
+        var aData = a;
+        var bData = b;
 
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];
@@ -2127,93 +1980,5 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return gpuEngine.UploadToGpu(result, GpuTensorRole.Activation);
     }
     #endregion
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // Check that all components support JIT
-        if (!_router.SupportsJitCompilation)
-            throw new NotSupportedException("MoE router does not support JIT compilation.");
-
-        foreach (var expert in _experts)
-        {
-            if (!expert.SupportsJitCompilation)
-                throw new NotSupportedException($"Expert does not support JIT compilation.");
-        }
-
-        // MixtureOfExpertsLayer JIT uses soft routing with TopK selection:
-        // 1. Router computes routing logits for each expert
-        // 2. TopKSoftmax selects top-K experts with differentiable routing weights
-        // 3. Each expert processes the input
-        // 4. Outputs are weighted by routing weights and summed
-
-        var input = inputNodes[0];
-
-        // Get routing logits from router
-        var routingLogits = _router.ExportComputationGraph(inputNodes);
-
-        // Apply TopKSoftmax for differentiable expert selection
-        var routingWeights = TensorOperations<T>.TopKSoftmax(routingLogits, _topK);
-
-        // Process through each expert and compute weighted sum
-        ComputationNode<T>? output = null;
-        int numExperts = _experts.Count;
-
-        for (int i = 0; i < numExperts; i++)
-        {
-            // Get expert output
-            var expertOutput = _experts[i].ExportComputationGraph(inputNodes);
-
-            // Get routing weight for this expert (slice from routing weights)
-            var expertWeight = TensorOperations<T>.Slice(routingWeights, i, 1, axis: -1);
-
-            // Weight the expert output
-            var weightedOutput = TensorOperations<T>.ElementwiseMultiply(expertOutput, expertWeight);
-
-            // Accumulate outputs
-            if (output == null)
-            {
-                output = weightedOutput;
-            }
-            else
-            {
-                output = TensorOperations<T>.Add(output, weightedOutput);
-            }
-        }
-
-        // Apply layer activation
-        if (output is null)
-        {
-            throw new InvalidOperationException("No expert outputs were generated. Ensure at least one expert is configured.");
-        }
-
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if both the router and all experts support JIT compilation; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for MoE uses TopKSoftmax for differentiable expert selection.
-    /// The routing is performed by the router network, and the selected experts'
-    /// outputs are weighted by the softmax-normalized routing scores.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        _router.SupportsJitCompilation && _experts.All(e => e.SupportsJitCompilation);
 
 }

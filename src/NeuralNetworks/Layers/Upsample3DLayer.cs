@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -95,12 +95,6 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// Upsample3D supports GPU execution via CUDA, OpenCL, and HIP backends using nearest neighbor interpolation.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>true</c> if the input shape is configured.</value>
-    public override bool SupportsJitCompilation => InputShape != null && InputShape.Length > 0;
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -300,7 +294,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors on GPU (uses first input).</param>
     /// <returns>The upsampled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -314,7 +308,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         if (input.Shape.Length < 4)
             throw new ArgumentException($"Upsample3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input5D;
+        Tensor<T> input5D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
@@ -322,7 +316,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         if (rank == 4)
         {
             addedBatch = true;
-            input5D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+            input5D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
         }
         else if (rank == 5)
         {
@@ -334,14 +328,14 @@ public class Upsample3DLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 4; d++)
                 flatBatch *= input.Shape[d];
-            input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+            input5D = input.Reshape(new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input5D.Shape.ToArray();
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass
-        _lastInput = input.ToTensor();
+        _lastInput = input;
 
         var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
 
@@ -355,126 +349,18 @@ public class Upsample3DLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[2];
             outputShape[_originalInputShape.Length - 2] = output.Shape[3];
             outputShape[_originalInputShape.Length - 1] = output.Shape[4];
-            return output.CreateView(0, outputShape);
+            return output.Reshape(outputShape);
         }
         if (addedBatch)
         {
-            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
         }
         return output;
-    }
-
-    /// <summary>
-    /// Performs GPU-resident backward pass of 3D upsampling.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the output on GPU.</param>
-    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Flatten gradient to 5D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        IGpuTensor<T> gradient5D;
-
-        if (rank == 4)
-        {
-            gradient5D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3] });
-        }
-        else if (rank == 5)
-        {
-            gradient5D = outputGradient;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 4; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient5D = outputGradient.CreateView(0, new[] { flatBatch, outputGradient.Shape[rank - 4], outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1] });
-        }
-
-        var inputGrad = gpuEngine.NearestNeighborUpsample3DBackwardGpu<T>(gradient5D, _gpuInputShape, ScaleDepth, ScaleHeight, ScaleWidth);
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length > 5)
-        {
-            var restoreShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 4; d++)
-                restoreShape[d] = _originalInputShape[d];
-            restoreShape[_originalInputShape.Length - 4] = inputGrad.Shape[1];
-            restoreShape[_originalInputShape.Length - 3] = inputGrad.Shape[2];
-            restoreShape[_originalInputShape.Length - 2] = inputGrad.Shape[3];
-            restoreShape[_originalInputShape.Length - 1] = inputGrad.Shape[4];
-            return inputGrad.CreateView(0, restoreShape);
-        }
-        if (_addedBatchDimension)
-        {
-            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4] });
-        }
-        return inputGrad;
     }
 
     #endregion
 
     #region Backward Pass
-
-    /// <summary>
-    /// Performs the backward pass to propagate gradients through the upsampling.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    /// <remarks>
-    /// <para>
-    /// During backpropagation, gradients from each output voxel in a [scaleD × scaleH × scaleW] block
-    /// are summed and assigned to the corresponding input voxel.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int rank = outputGradient.Rank;
-        Tensor<T> batchedGradient;
-        int[] inputShape;
-
-        if (rank == 5)
-        {
-            batchedGradient = outputGradient;
-            inputShape = _lastInput.Shape.Length == 5
-                ? _lastInput.Shape.ToArray()
-                : new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
-        }
-        else if (rank == 4)
-        {
-            batchedGradient = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]);
-            inputShape = new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 4; d++)
-                flatBatch *= outputGradient.Shape[d];
-            batchedGradient = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 4], outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-
-            int inputFlatBatch = 1;
-            for (int d = 0; d < _lastInput.Shape.Length - 4; d++)
-                inputFlatBatch *= _lastInput.Shape[d];
-            inputShape = new[] { inputFlatBatch, _lastInput.Shape[_lastInput.Shape.Length - 4], _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1] };
-        }
-
-        var inputGrad = Engine.Upsample3DBackward(batchedGradient, inputShape, ScaleDepth, ScaleHeight, ScaleWidth);
-
-        // Restore to original input shape
-        return inputGrad.Reshape(_lastInput.Shape.ToArray());
-    }
 
     #endregion
 
@@ -633,26 +519,6 @@ public class Upsample3DLayer<T> : LayerBase<T>
     #endregion
 
     #region Computation Graph
-
-    /// <summary>
-    /// Exports the layer's computation as a graph node for JIT compilation or autodiff.
-    /// </summary>
-    /// <param name="inputNodes">List to append input nodes to.</param>
-    /// <returns>A computation node representing the upsampling operation.</returns>
-    /// <exception cref="NotSupportedException">Thrown because Upsample3D autodiff is not yet implemented.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is not yet implemented. The TensorOperations.Upsample3D method needs to be added
-    /// to support JIT compilation and automatic differentiation for 3D upsampling operations.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        // TODO: Implement TensorOperations.Upsample3D for autodiff support
-        throw new NotSupportedException(
-            "Upsample3DLayer.ExportComputationGraph is not yet implemented. " +
-            "TensorOperations.Upsample3D needs to be added for JIT compilation and autodiff support.");
-    }
 
     #endregion
 }

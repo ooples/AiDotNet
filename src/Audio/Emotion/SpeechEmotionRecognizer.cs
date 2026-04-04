@@ -468,7 +468,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // Create tensor from the normalized vector with the original shape
-        return Tensor<T>.FromVector(resultVector, melSpec.Shape.ToArray());
+        return Tensor<T>.FromVector(resultVector, melSpec._shape);
     }
 
     /// <inheritdoc/>
@@ -738,44 +738,15 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
                 "Cannot train in ONNX mode. Create a new model with the native mode constructor for training.");
         }
 
-        // Preprocess audio
-        var preprocessed = PreprocessAudio(input);
-
-        // Forward pass
         SetTrainingMode(true);
-        var predictions = Forward(preprocessed);
-
-        // Compute loss derivative
-        var predVector = predictions.ToVector();
-        var expVector = expected.ToVector();
-        var gradients = LossFunction.CalculateDerivative(predVector, expVector);
-
-        var gradientTensor = new Tensor<T>([gradients.Length]);
-        var gradientVector = gradientTensor.ToVector();
-        for (int i = 0; i < gradients.Length; i++)
+        try
         {
-            gradientVector[i] = gradients[i];
+            TrainWithTape(input, expected);
         }
-
-        // Backpropagate through output layer
-        if (_outputLayer is not null)
+        finally
         {
-            gradientTensor = _outputLayer.Backward(gradientTensor);
+            SetTrainingMode(false);
         }
-
-        // Backpropagate through dense layers
-        for (int i = _denseLayers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = _denseLayers[i].Backward(gradientTensor);
-        }
-
-        // Backpropagate through conv layers
-        for (int i = _convLayers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = _convLayers[i].Backward(gradientTensor);
-        }
-
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

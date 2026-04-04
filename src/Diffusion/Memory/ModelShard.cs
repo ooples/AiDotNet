@@ -286,31 +286,6 @@ public class ModelShard<T>
     }
 
     /// <summary>
-    /// Performs backward pass through all sharded layers.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from subsequent layer.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        // Backward pass goes in reverse order
-        for (int device = _numDevices - 1; device >= 0; device--)
-        {
-            current = MoveToDevice(current, device);
-
-            // Process layers in reverse order
-            var layers = _deviceLayers[device];
-            for (int i = layers.Count - 1; i >= 0; i--)
-            {
-                current = layers[i].Backward(current);
-            }
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates parameters on all devices.
     /// </summary>
     /// <param name="learningRate">Learning rate for update.</param>

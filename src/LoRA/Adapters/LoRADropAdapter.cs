@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -295,92 +295,9 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass with dropout mask applied to gradients.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// During backpropagation, gradients are only propagated through components that were
-    /// not dropped during the forward pass. This is achieved by applying the same dropout
-    /// mask to the gradients and scaling appropriately.
-    /// </para>
-    /// <para><b>For Beginners:</b> This propagates gradients back through the layer.
-    ///
-    /// Key insight: Gradients only flow through the components that were active during
-    /// the forward pass. If a component was dropped (set to zero), its gradient is also
-    /// zero - we don't update it based on this training example.
-    ///
-    /// This ensures that:
-    /// - Dropped components don't get updated (they were "turned off")
-    /// - Kept components get normal gradient updates
-    /// - The scaling from the forward pass is preserved in gradients
-    ///
-    /// The result is that the model learns to work with different subsets of components,
-    /// making it more robust and less prone to overfitting.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Create a gradient for the LoRA layer
-        Tensor<T> loraGradient = new Tensor<T>(outputGradient.Shape.ToArray());
-
-        if (_isTraining)
-        {
-            // Apply dropout mask and scaling to gradients
-            T invKeepProb = NumOps.Divide(NumOps.One, NumOps.FromDouble(1.0 - _dropoutRate));
-
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                if (_dropoutMask != null && !_dropoutMask[i % _dropoutMask.Length])
-                {
-                    // This component was dropped - zero gradient
-                    loraGradient[i] = NumOps.Zero;
-                }
-                else
-                {
-                    // This component was kept - propagate gradient with scaling
-                    loraGradient[i] = NumOps.Multiply(outputGradient[i], invKeepProb);
-                }
-            }
-        }
-        else
-        {
-            // Inference mode: no dropout, no gradient scaling (inverted dropout pattern)
-            // Training already handled scaling, so inference gradients flow through unchanged
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                loraGradient[i] = outputGradient[i];
-            }
-        }
-
-        // Backward through LoRA layer with dropout-adjusted gradient
-        Tensor<T> loraInputGrad = _loraLayer.Backward(loraGradient);
-
-        // Backward through base layer with original gradient
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -466,11 +383,25 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         // Create new parameters with merged weights
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
-        // Merge weights
+        // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
+        // DenseLayer stores weights as [inputSize, outputSize] (input-major).
+        // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
+            int row, col;
+            if (isOutputMajor)
+            {
+                int outputIdx = i / inputSize;
+                int inputIdx = i % inputSize;
+                row = inputIdx;
+                col = outputIdx;
+            }
+            else
+            {
+                row = i / outputSize;
+                col = i % outputSize;
+            }
             mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
         }
 

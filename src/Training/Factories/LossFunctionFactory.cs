@@ -72,7 +72,7 @@ public static class LossFunctionFactory<T>
                 GetDoubleParam(parameters, "mPlus", 0.9),
                 GetDoubleParam(parameters, "mMinus", 0.1),
                 GetDoubleParam(parameters, "lambda", 0.5)),
-            LossType.CTC => new CTCLossAdapter<T>(
+            LossType.CTC => new CTCLoss<T>(
                 GetIntParam(parameters, "numClasses", 10),
                 GetIntParam(parameters, "blankIndex", 0)),
             LossType.NoiseContrastiveEstimation => new NoiseContrastiveEstimationLoss<T>(

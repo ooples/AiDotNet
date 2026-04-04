@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -260,135 +260,7 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     private List<Matrix<T>>? _weightGradients;
     private List<Vector<T>>? _biasGradients;
 
-    /// <summary>
-    /// Full analytical backward pass through the FC layers using chain rule.
-    /// Computes dL/dInput and stores dL/dW, dL/db for UpdateParameters.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _postActivations.Count == 0)
-            return new Tensor<T>(new[] { _lookbackWindow });
-
-        _weightGradients = new List<Matrix<T>>();
-        _biasGradients = new List<Vector<T>>();
-
-        // Output gradient layout: [dL/d_backcast(lookbackWindow) | dL/d_forecast(forecastHorizon)]
-        // Extract forecast output gradient
-        var dForecast = new Vector<T>(_forecastHorizon);
-        for (int i = 0; i < _forecastHorizon && i + _lookbackWindow < outputGradient.Length; i++)
-            dForecast[i] = outputGradient[_lookbackWindow + i];
-
-        // Extract backcast output gradient
-        var dBackcast = new Vector<T>(_lookbackWindow);
-        for (int i = 0; i < _lookbackWindow && i < outputGradient.Length; i++)
-            dBackcast[i] = outputGradient[i];
-
-        // Chain rule through basis expansion: output = BasisMatrix @ theta
-        // => dL/d_theta = BasisMatrix^T @ dL/d_output
-        var fcBasis = ComputeBasisMatrix(_thetaSizeForecast, _forecastHorizon);
-        var fcThetaGrad = new Vector<T>(_thetaSizeForecast);
-        for (int k = 0; k < _thetaSizeForecast; k++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < _forecastHorizon; t++)
-                sum = NumOps.Add(sum, NumOps.Multiply(fcBasis[t, k], dForecast[t]));
-            fcThetaGrad[k] = sum;
-        }
-
-        var bcBasis = ComputeBasisMatrix(_thetaSizeBackcast, _lookbackWindow);
-        var bcThetaGrad = new Vector<T>(_thetaSizeBackcast);
-        for (int k = 0; k < _thetaSizeBackcast; k++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < _lookbackWindow; t++)
-                sum = NumOps.Add(sum, NumOps.Multiply(bcBasis[t, k], dBackcast[t]));
-            bcThetaGrad[k] = sum;
-        }
-
-        // Backward through forecast theta layer using proper theta gradient
-        int fcLayerIdx = _numHiddenLayers + 1;
-        var fcW = _fcWeights[fcLayerIdx];
-        var hiddenOut = _lastHiddenOutput ?? new Vector<T>(fcW.Columns);
-
-        // dL/dW_forecast = dL/d_theta_forecast * hidden^T
-        var wGrad = new Matrix<T>(fcW.Rows, fcW.Columns);
-        for (int i = 0; i < fcW.Rows; i++)
-            for (int j = 0; j < fcW.Columns; j++)
-                wGrad[i, j] = NumOps.Multiply(fcThetaGrad[i], hiddenOut[j]);
-        _weightGradients.Insert(0, wGrad);
-        _biasGradients.Insert(0, fcThetaGrad.Clone());
-
-        // dL/d_hidden from forecast layer: W_forecast^T * dL/d_theta_forecast
-        var dHidden = new Vector<T>(fcW.Columns);
-        for (int j = 0; j < fcW.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < fcW.Rows; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(fcW[i, j], fcThetaGrad[i]));
-            dHidden[j] = sum;
-        }
-
-        // Backward through backcast theta layer using proper theta gradient
-        int bcLayerIdx = _numHiddenLayers;
-        var bcW = _fcWeights[bcLayerIdx];
-
-        var bcWGrad = new Matrix<T>(bcW.Rows, bcW.Columns);
-        for (int i = 0; i < bcW.Rows; i++)
-            for (int j = 0; j < bcW.Columns; j++)
-                bcWGrad[i, j] = NumOps.Multiply(bcThetaGrad[i], hiddenOut[j]);
-        _weightGradients.Insert(0, bcWGrad);
-        _biasGradients.Insert(0, bcThetaGrad.Clone());
-
-        // Add backcast contribution to dHidden: W_backcast^T * dL/d_theta_backcast
-        for (int j = 0; j < bcW.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < bcW.Rows; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(bcW[i, j], bcThetaGrad[i]));
-            dHidden[j] = NumOps.Add(dHidden[j], sum);
-        }
-
-        // Backward through hidden layers (reverse order)
-        var currentGrad = dHidden;
-        for (int layer = _numHiddenLayers - 1; layer >= 0; layer--)
-        {
-            var preAct = _preActivations[layer];
-            var w = _fcWeights[layer];
-
-            // ReLU derivative: gradient passes through where preActivation > 0
-            var reluGrad = new Vector<T>(currentGrad.Length);
-            for (int i = 0; i < reluGrad.Length; i++)
-                reluGrad[i] = NumOps.GreaterThan(preAct[i], NumOps.Zero) ? currentGrad[i] : NumOps.Zero;
-
-            // dL/dW = reluGrad * input^T
-            var layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
-            var layerWGrad = new Matrix<T>(w.Rows, w.Columns);
-            for (int i = 0; i < w.Rows; i++)
-                for (int j = 0; j < w.Columns && j < layerInput!.Length; j++)
-                    layerWGrad[i, j] = NumOps.Multiply(reluGrad[i], layerInput![j]);
-            _weightGradients.Insert(0, layerWGrad);
-            _biasGradients.Insert(0, reluGrad.Clone());
-
-            // dL/d_input = W^T * reluGrad (always compute, including layer 0)
-            currentGrad = new Vector<T>(w.Columns);
-            for (int j = 0; j < w.Columns; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < w.Rows; i++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
-                currentGrad[j] = sum;
-            }
-        }
-
-        // Convert input gradient to Tensor
-        var inputGrad = new Tensor<T>(new[] { _lookbackWindow });
-        for (int i = 0; i < _lookbackWindow && i < currentGrad.Length; i++)
-            inputGrad[i] = currentGrad[i];
-        return inputGrad;
-    }
-
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState() { /* stateless layer — no recurrent state to reset */ }
 
@@ -421,16 +293,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 
         _weightGradients = null;
         _biasGradients = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        if (nodes.Count > 0)
-        {
-            var (_, forecast) = ExportComputationGraph(nodes[0]);
-            return forecast;
-        }
-        return TensorOperations<T>.Variable(new Tensor<T>(new[] { _forecastHorizon }), "nbeats_output");
     }
 
     public (Vector<T> backcast, Vector<T> forecast) ForwardInternal(Vector<T> input)

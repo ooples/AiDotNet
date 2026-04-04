@@ -171,4 +171,17 @@ public class CIoULoss<T> : LossFunctionBase<T>
             tensor[batch, boxIdx, 3],
             BoundingBoxFormat.XYXY);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        if (predicted.Shape.Length != 2 || predicted.Shape[1] != 4)
+            throw new ArgumentException("Predicted must be [N, 4] in (x1, y1, x2, y2) format.", nameof(predicted));
+        if (target.Shape.Length != 2 || target.Shape[1] != 4 || target.Shape[0] != predicted.Shape[0])
+            throw new ArgumentException("Target must be [N, 4] matching predicted batch size.", nameof(target));
+
+        var perBoxLoss = Engine.TensorCIoULoss(predicted, target);
+        var allAxes = Enumerable.Range(0, perBoxLoss.Shape.Length).ToArray();
+        return Engine.ReduceMean(perBoxLoss, allAxes, keepDims: false);
+    }
 }

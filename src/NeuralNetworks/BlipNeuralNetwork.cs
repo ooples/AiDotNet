@@ -1535,40 +1535,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // For now, implement ITC like CLIP
         // Full implementation would include all three objectives
         SetTrainingMode(true);
-
         try
         {
-            // Forward pass through vision encoder
-            var imageOutput = input;
-            foreach (var layer in _visionEncoderLayers)
-            {
-                imageOutput = layer.Forward(imageOutput);
-            }
-
-            // Forward pass through text encoder (target contains text tokens)
-            var textOutput = target;
-            foreach (var layer in _textEncoderLayers)
-            {
-                textOutput = layer.Forward(textOutput);
-            }
-
-            // Compute contrastive loss and backpropagate
-            LastLoss = LossFunction.CalculateLoss(imageOutput.ToVector(), textOutput.ToVector());
-            var lossGradient = LossFunction.CalculateDerivative(imageOutput.ToVector(), textOutput.ToVector());
-            var gradient = Tensor<T>.FromVector(lossGradient);
-
-            // Backward pass through text encoder
-            foreach (var layer in _textEncoderLayers.AsEnumerable().Reverse())
-            {
-                gradient = layer.Backward(gradient);
-            }
-
-            // Backward pass through vision encoder
-            var visionGradient = Tensor<T>.FromVector(LossFunction.CalculateDerivative(imageOutput.ToVector(), textOutput.ToVector()));
-            foreach (var layer in _visionEncoderLayers.AsEnumerable().Reverse())
-            {
-                visionGradient = layer.Backward(visionGradient);
-            }
+            TrainWithTape(input, target, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {

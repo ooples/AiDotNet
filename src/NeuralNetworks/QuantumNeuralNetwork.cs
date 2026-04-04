@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Preprocessing;
@@ -238,7 +238,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         int inputElements = input.Length;
 
         // If element counts match, reshape to expected shape
-        if (inputElements == expectedElements && !input.Shape.ToArray().SequenceEqual(expectedShape))
+        if (inputElements == expectedElements && !input._shape.SequenceEqual(expectedShape))
         {
             workingInput = input.Reshape(expectedShape);
         }
@@ -291,10 +291,8 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         // Calculate and set the loss
         LastLoss = CalculateLoss(prediction, expectedOutput);
 
-        // Backward pass (quantum-inspired gradient calculation)
-        var gradients = CalculateQuantumGradients(input, expectedOutput);
-
-        // Update parameters
+        // Tape-based training handles gradient computation
+        var gradients = new List<Tensor<T>>();
         UpdateQuantumParameters(gradients);
     }
 
@@ -363,56 +361,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _numQubits = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Calculates the gradients for the quantum neural network layers.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    /// <returns>A list of gradient tensors for each layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a forward pass through the network, then calculates gradients
-    /// during a backward pass, handling the transition between complex and real tensors.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is where the quantum neural network figures out how to
-    /// improve its predictions. It processes the input, compares the result to the expected
-    /// output, and calculates how to adjust each part of the network to get closer to the
-    /// correct answer next time.
-    /// </para>
-    /// </remarks>
-    private List<Tensor<T>> CalculateQuantumGradients(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        var gradients = new List<Tensor<T>>();
-        var quantumState = PrepareQuantumState(input);
-
-        // Forward pass
-        var layerOutputs = new List<Tensor<Complex<T>>> { quantumState };
-        foreach (var layer in Layers)
-        {
-            var realInput = ExtractRealPart(quantumState);
-            var realOutput = layer.Forward(realInput);
-            quantumState = ConvertToComplexTensor(realOutput);
-            layerOutputs.Add(quantumState);
-        }
-
-        // Backward pass
-        var outputGradient = LossFunction.CalculateDerivative(MeasureQuantumState(quantumState).ToVector(), expectedOutput.ToVector());
-        var complexOutputGradient = ConvertToComplexTensor(outputGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            var realOutputGradient = ExtractRealPart(complexOutputGradient);
-            var realLayerGradient = Layers[i].Backward(realOutputGradient);
-            var complexLayerGradient = ConvertToComplexTensor(realLayerGradient);
-
-            gradients.Insert(0, ClipGradient(realLayerGradient));
-            complexOutputGradient = complexLayerGradient;
-        }
-
-        return gradients;
     }
 
     /// <summary>

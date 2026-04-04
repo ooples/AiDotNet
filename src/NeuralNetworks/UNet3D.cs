@@ -231,26 +231,6 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients from the output back through each layer,
-    /// computing gradients for all trainable parameters.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-        return outputGradient;
-    }
-
-    /// <summary>
     /// Generates predictions for the given input.
     /// </summary>
     /// <param name="input">The input voxel grid tensor.</param>
@@ -279,24 +259,15 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Forward(input);
-
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var gradients = new List<Tensor<T>>();
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        ClipGradients(gradients);
-        _optimizer.UpdateParameters(Layers);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

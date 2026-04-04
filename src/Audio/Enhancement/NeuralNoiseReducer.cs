@@ -800,37 +800,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             throw new InvalidOperationException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-
-        // Forward pass through all layers
-        var layerOutputs = new List<Tensor<T>> { input };
-        var current = input;
-
-        foreach (var layer in Layers)
+        try
         {
-            current = layer.Forward(current);
-            layerOutputs.Add(current);
+            TrainWithTape(input, expected);
         }
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(current.ToVector(), expected.ToVector());
-
-        // Calculate gradients
-        var gradient = _lossFunction.CalculateDerivative(current.ToVector(), expected.ToVector());
-
-        // Backward pass through all layers in reverse
-        var gradTensor = new Tensor<T>([gradient.Length]);
-        var gradVector = gradTensor.ToVector();
-        for (int i = 0; i < gradient.Length; i++)
+        finally
         {
-            gradVector[i] = gradient[i];
+            SetTrainingMode(false);
         }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradTensor = Layers[i].Backward(gradTensor);
-        }
-
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

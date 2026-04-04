@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -268,7 +268,6 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -427,7 +426,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         // For rank-1 inputs, treat as single sequence (batch=1, seqLen=input.Length)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -506,35 +505,6 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
         if (_forecastHead is not null)
             current = _forecastHead.Forward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-            current = _transformerLayers[i].Backward(current);
-
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

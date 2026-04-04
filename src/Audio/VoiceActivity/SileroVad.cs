@@ -617,7 +617,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     /// </summary>
     private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
     {
-        var shape = sequenceOutput.Shape.ToArray();
+        var shape = sequenceOutput._shape;
         if (shape.Length < 2) return sequenceOutput;
 
         // Assuming shape [batch, seq, hidden] or [batch, hidden]
@@ -644,39 +644,14 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
             throw new InvalidOperationException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var preprocessed = PreprocessAudio(input);
-        var output = Forward(preprocessed);
-
-        // Compute loss
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-        var loss = _lossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass
-        var gradients = _lossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradients);
-
-        // Backpropagate through output layer
-        if (_outputLayer is not null)
+        try
         {
-            gradientTensor = _outputLayer.Backward(gradientTensor);
+            TrainWithTape(input, expectedOutput);
         }
-
-        // Backpropagate through LSTM layers (reverse order)
-        for (int i = _lstmLayers.Count - 1; i >= 0; i--)
+        finally
         {
-            gradientTensor = _lstmLayers[i].Backward(gradientTensor);
+            SetTrainingMode(false);
         }
-
-        // Backpropagate through conv layers (reverse order)
-        for (int i = _convLayers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = _convLayers[i].Backward(gradientTensor);
-        }
-
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

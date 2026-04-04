@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -49,6 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBoltzmannMachineOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -107,7 +109,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// layer to the deepest hidden layer.
     /// </remarks>
     private List<int> _layerSizes;
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    #pragma warning restore CS0169
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -245,8 +249,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 1),
-            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
+            outputSize: 128),  // DBM is generative: output = reconstruction of input
+            epochs: 10,
             activationFunction: (IActivationFunction<T>?)null)
     {
     }
@@ -267,9 +271,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
-        int epochs,
-        T learningRate,
+        int epochs = 10,
         double learningRateDecay = 1.0,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
         int batchSize = 32,
@@ -277,10 +281,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;
-        _learningRate = learningRate;
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);
         _batchSize = batchSize;
         _cdSteps = cdSteps;
@@ -310,8 +315,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
         int epochs,
-        T learningRate,
         double learningRateDecay = 1.0,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
         int batchSize = 32,
@@ -319,10 +324,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;
-        _learningRate = learningRate;
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);
         _batchSize = batchSize;
         _cdSteps = cdSteps;
@@ -402,11 +408,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape.ToArray(),
+                _layerWeights[layer]._shape,
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape.ToArray(),
+                _layerBiases[layer]._shape,
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -611,7 +617,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape.ToArray();
+        var originalShape = input._shape;
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);
@@ -765,35 +771,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         // CD training is for unsupervised pretraining; for supervised tasks, use backprop
         if (Layers.Count > 0)
         {
-            // Forward through layers
             SetTrainingMode(true);
-            var prediction = ForwardWithMemory(input);
-
-            // Compute loss and gradients
-            var flatPred = prediction.ToVector();
-            var flatTarget = expectedOutput.Rank == 1
-                ? expectedOutput.ToVector()
-                : expectedOutput.Reshape([expectedOutput.Length]).ToVector();
-            LastLoss = LossFunction.CalculateLoss(flatPred, flatTarget);
-            var outputGrad = LossFunction.CalculateDerivative(flatPred, flatTarget);
-
-            // Backpropagate
-            Backpropagate(Tensor<T>.FromVector(outputGrad));
-
-            // Update parameters
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            foreach (var layer in Layers)
+            try
             {
-                if (layer.SupportsTraining && layer.ParameterCount > 0)
-                {
-                    var layerParams = layer.GetParameters();
-                    var layerGrads = layer.GetParameterGradients();
-                    if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
-                    {
-                        var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
-                        layer.SetParameters(updated);
-                    }
-                }
+                TrainWithTape(input, expectedOutput, _optimizer);
+            }
+            finally
+            {
+                SetTrainingMode(false);
             }
         }
         else
@@ -917,6 +902,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         get
         {
+            // When using Layers-based forward/backward (supervised), use Layers parameters.
+            // When using CD training (_layerWeights), use internal parameter store.
+            if (Layers.Count > 0)
+                return Layers.Sum(l => l.ParameterCount);
+
             int count = 0;
             for (int i = 0; i < _layerWeights.Count; i++)
             {
@@ -929,6 +919,10 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // When using Layers-based forward/backward (supervised), delegate to base.
+        if (Layers.Count > 0)
+            return base.GetParameters();
+
         var parameters = new Vector<T>(ParameterCount);
         int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)
@@ -951,12 +945,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape.ToArray(), weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i]._shape, weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape.ToArray(), biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i]._shape, biasVector);
             index += biasCount;
         }
     }
@@ -1165,12 +1159,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             return new DeepBoltzmannMachine<T>(
                 Architecture,
                 _epochs,
-                _learningRate,
                 Convert.ToDouble(_learningRateDecay),
-                _lossFunction,
-                _activationFunction,
-                _batchSize,
-                _cdSteps
+                lossFunction: _lossFunction,
+                activationFunction: _activationFunction,
+                batchSize: _batchSize,
+                cdSteps: _cdSteps
             );
         }
         else
@@ -1178,12 +1171,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             return new DeepBoltzmannMachine<T>(
                 Architecture,
                 _epochs,
-                _learningRate,
                 Convert.ToDouble(_learningRateDecay),
-                _lossFunction,
-                _vectorActivationFunction,
-                _batchSize,
-                _cdSteps
+                lossFunction: _lossFunction,
+                activationFunction: (IActivationFunction<T>?)null,
+                batchSize: _batchSize,
+                cdSteps: _cdSteps
             );
         }
     }

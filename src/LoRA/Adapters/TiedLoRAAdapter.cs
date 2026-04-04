@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -515,153 +515,13 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> tiedLoraOutput = new Tensor<T>(new[] { batchSize, outputSize }, tiedLoraOutputData);
 
             // Sum base output and Tied-LoRA output
-            Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+            Tensor<T> result = new Tensor<T>(baseOutput._shape);
             for (int i = 0; i < baseOutput.Length; i++)
             {
                 result[i] = NumOps.Add(baseOutput[i], tiedLoraOutput[i]);
             }
 
             return result;
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the Tied-LoRA adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for:
-    /// 1. Layer-specific scaling factor (local to this layer)
-    /// 2. Shared matrices A and B (accumulated across all layers)
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where Tied-LoRA learns! During backpropagation:
-    /// 1. Compute gradient for this layer's scaling factor
-    /// 2. Accumulate gradients for shared matrices A and B (these are summed across all layers)
-    /// 3. Update base layer if not frozen
-    /// 4. Pass gradients back to earlier layers
-    ///
-    /// The shared matrices are updated once after all layers have computed their gradients,
-    /// using the accumulated gradients from all layers.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastIntermediate == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-        int outputSize = GetOutputShape()[0];
-        int rank = Rank;
-
-        // Convert gradient to matrix
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-
-        lock (_sharedLock)
-        {
-            if (_sharedMatrixA == null || _sharedMatrixB == null ||
-                _sharedMatrixAGradient == null || _sharedMatrixBGradient == null)
-            {
-                throw new InvalidOperationException("Shared matrices are not initialized");
-            }
-
-            // Compute gradient for layer scaling: sum over batch of (gradMatrix * _lastIntermediate * scaling)
-            _layerScalingGradient = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    T grad = NumOps.Multiply(gradMatrix[i, j], _lastIntermediate[i, j]);
-                    grad = NumOps.Multiply(grad, scaling);
-                    _layerScalingGradient = NumOps.Add(_layerScalingGradient, grad);
-                }
-            }
-
-            // Propagate gradient back through layer scaling: grad_afterB = gradMatrix * layerScaling * scaling
-            T totalScaling = NumOps.Multiply(_layerScaling, scaling);
-            Matrix<T> gradAfterB = new Matrix<T>(batchSize, outputSize);
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    gradAfterB[i, j] = NumOps.Multiply(gradMatrix[i, j], totalScaling);
-                }
-            }
-
-            // Propagate through shared B: grad_afterA = gradAfterB * B^T
-            Matrix<T> gradAfterA = gradAfterB.Multiply(_sharedMatrixB.Transpose());
-
-            // Convert input to matrix for gradient computation
-            Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < inputSize; j++)
-                {
-                    inputMatrix[i, j] = _lastInput[i * inputSize + j];
-                }
-            }
-
-            // Compute intermediate: input * A_shared
-            Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA);
-
-            // Accumulate gradient for shared B: B_grad += afterA^T * gradAfterB
-            Matrix<T> afterATranspose = afterA.Transpose();
-            Matrix<T> bGrad = afterATranspose.Multiply(gradAfterB);
-            for (int i = 0; i < rank; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    _sharedMatrixBGradient[i, j] = NumOps.Add(_sharedMatrixBGradient[i, j], bGrad[i, j]);
-                }
-            }
-
-            // Accumulate gradient for shared A: A_grad += input^T * gradAfterA
-            Matrix<T> inputTranspose = inputMatrix.Transpose();
-            Matrix<T> aGrad = inputTranspose.Multiply(gradAfterA);
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int j = 0; j < rank; j++)
-                {
-                    _sharedMatrixAGradient[i, j] = NumOps.Add(_sharedMatrixAGradient[i, j], aGrad[i, j]);
-                }
-            }
-
-            // Propagate through shared A: grad_input_tied = gradAfterA * A^T
-            Matrix<T> tiedInputGrad = gradAfterA.Multiply(_sharedMatrixA.Transpose());
-
-            // Backward through base layer
-            Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-            // Sum input gradients from Tied-LoRA and base layer
-            Vector<T> inputGradData = new Vector<T>(batchSize * inputSize);
-            int idx = 0;
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < inputSize; j++)
-                {
-                    T tiedGrad = tiedInputGrad[i, j];
-                    T baseGrad = baseInputGrad[i * inputSize + j];
-                    inputGradData[idx++] = NumOps.Add(tiedGrad, baseGrad);
-                }
-            }
-
-            // Update parameter gradients
-            UpdateParameterGradientsFromScaling();
-
-            return new Tensor<T>(new[] { batchSize, inputSize }, inputGradData);
         }
     }
 

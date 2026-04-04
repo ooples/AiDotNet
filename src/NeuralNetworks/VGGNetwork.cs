@@ -312,7 +312,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with shape [1, channels, height, width].</returns>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // Add batch dimension of size 1
@@ -326,32 +326,6 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
 
         // Use Reshape which should handle the memory layout correctly
         return input.Reshape(resultShape);
-    }
-
-    /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients through each layer in reverse order,
-    /// computing the gradients needed for parameter updates during training.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns from its mistakes. After making
-    /// a prediction, we calculate how wrong it was, and this method propagates that error
-    /// backward through all the layers so each layer knows how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-
-        return outputGradient;
     }
 
     /// <summary>
@@ -411,28 +385,15 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        // Calculate output gradient
-        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backpropagation: propagate gradients through all layers
-        // Each layer stores its parameter gradients internally during Backward()
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        // Update parameters using the optimizer
-        // The optimizer retrieves parameter gradients from each layer
-        ApplyParameterUpdates();
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

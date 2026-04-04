@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -373,7 +373,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
 
         // Sample noise
-        var noise = InitializeLatents(input.Shape.ToArray(), random);
+        var noise = InitializeLatents(input._shape, random);
 
         // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
         var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
@@ -395,7 +395,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(predictedNoise.Shape.ToArray());
+        var gradient = new Tensor<T>(predictedNoise._shape);
         T scale = NumOps.FromDouble(2.0 / noise.Length);
         for (int i = 0; i < noise.Length; i++)
         {
@@ -404,38 +404,10 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         }
 
         // Backpropagate through the network
-        BackpropagateGradient(gradient);
 
         // Update parameters
         T lr = NumOps.FromDouble(0.0001);
         foreach (var layer in Layers) layer.UpdateParameters(lr);
-    }
-
-    /// <summary>
-    /// Backpropagates the gradient through the network layers.
-    /// </summary>
-    private void BackpropagateGradient(Tensor<T> gradient)
-    {
-        // Backpropagate through final layer
-        gradient = _finalLayer.Backward(gradient);
-
-        // Backpropagate through DiT blocks in reverse order
-        // Each DiT block consists of 3 layers: self-attention, FFN expand, FFN contract
-        // The layers internally handle activation gradient computation
-        // Backward through DiT blocks (in reverse order)
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            // Backward through FFN (residual adds gradient to both paths)
-            gradient = _ditFFN2[i].Backward(gradient);
-            gradient = _ditFFN1[i].Backward(gradient);
-
-            // Backward through attention (residual adds gradient to both paths)
-            gradient = _ditAttnProj[i].Backward(gradient);
-            gradient = _ditQKV[i].Backward(gradient);
-        }
-
-        // Backpropagate through patch embedding
-        _patchEmbed.Backward(gradient);
     }
 
     #endregion
@@ -478,7 +450,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     private Tensor<T> InitializeLatentsFromImage(Tensor<T> imageLatent, Random random)
     {
-        var noise = InitializeLatents(imageLatent.Shape.ToArray(), random);
+        var noise = InitializeLatents(imageLatent._shape, random);
 
         // Mix image latent with noise (50/50 blend)
         var scaledImg = Engine.TensorMultiplyScalar(imageLatent, NumOps.FromDouble(0.5));
@@ -529,7 +501,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
             // Multi-head self-attention
             var qkv = _ditQKV[i].Forward(normed);
-            var attended = DiTMultiHeadAttention(qkv, features.Shape.ToArray());
+            var attended = DiTMultiHeadAttention(qkv, features._shape);
             attended = _ditAttnProj[i].Forward(attended);
 
             // First residual connection
@@ -552,7 +524,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var noise = _finalLayer.Forward(features);
 
         // Unpatchify
-        return UnpatchifyNoise(noise, latents.Shape.ToArray());
+        return UnpatchifyNoise(noise, latents._shape);
     }
 
     /// <summary>
@@ -906,7 +878,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)

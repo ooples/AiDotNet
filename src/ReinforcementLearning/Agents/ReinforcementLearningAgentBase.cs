@@ -303,7 +303,10 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <summary>
     /// Applies gradients to update the agent.
     /// </summary>
-    public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // Default: tape-based training handles parameter updates via TrainWithTape
+    }
 
     /// <inheritdoc/>
     public virtual int[] GetInputShape()

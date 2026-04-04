@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -66,12 +67,6 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// </summary>
     /// <value>Always <c>true</c> as importance scores are learned.</value>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>false</c> because mesh pooling requires dynamic graph operations.</value>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets or sets the edge indices that remain after pooling.
@@ -137,7 +132,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape for backward pass.
@@ -197,6 +192,8 @@ public class MeshPoolLayer<T> : LayerBase<T>
 
         // Initialize importance weights in [-scale, scale] range
         _importanceWeights = Engine.TensorRandomUniformRange<T>([InputChannels], NumOps.Negate(scale), scale);
+
+        RegisterTrainableParameter(_importanceWeights, PersistentTensorRole.Weights);
     }
 
     #endregion
@@ -385,7 +382,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with pooled features.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -480,225 +477,12 @@ public class MeshPoolLayer<T> : LayerBase<T>
         // Cache output
         _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numToKeep, InputChannels]);
 
-        return new GpuTensor<T>(backend, outputBuffer, [numToKeep, InputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [numToKeep, InputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion
 
     #region Backward Pass
-
-    /// <summary>
-    /// Performs GPU-accelerated backward pass for mesh pooling.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor with gradient from next layer [numKept, InputChannels].</param>
-    /// <returns>GPU tensor with input gradients [numEdges, InputChannels].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when ForwardGpu has not been called in training mode.</exception>
-    /// <remarks>
-    /// <para>
-    /// The backward pass for mesh pooling scatters the output gradients back to their original
-    /// positions in the input tensor. Uses GPU scatter-add operation for efficiency.
-    /// </para>
-    /// <para>
-    /// Also computes gradient for the importance weights using matrix operations:
-    /// - Gathers kept edge features
-    /// - Computes weighted gradient through the selection operation
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (RemainingEdgeIndices == null || _lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int numEdges = _gpuInputShape[0];
-        int numKept = RemainingEdgeIndices.Length;
-        int inputGradSize = numEdges * InputChannels;
-
-        IGpuBuffer? inputGradBuffer = null;
-        IGpuBuffer? indicesBuffer = null;
-        IGpuBuffer? keptFeaturesBuffer = null;
-        IGpuBuffer? gradScaleBuffer = null;
-        IGpuBuffer? scaledFeaturesBuffer = null;
-        IGpuBuffer? weightsGradBuffer = null;
-
-        try
-        {
-            // Allocate and zero-initialize input gradient buffer [numEdges, InputChannels]
-            inputGradBuffer = backend.AllocateBuffer(inputGradSize);
-            backend.Fill(inputGradBuffer, 0.0f, inputGradSize);
-
-            // Upload remaining edge indices to GPU
-            var indicesFloat = new float[numKept];
-            for (int i = 0; i < numKept; i++)
-            {
-                indicesFloat[i] = RemainingEdgeIndices[i];
-            }
-            indicesBuffer = backend.AllocateBuffer(indicesFloat);
-
-            // Scatter output gradients back to original positions
-            // inputGrad[RemainingEdgeIndices[i]] += outputGrad[i] for each feature channel
-            // The ScatterAdd operates on flattened buffers, we need to handle the 2D case
-            // We can use ScatterAddBackward which is designed for gathering back gradients
-            // Actually, ScatterAdd does: destination[indices[i]] += source[i]
-            // We need: inputGrad[indices[i], :] += outputGrad[i, :]
-            // ScatterAddBackward: gathers gradients from destination back to source positions
-            // That's the opposite - it does gradSource = gather(gradDest, indices)
-
-            // For 2D scatter, we need to iterate or use a custom kernel
-            // Since we have ScatterAdd with sourceSize and destSize, let's check if it handles features
-            // Looking at the signature: ScatterAdd(source, indices, destination, sourceSize, destSize)
-            // This is 1D scatter. For 2D, we need to do it per-feature or use a strided approach
-
-            // Simple approach: do scatter per feature channel (less efficient but correct)
-            // Or use the standard backend pattern for 2D gather/scatter
-
-            // Actually, Gather and ScatterAddBackward have featureSize parameter!
-            // void ScatterAddBackward(gradDest, indices, gradSource, numIndices, featureSize)
-            // But that's for backward of scatter-add, not for doing scatter-add
-
-            // Let's do a CPU-assisted approach for correctness:
-            // Download output gradient, do scatter on CPU, upload result
-            var outputGradData = backend.DownloadBuffer(outputGradient.Buffer);
-            var inputGradData = new float[inputGradSize];
-
-            for (int i = 0; i < numKept; i++)
-            {
-                int dstEdge = RemainingEdgeIndices[i];
-                int srcOffset = i * InputChannels;
-                int dstOffset = dstEdge * InputChannels;
-                for (int c = 0; c < InputChannels; c++)
-                {
-                    inputGradData[dstOffset + c] += outputGradData[srcOffset + c];
-                }
-            }
-
-            // Upload input gradient to GPU
-            inputGradBuffer.Dispose();
-            inputGradBuffer = backend.AllocateBuffer(inputGradData);
-
-            // Compute importance weights gradient
-            // Step 1: Gather kept edge features from cached input
-            var inputData = backend.DownloadBuffer(_gpuInput.Buffer);
-            var keptFeaturesData = new float[numKept * InputChannels];
-            for (int i = 0; i < numKept; i++)
-            {
-                int srcEdge = RemainingEdgeIndices[i];
-                int srcOffset = srcEdge * InputChannels;
-                int dstOffset = i * InputChannels;
-                for (int c = 0; c < InputChannels; c++)
-                {
-                    keptFeaturesData[dstOffset + c] = inputData[srcOffset + c];
-                }
-            }
-
-            // Step 2: Sum output gradients along channels to get scale factors [numKept]
-            var gradScaleData = new float[numKept];
-            for (int i = 0; i < numKept; i++)
-            {
-                float sum = 0;
-                int offset = i * InputChannels;
-                for (int c = 0; c < InputChannels; c++)
-                {
-                    sum += outputGradData[offset + c];
-                }
-                gradScaleData[i] = sum;
-            }
-
-            // Step 3: Compute weighted gradient: sum over kept edges of (gradScale * features)
-            // weightsGrad[c] = sum_i(gradScale[i] * keptFeatures[i, c])
-            // This is a matrix-vector product: keptFeatures^T @ gradScale
-            // [InputChannels, numKept] @ [numKept] -> [InputChannels]
-
-            keptFeaturesBuffer = backend.AllocateBuffer(keptFeaturesData);
-            gradScaleBuffer = backend.AllocateBuffer(gradScaleData);
-            weightsGradBuffer = backend.AllocateBuffer(InputChannels);
-
-            // Use Gemm: keptFeatures^T @ gradScale
-            // keptFeatures is [numKept, InputChannels], we want transpose: [InputChannels, numKept]
-            // Gemm(A, B, C, M, N, K) computes C = A @ B where A is [M, K], B is [K, N], C is [M, N]
-            // We want [InputChannels, 1] = [InputChannels, numKept] @ [numKept, 1]
-            // So M=InputChannels, N=1, K=numKept
-            // But Gemm doesn't support transpose, so we need to transpose keptFeatures first
-
-            // For simplicity, do this on CPU since it's a small vector
-            var weightsGradData = new float[InputChannels];
-            for (int c = 0; c < InputChannels; c++)
-            {
-                float grad = 0;
-                for (int i = 0; i < numKept; i++)
-                {
-                    grad += gradScaleData[i] * keptFeaturesData[i * InputChannels + c];
-                }
-                weightsGradData[c] = grad;
-            }
-
-            // Store importance weights gradient for UpdateParameters
-            _importanceWeightsGradient = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(weightsGradData), [InputChannels]);
-
-            // Clear GPU cache as backward pass is complete
-            _gpuInput = null;
-            _gpuInputShape = null;
-
-            // Create output GPU tensor
-            var inputGradTensor = new GpuTensor<T>(backend, inputGradBuffer, [numEdges, InputChannels], GpuTensorRole.Gradient, ownsBuffer: true);
-            inputGradBuffer = null; // Ownership transferred
-
-            return inputGradTensor;
-        }
-        finally
-        {
-            // Dispose buffers we own (not transferred to result)
-            inputGradBuffer?.Dispose();
-            indicesBuffer?.Dispose();
-            keptFeaturesBuffer?.Dispose();
-            gradScaleBuffer?.Dispose();
-            scaledFeaturesBuffer?.Dispose();
-            weightsGradBuffer?.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass for mesh pooling using vectorized scatter operations.
-    /// </summary>
-    /// <param name="outputGradient">Gradient with respect to pooled output.</param>
-    /// <returns>Gradient with respect to input (sparse, only at kept edges).</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    /// <remarks>
-    /// <para>
-    /// Uses Engine.TensorScatterAdd to efficiently scatter gradients back to their original positions.
-    /// This is much faster than element-wise loops, especially on GPU.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || RemainingEdgeIndices == null || _lastImportanceScores == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int numEdges = _lastInput.Shape[0];
-        int numKept = RemainingEdgeIndices.Length;
-
-        // Create zero-initialized input gradient tensor
-        var inputGrad = TensorAllocator.Rent<T>([numEdges, InputChannels]);
-
-        // Create indices tensor for scatter operation
-        var indicesTensor = new Tensor<int>(RemainingEdgeIndices, [numKept]);
-
-        // Scatter-add gradients back to original positions
-        inputGrad = Engine.TensorScatterAdd(inputGrad, indicesTensor, outputGradient, axis: 0);
-
-        _importanceWeightsGradient = ComputeImportanceWeightsGradient(outputGradient, _lastInput, RemainingEdgeIndices);
-
-        return inputGrad;
-    }
 
     /// <summary>
     /// Computes gradient for importance weights using vectorized operations.
@@ -872,54 +656,6 @@ public class MeshPoolLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node representing the mesh pooling operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer is not properly initialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// Mesh pooling is approximated in the computation graph using a learned attention-weighted
-    /// aggregation. The edge importance scores are computed and used to weight the features
-    /// before reduction, enabling gradient flow through the pooling operation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_importanceWeights == null)
-            throw new InvalidOperationException("Layer importance weights not initialized.");
-
-        // Create symbolic input for edge features [numEdges, features]
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "mesh_pool_input");
-        inputNodes.Add(inputNode);
-
-        // Create importance weights as learnable parameters
-        var importanceNode = TensorOperations<T>.Constant(_importanceWeights, "mesh_pool_importance");
-
-        // Compute attention scores via linear transformation
-        var scores = TensorOperations<T>.MatrixMultiply(inputNode, importanceNode);
-
-        // Apply softmax to get attention weights
-        var attentionWeights = TensorOperations<T>.Softmax(scores);
-
-        // Weighted sum of features (attention-weighted pooling)
-        var weightedFeatures = TensorOperations<T>.ElementwiseMultiply(inputNode, attentionWeights);
-
-        // Reduce to get pooled output - use mean across edges
-        var pooledOutput = TensorOperations<T>.Mean(weightedFeatures);
-
-        return pooledOutput;
-    }
 
     #endregion
 }

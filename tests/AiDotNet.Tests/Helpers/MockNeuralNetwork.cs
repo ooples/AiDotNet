@@ -322,5 +322,7 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         _parameterGradients = gradients.Clone();
     }
 
+    public double GetLastLoss() => 0.0;
+
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

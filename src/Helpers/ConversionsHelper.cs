@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides utility methods for converting between different data structures used in machine learning models.
@@ -433,7 +433,7 @@ public static class ConversionsHelper
                     $"Vector length {vector.Length} doesn't match reference tensor size {refTensor.Length}");
             }
 
-            return (TInput)(object)Tensor<T>.FromVector(vector, refTensor.Shape.ToArray());
+            return (TInput)(object)Tensor<T>.FromVector(vector, refTensor._shape);
         }
         else
         {

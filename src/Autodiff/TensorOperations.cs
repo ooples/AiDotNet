@@ -1,48 +1,21 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
 /// <summary>
-/// Provides automatic differentiation support for tensor operations.
+/// Provides computation graph operations on <see cref="ComputationNode{T}"/> for legacy autodiff.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// TensorOperations is a helper class that integrates automatic differentiation with tensor operations.
-/// It records operations performed on tensors to an active GradientTape (if present) and creates
-/// the computation graph needed for backpropagation.
+/// TensorOperations builds a <see cref="ComputationNode{T}"/> graph with backward functions
+/// for reverse-mode differentiation. Each operation creates a node that remembers its inputs
+/// and how to propagate gradients.
 /// </para>
 /// <para>
-/// This class follows the opt-in pattern: tensor operations only record to the gradient tape
-/// when explicitly used within a GradientTape context. Outside of a GradientTape context,
-/// operations work normally without any overhead.
-/// </para>
-/// <para><b>For Beginners:</b> This class bridges regular tensor operations with automatic differentiation.
-///
-/// Think of it like adding a "recording mode" to your calculations:
-/// - When you're inside a GradientTape context, operations are recorded
-/// - The recording remembers how each value was computed
-/// - Later, you can "play it backwards" to compute gradients
-/// - When not recording, operations work exactly as before
-///
-/// This enables features like:
-/// - Automatic gradient computation for neural network training
-/// - Computing derivatives without writing manual backward passes
-/// - Building complex computational graphs automatically
-///
-/// Example usage:
-/// <code>
-/// using (var tape = new GradientTape&lt;double&gt;())
-/// {
-///     var x = TensorOperations&lt;double&gt;.Variable(inputTensor, "x");
-///     var y = TensorOperations&lt;double&gt;.Variable(parameterTensor, "y");
-///     tape.Watch(x);
-///     tape.Watch(y);
-///
-///     var z = TensorOperations&lt;double&gt;.Add(x, y); // Recorded to tape
-///     var gradients = tape.Gradient(z, new[] { x, y });
-/// }
-/// </code>
+/// <b>Note:</b> Tape recording for these operations is handled by the engine layer
+/// (via <c>AiDotNet.Tensors.Engines.Autodiff.GradientTape</c>). This class no longer
+/// records to a tape directly.
 /// </para>
 /// </remarks>
 public static class TensorOperations<T>
@@ -146,13 +119,13 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Use direct addition if shapes are equal, otherwise broadcast
-        Tensor<T> result = a.Value.Shape.ToArray().SequenceEqual(b.Value.Shape.ToArray())
+        Tensor<T> result = a.Value._shape.SequenceEqual(b.Value._shape)
             ? engine.TensorAdd(a.Value, b.Value)
             : BroadcastAdd(a.Value, b.Value, numOps);
 
         // Store original shapes for gradient reduction
-        var aShape = a.Value.Shape.ToArray();
-        var bShape = b.Value.Shape.ToArray();
+        var aShape = a.Value._shape;
+        var bShape = b.Value._shape;
 
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
@@ -194,13 +167,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Add;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -274,13 +240,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Subtract;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -315,13 +274,13 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        Tensor<T> result = a.Value.Shape.ToArray().SequenceEqual(b.Value.Shape.ToArray())
+        Tensor<T> result = a.Value._shape.SequenceEqual(b.Value._shape)
             ? engine.TensorMultiply(a.Value, b.Value)
             : BroadcastMultiply(a.Value, b.Value, numOps);
 
         // Store original shapes for gradient reduction
-        var aShape = a.Value.Shape.ToArray();
-        var bShape = b.Value.Shape.ToArray();
+        var aShape = a.Value._shape;
+        var bShape = b.Value._shape;
 
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
@@ -375,13 +334,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Multiply;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -468,9 +420,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Divide;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -532,9 +481,6 @@ public static class TensorOperations<T>
             { "Exponent", exponent }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -582,9 +528,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Exp;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -647,9 +590,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Log;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -722,9 +662,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sqrt;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -777,9 +714,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Tanh;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -832,9 +766,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sigmoid;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -890,9 +821,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ReLU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -937,9 +865,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Negate;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1006,9 +931,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Abs;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1061,9 +983,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.MatMul;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1160,9 +1079,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.MatMul;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1204,9 +1120,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Transpose;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1228,7 +1141,7 @@ public static class TensorOperations<T>
     {
         var result = a.Value.Sum(axes);
         // Store original shape for gradient computation
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
@@ -1330,9 +1243,6 @@ public static class TensorOperations<T>
             ? new Dictionary<string, object> { { "Axes", axes }, { "KeepDims", keepDims } }
             : new Dictionary<string, object> { { "KeepDims", keepDims } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1355,7 +1265,7 @@ public static class TensorOperations<T>
         var mean = a.Value.Mean();
         var result = new Tensor<T>(new int[] { 1 });
         result[0] = mean;
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         var count = a.Value.Length;
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -1383,9 +1293,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Mean;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1400,14 +1307,14 @@ public static class TensorOperations<T>
     /// The total number of elements must remain the same.
     /// </para>
     /// <para><b>Gradient computation:</b>
-    /// - ∂(Reshape(A))/∂A = Reshape(gradOut, A.Shape.ToArray())
+    /// - ∂(Reshape(A))/∂A = Reshape(gradOut, A._shape)
     /// - Simply reshape the gradient back to the original shape.
     /// </para>
     /// </remarks>
     public static ComputationNode<T> Reshape(ComputationNode<T> a, params int[] newShape)
     {
         var result = a.Value.Reshape(newShape);
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
@@ -1432,9 +1339,6 @@ public static class TensorOperations<T>
             { "NewShape", newShape }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1489,9 +1393,6 @@ public static class TensorOperations<T>
             { "Axes", axes }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1521,7 +1422,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Broadcast(ComputationNode<T> a, int[] targetShape)
     {
         var engine = AiDotNetEngine.Current;
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
 
         // Validate: we support broadcasting 1D [N] to 2D [M, N]
         if (originalShape.Length != 1 || targetShape.Length != 2 || originalShape[0] != targetShape[1])
@@ -1570,9 +1471,6 @@ public static class TensorOperations<T>
             { "TargetShape", targetShape }
         };
 
-        var broadcastTape = GradientTape<T>.Current;
-        if (broadcastTape != null && broadcastTape.IsRecording)
-            broadcastTape.RecordOperation(node);
         return node;
     }
 
@@ -1604,7 +1502,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Softmax(ComputationNode<T> a, int axis = -1)
     {
         var engine = AiDotNetEngine.Current;
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         // Use IEngine for GPU-accelerated forward pass
         var result = engine.Softmax(a.Value, axis);
@@ -1639,9 +1537,6 @@ public static class TensorOperations<T>
             { "Axis", axis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1695,9 +1590,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ELU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1747,9 +1639,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LeakyReLU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1824,9 +1713,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GELU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1887,9 +1773,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Swish;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1952,9 +1835,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Mish;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2021,9 +1901,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SoftPlus;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2099,9 +1976,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SELU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2174,9 +2048,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.HardSigmoid;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2240,9 +2111,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.HardTanh;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2302,9 +2170,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SoftSign;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2370,9 +2235,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.CELU;
         node.OperationParams = new Dictionary<string, object> { { "alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2429,9 +2291,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LiSHT;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2492,9 +2351,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.BentIdentity;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2552,9 +2408,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Gaussian;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2618,9 +2471,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ScaledTanh;
         node.OperationParams = new Dictionary<string, object> { { "beta", beta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2655,7 +2505,7 @@ public static class TensorOperations<T>
             throw new ArgumentException("Cannot concatenate empty list of nodes");
 
         var engine = AiDotNetEngine.Current;
-        var firstShape = nodes[0].Value.Shape.ToArray();
+        var firstShape = nodes[0].Value._shape;
 
         // Normalize axis
         int normalizedAxis = axis < 0 ? firstShape.Length + axis : axis;
@@ -2666,14 +2516,14 @@ public static class TensorOperations<T>
 
         // Store sizes and shapes for gradient splitting
         var sizes = nodes.Select(n => n.Value.Shape[normalizedAxis]).ToList();
-        var shapes = nodes.Select(n => n.Value.Shape.ToArray()).ToList();
+        var shapes = nodes.Select(n => n.Value._shape).ToList();
         int capturedAxis = normalizedAxis;
 
         void BackwardFunction(Tensor<T> gradient)
         {
             // Split gradient along concat axis and distribute to inputs
             var numOps = MathHelper.GetNumericOperations<T>();
-            var gradShape = gradient.Shape.ToArray();
+            var gradShape = gradient._shape;
             var strides = ComputeStridesStatic(gradShape);
             var gradData = gradient.ToArray();
 
@@ -2709,9 +2559,6 @@ public static class TensorOperations<T>
             { "Axis", normalizedAxis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2794,7 +2641,7 @@ public static class TensorOperations<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var padValue = value ?? numOps.Zero;
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         // Validate padWidth dimensions
         if (padWidth.GetLength(0) != shape.Length)
             throw new ArgumentException("padWidth must have same number of dimensions as input tensor");
@@ -2859,9 +2706,6 @@ public static class TensorOperations<T>
                 { "Value", value! }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -2957,9 +2801,6 @@ public static class TensorOperations<T>
                 { "Value", value! }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -3010,7 +2851,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         if (shape.Length != 4)
             throw new ArgumentException("MaxPool2D requires 4D input [batch, channels, height, width]");
 
@@ -3049,9 +2890,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -3085,7 +2923,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         if (shape.Length != 4)
             throw new ArgumentException("AvgPool2D requires 4D input [batch, channels, height, width]");
 
@@ -3124,9 +2962,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -3166,7 +3001,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
         // For 2D input [batch, features], normalize over features
         if (shape.Length == 2 && normalizedShape.Length == 1 && normalizedShape[0] == shape[1])
@@ -3315,9 +3150,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -3487,9 +3319,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.LayerNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -3539,7 +3368,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
         // Handle 2D case [batch, features]
         if (shape.Length == 2)
@@ -3735,9 +3564,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else if (shape.Length == 4)
@@ -3917,9 +3743,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.BatchNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -4043,9 +3866,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.BatchNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -4092,7 +3912,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
 
         if (shape.Length < 2)
@@ -4305,9 +4125,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -4473,9 +4290,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -4522,8 +4336,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
         if (inputShape.Length != 4)
             throw new ArgumentException("Conv2D requires 4D input [batch, inChannels, height, width]");
         if (kernelShape.Length != 4)
@@ -4617,9 +4431,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -4667,8 +4478,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 5)
             throw new ArgumentException("Conv3D requires 5D input [batch, inChannels, depth, height, width]", nameof(input));
@@ -4779,9 +4590,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -4817,7 +4625,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         if (shape.Length != 5)
             throw new ArgumentException("MaxPool3D requires 5D input [batch, channels, depth, height, width]");
 
@@ -4851,9 +4659,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -4887,7 +4692,7 @@ public static class TensorOperations<T>
         int scaleH,
         int scaleW)
     {
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         if (shape.Length != 5)
             throw new ArgumentException("Upsample3D requires 5D input [batch, channels, depth, height, width]");
 
@@ -4919,9 +4724,6 @@ public static class TensorOperations<T>
             { "ScaleW", scaleW }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -4963,8 +4765,8 @@ public static class TensorOperations<T>
         int[]? outputPadding = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("ConvTranspose2D requires 4D input [batch, inChannels, height, width]");
@@ -5093,9 +4895,6 @@ public static class TensorOperations<T>
             { "OutputPadding", outputPadding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5108,7 +4907,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ReduceMax(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         // If axes is null, reduce all dimensions
         if (axes == null)
         {
@@ -5206,9 +5005,6 @@ public static class TensorOperations<T>
             { "KeepDims", keepDims }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5221,7 +5017,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ReduceMean(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         // If axes is null, reduce all dimensions
         if (axes == null)
         {
@@ -5249,6 +5045,22 @@ public static class TensorOperations<T>
             outputShape.Add(1);
         var result = new Tensor<T>(outputShape.ToArray());
         var divisor = numOps.FromDouble((double)reduceCount);
+        // Build a mapping from input dimension to output dimension index
+        // (skipping reduced axes, unless keepDims where they map to size-1 slots)
+        var inputToOutputDim = new int[inputShape.Length];
+        int outDimCounter = 0;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (axes.Contains(i))
+            {
+                inputToOutputDim[i] = keepDims ? outDimCounter++ : -1;
+            }
+            else
+            {
+                inputToOutputDim[i] = outDimCounter++;
+            }
+        }
+
         // Compute forward pass: sum and then divide
         void ComputeSum(int[] currentIndices, int dim, int[] outputIndices)
         {
@@ -5258,7 +5070,7 @@ public static class TensorOperations<T>
                 result[outputIndices] = numOps.Add(result[outputIndices], value);
                 return;
             }
-            if (axes.Contains(dim))
+            if (axes.Contains(dim) && !keepDims)
             {
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
@@ -5268,11 +5080,11 @@ public static class TensorOperations<T>
             }
             else
             {
-                int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                int outIdx = inputToOutputDim[dim];
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     currentIndices[dim] = i;
-                    outputIndices[outIdx] = i;
+                    outputIndices[outIdx] = keepDims && axes.Contains(dim) ? 0 : i;
                     ComputeSum(currentIndices, dim + 1, outputIndices);
                 }
             }
@@ -5297,7 +5109,7 @@ public static class TensorOperations<T>
                     gradInput[currentIndices] = numOps.Multiply(gradient[outputIndices], gradScale);
                     return;
                 }
-                if (axes.Contains(dim))
+                if (axes.Contains(dim) && !keepDims)
                 {
                     for (int i = 0; i < inputShape[dim]; i++)
                     {
@@ -5307,11 +5119,11 @@ public static class TensorOperations<T>
                 }
                 else
                 {
-                    int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                    int outIdx = inputToOutputDim[dim];
                     for (int i = 0; i < inputShape[dim]; i++)
                     {
                         currentIndices[dim] = i;
-                        outputIndices[outIdx] = i;
+                        outputIndices[outIdx] = keepDims && axes.Contains(dim) ? 0 : i;
                         BroadcastGrad(currentIndices, dim + 1, outputIndices);
                     }
                 }
@@ -5335,9 +5147,6 @@ public static class TensorOperations<T>
             { "KeepDims", keepDims }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5350,7 +5159,7 @@ public static class TensorOperations<T>
     public static List<ComputationNode<T>> Split(ComputationNode<T> a, int numSplits, int axis = 0)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         if (axis < 0 || axis >= inputShape.Length)
             throw new ArgumentException($"Axis {axis} is out of bounds for tensor with {inputShape.Length} dimensions.");
         if (inputShape[axis] % numSplits != 0)
@@ -5429,9 +5238,6 @@ public static class TensorOperations<T>
                 { "SplitIndex", split }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             results.Add(node);
         }
         return results;
@@ -5445,7 +5251,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Crop(ComputationNode<T> a, int[] cropping)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         if (inputShape.Length == 4 && cropping.Length == 4)
         {
             // 4D tensor: [batch, channels, height, width]
@@ -5509,9 +5315,6 @@ public static class TensorOperations<T>
                 { "Cropping", cropping }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -5529,7 +5332,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Upsample(ComputationNode<T> a, int scale)
     {
         var engine = AiDotNetEngine.Current;
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (inputShape.Length < 2)
             throw new ArgumentException("Upsample requires tensor with at least 2 dimensions for height and width.");
@@ -5567,9 +5370,6 @@ public static class TensorOperations<T>
             { "Scale", scale }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5581,7 +5381,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> PixelShuffle(ComputationNode<T> a, int upscaleFactor)
     {
         var engine = AiDotNetEngine.Current;
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("PixelShuffle expects 4D input [batch, channels, height, width]");
@@ -5623,9 +5423,6 @@ public static class TensorOperations<T>
             { "UpscaleFactor", upscaleFactor }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5648,8 +5445,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
         if (inputShape.Length != 4 || kernelShape.Length != 4)
             throw new ArgumentException("DilatedConv2D expects 4D tensors [batch, channels, height, width]");
         stride ??= new int[] { 1, 1 };
@@ -5742,9 +5539,6 @@ public static class TensorOperations<T>
             { "Dilation", dilation }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5781,8 +5575,8 @@ public static class TensorOperations<T>
         int[]? padding = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         // Validate input shape (must be 4D: [batch, in_channels, height, width])
         if (inputShape.Length != 4)
@@ -5805,7 +5599,7 @@ public static class TensorOperations<T>
         // Validate bias if provided
         if (bias != null)
         {
-            var biasShape = bias.Value.Shape.ToArray();
+            var biasShape = bias.Value._shape;
             if (biasShape.Length != 1 || biasShape[0] != outChannels)
                 throw new ArgumentException($"Bias must be 1D tensor of length {outChannels}");
         }
@@ -5911,9 +5705,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5947,8 +5738,8 @@ public static class TensorOperations<T>
         int[]? stride = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightsShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightsShape = weights.Value._shape;
         // Validate input shape (must be 4D: [batch, in_channels, height, width])
         if (inputShape.Length != 4)
             throw new ArgumentException("Input must be 4D tensor [batch, in_channels, height, width]");
@@ -5976,7 +5767,7 @@ public static class TensorOperations<T>
         // Validate bias if provided
         if (bias != null)
         {
-            var biasShape = bias.Value.Shape.ToArray();
+            var biasShape = bias.Value._shape;
             if (biasShape.Length != 1 || biasShape[0] != outChannels)
                 throw new ArgumentException($"Bias must be 1D tensor of length {outChannels}");
         }
@@ -6132,9 +5923,6 @@ public static class TensorOperations<T>
             { "Stride", stride }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -6173,8 +5961,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("DeformableConv2D requires 4D input [batch, inChannels, height, width]");
@@ -6310,9 +6098,6 @@ public static class TensorOperations<T>
             { "Dilation", dilation }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -6346,7 +6131,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-8)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
         if (axis < 0 || axis >= inputShape.Length)
             throw new ArgumentException($"Axis {axis} is out of range for tensor of rank {inputShape.Length}");
         // Compute output shape (remove the reduction axis)
@@ -6459,9 +6244,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6499,9 +6281,9 @@ public static class TensorOperations<T>
         ComputationNode<T> epsilons)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var centersShape = centers.Value.Shape.ToArray();
-        var epsilonsShape = epsilons.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var centersShape = centers.Value._shape;
+        var epsilonsShape = epsilons.Value._shape;
         // Validate shapes
         if (inputShape.Length != 2)
             throw new ArgumentException("Input must be 2D tensor [batch, inputSize]");
@@ -6637,9 +6419,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.RBFKernel;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6676,7 +6455,7 @@ public static class TensorOperations<T>
         int outputWidth)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var thetaShape = theta.Value.Shape.ToArray();
+        var thetaShape = theta.Value._shape;
         // Validate shapes
         if (thetaShape.Length != 3 || thetaShape[1] != 2 || thetaShape[2] != 3)
             throw new ArgumentException("Theta must be of shape [batch, 2, 3]");
@@ -6771,9 +6550,6 @@ public static class TensorOperations<T>
             { "OutputSize", new int[] { outputHeight, outputWidth } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6810,8 +6586,8 @@ public static class TensorOperations<T>
         ComputationNode<T> grid)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var gridShape = grid.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var gridShape = grid.Value._shape;
         // Validate shapes
         if (inputShape.Length != 4)
             throw new ArgumentException("Input must be 4D tensor [batch, height, width, channels]");
@@ -6990,9 +6766,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GridSample;
         node.OperationParams = new Dictionary<string, object>();
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -7037,9 +6810,9 @@ public static class TensorOperations<T>
         ComputationNode<T>? bias = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var adjShape = adjacency.Value.Shape.ToArray();
-        var weightsShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var adjShape = adjacency.Value._shape;
+        var weightsShape = weights.Value._shape;
         // Validate shapes
         if (inputShape.Length != 3)
             throw new ArgumentException("Input must be 3D tensor [batch, numNodes, inputFeatures]");
@@ -7228,9 +7001,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GraphConv;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -7263,7 +7033,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Pad(ComputationNode<T> a, int[] padding)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (padding.Length != inputShape.Length)
             throw new ArgumentException($"Padding array length ({padding.Length}) must match input rank ({inputShape.Length})");
@@ -7364,9 +7134,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7472,9 +7239,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Activation;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7516,7 +7280,7 @@ public static class TensorOperations<T>
         {
             if (embeddings.RequiresGradient)
             {
-                var embeddingGrad = new Tensor<T>(embeddingMatrix.Shape.ToArray());
+                var embeddingGrad = new Tensor<T>(embeddingMatrix._shape);
 
                 for (int b = 0; b < batchSize; b++)
                 {
@@ -7549,9 +7313,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Embedding;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7832,9 +7593,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Square;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7869,7 +7627,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Squash(ComputationNode<T> a, double epsilon = 1e-7)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         // Assume last dimension is the capsule dimension
         int capsuleDim = inputShape[inputShape.Length - 1];
@@ -7935,16 +7693,43 @@ public static class TensorOperations<T>
                         T normSquared = numOps.Multiply(norm, norm);
                         T onePlusNormSquared = numOps.Add(numOps.One, normSquared);
 
-                        // Simplified gradient computation
-                        // Full derivation requires chain rule through normalization and scaling
+                        // Exact Jacobian: ds_j/dv_i = scaleFactor * (delta_ij/||v|| - v_i*v_j/||v||^3)
+                        //                            + (2*v_i*v_j) / (||v|| * (1+||v||^2)^2)
+                        // grad_input_i = sum_j (J_ji * grad_output_j)
+                        T invNorm = numOps.Divide(numOps.One, norm);
+                        T invNormCubed = numOps.Divide(numOps.One, numOps.Multiply(normSquared, norm));
+                        T scaleFactor = numOps.Divide(normSquared, onePlusNormSquared);
+                        T couplingFactor = numOps.Divide(
+                            numOps.FromDouble(2.0),
+                            numOps.Multiply(norm, numOps.Multiply(onePlusNormSquared, onePlusNormSquared)));
+
+                        // Read input vector and gradient vector for this capsule
+                        var v = new T[capsuleDim];
+                        var g = new T[capsuleDim];
                         for (int i = 0; i < capsuleDim; i++)
                         {
                             var idx = indices.Take(indices.Length - 1).Concat(new[] { i }).ToArray();
-                            // Approximate gradient (full computation is complex)
-                            T scale = numOps.Divide(
-                                numOps.FromDouble(2.0),
-                                numOps.Multiply(onePlusNormSquared, norm));
-                            gradA[idx] = numOps.Multiply(gradient[idx], scale);
+                            v[i] = a.Value[idx];
+                            g[i] = gradient[idx];
+                        }
+
+                        // Compute grad_input = J^T * grad_output
+                        for (int i = 0; i < capsuleDim; i++)
+                        {
+                            T sum = numOps.Zero;
+                            for (int j = 0; j < capsuleDim; j++)
+                            {
+                                // J_ji = scaleFactor * (delta_ji * invNorm - v_i * v_j * invNormCubed)
+                                //      + couplingFactor * v_i * v_j
+                                T diagTerm = i == j ? numOps.Multiply(scaleFactor, invNorm) : numOps.Zero;
+                                T outerTerm = numOps.Multiply(
+                                    numOps.Subtract(couplingFactor, numOps.Multiply(scaleFactor, invNormCubed)),
+                                    numOps.Multiply(v[i], v[j]));
+                                T jacobianEntry = numOps.Add(diagTerm, outerTerm);
+                                sum = numOps.Add(sum, numOps.Multiply(jacobianEntry, g[j]));
+                            }
+                            var outIdx = indices.Take(indices.Length - 1).Concat(new[] { i }).ToArray();
+                            gradA[outIdx] = sum;
                         }
                     }
                     else
@@ -7979,9 +7764,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8013,7 +7795,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Norm(ComputationNode<T> a, int axis = -1, bool keepDims = false, double epsilon = 1e-12)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         // Normalize axis to positive index
         if (axis < 0)
@@ -8029,12 +7811,12 @@ public static class TensorOperations<T>
 
         var result = new Tensor<T>(outputShape);
 
-        // Compute norms
+        // Compute norms by iterating over all non-axis dimensions
         void ComputeNorm(int[] indices, int dim)
         {
-            if (dim == axis)
+            if (dim == inputShape.Length)
             {
-                // Compute norm along this axis
+                // All non-axis dims are set; compute norm along the axis
                 T sumSquares = numOps.Zero;
                 for (int i = 0; i < inputShape[axis]; i++)
                 {
@@ -8051,26 +7833,25 @@ public static class TensorOperations<T>
                     : indices.Where((_, i) => i != axis).ToArray();
 
                 result[outIndices] = norm;
+                return;
             }
-            else if (dim < inputShape.Length)
+
+            if (dim == axis)
+            {
+                // Skip the reduction axis during outer iteration
+                ComputeNorm(indices, dim + 1);
+            }
+            else
             {
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     indices[dim] = i;
-                    ComputeNorm(indices, dim == axis - 1 ? axis : dim + 1);
+                    ComputeNorm(indices, dim + 1);
                 }
             }
         }
 
-        var startIndices = new int[inputShape.Length];
-        if (axis == 0)
-        {
-            ComputeNorm(startIndices, 0);
-        }
-        else
-        {
-            ComputeNorm(startIndices, 0);
-        }
+        ComputeNorm(new int[inputShape.Length], 0);
 
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -8081,7 +7862,7 @@ public static class TensorOperations<T>
                 // Gradient: ∂||x||/∂x = x / ||x||
                 void ComputeGradient(int[] indices, int dim)
                 {
-                    if (dim == axis)
+                    if (dim == inputShape.Length)
                     {
                         var outIndices = keepDims
                             ? indices.Select((idx, i) => i == axis ? 0 : idx).ToArray()
@@ -8096,18 +7877,24 @@ public static class TensorOperations<T>
                             T val = a.Value[indices];
                             gradA[indices] = numOps.Multiply(gradNorm, numOps.Divide(val, norm));
                         }
+                        return;
                     }
-                    else if (dim < inputShape.Length)
+
+                    if (dim == axis)
+                    {
+                        ComputeGradient(indices, dim + 1);
+                    }
+                    else
                     {
                         for (int i = 0; i < inputShape[dim]; i++)
                         {
                             indices[dim] = i;
-                            ComputeGradient(indices, dim == axis - 1 ? axis : dim + 1);
+                            ComputeGradient(indices, dim + 1);
                         }
                     }
                 }
 
-                ComputeGradient(new int[inputShape.Length], axis == 0 ? 0 : 0);
+                ComputeGradient(new int[inputShape.Length], 0);
 
                 if (a.Gradient == null)
                 {
@@ -8136,9 +7923,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8165,8 +7949,8 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ComplexMatMul(ComputationNode<T> a, ComputationNode<T> b, string format = "split")
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shapeA = a.Value.Shape.ToArray();
-        var shapeB = b.Value.Shape.ToArray();
+        var shapeA = a.Value._shape;
+        var shapeB = b.Value._shape;
 
         // For split format: [batch, m, 2*k] and [batch, 2*k, n]
         // Split into real and imaginary parts
@@ -8344,9 +8128,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.ComplexMatMul;
             node.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
 
             return node;
         }
@@ -8524,10 +8305,6 @@ public static class TensorOperations<T>
             nodeInterleaved.OperationType = OperationType.ComplexMatMul;
             nodeInterleaved.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-            var tapeInterleaved = GradientTape<T>.Current;
-            if (tapeInterleaved != null && tapeInterleaved.IsRecording)
-                tapeInterleaved.RecordOperation(nodeInterleaved);
-
             return nodeInterleaved;
         }
 
@@ -8549,9 +8326,9 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ComplexMultiply(ComputationNode<T> a, ComputationNode<T> b, string format = "split")
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
-        if (!shape.SequenceEqual(b.Value.Shape.ToArray()))
+        if (!shape.SequenceEqual(b.Value._shape))
             throw new ArgumentException("Tensors must have the same shape for complex multiplication.");
 
         var result = new Tensor<T>(shape);
@@ -8683,9 +8460,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ComplexMultiply;
         node.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8720,7 +8494,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Slice(ComputationNode<T> a, int start, int length, int step = 1, int axis = 0)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         // Handle negative axis
         if (axis < 0)
@@ -8840,9 +8614,6 @@ public static class TensorOperations<T>
             { "Axis", axis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8871,7 +8642,7 @@ public static class TensorOperations<T>
 
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = logits.Value.Shape.ToArray();
+        var shape = logits.Value._shape;
         var eps = 1e-10;
 
         // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
@@ -8976,9 +8747,6 @@ public static class TensorOperations<T>
             { "Hard", hard }
         };
 
-        var tape2 = GradientTape<T>.Current;
-        if (tape2 != null && tape2.IsRecording)
-            tape2.RecordOperation(node);
 
         return node;
     }
@@ -9001,7 +8769,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = membranePotential.Value.Shape.ToArray();
+        var shape = membranePotential.Value._shape;
 
         // Forward pass: hard threshold
         var spikes = new Tensor<T>(shape);
@@ -9018,7 +8786,7 @@ public static class TensorOperations<T>
             // Surrogate gradient: sigmoid derivative scaled by beta
             // d_surrogate = beta * sigmoid(beta * (v - threshold)) * (1 - sigmoid(beta * (v - threshold)))
             var surrogateGrad = new Tensor<T>(shape);
-            for (int i = 0; i < shape.Length; i++)
+            for (int i = 0; i < surrogateGrad.Length; i++)
             {
                 var x = numOps.Multiply(
                     numOps.FromDouble(surrogateBeta),
@@ -9048,9 +8816,6 @@ public static class TensorOperations<T>
             { "SurrogateBeta", surrogateBeta }
         };
 
-        var tape3 = GradientTape<T>.Current;
-        if (tape3 != null && tape3.IsRecording)
-            tape3.RecordOperation(node);
 
         return node;
     }
@@ -9071,7 +8836,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         var thresholdT = numOps.FromDouble(threshold);
 
         var result = new Tensor<T>(shape);
@@ -9098,9 +8863,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.StraightThroughThreshold;
         node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
 
-        var tape4 = GradientTape<T>.Current;
-        if (tape4 != null && tape4.IsRecording)
-            tape4.RecordOperation(node);
 
         return node;
     }
@@ -9121,7 +8883,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = scores.Value.Shape.ToArray();
+        var shape = scores.Value._shape;
         int lastDim = shape[^1];
         int batchSize = scores.Value.Length / lastDim;
 
@@ -9204,9 +8966,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.TopKSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "K", k } };
 
-        var tape5 = GradientTape<T>.Current;
-        if (tape5 != null && tape5.IsRecording)
-            tape5.RecordOperation(node);
 
         return node;
     }
@@ -9364,10 +9123,10 @@ public static class TensorOperations<T>
                 }
             }
 
-            var emitGrad = new Tensor<T>(emissions.Value.Shape.ToArray());
-            var transGrad = new Tensor<T>(transitions.Value.Shape.ToArray());
-            Tensor<T>? startGrad = startScores != null ? new Tensor<T>(startScores.Value.Shape.ToArray()) : null;
-            Tensor<T>? endGrad = endScores != null ? new Tensor<T>(endScores.Value.Shape.ToArray()) : null;
+            var emitGrad = new Tensor<T>(emissions.Value._shape);
+            var transGrad = new Tensor<T>(transitions.Value._shape);
+            Tensor<T>? startGrad = startScores != null ? new Tensor<T>(startScores.Value._shape) : null;
+            Tensor<T>? endGrad = endScores != null ? new Tensor<T>(endScores.Value._shape) : null;
 
             // Emission grads (posterior)
             for (int t = 0; t < seqLen; t++)
@@ -9448,9 +9207,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.CRFForward;
         node.OperationParams = null;
 
-        var tape6 = GradientTape<T>.Current;
-        if (tape6 != null && tape6.IsRecording)
-            tape6.RecordOperation(node);
 
         return node;
     }
@@ -9525,9 +9281,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.PReLU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9585,9 +9338,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ThresholdedReLU;
         node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9645,9 +9395,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ISRU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9709,9 +9456,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sign;
         node.OperationParams = new Dictionary<string, object> { { "SurrogateBeta", surrogateBeta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9732,7 +9476,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> LogSoftmax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -9835,9 +9579,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LogSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9857,7 +9598,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Softmin(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -9958,9 +9699,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Softmin;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9979,7 +9717,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> LogSoftmin(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10080,9 +9818,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LogSoftmin;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10142,9 +9877,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SQRBF;
         node.OperationParams = new Dictionary<string, object> { { "Beta", beta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10165,7 +9897,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Maxout(ComputationNode<T> a, int numPieces = 2)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (shape.Length != 2)
             throw new ArgumentException($"Maxout requires 2D input [batch, features], got {shape.Length}D");
@@ -10241,9 +9973,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Maxout;
         node.OperationParams = new Dictionary<string, object> { { "NumPieces", numPieces } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10325,9 +10054,6 @@ public static class TensorOperations<T>
             { "IsTraining", isTraining }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10348,7 +10074,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10502,9 +10228,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SphericalSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10530,7 +10253,7 @@ public static class TensorOperations<T>
             throw new ArgumentOutOfRangeException(nameof(order), order, "Order must be at least 1.");
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10674,9 +10397,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.TaylorSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Order", capturedOrder }, { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10697,7 +10417,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Sparsemax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10847,9 +10567,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sparsemax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10877,8 +10594,8 @@ public static class TensorOperations<T>
         int numClasses)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightsShape = nodeWeights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightsShape = nodeWeights.Value._shape;
 
         if (inputShape.Length != 2)
             throw new ArgumentException($"Input must be 2D [batch, inputDim], got {inputShape.Length}D");
@@ -11076,9 +10793,6 @@ public static class TensorOperations<T>
             { "TreeDepth", treeDepth }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11214,9 +10928,6 @@ public static class TensorOperations<T>
             { "Temperature", temp! }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11253,7 +10964,7 @@ public static class TensorOperations<T>
         var labelData = labels.Value.ToVector();
 
         // Determine number of support vectors and features
-        var svShape = supportVectors.Value.Shape.ToArray();
+        var svShape = supportVectors.Value._shape;
         var nSamples = svShape.Length > 0 ? svShape[0] : svData.Length;
         var nFeatures = svShape.Length > 1 ? svShape[1] : 1;
 
@@ -11329,7 +11040,7 @@ public static class TensorOperations<T>
                         }
                     }
                 }
-                var gradLabelsTensor = new Tensor<T>(labels.Value.Shape.ToArray(), new Vector<T>(gradLabels));
+                var gradLabelsTensor = new Tensor<T>(labels.Value._shape, new Vector<T>(gradLabels));
                 if (labels.Gradient == null)
                     labels.Gradient = gradLabelsTensor;
                 else
@@ -11381,7 +11092,7 @@ public static class TensorOperations<T>
                     }
                 }
 
-                var gradInputTensor = new Tensor<T>(input.Value.Shape.ToArray(), new Vector<T>(gradInput));
+                var gradInputTensor = new Tensor<T>(input.Value._shape, new Vector<T>(gradInput));
                 if (input.Gradient == null)
                     input.Gradient = gradInputTensor;
                 else
@@ -11402,9 +11113,6 @@ public static class TensorOperations<T>
             { "Temperature", temp! }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11550,9 +11258,6 @@ public static class TensorOperations<T>
             { "Symmetric", symmetric }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11593,8 +11298,8 @@ public static class TensorOperations<T>
         {
             // General broadcasting following NumPy rules:
             // Align shapes from the right, dimensions are compatible if equal or one is 1.
-            var largerShape = larger.Shape.ToArray();
-            var smallerShape = smaller.Shape.ToArray();
+            var largerShape = larger._shape;
+            var smallerShape = smaller._shape;
             int maxRank = largerShape.Length;
 
             // Pad smaller shape with 1s on the left to match rank
@@ -11694,8 +11399,8 @@ public static class TensorOperations<T>
         // General broadcasting multiplication following NumPy rules
         var mulLarger = a.Length >= b.Length ? a : b;
         var mulSmaller = a.Length >= b.Length ? b : a;
-        var mulLargerShape = mulLarger.Shape.ToArray();
-        var mulSmallerShape = mulSmaller.Shape.ToArray();
+        var mulLargerShape = mulLarger._shape;
+        var mulSmallerShape = mulSmaller._shape;
         int maxRank = mulLargerShape.Length;
         int offset = maxRank - mulSmallerShape.Length;
 
@@ -11741,7 +11446,7 @@ public static class TensorOperations<T>
     private static Tensor<T> ReduceGradient(Tensor<T> gradient, int[] originalShape)
     {
         // If shapes already match, no reduction needed
-        if (gradient.Shape.ToArray().SequenceEqual(originalShape))
+        if (gradient._shape.SequenceEqual(originalShape))
         {
             return gradient;
         }
@@ -11776,7 +11481,7 @@ public static class TensorOperations<T>
         else
         {
             // General reduction: sum across dimensions that were broadcasted
-            throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient.Shape.ToArray())}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
+            throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient._shape)}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
         }
     }
 
@@ -11807,8 +11512,8 @@ public static class TensorOperations<T>
         ComputationNode<T>? biases = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightShape = weights.Value._shape;
 
         if (inputShape.Length != 2)
             throw new ArgumentException("OctonionMatMul input must have shape [batch, inputFeatures * 8]");
@@ -11977,9 +11682,6 @@ public static class TensorOperations<T>
 
         node.OperationType = OperationType.OctonionMatMul;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -12163,7 +11865,7 @@ public static class TensorOperations<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var input = point.Value;
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Compute max radius based on curvature
         double absC = Math.Abs(curvature);
@@ -12315,7 +12017,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var xVal = x.Value;
         var yVal = y.Value;
-        var shape = xVal.Shape.ToArray();
+        var shape = xVal._shape;
         double c = Math.Abs(curvature); // Use absolute value of curvature
 
         int batchSize = shape.Length > 1 ? shape[0] : 1;
@@ -12379,30 +12081,67 @@ public static class TensorOperations<T>
                 double denominator = 1.0 + 2.0 * c * dotXY + c * c * sqNormX * sqNormY;
                 denominator = Math.Max(denominator, 1e-10);
 
-                // Simplified gradient computation
+                // Read vectors and output gradient for this batch element
+                var xVec = new double[dim];
+                var yVec = new double[dim];
+                var rVec = new double[dim];
+                var gVec = new double[dim];
                 for (int i = 0; i < dim; i++)
                 {
-                    double gradOut = shape.Length > 1
-                        ? numOps.ToDouble(outputGradient[b, i])
-                        : numOps.ToDouble(outputGradient[i]);
+                    xVec[i] = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    yVec[i] = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    rVec[i] = shape.Length > 1 ? numOps.ToDouble(result[b, i]) : numOps.ToDouble(result[i]);
+                    gVec[i] = shape.Length > 1 ? numOps.ToDouble(outputGradient[b, i]) : numOps.ToDouble(outputGradient[i]);
+                }
 
-                    double gradXi = gradOut * numeratorX / denominator;
-                    double gradYi = gradOut * numeratorY / denominator;
+                double invD = 1.0 / denominator;
 
-                    if (x.RequiresGradient)
+                // Exact Jacobian: dr_j/dx_i = (1/D)*[dA/dx_i * x_j + A*delta_ij + dB/dx_i * y_j] - (r_j/D)*(dD/dx_i)
+                // dA/dx_i = 2c*y_i,  dB/dx_i = -2c*x_i,  dD/dx_i = 2c*y_i + 2c^2*x_i*||y||^2
+                if (x.RequiresGradient)
+                {
+                    if (x.Gradient == null) x.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (x.Gradient == null)
-                            x.Gradient = new Tensor<T>(shape);
+                        double dA_dxi = 2.0 * c * yVec[i];
+                        double dB_dxi = -2.0 * c * xVec[i];
+                        double dD_dxi = 2.0 * c * yVec[i] + 2.0 * c * c * xVec[i] * sqNormY;
+
+                        double gradXi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dr_j_dx_i = invD * (dA_dxi * xVec[j] + (i == j ? numeratorX : 0) + dB_dxi * yVec[j])
+                                             - rVec[j] * invD * dD_dxi;
+                            gradXi += gVec[j] * dr_j_dx_i;
+                        }
+
                         if (shape.Length > 1)
                             x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(gradXi));
                         else
                             x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(gradXi));
                     }
+                }
 
-                    if (y.RequiresGradient)
+                // dr_j/dy_i = (1/D)*[dA/dy_i * x_j + dB/dy_i * y_j + B*delta_ij] - (r_j/D)*(dD/dy_i)
+                // dA/dy_i = 2c*x_i + 2c*y_i,  dB/dy_i = 0,  dD/dy_i = 2c*x_i + 2c^2*||x||^2*y_i
+                // Wait: dA/dy_i = d(1 + 2c<x,y> + c||y||^2)/dy_i = 2c*x_i + 2c*y_i
+                // dD/dy_i = d(1 + 2c<x,y> + c^2*||x||^2*||y||^2)/dy_i = 2c*x_i + 2c^2*sqNormX*y_i
+                if (y.RequiresGradient)
+                {
+                    if (y.Gradient == null) y.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (y.Gradient == null)
-                            y.Gradient = new Tensor<T>(shape);
+                        double dA_dyi = 2.0 * c * xVec[i] + 2.0 * c * yVec[i];
+                        double dD_dyi = 2.0 * c * xVec[i] + 2.0 * c * c * sqNormX * yVec[i];
+
+                        double gradYi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dr_j_dy_i = invD * (dA_dyi * xVec[j] + (i == j ? numeratorY : 0))
+                                             - rVec[j] * invD * dD_dyi;
+                            gradYi += gVec[j] * dr_j_dy_i;
+                        }
+
                         if (shape.Length > 1)
                             y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(gradYi));
                         else
@@ -12449,7 +12188,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var pVal = point.Value;
         var vVal = tangent.Value;
-        var shape = pVal.Shape.ToArray();
+        var shape = pVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12529,48 +12268,162 @@ public static class TensorOperations<T>
             }
         }
 
-        // Backward function
+        // Exact backward for Poincare exponential map.
+        // Forward: r = MobiusAdd(p, alpha * v) where alpha = tanh(sqrtC * lambda_p * ||v|| / 2) / (sqrtC * ||v||)
+        // The backward computes exact Jacobians via chain rule through MobiusAdd and the scaling.
         void BackwardFunction(Tensor<T> outputGradient)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                double sqNormP = 0;
+                var pVec = new double[dim];
+                var vVec = new double[dim];
+                var gVec = new double[dim];
+                double sqNormP = 0, sqNormV = 0;
+
                 for (int i = 0; i < dim; i++)
                 {
-                    double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
-                    sqNormP += pi * pi;
+                    pVec[i] = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                    vVec[i] = shape.Length > 1 ? numOps.ToDouble(vVal[b, i]) : numOps.ToDouble(vVal[i]);
+                    gVec[i] = shape.Length > 1 ? numOps.ToDouble(outputGradient[b, i]) : numOps.ToDouble(outputGradient[i]);
+                    sqNormP += pVec[i] * pVec[i];
+                    sqNormV += vVec[i] * vVec[i];
                 }
 
+                double normV = Math.Sqrt(sqNormV);
                 double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
-                double conformalFactor = lambda_p * lambda_p / 4.0;
+
+                if (normV < 1e-10)
+                {
+                    // Near zero tangent: gradient passes through scaled by conformal factor
+                    double cf = lambda_p * lambda_p / 4.0;
+                    for (int i = 0; i < dim; i++)
+                    {
+                        if (point.RequiresGradient)
+                        {
+                            if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                            double pg = gVec[i] * cf;
+                            if (shape.Length > 1) point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pg));
+                            else point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pg));
+                        }
+                        if (tangent.RequiresGradient)
+                        {
+                            if (tangent.Gradient is null) tangent.Gradient = new Tensor<T>(shape);
+                            double vg = gVec[i] * cf;
+                            if (shape.Length > 1) tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(vg));
+                            else tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(vg));
+                        }
+                    }
+                    continue;
+                }
+
+                // alpha = tanh(sqrtC * lambda_p * normV / 2) / (sqrtC * normV)
+                double arg = sqrtC * lambda_p * normV / 2.0;
+                double tanhArg = Math.Tanh(arg);
+                double alpha = tanhArg / (sqrtC * normV);
+
+                // scaledV[i] = alpha * v[i]
+                var scaledV = new double[dim];
+                for (int i = 0; i < dim; i++)
+                    scaledV[i] = alpha * vVec[i];
+
+                // Step 1: Backward through MobiusAdd(p, scaledV) → gradP_mob, gradSV_mob
+                // MobiusAdd: r = (A*p + B*scaledV) / D
+                double dotPSV = 0, sqNormSV = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    dotPSV += pVec[i] * scaledV[i];
+                    sqNormSV += scaledV[i] * scaledV[i];
+                }
+                double A = 1.0 + 2.0 * c * dotPSV + c * sqNormSV;
+                double B = 1.0 - c * sqNormP;
+                double D = Math.Max(1.0 + 2.0 * c * dotPSV + c * c * sqNormP * sqNormSV, 1e-10);
+                double invD = 1.0 / D;
+
+                var rVec = new double[dim];
+                for (int i = 0; i < dim; i++)
+                    rVec[i] = (A * pVec[i] + B * scaledV[i]) * invD;
+
+                // Compute dL/dp_mob and dL/dsv_mob via MobiusAdd Jacobian
+                var gradP_mob = new double[dim];
+                var gradSV_mob = new double[dim];
 
                 for (int i = 0; i < dim; i++)
                 {
-                    double gradOut = shape.Length > 1
-                        ? numOps.ToDouble(outputGradient[b, i])
-                        : numOps.ToDouble(outputGradient[i]);
-
-                    double pGrad = gradOut * conformalFactor;
-                    double vGrad = gradOut * conformalFactor;
-
-                    if (point.RequiresGradient)
+                    // dr_j/dp_i
+                    double dA_dpi = 2.0 * c * scaledV[i];
+                    double dB_dpi = -2.0 * c * pVec[i];
+                    double dD_dpi = 2.0 * c * scaledV[i] + 2.0 * c * c * pVec[i] * sqNormSV;
+                    double gpMob = 0;
+                    for (int j = 0; j < dim; j++)
                     {
-                        if (point.Gradient == null)
-                            point.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pGrad));
-                        else
-                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pGrad));
+                        double dr = invD * (dA_dpi * pVec[j] + (i == j ? A : 0) + dB_dpi * scaledV[j]) - rVec[j] * invD * dD_dpi;
+                        gpMob += gVec[j] * dr;
                     }
+                    gradP_mob[i] = gpMob;
 
-                    if (tangent.RequiresGradient)
+                    // dr_j/dsv_i
+                    double dA_dsvi = 2.0 * c * pVec[i] + 2.0 * c * scaledV[i];
+                    double dD_dsvi = 2.0 * c * pVec[i] + 2.0 * c * c * sqNormP * scaledV[i];
+                    double gsvMob = 0;
+                    for (int j = 0; j < dim; j++)
                     {
-                        if (tangent.Gradient == null)
-                            tangent.Gradient = new Tensor<T>(shape);
+                        double dr = invD * (dA_dsvi * pVec[j] + (i == j ? B : 0)) - rVec[j] * invD * dD_dsvi;
+                        gsvMob += gVec[j] * dr;
+                    }
+                    gradSV_mob[i] = gsvMob;
+                }
+
+                // Step 2: Backward through scaledV = alpha * v
+                // d(alpha*v_j)/dv_i = alpha * delta_ij + v_j * d(alpha)/dv_i
+                // d(alpha)/dv_i = d/dv_i [tanh(arg) / (sqrtC * normV)]
+                //   = [sech²(arg) * sqrtC*lambda_p/(2*normV) * v_i - tanhArg/(sqrtC*normV²) * v_i/normV] / (sqrtC)
+                //   = v_i * [sech²(arg)*lambda_p/(2*normV) - tanhArg/(sqrtC*normV*normV)] / sqrtC ... simplified:
+                double sech2 = 1.0 - tanhArg * tanhArg;
+                double dAlpha_dNormV = (sech2 * sqrtC * lambda_p / 2.0 * normV - tanhArg) / (sqrtC * normV * normV);
+
+                if (tangent.RequiresGradient)
+                {
+                    if (tangent.Gradient is null) tangent.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // dL/dv_i = sum_j gradSV_mob[j] * d(scaledV_j)/dv_i
+                        double gradVi = 0;
+                        double dAlpha_dvi = dAlpha_dNormV * vVec[i] / normV; // chain through normV
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dSVj_dvi = alpha * (i == j ? 1.0 : 0.0) + vVec[j] * dAlpha_dvi;
+                            gradVi += gradSV_mob[j] * dSVj_dvi;
+                        }
                         if (shape.Length > 1)
-                            tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(vGrad));
+                            tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(gradVi));
                         else
-                            tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(vGrad));
+                            tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(gradVi));
+                    }
+                }
+
+                // Step 3: Point gradient includes both MobiusAdd contribution and
+                // the chain through alpha (which depends on lambda_p which depends on p)
+                // d(lambda_p)/dp_i = 4c*p_i / (1 - c*||p||²)² = lambda_p² * c * p_i
+                if (point.RequiresGradient)
+                {
+                    if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // Direct MobiusAdd gradient w.r.t. p
+                        double gradPi = gradP_mob[i];
+
+                        // Chain through alpha's dependence on lambda_p (which depends on p)
+                        double dLambda_dpi = lambda_p * lambda_p * c * pVec[i];
+                        double dArg_dpi = sqrtC * dLambda_dpi * normV / 2.0;
+                        double dAlpha_dpi = sech2 * dArg_dpi / (sqrtC * normV);
+
+                        for (int j = 0; j < dim; j++)
+                            gradPi += gradSV_mob[j] * vVec[j] * dAlpha_dpi;
+
+                        if (shape.Length > 1)
+                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(gradPi));
+                        else
+                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(gradPi));
                     }
                 }
             }
@@ -12611,7 +12464,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var pVal = point.Value;
         var qVal = target.Value;
-        var shape = pVal.Shape.ToArray();
+        var shape = pVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12680,48 +12533,146 @@ public static class TensorOperations<T>
             }
         }
 
-        // Backward function
+        // Exact backward for Poincare logarithmic map.
+        // Forward: r = scale * diff, where diff = MobiusAdd(-p, q), scale = 2/(sqrtC*lambda_p) * atanh(sqrtC*||diff||)/||diff||
         void BackwardFunction(Tensor<T> outputGradient)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                double sqNormP = 0;
+                var pVec = new double[dim];
+                var qVec = new double[dim];
+                var gVec = new double[dim];
+                double sqNormP = 0, sqNormQ = 0, dotNPQ = 0;
+
                 for (int i = 0; i < dim; i++)
                 {
-                    double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
-                    sqNormP += pi * pi;
+                    pVec[i] = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                    qVec[i] = shape.Length > 1 ? numOps.ToDouble(qVal[b, i]) : numOps.ToDouble(qVal[i]);
+                    gVec[i] = shape.Length > 1 ? numOps.ToDouble(outputGradient[b, i]) : numOps.ToDouble(outputGradient[i]);
+                    sqNormP += pVec[i] * pVec[i];
+                    sqNormQ += qVec[i] * qVec[i];
+                    dotNPQ += (-pVec[i]) * qVec[i];
                 }
 
-                double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
-                double conformalFactor = 4.0 / (lambda_p * lambda_p);
+                // Recompute diff = MobiusAdd(-p, q)
+                double numNP = 1.0 + 2.0 * c * dotNPQ + c * sqNormQ;
+                double numQ = 1.0 - c * sqNormP;
+                double den = Math.Max(1.0 + 2.0 * c * dotNPQ + c * c * sqNormP * sqNormQ, 1e-10);
+                double invDen = 1.0 / den;
 
+                var diff2 = new double[dim];
+                double sqNormDiff = 0;
                 for (int i = 0; i < dim; i++)
                 {
-                    double gradOut = shape.Length > 1
-                        ? numOps.ToDouble(outputGradient[b, i])
-                        : numOps.ToDouble(outputGradient[i]);
+                    diff2[i] = (numNP * (-pVec[i]) + numQ * qVec[i]) * invDen;
+                    sqNormDiff += diff2[i] * diff2[i];
+                }
+                double normDiff = Math.Sqrt(sqNormDiff);
+                double lambda_p2 = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
 
-                    double pGrad = -gradOut * conformalFactor;
-                    double qGrad = gradOut * conformalFactor;
-
-                    if (point.RequiresGradient)
+                if (normDiff < 1e-10)
+                {
+                    // Near-zero diff: conformal scaling fallback
+                    double cf = 4.0 / (lambda_p2 * lambda_p2);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (point.Gradient == null)
-                            point.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pGrad));
-                        else
-                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pGrad));
+                        if (point.RequiresGradient)
+                        {
+                            if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                            double pg = -gVec[i] * cf;
+                            if (shape.Length > 1) point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pg));
+                            else point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pg));
+                        }
+                        if (target.RequiresGradient)
+                        {
+                            if (target.Gradient is null) target.Gradient = new Tensor<T>(shape);
+                            double qg = gVec[i] * cf;
+                            if (shape.Length > 1) target.Gradient[b, i] = numOps.Add(target.Gradient[b, i], numOps.FromDouble(qg));
+                            else target.Gradient[i] = numOps.Add(target.Gradient[i], numOps.FromDouble(qg));
+                        }
                     }
+                    continue;
+                }
 
-                    if (target.RequiresGradient)
+                // scale = (2 / (sqrtC * lambda_p)) * atanh(sqrtC * normDiff) / normDiff
+                double arg2 = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
+                double atanhArg = Atanh(arg2);
+                double scale2 = (2.0 / (sqrtC * lambda_p2)) * atanhArg / normDiff;
+
+                // dL/d(diff_i) via chain rule through r = scale * diff
+                // dr_j/d(diff_i) = scale * delta_ij + diff_j * d(scale)/d(diff_i)
+                // d(scale)/d(diff_i) = (2/(sqrtC*lambda_p)) * d/d(diff_i) [atanh(sqrtC*||diff||)/||diff||]
+                // Let u = sqrtC*normDiff. d(atanh(u)/normDiff)/d(diff_i) = diff_i/(normDiff) * [1/(1-u²) * sqrtC/normDiff - atanh(u)/normDiff²]
+                double u = arg2;
+                double dAtanhU_dNorm = sqrtC / (1.0 - u * u + 1e-15);
+                double dScaleOverNorm_dNorm = dAtanhU_dNorm / normDiff - atanhArg / (normDiff * normDiff);
+                double dScale_dNorm = (2.0 / (sqrtC * lambda_p2)) * dScaleOverNorm_dNorm;
+
+                var gradDiff = new double[dim];
+                for (int i = 0; i < dim; i++)
+                {
+                    double dScale_di = dScale_dNorm * diff2[i] / normDiff;
+                    double gradDi = 0;
+                    for (int j = 0; j < dim; j++)
                     {
-                        if (target.Gradient == null)
-                            target.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            target.Gradient[b, i] = numOps.Add(target.Gradient[b, i], numOps.FromDouble(qGrad));
-                        else
-                            target.Gradient[i] = numOps.Add(target.Gradient[i], numOps.FromDouble(qGrad));
+                        double dr = scale2 * (i == j ? 1.0 : 0.0) + diff2[j] * dScale_di;
+                        gradDi += gVec[j] * dr;
+                    }
+                    gradDiff[i] = gradDi;
+                }
+
+                // Backward through diff = MobiusAdd(-p, q): compute dL/dp and dL/dq
+                // diff = (numNP * (-p) + numQ * q) / den
+                // Note: MobiusAdd inputs are (-p, q), so gradients w.r.t. p get negated
+                if (point.RequiresGradient)
+                {
+                    if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // d(diff_j)/d(p_i) via chain through MobiusAdd(-p, q) w.r.t. p
+                        // First input to MobiusAdd is -p, so d(-p_i)/dp_i = -1
+                        // dA/d(-p_i) = 2c*q_i → dA/dp_i = -2c*q_i
+                        // dB/d(-p_i) = -2c*(-p_i) = 2c*p_i → dB/dp_i = -2c*p_i  ... actually B = 1-c*||p||², dB/dp_i = -2c*p_i
+                        double dA_dpi = -2.0 * c * qVec[i];
+                        double dB_dpi = -2.0 * c * pVec[i];
+                        double dD_dpi = -2.0 * c * qVec[i] + 2.0 * c * c * pVec[i] * sqNormQ;
+
+                        double gradPi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dDiff = invDen * (dA_dpi * (-pVec[j]) + (i == j ? -numNP : 0) + dB_dpi * qVec[j])
+                                         - diff2[j] * invDen * dD_dpi;
+                            gradPi += gradDiff[j] * dDiff;
+                        }
+                        // Also chain through lambda_p's dependence on p
+                        double dLambda_dpi = lambda_p2 * lambda_p2 * c * pVec[i];
+                        double dScale_dLambda = -(2.0 / (sqrtC * lambda_p2 * lambda_p2)) * atanhArg / normDiff;
+                        for (int j = 0; j < dim; j++)
+                            gradPi += gVec[j] * diff2[j] * dScale_dLambda * dLambda_dpi;
+
+                        if (shape.Length > 1) point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(gradPi));
+                        else point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(gradPi));
+                    }
+                }
+
+                if (target.RequiresGradient)
+                {
+                    if (target.Gradient is null) target.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // d(diff_j)/d(q_i) via MobiusAdd(-p, q) w.r.t. second arg q
+                        double dA_dqi = 2.0 * c * (-pVec[i]) + 2.0 * c * qVec[i];
+                        double dD_dqi = 2.0 * c * (-pVec[i]) + 2.0 * c * c * sqNormP * qVec[i];
+
+                        double gradQi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dDiff = invDen * (dA_dqi * (-pVec[j]) + (i == j ? numQ : 0))
+                                         - diff2[j] * invDen * dD_dqi;
+                            gradQi += gradDiff[j] * dDiff;
+                        }
+                        if (shape.Length > 1) target.Gradient[b, i] = numOps.Add(target.Gradient[b, i], numOps.FromDouble(gradQi));
+                        else target.Gradient[i] = numOps.Add(target.Gradient[i], numOps.FromDouble(gradQi));
                     }
                 }
             }
@@ -12762,7 +12713,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var xVal = x.Value;
         var yVal = y.Value;
-        var shape = xVal.Shape.ToArray();
+        var shape = xVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12808,66 +12759,91 @@ public static class TensorOperations<T>
         }
 
         // Backward function
+        // Exact backward for Poincare distance.
+        // Forward: d = (2/sqrtC) * atanh(sqrtC * ||MobiusAdd(-x, y)||)
+        // Chain: dL/dx_i = dL/d(dist) * d(dist)/d(diff_j) * d(diff_j)/d(x_i)
         void BackwardFunction(Tensor<T> outputGradient)
         {
             for (int b = 0; b < batchSize; b++)
             {
                 double gradOut = numOps.ToDouble(outputGradient[b]);
 
-                // Compute Mobius add components again
-                double sqNormX = 0, sqNormY = 0, dotNegXY = 0;
+                var xVec = new double[dim];
+                var yVec = new double[dim];
+                double sqNormX = 0, sqNormY = 0, dotNXY = 0;
                 for (int i = 0; i < dim; i++)
                 {
-                    double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
-                    double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
-                    sqNormX += xi * xi;
-                    sqNormY += yi * yi;
-                    dotNegXY += (-xi) * yi;
+                    xVec[i] = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    yVec[i] = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    sqNormX += xVec[i] * xVec[i];
+                    sqNormY += yVec[i] * yVec[i];
+                    dotNXY += (-xVec[i]) * yVec[i];
                 }
 
-                double numeratorNegX = 1.0 + 2.0 * c * dotNegXY + c * sqNormY;
-                double numeratorY = 1.0 - c * sqNormX;
-                double denominator = Math.Max(1.0 + 2.0 * c * dotNegXY + c * c * sqNormX * sqNormY, 1e-10);
+                double A = 1.0 + 2.0 * c * dotNXY + c * sqNormY;
+                double B = 1.0 - c * sqNormX;
+                double D = Math.Max(1.0 + 2.0 * c * dotNXY + c * c * sqNormX * sqNormY, 1e-10);
+                double invD = 1.0 / D;
 
-                var diff = new double[dim];
+                var diff3 = new double[dim];
                 double sqNormDiff = 0;
                 for (int i = 0; i < dim; i++)
                 {
-                    double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
-                    double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
-                    diff[i] = (numeratorNegX * (-xi) + numeratorY * yi) / denominator;
-                    sqNormDiff += diff[i] * diff[i];
+                    diff3[i] = (A * (-xVec[i]) + B * yVec[i]) * invD;
+                    sqNormDiff += diff3[i] * diff3[i];
                 }
 
                 double normDiff = Math.Max(Math.Sqrt(sqNormDiff), 1e-10);
-                double arg = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
-                double atanhDeriv = 1.0 / Math.Max(1.0 - arg * arg, 1e-10);
-                double distDeriv = (2.0 / sqrtC) * atanhDeriv * sqrtC / normDiff;
+                double u = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
+                double atanhDeriv = 1.0 / Math.Max(1.0 - u * u, 1e-10);
 
-                for (int i = 0; i < dim; i++)
+                // d(dist)/d(diff_j) = (2/sqrtC) * atanh'(u) * sqrtC * diff_j/normDiff
+                //                   = 2 * atanhDeriv * diff_j / normDiff
+                double distScale = 2.0 * atanhDeriv / normDiff;
+                var gradDiff = new double[dim];
+                for (int j = 0; j < dim; j++)
+                    gradDiff[j] = gradOut * distScale * diff3[j] / normDiff;
+
+                // Exact Jacobian of MobiusAdd(-x, y) w.r.t. x (first arg is -x)
+                if (x.RequiresGradient)
                 {
-                    double diffDeriv = gradOut * distDeriv * diff[i] / normDiff;
-                    double xGradVal = -diffDeriv * numeratorNegX / denominator;
-                    double yGradVal = diffDeriv * numeratorY / denominator;
-
-                    if (x.RequiresGradient)
+                    if (x.Gradient is null) x.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (x.Gradient == null)
-                            x.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(xGradVal));
-                        else
-                            x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(xGradVal));
+                        // d(diff_j)/d(x_i): first MobiusAdd input is -x, so d(-x_i)/dx_i = -1
+                        double dA_dxi = -2.0 * c * yVec[i];
+                        double dB_dxi = -2.0 * c * xVec[i];
+                        double dD_dxi = -2.0 * c * yVec[i] + 2.0 * c * c * xVec[i] * sqNormY;
+
+                        double gxi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dDiff = invD * (dA_dxi * (-xVec[j]) + (i == j ? -A : 0) + dB_dxi * yVec[j])
+                                         - diff3[j] * invD * dD_dxi;
+                            gxi += gradDiff[j] * dDiff;
+                        }
+                        if (shape.Length > 1) x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(gxi));
+                        else x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(gxi));
                     }
+                }
 
-                    if (y.RequiresGradient)
+                if (y.RequiresGradient)
+                {
+                    if (y.Gradient is null) y.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (y.Gradient == null)
-                            y.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(yGradVal));
-                        else
-                            y.Gradient[i] = numOps.Add(y.Gradient[i], numOps.FromDouble(yGradVal));
+                        double dA_dyi = 2.0 * c * (-xVec[i]) + 2.0 * c * yVec[i];
+                        double dD_dyi = 2.0 * c * (-xVec[i]) + 2.0 * c * c * sqNormX * yVec[i];
+
+                        double gyi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dDiff = invD * (dA_dyi * (-xVec[j]) + (i == j ? B : 0))
+                                         - diff3[j] * invD * dD_dyi;
+                            gyi += gradDiff[j] * dDiff;
+                        }
+                        if (shape.Length > 1) y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(gyi));
+                        else y.Gradient[i] = numOps.Add(y.Gradient[i], numOps.FromDouble(gyi));
                     }
                 }
             }
@@ -13059,7 +13035,7 @@ public static class TensorOperations<T>
                         if (input.RequiresGradient)
                         {
                             if (input.Gradient == null)
-                                input.Gradient = new Tensor<T>(inputVal.Shape.ToArray());
+                                input.Gradient = new Tensor<T>(inputVal._shape);
                             double existingInputGrad = numOps.ToDouble(input.Gradient[b, i]);
                             input.Gradient[b, i] = numOps.FromDouble(existingInputGrad + scaledGrad * w);
                         }
@@ -13068,7 +13044,7 @@ public static class TensorOperations<T>
                         if (weights.RequiresGradient)
                         {
                             if (weights.Gradient == null)
-                                weights.Gradient = new Tensor<T>(weightsVal.Shape.ToArray());
+                                weights.Gradient = new Tensor<T>(weightsVal._shape);
                             double existingWeightGrad = numOps.ToDouble(weights.Gradient[o, i]);
                             weights.Gradient[o, i] = numOps.FromDouble(existingWeightGrad + scaledGrad * inp);
                         }
@@ -13077,7 +13053,7 @@ public static class TensorOperations<T>
                         if (biases is not null && biases.RequiresGradient)
                         {
                             if (biases.Gradient == null)
-                                biases.Gradient = new Tensor<T>(biases.Value.Shape.ToArray());
+                                biases.Gradient = new Tensor<T>(biases.Value._shape);
                             double existingBiasGrad = numOps.ToDouble(biases.Gradient[o, i]);
                             biases.Gradient[o, i] = numOps.FromDouble(existingBiasGrad + scaledGrad / inputFeatures);
                         }

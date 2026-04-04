@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -144,27 +144,27 @@ public static class DataSplitter
         }
 
         // Create output tensors
-        int[] xTrainShape = (int[])X.Shape.ToArray().Clone();
+        int[] xTrainShape = (int[])X.Shape.ToArray();
         xTrainShape[0] = trainSize;
         var XTrain = new Tensor<T>(xTrainShape);
 
-        int[] xValShape = (int[])X.Shape.ToArray().Clone();
+        int[] xValShape = (int[])X.Shape.ToArray();
         xValShape[0] = validationSize;
         var XVal = new Tensor<T>(xValShape);
 
-        int[] xTestShape = (int[])X.Shape.ToArray().Clone();
+        int[] xTestShape = (int[])X.Shape.ToArray();
         xTestShape[0] = testSize;
         var XTest = new Tensor<T>(xTestShape);
 
-        int[] yTrainShape = (int[])y.Shape.ToArray().Clone();
+        int[] yTrainShape = (int[])y.Shape.ToArray();
         yTrainShape[0] = trainSize;
         var yTrain = new Tensor<T>(yTrainShape);
 
-        int[] yValShape = (int[])y.Shape.ToArray().Clone();
+        int[] yValShape = (int[])y.Shape.ToArray();
         yValShape[0] = validationSize;
         var yVal = new Tensor<T>(yValShape);
 
-        int[] yTestShape = (int[])y.Shape.ToArray().Clone();
+        int[] yTestShape = (int[])y.Shape.ToArray();
         yTestShape[0] = testSize;
         var yTest = new Tensor<T>(yTestShape);
 

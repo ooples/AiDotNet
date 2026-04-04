@@ -188,10 +188,15 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
-        SetTrainingMode(true); var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers); SetTrainingMode(false);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -201,7 +206,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o.Shape.ToArray()); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o._shape); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

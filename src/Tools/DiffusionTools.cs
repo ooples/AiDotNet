@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+﻿using AiDotNet.Diffusion;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Helpers;
@@ -106,7 +106,7 @@ public class TextToImageTool<T> : ToolBase
 
     private static string FormatImageResult(Tensor<T> image, string prompt, int steps, double guidance, int? seed)
     {
-        var shape = string.Join("x", image.Shape.ToArray());
+        var shape = string.Join("x", image._shape);
         return $"Generated image successfully.\n" +
                $"Shape: {shape}\n" +
                $"Prompt: \"{prompt}\"\n" +

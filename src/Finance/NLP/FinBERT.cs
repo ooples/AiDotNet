@@ -461,7 +461,6 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -826,29 +825,6 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Propagates gradients backward through all layers,
-    /// computing how each layer's parameters should change to reduce the loss.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Backward through layers in reverse
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
         }
 
         return current;

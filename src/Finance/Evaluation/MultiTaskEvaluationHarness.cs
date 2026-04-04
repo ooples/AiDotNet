@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -260,7 +260,7 @@ public class MultiTaskEvaluationHarness<T>
                     nameof(masks));
 
             // Create masked input (zero out masked positions)
-            var maskedInput = new Tensor<T>(original.Shape.ToArray());
+            var maskedInput = new Tensor<T>(original._shape);
             for (int i = 0; i < original.Length; i++)
             {
                 double m = NumOps.ToDouble(mask[i]);

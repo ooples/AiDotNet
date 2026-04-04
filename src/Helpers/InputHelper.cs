@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides helper methods for input-related operations.
@@ -33,7 +33,7 @@ public static class InputHelper<T, TInput>
             Tensor<T> tensor => tensor.Shape.Length >= 2
                 ? (tensor.Shape.Length == 2
                     ? tensor.Shape[1]
-                    : tensor.Shape.ToArray().Skip(1).Aggregate((a, b) => a * b))
+                    : tensor._shape.Skip(1).Aggregate((a, b) => a * b))
                 : tensor.Shape[0],
             _ => throw new ArgumentException("Unsupported input type")
         };
@@ -120,7 +120,7 @@ public static class InputHelper<T, TInput>
                 (tensor.Shape.Length > 1 && column >= tensor.Shape[1]))
             {
                 throw new ArgumentOutOfRangeException(
-                    $"Indices ({row}, {column}) are out of range for tensor with shape {string.Join("x", tensor.Shape.ToArray())}.");
+                    $"Indices ({row}, {column}) are out of range for tensor with shape {string.Join("x", tensor._shape)}.");
             }
 
             return tensor[row, column];

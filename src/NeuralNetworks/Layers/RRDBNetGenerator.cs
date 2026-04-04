@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class RRDBNetGenerator<T> : LayerBase<T>
 {
     #region Fields
 
@@ -151,36 +151,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all sub-components support JIT
-            if (!_convFirst.SupportsJitCompilation) return false;
-            if (!_trunkConv.SupportsJitCompilation) return false;
-            if (!_hrConv.SupportsJitCompilation) return false;
-            if (!_convLast.SupportsJitCompilation) return false;
-
-            foreach (var rrdb in _rrdbBlocks)
-            {
-                if (!rrdb.SupportsJitCompilation) return false;
-            }
-
-            foreach (var conv in _upsampleConvs)
-            {
-                if (!conv.SupportsJitCompilation) return false;
-            }
-
-            foreach (var ps in _pixelShuffleLayers)
-            {
-                if (!ps.SupportsJitCompilation) return false;
-            }
-
-            return true;
-        }
-    }
 
     #endregion
 
@@ -327,6 +297,14 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_convFirst);
+        RegisterSubLayer(_trunkConv);
+        RegisterSubLayer(_hrConv);
+        RegisterSubLayer(_convLast);
+        foreach (var rrdb in _rrdbBlocks) RegisterSubLayer(rrdb);
+        foreach (var conv in _upsampleConvs) RegisterSubLayer(conv);
+        foreach (var ps in _pixelShuffleLayers) RegisterSubLayer(ps);
     }
 
     #endregion
@@ -378,54 +356,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region Backward Pass
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _conv1Output == null || _rrdbOutputs == null || _upsampleOutputs == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var grad = outputGradient;
-
-        // Backward through final conv
-        grad = _convLast.Backward(grad);
-
-        // Backward through HR conv + activation
-        grad = BackwardLeakyReLU(_hrConv.Forward(_upsampleOutputs[^1]), grad);
-        grad = _hrConv.Backward(grad);
-
-        // Backward through upsampling stages (in reverse)
-        for (int i = _upsampleConvs.Length - 1; i >= 0; i--)
-        {
-            // Backward through LeakyReLU after PixelShuffle
-            grad = BackwardLeakyReLU(_upsampleOutputs[i * 2], grad);
-
-            // Backward through PixelShuffle
-            grad = _pixelShuffleLayers[i].Backward(grad);
-
-            // Backward through upsample conv
-            grad = _upsampleConvs[i].Backward(grad);
-        }
-
-        // Backward through global residual: grad flows to both trunk and conv1
-        var trunkGrad = grad;
-        var conv1ResidualGrad = grad;
-
-        // Backward through trunk conv
-        var rrdbGrad = _trunkConv.Backward(trunkGrad);
-
-        // Backward through RRDB blocks (in reverse)
-        for (int i = _rrdbBlocks.Length - 1; i >= 0; i--)
-        {
-            rrdbGrad = _rrdbBlocks[i].Backward(rrdbGrad);
-        }
-
-        // Combine gradients at conv1 output
-        var combinedGrad = AddTensors(rrdbGrad, conv1ResidualGrad);
-
-        // Backward through first conv
-        return _convFirst.Backward(combinedGrad);
-    }
 
     #endregion
 
@@ -586,23 +516,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     #region JIT Compilation
 
     /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
-    /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         // Initial feature extraction
@@ -656,4 +569,5 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
 }

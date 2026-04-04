@@ -107,60 +107,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[2]); // output features
     }
 
-    [Fact]
-    public void DenseLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        int inputSize = 32;
-        int outputSize = 16;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
-        var input = Create2DInput(4, inputSize);
-        var outputGrad = CreateRandomTensor([4, outputSize], 123);
 
-        // Act
-        var output = layer.Forward(input);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void DenseLayer_UpdateParameters_ModifiesWeights()
-    {
-        // Arrange
-        int inputSize = 16;
-        int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
-        var input = Create2DInput(2, inputSize);
-        var outputGrad = CreateRandomTensor([2, outputSize], 123);
-
-        // Get initial parameters
-        var initialParams = layer.GetParameters();
-        var initialParamsArray = new float[initialParams.Length];
-        for (int i = 0; i < initialParams.Length; i++)
-            initialParamsArray[i] = initialParams[i];
-
-        // Act
-        layer.Forward(input);
-        layer.Backward(outputGrad);
-        layer.UpdateParameters(0.01f);
-
-        // Get updated parameters
-        var updatedParams = layer.GetParameters();
-
-        // Assert - parameters should have changed
-        bool paramsChanged = false;
-        for (int i = 0; i < updatedParams.Length; i++)
-        {
-            if (Math.Abs(updatedParams[i] - initialParamsArray[i]) > Tolerance)
-            {
-                paramsChanged = true;
-                break;
-            }
-        }
-        Assert.True(paramsChanged, "Parameters should change after update");
-    }
 
     [Fact]
     public void DenseLayer_Clone_CreatesIndependentCopy()
@@ -306,32 +253,6 @@ public class CoreLayersIntegrationTests
         Assert.Equal(inputWidth, output.Shape[3]); // width
     }
 
-    [Fact]
-    public void ConvolutionalLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        int inputChannels = 3;
-        int outputChannels = 8;
-        int kernelSize = 3;
-        int stride = 1;
-        int padding = 1;
-        int inputHeight = 16;
-        int inputWidth = 16;
-
-        var layer = new ConvolutionalLayer<float>(
-            inputChannels, inputHeight, inputWidth,
-            outputChannels, kernelSize, stride, padding);
-        var input = Create4DInput(2, inputChannels, inputHeight, inputWidth);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void ConvolutionalLayer_WithStride2_ReducesSpatialDimensions()
@@ -458,24 +379,6 @@ public class CoreLayersIntegrationTests
         Assert.Equal(5f, output[0, 0, 1, 1]); // max of [1,2,4,5]
     }
 
-    [Fact]
-    public void MaxPoolingLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        int channels = 8;
-        int inputHeight = 16;
-        int inputWidth = 16;
-        var layer = new MaxPoolingLayer<float>([channels, inputHeight, inputWidth], 2, 2);
-        var input = Create4DInput(2, channels, inputHeight, inputWidth);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
@@ -553,24 +456,6 @@ public class CoreLayersIntegrationTests
         Assert.Equal((11f + 12f + 15f + 16f) / 4f, output[0, 0, 1, 1], Tolerance); // avg = 13.5
     }
 
-    [Fact]
-    public void AveragePoolingLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        int channels = 8;
-        int inputHeight = 16;
-        int inputWidth = 16;
-        var layer = new AveragePoolingLayer<float>([channels, inputHeight, inputWidth], 2, 2);
-        var input = Create4DInput(2, channels, inputHeight, inputWidth);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     #endregion
 
@@ -621,23 +506,6 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void DropoutLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        int[] shape = [4, 32];
-        var layer = new DropoutLayer<float>(0.3);
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(shape);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(shape, 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void DropoutLayer_Clone_CreatesIndependentCopy()
@@ -705,22 +573,6 @@ public class CoreLayersIntegrationTests
         Assert.Equal(sum1, sum2, Tolerance);
     }
 
-    [Fact]
-    public void FlattenLayer_Backward_RestoresOriginalShape()
-    {
-        // Arrange
-        int[] inputShape = [8, 8, 3];
-        var layer = new FlattenLayer<float>(inputShape);
-        var input = CreateRandomTensor([2, 8, 8, 3]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void FlattenLayer_Clone_CreatesIndependentCopy()
@@ -789,23 +641,6 @@ public class CoreLayersIntegrationTests
         Assert.Equal(sum1, sum2, Tolerance);
     }
 
-    [Fact]
-    public void ReshapeLayer_Backward_RestoresOriginalShape()
-    {
-        // Arrange
-        int[] inputShape = [32];
-        int[] outputShape = [4, 8];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
-        var input = CreateRandomTensor([2, 32]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void ReshapeLayer_Clone_CreatesIndependentCopy()
@@ -903,22 +738,6 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
-        var input = CreateRandomTensor([2, 8, 16]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void ActivationLayer_Clone_CreatesIndependentCopy()
@@ -945,89 +764,8 @@ public class CoreLayersIntegrationTests
 
     #region Layer Integration Tests
 
-    [Fact]
-    public void DenseLayerChain_ForwardAndBackward_WorksCorrectly()
-    {
-        // Arrange - a simple network: Dense(64) -> Dense(32) -> Dense(10)
-        var layer1 = new DenseLayer<float>(64, 32);
-        var layer2 = new DenseLayer<float>(32, 16);
-        var layer3 = new DenseLayer<float>(16, 10);
 
-        var input = Create2DInput(4, 64);
-        var targetGrad = CreateRandomTensor([4, 10], 123);
 
-        // Act - Forward
-        var out1 = layer1.Forward(input);
-        var out2 = layer2.Forward(out1);
-        var out3 = layer3.Forward(out2);
-
-        // Backward
-        var grad3 = layer3.Backward(targetGrad);
-        var grad2 = layer2.Backward(grad3);
-        var grad1 = layer1.Backward(grad2);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), grad1.Shape.ToArray());
-        Assert.Equal(out1.Shape.ToArray(), grad2.Shape.ToArray());
-        Assert.Equal(out2.Shape.ToArray(), grad3.Shape.ToArray());
-    }
-
-    [Fact]
-    public void ConvFlattenDenseChain_ForwardAndBackward_WorksCorrectly()
-    {
-        // Arrange - Conv -> Flatten -> Dense
-        // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        var convLayer = new ConvolutionalLayer<float>(1, 8, 8, 4, 3, 1, 1);
-        var flattenLayer = new FlattenLayer<float>([4, 8, 8]);
-        var denseLayer = new DenseLayer<float>(4 * 8 * 8, 10);
-
-        var input = Create4DInput(2, 1, 8, 8);
-        var targetGrad = CreateRandomTensor([2, 10], 123);
-
-        // Act - Forward
-        var convOut = convLayer.Forward(input);
-        var flatOut = flattenLayer.Forward(convOut);
-        var denseOut = denseLayer.Forward(flatOut);
-
-        // Backward
-        var denseGrad = denseLayer.Backward(targetGrad);
-        var flatGrad = flattenLayer.Backward(denseGrad);
-        var convGrad = convLayer.Backward(flatGrad);
-
-        // Assert
-        Assert.Equal([2, 10], denseOut.Shape.ToArray());
-        Assert.Equal(input.Shape.ToArray(), convGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void ConvPoolChain_ForwardAndBackward_WorksCorrectly()
-    {
-        // Arrange - Conv -> MaxPool -> Conv -> MaxPool
-        // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        var conv1 = new ConvolutionalLayer<float>(1, 16, 16, 8, 3, 1, 1);
-        var pool1 = new MaxPoolingLayer<float>([8, 16, 16], 2, 2);
-        var conv2 = new ConvolutionalLayer<float>(8, 8, 8, 16, 3, 1, 1);
-        var pool2 = new MaxPoolingLayer<float>([16, 8, 8], 2, 2);
-
-        var input = Create4DInput(2, 1, 16, 16);
-        var targetGrad = CreateRandomTensor([2, 16, 4, 4], 123);
-
-        // Act - Forward
-        var c1Out = conv1.Forward(input);
-        var p1Out = pool1.Forward(c1Out);
-        var c2Out = conv2.Forward(p1Out);
-        var p2Out = pool2.Forward(c2Out);
-
-        // Backward
-        var p2Grad = pool2.Backward(targetGrad);
-        var c2Grad = conv2.Backward(p2Grad);
-        var p1Grad = pool1.Backward(c2Grad);
-        var c1Grad = conv1.Backward(p1Grad);
-
-        // Assert
-        Assert.Equal([2, 16, 4, 4], p2Out.Shape.ToArray());
-        Assert.Equal(input.Shape.ToArray(), c1Grad.Shape.ToArray());
-    }
 
     [Fact]
     public void DenseWithDropout_TrainingVsInference_BehavesDifferently()

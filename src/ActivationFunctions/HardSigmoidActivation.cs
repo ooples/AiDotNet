@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -110,22 +110,6 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
         return NumOps.Zero;
     }
 
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.HardSigmoid.</value>
-    /// <remarks>
-    /// <para>
-    /// HardSigmoid supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is 0.5 when -1 &lt; x &lt; 1, and 0 otherwise
-    /// - It's computationally efficient and commonly used in mobile/embedded applications
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
@@ -167,28 +151,6 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
     {
         backend.Hardsigmoid(input, output, size);
-    }
-
-    /// <summary>
-    /// Calculates the HardSigmoid backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for HardSigmoid (can be null). HardSigmoid backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// HardSigmoid backward on GPU:
-    /// - For -1 &lt; input &lt; 1: gradInput[i] = gradOutput[i] * 0.5
-    /// - Otherwise: gradInput[i] = 0
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "HardSigmoid backward requires the input from forward pass.");
-
-        backend.HardsigmoidBackward(gradOutput, input, gradInput, size);
     }
 
     #endregion

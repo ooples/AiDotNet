@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -150,7 +150,7 @@ public class CroppingLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("CroppingLayer requires an input tensor.");
         var input = inputs[0];
@@ -211,80 +211,11 @@ public class CroppingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             _gpuCachedInputShape = (int[])inputShape.Clone();
         }
 
         return result;
-    }
-
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// The backward pass is the inverse of cropping - it scatters the output gradients back to
-    /// their original positions in the input and fills the cropped regions with zeros.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuCachedInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        int[] inputShape = _gpuCachedInputShape;
-        int[] outputShape = outputGradient.Shape.ToArray();
-
-        int inputSize = 1;
-        foreach (var dim in inputShape) inputSize *= dim;
-
-        int outputSize = 1;
-        foreach (var dim in outputShape) outputSize *= dim;
-
-        // Generate the same index mapping as forward pass
-        // indices[outputIdx] = inputIdx tells us where each output element came from
-        int[] indices = new int[outputSize];
-        int rank = inputShape.Length;
-        int[] outputStrides = new int[rank];
-        int[] inputStrides = new int[rank];
-
-        outputStrides[rank - 1] = 1;
-        inputStrides[rank - 1] = 1;
-        for (int i = rank - 2; i >= 0; i--)
-        {
-            outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
-            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
-        }
-
-        System.Threading.Tasks.Parallel.For(0, outputSize, i =>
-        {
-            int remaining = i;
-            int inputIdx = 0;
-
-            for (int d = 0; d < rank; d++)
-            {
-                int dimIdx = remaining / outputStrides[d];
-                remaining %= outputStrides[d];
-                inputIdx += (dimIdx + _cropTop[d] + _cropLeft[d]) * inputStrides[d];
-            }
-            indices[i] = inputIdx;
-        });
-
-        using var indicesBuffer = backend.AllocateIntBuffer(indices);
-
-        // Use scatter add to place gradients at original input positions
-        // ScatterAddGpu: dest[indices[i]] += source[i]
-        var gradInput = gpuEngine.ScatterAddGpu(outputGradient, indicesBuffer, inputSize);
-        gradInput = gpuEngine.ReshapeGpu(gradInput, inputShape);
-
-        return gradInput;
     }
 
     /// <summary>
@@ -508,92 +439,6 @@ public class CroppingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Calculates gradients during backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the backward pass of the cropping layer during training. It creates a tensor with
-    /// the same shape as the input and places the output gradient in the non-cropped region, leaving the
-    /// cropped regions as zero. This effectively passes the gradient back through only the portions of the
-    /// input that were kept during the forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method helps pass error information backward through the network during training.
-    ///
-    /// During the backward pass:
-    /// - A tensor the same size as the original input is created
-    /// - The gradient information is placed in the center (non-cropped) region
-    /// - The cropped regions get zero gradient (since they didn't contribute to the output)
-    /// - This allows the network to learn only from the parts of the input that were actually used
-    ///
-    /// Even though the cropping layer itself doesn't learn, it needs to properly pass
-    /// gradient information back to previous layers that do learn.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        Tensor<T> gradient4D;
-
-        if (rank == 3)
-        {
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (rank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-        }
-
-        // Convert outputGradient from NHWC to NCHW (same as forward pass)
-        var outputGradientNCHW = gradient4D.Transpose([0, 3, 1, 2]);
-
-        // Convert input shape from NHWC to NCHW for CropBackward
-        var inputShape4D = _lastInput.Shape.ToArray();
-        var inputShapeNCHW = new int[] { inputShape4D[0], inputShape4D[3], inputShape4D[1], inputShape4D[2] };
-
-        int hCropIdx = _cropTop.Length >= 4 ? 1 : 0;
-        int wCropIdx = _cropLeft.Length >= 4 ? 2 : 1;
-        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[hCropIdx], _cropLeft[wCropIdx]);
-
-        // Convert back from NCHW to NHWC
-        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
-
-        var result = ApplyActivationDerivative(_lastInput, inputGradient);
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return result.Reshape(_originalInputShape);
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Stores the last input for use in autodiff backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
@@ -607,40 +452,6 @@ public class CroppingLayer<T> : LayerBase<T>
     /// Cached input shape for GPU backward pass.
     /// </summary>
     private int[]? _gpuCachedInputShape;
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use the same indexing logic for placing output gradients
-    /// in the input gradient tensor at the cropped region positions.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Convert outputGradient from NHWC to NCHW (same as forward pass)
-        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
-
-        // Convert input shape from NHWC to NCHW for CropBackward
-        var inputShapeNHWC = GetInputShape();
-        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
-
-        int hCropIdx = _cropTop.Length >= 4 ? 1 : 0;
-        int wCropIdx = _cropLeft.Length >= 4 ? 2 : 1;
-        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[hCropIdx], _cropLeft[wCropIdx]);
-
-        // Convert back from NCHW to NHWC
-        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
-
-        return ApplyActivationDerivative(_lastInput, inputGradient);
-    }
 
     /// <summary>
     /// Updates the layer's parameters using the specified learning rate.
@@ -692,85 +503,6 @@ public class CroppingLayer<T> : LayerBase<T>
         // Cropping layer has no trainable parameters
         return Vector<T>.Empty();
     }
-
-    /// <summary>
-    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
-    /// <returns>The output computation node representing this layer's operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the activation function is not supported for JIT compilation.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representation of the cropping operation that can be compiled
-    /// and optimized for efficient execution. The graph represents removing specified portions from the edges
-    /// of the input tensor followed by optional activation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an optimized version of the cropping operation.
-    ///
-    /// For cropping layers:
-    /// - Creates a placeholder for the input tensor
-    /// - Applies the cropping operation (removes edges)
-    /// - Applies the activation function if present
-    /// - Returns a computation graph for efficient execution
-    ///
-    /// This allows for faster inference by pre-compiling the cropping operation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (!CanActivationBeJitted())
-        {
-            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
-        }
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // CroppingLayer uses NHWC format [batch, H, W, channels]
-        // Need to convert to NCHW for TensorOperations.Crop
-        // Create placeholder for input in NHWC format
-        var inputPlaceholderNHWC = new Tensor<T>(InputShape);
-
-        // Convert to NCHW format
-        int batch = InputShape[0];
-        int height = InputShape[1];
-        int width = InputShape[2];
-        int channels = InputShape[3];
-        var inputShapeNCHW = new int[] { batch, channels, height, width };
-        var inputPlaceholderNCHW = new Tensor<T>(inputShapeNCHW);
-
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholderNCHW, "input");
-        inputNodes.Add(inputNode);
-
-        // Apply cropping operation
-        // Crop expects [top, bottom, left, right] for 4D tensors in NCHW format
-        var cropping = new int[] { _cropTop[1], _cropBottom[1], _cropLeft[2], _cropRight[2] };
-        var croppedNode = TensorOperations<T>.Crop(inputNode, cropping);
-
-        // Apply activation function using LayerBase helper
-        var activatedOutput = ApplyActivationToGraph(croppedNode);
-
-        return activatedOutput;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
-    /// <remarks>
-    /// <para>
-    /// Cropping layers support JIT compilation as long as their activation function does.
-    /// The cropping operation is straightforward to compile and optimize.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Resets the internal state of the layer.

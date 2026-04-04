@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -457,7 +457,7 @@ public class BiFPN<T> : NeckBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Rank);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
         {
             writer.Write(dim);
         }

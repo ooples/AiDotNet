@@ -1,4 +1,4 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -217,7 +217,7 @@ public class ContrastivePretraining<T>
 
     private Tensor<T> L2Normalize(Tensor<T> embeddings, int batchSize, int dim)
     {
-        var normalized = new Tensor<T>(embeddings.Shape.ToArray());
+        var normalized = new Tensor<T>(embeddings._shape);
         var epsilon = NumOps.FromDouble(1e-8);
 
         for (int b = 0; b < batchSize; b++)

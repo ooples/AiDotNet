@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using System;
 using System.IO;
 using AiDotNet.Autodiff;
@@ -221,10 +222,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                 // Evaluate solution
                 T[] u = EvaluateAtPoint(point);
-                T[,] gradU = NeuralNetworkDerivatives<T>.ComputeGradient(
+                var derivs = NeuralNetworkDerivatives<T>.ComputeDerivatives(
                     this,
                     point,
                     Architecture.OutputSize);
+                T[,] gradU = derivs.FirstDerivatives ?? new T[Architecture.OutputSize, point.Length];
 
                 // Evaluate test function
                 T[] v = EvaluateTestFunction(point, testFunctionIndex);
@@ -449,226 +451,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return result;
         }
 
-        /// <summary>
-        /// Trains the network to minimize the weak residual.
-        /// </summary>
-        /// <param name="epochs">Number of training epochs.</param>
-        /// <param name="learningRate">Learning rate for optimization.</param>
-        /// <param name="verbose">Whether to print progress.</param>
-        /// <param name="batchSize">Number of quadrature points per batch.</param>
-        /// <param name="derivativeStep">Finite-difference step size for input derivatives.</param>
-        public TrainingHistory<T> Solve(
-            int epochs = 1000,
-            double learningRate = 0.001,
-            bool verbose = true,
-            int batchSize = 256,
-            double derivativeStep = 1e-4)
-        {
-            if (_quadraturePoints == null || _quadratureWeights == null)
-            {
-                throw new InvalidOperationException("Quadrature points not initialized.");
-            }
-
-            if (batchSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
-            }
-
-            if (derivativeStep <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(derivativeStep), "Derivative step must be positive.");
-            }
-
-            int inputDim = Architecture.InputSize;
-            int outputDim = Architecture.OutputSize;
-            int totalCount = _quadraturePoints.GetLength(0);
-
-            if (totalCount == 0)
-            {
-                throw new InvalidOperationException("Quadrature points are empty.");
-            }
-
-            var history = new TrainingHistory<T>();
-            T step = NumOps.FromDouble(derivativeStep);
-            int evalPerBase = 1 + (2 * inputDim);
-
-            if (_usesDefaultOptimizer)
-            {
-                var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = learningRate
-                };
-                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
-            }
-
-            SetTrainingMode(true);
-            foreach (var layer in Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
-            try
-            {
-                for (int epoch = 0; epoch < epochs; epoch++)
-                {
-                    T epochLossSum = NumOps.Zero;
-                    int batchCounter = 0;
-
-                    for (int batchStart = 0; batchStart < totalCount; batchStart += batchSize)
-                    {
-                        int batchCount = Math.Min(batchSize, totalCount - batchStart);
-                        var evaluationInputs = BuildEvaluationTensor(_quadraturePoints, batchStart, batchCount, step);
-                        var outputs = ForwardWithMemory(evaluationInputs);
-
-                        if (outputs.Shape[1] != outputDim)
-                        {
-                            throw new InvalidOperationException(
-                                $"Expected {outputDim} outputs from the network, got {outputs.Shape[1]}.");
-                        }
-                        var outputGradients = new Tensor<T>(outputs.Shape.ToArray());
-
-                        T invTwoStep = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), step));
-                        T batchWeightSum = NumOps.Zero;
-
-                        for (int i = 0; i < batchCount; i++)
-                        {
-                            batchWeightSum = NumOps.Add(batchWeightSum, _quadratureWeights[batchStart + i]);
-                        }
-
-                        T weightNormalizer = NumOps.Divide(NumOps.One, batchWeightSum);
-
-                        var baseOutputs = new T[batchCount, outputDim];
-                        var gradUs = new T[batchCount, outputDim, inputDim];
-
-                        for (int b = 0; b < batchCount; b++)
-                        {
-                            int baseOffset = b * evalPerBase;
-
-                            for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                            {
-                                baseOutputs[b, outIdx] = outputs[baseOffset, outIdx];
-                                for (int dim = 0; dim < inputDim; dim++)
-                                {
-                                    int plusIndex = baseOffset + 1 + (2 * dim);
-                                    int minusIndex = plusIndex + 1;
-                                    T plus = outputs[plusIndex, outIdx];
-                                    T minus = outputs[minusIndex, outIdx];
-                                    gradUs[b, outIdx, dim] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoStep);
-                                }
-                            }
-                        }
-
-                        T batchLoss = NumOps.Zero;
-                        for (int testIdx = 0; testIdx < _numTestFunctions; testIdx++)
-                        {
-                            T residualSum = NumOps.Zero;
-                            var outputResidualGrads = new T[batchCount, outputDim];
-                            var gradResidualGrads = new T[batchCount, outputDim, inputDim];
-
-                            for (int b = 0; b < batchCount; b++)
-                            {
-                                int baseRow = batchStart + b;
-                                int baseOffset = b * evalPerBase;
-                                var point = new T[inputDim];
-
-                                for (int j = 0; j < inputDim; j++)
-                                {
-                                    point[j] = _quadraturePoints[baseRow, j];
-                                }
-
-                                var u = new T[outputDim];
-                                var gradU = new T[outputDim, inputDim];
-                                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                                {
-                                    u[outIdx] = baseOutputs[b, outIdx];
-                                    for (int dim = 0; dim < inputDim; dim++)
-                                    {
-                                        gradU[outIdx, dim] = gradUs[b, outIdx, dim];
-                                    }
-                                }
-
-                                T[] v = EvaluateTestFunction(point, testIdx);
-                                T[,] gradV = ComputeTestFunctionGradient(point, testIdx);
-                                var (localResidual, outputGrad, gradGrad) = ComputeWeakResidualGradient(point, u, gradU, v, gradV);
-
-                                T weight = NumOps.Multiply(_quadratureWeights[baseRow], weightNormalizer);
-                                residualSum = NumOps.Add(residualSum, NumOps.Multiply(weight, localResidual));
-
-                                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                                {
-                                    outputResidualGrads[b, outIdx] = NumOps.Multiply(weight, outputGrad[outIdx]);
-                                    for (int dim = 0; dim < inputDim; dim++)
-                                    {
-                                        gradResidualGrads[b, outIdx, dim] = NumOps.Multiply(weight, gradGrad[outIdx, dim]);
-                                    }
-                                }
-                            }
-
-                            T lossScale = NumOps.Multiply(
-                                NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(_numTestFunctions)),
-                                residualSum);
-
-                            batchLoss = NumOps.Add(
-                                batchLoss,
-                                NumOps.Multiply(
-                                    NumOps.Divide(NumOps.One, NumOps.FromDouble(_numTestFunctions)),
-                                    NumOps.Multiply(residualSum, residualSum)));
-
-                            for (int b = 0; b < batchCount; b++)
-                            {
-                                int baseOffset = b * evalPerBase;
-
-                                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                                {
-                                    T outputContribution = NumOps.Multiply(lossScale, outputResidualGrads[b, outIdx]);
-                                    outputGradients[baseOffset, outIdx] = NumOps.Add(outputGradients[baseOffset, outIdx], outputContribution);
-
-                                    for (int dim = 0; dim < inputDim; dim++)
-                                    {
-                                        int plusIndex = baseOffset + 1 + (2 * dim);
-                                        int minusIndex = plusIndex + 1;
-
-                                        T gradContribution = NumOps.Multiply(lossScale, gradResidualGrads[b, outIdx, dim]);
-                                        T delta = NumOps.Multiply(gradContribution, invTwoStep);
-                                        outputGradients[plusIndex, outIdx] = NumOps.Add(outputGradients[plusIndex, outIdx], delta);
-                                        outputGradients[minusIndex, outIdx] = NumOps.Subtract(outputGradients[minusIndex, outIdx], delta);
-                                    }
-                                }
-                            }
-                        }
-
-                        Backpropagate(outputGradients);
-                        _optimizer.UpdateParameters(Layers);
-
-                        epochLossSum = NumOps.Add(epochLossSum, batchLoss);
-                        batchCounter++;
-                    }
-
-                    T avgLoss = batchCounter > 0
-                        ? NumOps.Divide(epochLossSum, NumOps.FromDouble(batchCounter))
-                        : NumOps.Zero;
-
-                    LastLoss = avgLoss;
-                    history.AddEpoch(avgLoss);
-
-                    if (verbose && epoch % 100 == 0)
-                    {
-                        Console.WriteLine($"Epoch {epoch}/{epochs}, Weak Residual: {avgLoss}");
-                    }
-                }
-            }
-            finally
-            {
-                foreach (var layer in Layers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-
-                SetTrainingMode(false);
-            }
-
-            return history;
-        }
 
         private T ComputeAverageWeakLoss()
         {
@@ -740,18 +522,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
             SetTrainingMode(true);
-
-            var prediction = Forward(input);
-            var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-            LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
-
-            Backpropagate(outputGradientTensor);
-            _optimizer.UpdateParameters(Layers);
-
-            SetTrainingMode(false);
+            try
+            {
+                TrainWithTape(input, expectedOutput);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>

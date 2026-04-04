@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -537,7 +537,6 @@ public class TSDiff<T> : ForecastingModelBase<T>
         {
             fullGradient[i] = gradient[i];
         }
-        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -830,27 +829,6 @@ public class TSDiff<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Backpropagation computes gradients for learning.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
-    }
-
-    /// <summary>
     /// Flattens input tensor for dense layer processing.
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -863,7 +841,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -1016,8 +994,8 @@ public class TSDiff<T> : ForecastingModelBase<T>
             noisyVec[i] = NumOps.FromDouble(noisyVal);
         }
 
-        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data._shape, new Vector<T>(noisyVec)),
+                new Tensor<T>(data._shape, new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1063,7 +1041,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(mean + sigma * z);
         }
 
-        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(current._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1101,7 +1079,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(guided);
         }
 
-        return new Tensor<T>(sample.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(sample._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>

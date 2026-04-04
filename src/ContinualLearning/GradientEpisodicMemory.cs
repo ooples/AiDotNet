@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -116,8 +116,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         var sampledData = SampleMemory(taskData.inputs, taskData.targets);
         _episodicMemory.Add(sampledData);
 
-        // Compute and store reference gradients for this task
-        var refGrad = ComputeReferenceGradient(network, sampledData.inputs, sampledData.targets);
+        // Compute and store reference gradients for this task using tape
+        var refGrad = network.ComputeGradients(sampledData.inputs, sampledData.targets);
         _referenceGradients.Add(refGrad);
     }
 
@@ -226,22 +226,6 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes the reference gradient for stored examples.
-    /// </summary>
-    private Vector<T> ComputeReferenceGradient(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        network.SetTrainingMode(true);
-
-        var output = network.ForwardWithMemory(inputs);
-        var outputGrad = ComputeLossGradient(output, targets);
-        network.Backpropagate(outputGrad);
-        var grads = network.GetParameterGradients();
-
-        network.SetTrainingMode(false);
-        return grads.Clone();
-    }
-
-    /// <summary>
     /// Updates reference gradients for all stored tasks.
     /// </summary>
     private void UpdateReferenceGradients(INeuralNetwork<T> network)
@@ -249,7 +233,6 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         for (int i = 0; i < _episodicMemory.Count; i++)
         {
             var (inputs, targets) = _episodicMemory[i];
-            _referenceGradients[i] = ComputeReferenceGradient(network, inputs, targets);
         }
     }
 
@@ -289,6 +272,6 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         {
             gradData[i] = _numOps.Subtract(output[i], target[i]);
         }
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 }

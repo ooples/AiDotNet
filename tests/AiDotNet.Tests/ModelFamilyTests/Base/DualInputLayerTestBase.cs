@@ -158,32 +158,7 @@ public abstract class DualInputLayerTestBase
             "Layer produces identical output for different primary inputs.");
     }
 
-    // =========================================================================
-    // INVARIANT 4: Backward produces finite gradient
-    // =========================================================================
-
-    [Fact]
-    public void Backward_ShouldProduceFiniteGradient()
-    {
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        var primary = CreateRandomTensor(PrimaryInputShape);
-        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
-
-        var output = ForwardDual(layer, primary, secondary);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        var inputGrad = layer.Backward(outputGrad);
-
-        Assert.True(inputGrad.Length > 0, "Input gradient should not be empty.");
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGrad[i]),
-                $"InputGradient[{i}] is NaN — broken backward pass.");
-            Assert.False(double.IsInfinity(inputGrad[i]),
-                $"InputGradient[{i}] is Infinity — gradient explosion.");
-        }
-    }
+    // INVARIANT 4: (Removed — Backward deleted in tape-based autodiff migration)
 
     // =========================================================================
     // INVARIANT 5: Parameter count consistency
@@ -226,40 +201,7 @@ public abstract class DualInputLayerTestBase
             Assert.Equal(modified[i], retrieved[i], 1e-15);
     }
 
-    // =========================================================================
-    // INVARIANT 7: Non-zero weight gradients after backward
-    // =========================================================================
-
-    [Fact]
-    public void Backward_ShouldProduceNonZeroWeightGradients()
-    {
-        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
-
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        layer.ClearGradients();
-
-        var primary = CreateRandomTensor(PrimaryInputShape);
-        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
-        var output = ForwardDual(layer, primary, secondary);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        layer.Backward(outputGrad);
-        var gradients = layer.GetParameterGradients();
-
-        Assert.True(gradients.Length > 0, "Trainable layer should have gradients after Backward.");
-
-        bool anyNonZero = false;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            if (Math.Abs(gradients[i]) > 1e-15)
-            {
-                anyNonZero = true;
-                break;
-            }
-        }
-        Assert.True(anyNonZero, "All parameter gradients are zero after Backward.");
-    }
+    // INVARIANT 7: (Removed — Backward deleted in tape-based autodiff migration)
 
     // =========================================================================
     // INVARIANT 8: ResetState doesn't break the layer

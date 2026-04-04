@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -15,7 +15,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
-internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+internal class DenseBlockLayer<T> : LayerBase<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;
@@ -31,9 +31,9 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _relu2Out;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBn1Out;
-    private IGpuTensor<T>? _gpuConv1Out;
-    private IGpuTensor<T>? _gpuBn2Out;
+    private Tensor<T>? _gpuBn1Out;
+    private Tensor<T>? _gpuConv1Out;
+    private Tensor<T>? _gpuBn2Out;
 
     public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
@@ -85,6 +85,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
+
+        RegisterSubLayer(_bn1);
+        RegisterSubLayer(_conv1x1);
+        RegisterSubLayer(_bn2);
+        RegisterSubLayer(_conv3x3);
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -120,7 +125,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Chains GPU operations: BN1 → ReLU → Conv1x1 → BN2 → ReLU → Conv3x3.
     /// All computations stay on GPU.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -150,125 +155,6 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuBn1Out == null || _gpuConv1Out == null || _gpuBn2Out == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through Conv3x3
-        var conv3x3Type = _conv3x3.GetType();
-        var conv3x3BackwardGpu = conv3x3Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        IGpuTensor<T> grad;
-        if (conv3x3BackwardGpu != null)
-        {
-            grad = (IGpuTensor<T>)(conv3x3BackwardGpu.Invoke(_conv3x3, new object[] { outputGradient })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            var cpuGrad = outputGradient.ToTensor();
-            var cpuResult = _conv3x3.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Backward through ReLU2 - uses BN2 output as input
-        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBn2Out);
-
-        // Backward through BN2
-        var bn2Type = _bn2.GetType();
-        var bn2BackwardGpu = bn2Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (bn2BackwardGpu != null)
-        {
-            grad = (IGpuTensor<T>)(bn2BackwardGpu.Invoke(_bn2, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _bn2.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Backward through Conv1x1
-        var conv1x1Type = _conv1x1.GetType();
-        var conv1x1BackwardGpu = conv1x1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (conv1x1BackwardGpu != null)
-        {
-            grad = (IGpuTensor<T>)(conv1x1BackwardGpu.Invoke(_conv1x1, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _conv1x1.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Backward through ReLU1 - uses BN1 output as input
-        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBn1Out);
-
-        // Backward through BN1
-        var bn1Type = _bn1.GetType();
-        var bn1BackwardGpu = bn1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (bn1BackwardGpu != null)
-        {
-            grad = (IGpuTensor<T>)(bn1BackwardGpu.Invoke(_bn1, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _bn1.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        return grad;
-    }
-
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _bn1Out is null || _relu1Out is null ||
-            _conv1Out is null || _bn2Out is null || _relu2Out is null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Add batch dim if needed (matches Forward's reshape)
-        var grad = outputGradient.Shape.Length == 3
-            ? outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]])
-            : outputGradient;
-
-        // Backward through conv3x3
-        grad = _conv3x3.Backward(grad);
-
-        // Backward through ReLU2
-        grad = ApplyReluDerivative(_bn2Out, grad);
-
-        // Backward through BN2
-        grad = _bn2.Backward(grad);
-
-        // Backward through conv1x1
-        grad = _conv1x1.Backward(grad);
-
-        // Backward through ReLU1
-        grad = ApplyReluDerivative(_bn1Out, grad);
-
-        // Backward through BN1
-        grad = _bn1.Backward(grad);
-
-        // Remove batch dim if we added it
-        if (_lastInput.Shape.Length == 3 && grad.Shape.Length == 4 && grad.Shape[0] == 1)
-            grad = grad.Reshape([grad.Shape[1], grad.Shape[2], grad.Shape[3]]);
-
-        return grad;
     }
 
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)
@@ -341,52 +227,6 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv3x3.ResetState();
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all required sub-layers support JIT
-            return _bn1.SupportsJitCompilation &&
-                   _conv1x1.SupportsJitCompilation &&
-                   _bn2.SupportsJitCompilation &&
-                   _conv3x3.SupportsJitCompilation;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the DenseBlockLayer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the DenseBlockLayer:
-    /// Input -> BN1 -> ReLU -> Conv1x1 -> BN2 -> ReLU -> Conv3x3 -> Output
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(
         ComputationNode<T> inputNode,
@@ -438,4 +278,5 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return outputNode;
     }
+
 }

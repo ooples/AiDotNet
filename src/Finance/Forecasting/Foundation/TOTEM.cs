@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
@@ -319,7 +319,6 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -500,7 +499,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -612,7 +611,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (_codebooks is null) InitializeCodebooks();
 
         int totalLen = encoderOutput.Length;
-        var quantized = new Tensor<T>(encoderOutput.Shape.ToArray());
+        var quantized = new Tensor<T>(encoderOutput._shape);
         T commitmentLoss = NumOps.Zero;
 
         // Product quantization: split encoded vector across codebooks
@@ -686,38 +685,6 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         T invTotalLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Max(1, totalLen)));
         _lastCommitmentLoss = NumOps.Multiply(NumOps.Multiply(commitmentLoss, commitWeightT), invTotalLen);
         return quantized;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        if (_decoder is not null)
-            current = _decoder.Backward(current);
-
-        if (_quantizationProjection is not null)
-            current = _quantizationProjection.Backward(current);
-
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-            current = _transformerLayers[i].Backward(current);
-
-        if (_encoder is not null)
-            current = _encoder.Backward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

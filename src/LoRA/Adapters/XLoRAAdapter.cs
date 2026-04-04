@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -259,7 +259,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Forward through all experts and store their outputs
         _lastExpertOutputs = new Tensor<T>[_experts.Length];
-        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput._shape);
 
         // Initialize combined output to zero
         for (int i = 0; i < combinedExpertOutput.Length; i++)
@@ -293,126 +293,13 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum base output and combined expert output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], combinedExpertOutput[i]);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the mixture of experts.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients through:
-    /// 1. All expert LoRA layers (weighted by their gating weights)
-    /// 2. The gating network (to learn better routing)
-    /// 3. The base layer (if not frozen)
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where all components learn to improve!
-    ///
-    /// During backpropagation:
-    /// 1. Each expert receives gradients weighted by how much it was used
-    ///    - Expert with weight 0.6 gets 60% of the gradient
-    ///    - Expert with weight 0.1 gets 10% of the gradient
-    /// 2. The gating network learns to route inputs better
-    ///    - If an expert's output helped, increase its weight next time
-    ///    - If an expert's output hurt, decrease its weight
-    /// 3. The base layer updates if not frozen
-    ///
-    /// This creates a feedback loop where:
-    /// - Experts specialize in patterns they're good at
-    /// - Gating network learns which expert to use for which input
-    /// - Together, they improve performance beyond single LoRA
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastGatingWeights == null || _lastExpertOutputs == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int outputDim = outputGradient.Length / batchSize;
-        int inputDim = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length / batchSize;
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Backward through experts
-        // Each expert receives a gradient weighted by its gating weight
-        Tensor<T> expertInputGradSum = new Tensor<T>(new[] { batchSize, inputDim });
-        for (int i = 0; i < expertInputGradSum.Length; i++)
-        {
-            expertInputGradSum[i] = NumOps.Zero;
-        }
-
-        // Gradient w.r.t. gating weights (for gating network backprop)
-        Tensor<T> gatingGradient = new Tensor<T>(new[] { batchSize, _experts.Length });
-        for (int i = 0; i < gatingGradient.Length; i++)
-        {
-            gatingGradient[i] = NumOps.Zero;
-        }
-
-        // Backward through each expert
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            // Weight the output gradient by this expert's gating weight for each sample
-            Tensor<T> weightedOutputGrad = new Tensor<T>(outputGradient.Shape.ToArray());
-
-            for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
-            {
-                T gatingWeight = _lastGatingWeights[batchIdx * _experts.Length + expertIdx];
-
-                for (int dimIdx = 0; dimIdx < outputDim; dimIdx++)
-                {
-                    int outputIdx = batchIdx * outputDim + dimIdx;
-                    weightedOutputGrad[outputIdx] = NumOps.Multiply(outputGradient[outputIdx], gatingWeight);
-                }
-
-                // Compute gradient w.r.t. gating weight for this expert
-                // dL/dg[i] = sum over output dims of (outputGradient * expertOutput)
-                T gatingGrad = NumOps.Zero;
-                for (int dimIdx = 0; dimIdx < outputDim; dimIdx++)
-                {
-                    int outputIdx = batchIdx * outputDim + dimIdx;
-                    T grad = NumOps.Multiply(outputGradient[outputIdx], _lastExpertOutputs[expertIdx][outputIdx]);
-                    gatingGrad = NumOps.Add(gatingGrad, grad);
-                }
-                gatingGradient[batchIdx * _experts.Length + expertIdx] = gatingGrad;
-            }
-
-            // Backward through this expert
-            Tensor<T> expertInputGrad = _experts[expertIdx].Backward(weightedOutputGrad);
-
-            // Accumulate input gradients
-            for (int i = 0; i < expertInputGrad.Length; i++)
-            {
-                expertInputGradSum[i] = NumOps.Add(expertInputGradSum[i], expertInputGrad[i]);
-            }
-        }
-
-        // Backward through gating network
-        Tensor<T> gatingInputGrad = _gatingNetwork.Backward(gatingGradient);
-
-        // Sum all input gradients (base + experts + gating)
-        Tensor<T> totalInputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
-        for (int i = 0; i < baseInputGrad.Length; i++)
-        {
-            T sum = NumOps.Add(baseInputGrad[i], expertInputGradSum[i]);
-            totalInputGrad[i] = NumOps.Add(sum, gatingInputGrad[i]);
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return totalInputGrad;
     }
 
     /// <summary>

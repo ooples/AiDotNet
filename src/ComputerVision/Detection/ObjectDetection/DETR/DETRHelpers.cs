@@ -1,4 +1,4 @@
-using AiDotNet.Tensors;
+﻿using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
@@ -114,10 +114,10 @@ internal static class DETRHelpers
         {
             throw new ArgumentNullException(nameof(b));
         }
-        if (a.Shape.Length != b.Shape.Length || !a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
+        if (a.Shape.Length != b.Shape.Length || !a._shape.SequenceEqual(b._shape))
         {
             throw new ArgumentException(
-                $"Tensors must have the same shape. a.Shape=[{string.Join(",", a.Shape.ToArray())}], b.Shape=[{string.Join(",", b.Shape.ToArray())}].",
+                $"Tensors must have the same shape. a.Shape=[{string.Join(",", a._shape)}], b.Shape=[{string.Join(",", b._shape)}].",
                 nameof(b));
         }
 
