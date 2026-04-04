@@ -312,8 +312,8 @@ public class RWKV7Block<T> : LayerBase<T>
         _normBeta2.Fill(NumOps.Zero);
 
         // Arena workspace: pre-allocate forward pass buffers for zero-allocation hot path
-        Workspace = new LayerWorkspace<T>(timestepCount: 7, sequenceCount: 8);
-        // Timestep buffers (reused each iteration of seqLen loop)
+        Workspace = new LayerWorkspace<T>(timestepCount: 10, sequenceCount: 12);
+        // TimeMixing timestep buffers
         Workspace.DeclareTimestep(TsRInput, _modelDimension);
         Workspace.DeclareTimestep(TsKInput, _modelDimension);
         Workspace.DeclareTimestep(TsVInput, _modelDimension);
@@ -321,7 +321,11 @@ public class RWKV7Block<T> : LayerBase<T>
         Workspace.DeclareTimestep(TsBInput, _modelDimension);
         Workspace.DeclareTimestep(TsWkvOut, _modelDimension);
         Workspace.DeclareTimestep(TsYt, _modelDimension);
-        // Sequence buffers (one per forward pass, stores all timesteps)
+        // ChannelMixing timestep buffers
+        Workspace.DeclareTimestep(TsCmRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKSiLU, _ffnDimension);
+        // TimeMixing sequence buffers
         Workspace.DeclareSequence(SqAllR, _modelDimension);
         Workspace.DeclareSequence(SqAllK, _modelDimension);
         Workspace.DeclareSequence(SqAllV, _modelDimension);
@@ -330,13 +334,29 @@ public class RWKV7Block<T> : LayerBase<T>
         Workspace.DeclareSequence(SqAllWkv, _modelDimension);
         Workspace.DeclareSequence(SqAllWkvPre, _modelDimension);
         Workspace.DeclareSequence(SqAllWkvGated, _modelDimension);
+        // ChannelMixing sequence buffers
+        Workspace.DeclareSequence(SqCmAllRGate, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllVProj, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllSiLU, _ffnDimension);
+        Workspace.DeclareSequence(SqCmAllKProj, _ffnDimension);
     }
 
-    // Workspace buffer indices
+    /// <summary>Gets the workspace, throwing if not initialized.</summary>
+    private LayerWorkspace<T> Ws => Workspace
+        ?? throw new InvalidOperationException("RWKV7Block workspace not initialized.");
+
+    // Workspace buffer indices — TimeMixing timestep buffers
     private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
     private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5, TsYt = 6;
+    // Workspace buffer indices — ChannelMixing timestep buffers
+    private const int TsCmRInput = 7, TsCmKInput = 8, TsCmKSiLU = 9;
+    // Workspace buffer indices — TimeMixing sequence buffers
     private const int SqAllR = 0, SqAllK = 1, SqAllV = 2, SqAllA = 3;
     private const int SqAllB = 4, SqAllWkv = 5, SqAllWkvPre = 6, SqAllWkvGated = 7;
+    // Workspace buffer indices — ChannelMixing sequence buffers
+    private const int SqCmAllRGate = 8, SqCmAllVProj = 9;
+    // FFN-dimension sequence buffers (separate indices since different shape suffix)
+    private const int SqCmAllSiLU = 10, SqCmAllKProj = 11;
 
     private void InitializeProjection(Tensor<T> tensor)
     {
@@ -397,7 +417,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        Workspace!.BeginForward(batchSize, seqLen);
+        Ws.BeginForward(batchSize, seqLen);
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head
@@ -405,25 +425,25 @@ public class RWKV7Block<T> : LayerBase<T>
         var xPrev = _prevToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
         // Cache intermediate values for backward — zero allocation via workspace
-        var allR = Workspace.Sequence(SqAllR);
-        var allK = Workspace.Sequence(SqAllK);
-        var allV = Workspace.Sequence(SqAllV);
-        var allA = Workspace.Sequence(SqAllA);
-        var allB = Workspace.Sequence(SqAllB);
-        var allWkv = Workspace.Sequence(SqAllWkv);
-        var allWkvPreGate = Workspace.Sequence(SqAllWkvPre);
-        var allWkvGated = Workspace.Sequence(SqAllWkvGated);
+        var allR = Ws.Sequence(SqAllR);
+        var allK = Ws.Sequence(SqAllK);
+        var allV = Ws.Sequence(SqAllV);
+        var allA = Ws.Sequence(SqAllA);
+        var allB = Ws.Sequence(SqAllB);
+        var allWkv = Ws.Sequence(SqAllWkv);
+        var allWkvPreGate = Ws.Sequence(SqAllWkvPre);
+        var allWkvGated = Ws.Sequence(SqAllWkvGated);
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
             // Token shift: lerp between current and previous token — zero allocation via workspace
-            var rInput = Workspace.Timestep(TsRInput);
-            var kInput = Workspace.Timestep(TsKInput);
-            var vInput = Workspace.Timestep(TsVInput);
-            var aInput = Workspace.Timestep(TsAInput);
-            var bInput = Workspace.Timestep(TsBInput);
+            var rInput = Ws.Timestep(TsRInput);
+            var kInput = Ws.Timestep(TsKInput);
+            var vInput = Ws.Timestep(TsVInput);
+            var aInput = Ws.Timestep(TsAInput);
+            var bInput = Ws.Timestep(TsBInput);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -472,7 +492,9 @@ public class RWKV7Block<T> : LayerBase<T>
             SafeSetSlice(allB, t, bProj, batchSize, _modelDimension);
 
             // WKV-7 kernel per head
-            var wkvOutput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var wkvOutput = Workspace is not null
+                ? Ws.Timestep(TsWkvOut)
+                : new Tensor<T>(new[] { batchSize, _modelDimension });
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -571,19 +593,19 @@ public class RWKV7Block<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = _prevChannelToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Caches for backward pass
-        var allRGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allSiLU = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
-        var allVProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allKProj = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
+        // Caches for backward pass — use workspace for modelDim-shaped buffers
+        var allRGate = Ws.Sequence(SqCmAllRGate);
+        var allSiLU = Ws.Sequence(SqCmAllSiLU);
+        var allVProj = Ws.Sequence(SqCmAllVProj);
+        var allKProj = Ws.Sequence(SqCmAllKProj);
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
 
-            // Token shift
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            // Token shift — zero allocation via workspace
+            var rInput = Ws.Timestep(TsCmRInput);
+            var kInput = Ws.Timestep(TsCmKInput);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -608,7 +630,7 @@ public class RWKV7Block<T> : LayerBase<T>
             var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, ffnDim]
 
             // SiLU: x * sigmoid(x)
-            var kSiLU = new Tensor<T>(new[] { batchSize, _ffnDimension });
+            var kSiLU = Ws.Timestep(TsCmKSiLU);
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _ffnDimension; d++)
