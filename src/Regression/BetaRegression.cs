@@ -274,17 +274,19 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         var (mus, _) = await Task.Run(() => ComputePredictions(input));
 
-        // Inverse transform from (0.01, 0.99) back to original y scale
+        // Inverse transform from (0.01, 0.99) back to original y scale (SIMD)
         if (_needsTransform)
         {
-            double yRange = NumOps.ToDouble(_yMax) - NumOps.ToDouble(_yMin);
-            if (yRange < 1e-10) yRange = 1.0;
-            for (int i = 0; i < mus.Length; i++)
-            {
-                double mu = NumOps.ToDouble(mus[i]);
-                double original = ((mu - 0.01) / 0.98) * yRange + NumOps.ToDouble(_yMin);
-                mus[i] = NumOps.FromDouble(original);
-            }
+            T yRange = NumOps.Subtract(_yMax, _yMin);
+            T epsRange = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(yRange, epsRange)) yRange = NumOps.One;
+            T offset = NumOps.FromDouble(0.01);
+            T scale = NumOps.FromDouble(0.98);
+            // mus = ((mus - 0.01) / 0.98) * yRange + yMin
+            var shifted = (Vector<T>)Engine.Subtract(mus, Vector<T>.CreateDefault(mus.Length, offset));
+            var scaled = (Vector<T>)Engine.Divide(shifted, Vector<T>.CreateDefault(mus.Length, scale));
+            var ranged = (Vector<T>)Engine.Multiply(scaled, Vector<T>.CreateDefault(mus.Length, yRange));
+            mus = (Vector<T>)Engine.Add(ranged, Vector<T>.CreateDefault(mus.Length, _yMin));
         }
 
         return mus;
