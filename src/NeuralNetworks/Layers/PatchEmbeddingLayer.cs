@@ -372,7 +372,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     {
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
         {
-            return; // No gradients available — skip update
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
         _projectionWeights = Engine.TensorSubtract(_projectionWeights, Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate));

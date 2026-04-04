@@ -237,34 +237,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
-        try
-        {
-            var prediction = Forward(input);
-
-            var primaryLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            T auxiliaryLoss = NumOps.Zero;
-            foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
-            {
-                var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-                var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-                auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-            }
-
-            LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
-
-            var outputGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-
-
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            IsTrainingMode = false;
-        }
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <summary>

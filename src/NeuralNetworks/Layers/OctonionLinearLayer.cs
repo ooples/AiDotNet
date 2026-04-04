@@ -253,7 +253,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            return; // No gradients available — skip update
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
         // Update weights: w = w - lr * grad (tensor ops, no Octonion<T> objects)

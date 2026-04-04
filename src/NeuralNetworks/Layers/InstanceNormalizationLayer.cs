@@ -360,7 +360,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             return; // No learnable parameters when affine is false
 
         if (_gammaGradient == null || _betaGradient == null)
-            return; // No gradients available — skip update
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         // Update in-place to preserve GPU-registered tensor references
         var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));

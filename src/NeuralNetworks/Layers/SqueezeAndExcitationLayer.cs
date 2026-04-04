@@ -1252,7 +1252,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     public override void UpdateParameters(T learningRate)
     {
         if (_weights1Gradient == null || _bias1Gradient == null || _weights2Gradient == null || _bias2Gradient == null)
-            return; // No gradients available — skip update
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         var w1Update = Engine.TensorMultiplyScalar(_weights1Gradient, learningRate);
         var b1Update = Engine.TensorMultiplyScalar(_bias1Gradient, learningRate);

@@ -1542,24 +1542,9 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             embeddingTensor[0, i] = embedding[i];
         }
 
-        LastLoss = LossFunction.CalculateLoss(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var lossGradient = LossFunction.CalculateDerivative(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-
-        // Update parameters using the optimizer's gradient-based update
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradOptimizer)
-        {
-            gradOptimizer.UpdateParameters(Layers);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Optimizer type '{_optimizer.GetType().Name}' does not implement IGradientBasedOptimizer. " +
-                "VideoCLIP training requires a gradient-based optimizer (e.g., AdamOptimizer).");
-        }
-
-        SetTrainingMode(false);
+        // Use tape-based autodiff for gradient computation and parameter update.
+        // The tape records all forward operations and computes gradients automatically.
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <inheritdoc/>
