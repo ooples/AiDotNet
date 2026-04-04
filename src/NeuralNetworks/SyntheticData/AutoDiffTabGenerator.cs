@@ -666,8 +666,8 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             var noise = CreateStandardNormalVector(_dataWidth);
 
             // Create noisy sample: xt = sqrt(alpha_bar_t) * x0 + sqrt(1 - alpha_bar_t) * noise
-            double sqrtAlphaBar = Math.Sqrt(NumOps.ToDouble(_alphasCumprod[t]));
-            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - NumOps.ToDouble(_alphasCumprod[t]));
+            double sqrtAlphaBar = Math.Sqrt(NumOps.ToDouble((_alphasCumprod ?? throw new InvalidOperationException("Noise schedule not computed."))[t]));
+            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - NumOps.ToDouble((_alphasCumprod ?? throw new InvalidOperationException("Noise schedule not computed."))[t]));
 
             var xt = new Vector<T>(_dataWidth);
             for (int j = 0; j < _dataWidth; j++)
@@ -788,9 +788,9 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private Vector<T> DenoisingStep(Vector<T> xt, Vector<T> predictedNoise, int t)
     {
-        double alphaT = NumOps.ToDouble(_alphas[t]);
-        double alphaBarT = NumOps.ToDouble(_alphasCumprod[t]);
-        double betaT = NumOps.ToDouble(_betas[t]);
+        double alphaT = NumOps.ToDouble((_alphas ?? throw new InvalidOperationException("Noise schedule not computed."))[t]);
+        double alphaBarT = NumOps.ToDouble((_alphasCumprod ?? throw new InvalidOperationException("Noise schedule not computed."))[t]);
+        double betaT = NumOps.ToDouble((_betas ?? throw new InvalidOperationException("Noise schedule not computed."))[t]);
 
         var result = new Vector<T>(_dataWidth);
         double coeff1 = 1.0 / Math.Sqrt(alphaT);

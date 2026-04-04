@@ -102,8 +102,10 @@ public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
 
         // Compute baseline statistics from training data
         var saliency = ComputeSaliencyMap(values);
-        _meanAmplitudes = new[] { saliency.Average() };
-        _stdAmplitudes = new[] { Math.Sqrt(saliency.Select(s => Math.Pow(s - _meanAmplitudes[0], 2)).Average()) };
+        double meanAmp = saliency.Average();
+        double stdAmp = Math.Sqrt(saliency.Select(s => Math.Pow(s - meanAmp, 2)).Average());
+        _meanAmplitudes = new Vector<T>(new[] { NumOps.FromDouble(meanAmp) });
+        _stdAmplitudes = new Vector<T>(new[] { NumOps.FromDouble(stdAmp) });
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);

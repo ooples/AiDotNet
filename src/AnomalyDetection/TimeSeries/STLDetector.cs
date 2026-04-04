@@ -194,10 +194,12 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Compute residual standard deviation
+        var trendVec = _trend ?? throw new InvalidOperationException("Trend not computed.");
+        var seasonalVec = _seasonal ?? throw new InvalidOperationException("Seasonal not computed.");
         var residuals = new double[n];
         for (int i = 0; i < n; i++)
         {
-            residuals[i] = values[i] - NumOps.ToDouble(_trend[i]) - NumOps.ToDouble(_seasonal[i]);
+            residuals[i] = values[i] - NumOps.ToDouble(trendVec[i]) - NumOps.ToDouble(seasonalVec[i]);
         }
 
         double residualStdD = Math.Sqrt(residuals.Select(r => r * r).Average());
