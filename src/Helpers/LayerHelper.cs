@@ -4675,7 +4675,9 @@ public static class LayerHelper<T>
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
 
-        yield return new BatchNormalizationLayer<T>(stemChannels);
+        var stemBn = new BatchNormalizationLayer<T>(stemChannels);
+        stemBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
+        yield return stemBn;
         yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
             activationFunction: new SwishActivation<T>());
 
@@ -4745,7 +4747,9 @@ public static class LayerHelper<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(headChannels);
+        var headBn = new BatchNormalizationLayer<T>(headChannels);
+        headBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
+        yield return headBn;
         yield return new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
             activationFunction: new SwishActivation<T>());
 
