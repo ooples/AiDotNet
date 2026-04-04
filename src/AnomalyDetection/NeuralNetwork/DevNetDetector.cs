@@ -430,27 +430,26 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b1[j];
-            { var wCol_2 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_2[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_2)); }
-            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-        }
+        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
+        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var h1Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
+            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
+        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
-        // Layer 2
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b2[j];
-            { var wCol_3 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_3[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_3)); }
-            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-        }
+        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
+        var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
+        var h2Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
+            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
+        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
-        // Output layer
-        T score = b3[0];
-        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = w3[_i, 0]; score = NumOps.Add(score, Engine.DotProduct(h2, _e1)); }
+        // Output layer (scalar): score = h2 @ w3[:,0] + b3[0]
+        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var scorePre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
+            Tensor<T>.FromVector(b3).Reshape(1, 1));
+        T score = scorePre[0];
 
         return (h1, h2, score);
     }
