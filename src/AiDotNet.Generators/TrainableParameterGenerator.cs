@@ -119,6 +119,26 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
+            // Fallback: discover trainable parameters from RegisterTrainableParameter() calls
+            // in the class body. This handles layers that use the registration API but haven't
+            // been annotated with [TrainableParameter] yet. Same pattern as sublayer discovery.
+            if (paramFields.Count == 0)
+            {
+                var registeredFields = DiscoverFromRegisterCalls(classDecl, model, "RegisterTrainableParameter");
+                foreach (var (fieldName, role) in registeredFields)
+                {
+                    // Verify the field exists and is a Tensor<T>
+                    var matchingField = classSymbol.GetMembers()
+                        .OfType<IFieldSymbol>()
+                        .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type));
+                    if (matchingField is not null)
+                    {
+                        paramFields.Add(new ParameterFieldInfo(matchingField.Name, role, paramFields.Count));
+                    }
+                }
+
+            }
+
             if (paramFields.Count == 0 && subLayerFields.Count == 0) continue;
 
             // Stable sort by Order, preserving declaration order for equal Order values.
@@ -348,6 +368,60 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         OptimizerState = 5,
         Constant = 6,
         Other = 7
+    }
+
+    /// <summary>
+    /// Scans all syntax trees of a class for invocations of RegisterTrainableParameter(_field, role)
+    /// and extracts the field name and role. This enables auto-discovery without [TrainableParameter]
+    /// attributes — matching the pattern used for RegisterSubLayer discovery.
+    /// </summary>
+    private static List<(string FieldName, string Role)> DiscoverFromRegisterCalls(
+        ClassDeclarationSyntax classDecl, SemanticModel model, string methodName)
+    {
+        var results = new List<(string, string)>();
+        var seen = new HashSet<string>();
+
+        // Walk all invocation expressions in the class body
+        foreach (var invocation in classDecl.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            // Match method name: RegisterTrainableParameter(...)
+            string invokedName;
+            if (invocation.Expression is IdentifierNameSyntax id)
+                invokedName = id.Identifier.Text;
+            else if (invocation.Expression is MemberAccessExpressionSyntax ma)
+                invokedName = ma.Name.Identifier.Text;
+            else
+                continue;
+
+            if (invokedName != methodName) continue;
+
+            var args = invocation.ArgumentList.Arguments;
+            if (args.Count < 2) continue;
+
+            // First arg: the field reference (e.g., _weights)
+            var fieldArg = args[0].Expression;
+            string fieldName;
+            if (fieldArg is IdentifierNameSyntax fieldId)
+                fieldName = fieldId.Identifier.Text;
+            else if (fieldArg is MemberAccessExpressionSyntax fieldMa && fieldMa.Expression is ThisExpressionSyntax)
+                fieldName = fieldMa.Name.Identifier.Text;
+            else
+                continue;
+
+            // Second arg: the role enum (e.g., PersistentTensorRole.Weights)
+            var roleArg = args[1].Expression.ToString();
+            // Normalize to full enum reference
+            if (!roleArg.Contains("PersistentTensorRole"))
+                roleArg = $"PersistentTensorRole.{roleArg}";
+
+            // Deduplicate (same field may be registered in multiple constructors)
+            if (seen.Add(fieldName))
+            {
+                results.Add((fieldName, roleArg));
+            }
+        }
+
+        return results;
     }
 
     private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0);
