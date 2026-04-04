@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -46,6 +47,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// Gets the global execution engine for vector operations.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Per-layer workspace for zero-allocation forward passes.
+    /// Layers that want arena-based allocation create this in their constructor
+    /// and declare buffer shapes. See <see cref="AiDotNet.Memory.LayerWorkspace{T}"/>.
+    /// </summary>
+    protected LayerWorkspace<T>? Workspace { get; set; }
 
     /// <summary>
     /// <summary>
