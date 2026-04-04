@@ -210,6 +210,7 @@ namespace AiDotNet.AutoML
     [ModelTask(ModelTask.TextToImage)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
     public class DiffusionAutoML<T> : AutoMLModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -771,6 +772,7 @@ namespace AiDotNet.AutoML
     [ModelTask(ModelTask.Denoising)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
     internal class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private readonly UNetNoisePredictor<T> _noisePredictor;

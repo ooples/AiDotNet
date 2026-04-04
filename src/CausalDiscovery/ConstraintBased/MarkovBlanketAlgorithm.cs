@@ -33,6 +33,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("Algorithms for Large Scale Markov Blanket Discovery", "https://jmlr.org/papers/v7/tsamardinos06a.html")]
 public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
     private const int DefaultDiscretizationBins = 10;

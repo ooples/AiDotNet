@@ -43,6 +43,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Probabilistic Linear Discriminant Analysis for Inferences About Identity", "https://doi.org/10.1109/ICCV.2007.4409052")]
 public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields

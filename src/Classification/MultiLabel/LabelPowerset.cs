@@ -82,6 +82,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("A Review on Multi-Label Learning Algorithms", "https://doi.org/10.1109/TKDE.2013.39")]
 public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
     #region Fields

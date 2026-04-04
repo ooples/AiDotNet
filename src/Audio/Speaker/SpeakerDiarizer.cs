@@ -58,6 +58,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Speaker Diarization: A Review of Recent Research", "https://doi.org/10.1109/TASLP.2012.2209910")]
 public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
     #region Fields

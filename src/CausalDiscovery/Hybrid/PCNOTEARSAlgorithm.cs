@@ -42,6 +42,7 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("DAGs with NO TEARS: Continuous Optimization for Structure Learning", "https://arxiv.org/abs/1803.01422")]
 public class PCNOTEARSAlgorithm<T> : HybridBase<T>
 {
     private readonly double _lambda;

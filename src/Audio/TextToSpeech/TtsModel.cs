@@ -62,6 +62,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884")]
 public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly TtsOptions _options;

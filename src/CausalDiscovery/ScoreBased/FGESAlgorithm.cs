@@ -31,6 +31,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("A Million Variables and More: The Fast Greedy Equivalence Search Algorithm", "https://doi.org/10.1615/Int.J.UncertaintyQuantification.2016018285")]
 public class FGESAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

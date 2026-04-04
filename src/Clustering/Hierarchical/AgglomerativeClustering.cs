@@ -53,6 +53,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Hierarchical Grouping to Optimize an Objective Function", "https://doi.org/10.1080/01621459.1963.10500845")]
 public class AgglomerativeClustering<T> : ClusteringBase<T>
 {
     private readonly HierarchicalOptions<T> _options;

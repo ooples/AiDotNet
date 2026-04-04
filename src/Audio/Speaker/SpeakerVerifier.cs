@@ -47,6 +47,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
 public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
 {
     #region Execution Mode
