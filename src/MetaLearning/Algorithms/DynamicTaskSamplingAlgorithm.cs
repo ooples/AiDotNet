@@ -78,7 +78,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         if (options.DifficultyDecay <= 0 || options.DifficultyDecay >= 1)
             throw new ArgumentException("DifficultyDecay must be in (0, 1).", nameof(options));
 
-        _taskDifficulty = new double[options.MetaBatchSize];
+        _taskDifficulty = new Vector<T>(options.MetaBatchSize);
         _taskVisits = new int[options.MetaBatchSize];
         _totalIterations = 0;
     }
@@ -98,7 +98,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         // Ensure arrays are large enough
         if (_taskDifficulty.Length < taskBatch.Tasks.Length)
         {
-            _taskDifficulty = new double[taskBatch.Tasks.Length];
+            _taskDifficulty = new Vector<T>(taskBatch.Tasks.Length);
             _taskVisits = new int[taskBatch.Tasks.Length];
         }
 
@@ -123,8 +123,9 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
 
                 // Update difficulty estimate
                 _taskVisits[t]++;
-                _taskDifficulty[t] = _algoOptions.DifficultyDecay * _taskDifficulty[t]
-                                   + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
+                double diffD = _algoOptions.DifficultyDecay * NumOps.ToDouble(_taskDifficulty[t])
+                             + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
+                _taskDifficulty[t] = NumOps.FromDouble(diffD);
 
                 losses.Add(queryLoss);
                 metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -145,7 +146,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         {
             double ucbBonus = _algoOptions.ExplorationCoeff
                             * Math.Sqrt(logN / Math.Max(_taskVisits[t], 1));
-            weights[t] = _taskDifficulty[t] / _algoOptions.TaskTemperature + ucbBonus;
+            weights[t] = NumOps.ToDouble(_taskDifficulty[t]) / _algoOptions.TaskTemperature + ucbBonus;
             if (weights[t] > maxWeight) maxWeight = weights[t];
         }
 

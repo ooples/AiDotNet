@@ -78,7 +78,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             throw new ArgumentOutOfRangeException(nameof(options), "ProtectionStrength must be non-negative.");
         if (options.ElasticRegWeight < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "ElasticRegWeight must be non-negative.");
-        _importance = new double[_paramDim];
+        _importance = new Vector<T>(_paramDim);
     }
 
     /// <inheritdoc/>
@@ -106,15 +106,16 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 for (int d = 0; d < _paramDim; d++)
                 {
                     double gVal = NumOps.ToDouble(grad[d]);
-                    _importance[d] = _algoOptions.ImportanceDecay * _importance[d]
-                                   + (1.0 - _algoOptions.ImportanceDecay) * gVal * gVal;
+                    double impD = NumOps.ToDouble(_importance[d]);
+                    _importance[d] = NumOps.FromDouble(_algoOptions.ImportanceDecay * impD
+                                   + (1.0 - _algoOptions.ImportanceDecay) * gVal * gVal);
                 }
 
                 // Apply gradient with per-parameter protected learning rate
                 for (int d = 0; d < _paramDim; d++)
                 {
                     double effectiveLR = _algoOptions.InnerLearningRate
-                                       / (1.0 + _algoOptions.ProtectionStrength * _importance[d]);
+                                       / (1.0 + _algoOptions.ProtectionStrength * NumOps.ToDouble(_importance[d]));
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                         NumOps.FromDouble(effectiveLR * NumOps.ToDouble(grad[d])));
                 }
