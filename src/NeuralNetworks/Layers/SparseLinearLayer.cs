@@ -277,7 +277,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
         }
 
         // Update biases

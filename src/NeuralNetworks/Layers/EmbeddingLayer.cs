@@ -716,7 +716,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     public override void UpdateParameters(T learningRate)
     {
         if (_embeddingGradient == null && _projectionWeightsGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         if (_embeddingGradient != null)
         {

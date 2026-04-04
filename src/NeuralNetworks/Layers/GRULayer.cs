@@ -1215,7 +1215,7 @@ public partial class GRULayer<T> : LayerBase<T>
         if (_dWz == null || _dWr == null || _dWh == null ||
             _dUz == null || _dUr == null || _dUh == null ||
             _dbz == null || _dbr == null || _dbh == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

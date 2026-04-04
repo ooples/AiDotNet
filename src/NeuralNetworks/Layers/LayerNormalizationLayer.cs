@@ -340,7 +340,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

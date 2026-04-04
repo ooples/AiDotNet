@@ -357,7 +357,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         // Update in-place to preserve GPU-registered tensor references
         var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));

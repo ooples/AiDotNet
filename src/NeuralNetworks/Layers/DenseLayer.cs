@@ -1134,7 +1134,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

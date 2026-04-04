@@ -1044,7 +1044,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_dWq == null || _dWk == null || _dWv == null || _dWo == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         _Wq = _Wq.Subtract(_dWq.Scale(learningRate));
         _Wk = _Wk.Subtract(_dWk.Scale(learningRate));

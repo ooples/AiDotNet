@@ -657,7 +657,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

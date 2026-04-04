@@ -518,7 +518,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients available — skip update
         }
 
         var epsilon = NumOps.FromDouble(1e-5);
