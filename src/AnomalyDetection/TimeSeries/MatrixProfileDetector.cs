@@ -259,7 +259,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                 checksum += values[i] * (i + 1);
             }
             // Allow small floating point tolerance in checksum comparison
-            isSameData = Math.Abs(checksum - _trainingChecksum) < 1e-6;
+            isSameData = Math.Abs(checksum - NumOps.ToDouble(_trainingChecksum)) < 1e-6;
         }
 
         if (isSameData)
@@ -306,9 +306,10 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 
                     for (int s = subStart; s <= subEnd; s++)
                     {
-                        if (matrixProfile[s] > maxProfileValue)
+                        double mpVal = NumOps.ToDouble(matrixProfile[s]);
+                        if (mpVal > maxProfileValue)
                         {
-                            maxProfileValue = matrixProfile[s];
+                            maxProfileValue = mpVal;
                         }
                     }
 
@@ -354,7 +355,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             double sum = 0, sumSq = 0;
             for (int j = 0; j < m; j++)
             {
-                double v = trainingValues[i + j];
+                double v = NumOps.ToDouble(trainingValues[i + j]);
                 sum += v;
                 sumSq += v * v;
             }
@@ -397,7 +398,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                     for (int k = 0; k < m; k++)
                     {
                         double testNorm = (values[s + k] - mean) / std;
-                        double trainNorm = (trainingValues[t + k] - trainMeans[t]) / trainStds[t];
+                        double trainNorm = (NumOps.ToDouble(trainingValues[t + k]) - trainMeans[t]) / trainStds[t];
                         double diff = testNorm - trainNorm;
                         dist += diff * diff;
                     }
