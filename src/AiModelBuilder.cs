@@ -7440,6 +7440,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Create a new model with QAT-conditioned parameters
                 model = InterfaceGuard.Parameterizable(model).WithParameters(qatConditionedParams);
 
+                // Recalibrate after QAT conditioning — calibration stats from pre-QAT weights
+                // would skew scale selection for the quantized model
+                if (calibrationData is not null)
+                {
+                    quantizer.Calibrate(model, calibrationData);
+                }
+
                 Console.WriteLine($"QAT simulation applied using {internalConfig.QATMethod} method");
             }
             catch (Exception ex)
