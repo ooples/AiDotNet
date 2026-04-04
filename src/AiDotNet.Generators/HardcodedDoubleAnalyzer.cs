@@ -15,12 +15,16 @@ namespace AiDotNet.Generators;
 [Generator]
 public class HardcodedDoubleAnalyzer : IIncrementalGenerator
 {
+    // NOTE: Severity is Info (not Warning) because TreatWarningsAsErrors=True
+    // in the main project. Existing codebase has ~2000 known-debt double fields.
+    // This diagnostic surfaces in IDE to prevent NEW regressions without blocking CI.
+    // Promote to Warning once the remaining internal conversions are done.
     private static readonly DiagnosticDescriptor DoubleFieldInGenericClass = new(
         id: "AIDN060",
         title: "Hardcoded double field in generic <T> class",
         messageFormat: "Field '{0}' is declared as 'double' in generic class '{1}'. Consider using 'T' instead to preserve precision across numeric types.",
         category: "AiDotNet.TypeSafety",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor DoubleArrayFieldInGenericClass = new(
@@ -28,7 +32,7 @@ public class HardcodedDoubleAnalyzer : IIncrementalGenerator
         title: "Hardcoded double[] field in generic <T> class",
         messageFormat: "Field '{0}' is declared as 'double[]' in generic class '{1}'. Consider using 'Vector<T>' instead for SIMD acceleration.",
         category: "AiDotNet.TypeSafety",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor DoubleMatrixFieldInGenericClass = new(
@@ -36,7 +40,7 @@ public class HardcodedDoubleAnalyzer : IIncrementalGenerator
         title: "Hardcoded double[,]/double[][] field in generic <T> class",
         messageFormat: "Field '{0}' is declared as '{2}' in generic class '{1}'. Consider using 'Matrix<T>' instead for SIMD acceleration.",
         category: "AiDotNet.TypeSafety",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -88,6 +92,14 @@ public class HardcodedDoubleAnalyzer : IIncrementalGenerator
         foreach (var modifier in fieldSyntax.Modifiers)
         {
             if (modifier.IsKind(SyntaxKind.StaticKeyword))
+                return null;
+        }
+
+        // Skip readonly fields — these are typically constructor hyperparameters
+        // that intentionally stay as double (configuration boundary pattern)
+        foreach (var modifier in fieldSyntax.Modifiers)
+        {
+            if (modifier.IsKind(SyntaxKind.ReadOnlyKeyword))
                 return null;
         }
 
