@@ -99,7 +99,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Configuration options.
     /// </summary>
-    private readonly DeepSurvOptions _options;
+    private readonly DeepSurvOptions<T> _options;
 
     /// <summary>
     /// Random number generator.
@@ -121,11 +121,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="regularization">Optional regularization.</param>
-    public DeepSurv(DeepSurvOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    public DeepSurv(DeepSurvOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
         _olsIntercept = NumOps.Zero;
-        _options = options ?? new DeepSurvOptions();
+        _options = options ?? new DeepSurvOptions<T>();
         _weights = [];
         _biases = [];
         _numFeatures = 0;
@@ -383,19 +383,18 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             var b = _biases[layer];
             int outputSize = w.Columns;
 
+            var weightTensor = Tensor<T>.FromMatrix(w);
+            var biasTensor = Tensor<T>.FromVector(b).Reshape(1, outputSize);
             var next = new Vector<T>[n];
             for (int i = 0; i < n; i++)
             {
-                next[i] = new Vector<T>(outputSize);
-                for (int j = 0; j < outputSize; j++)
-                {
-                    // Engine-accelerated dot product for input · weights[:,j]
-                    var wCol = new Vector<T>(current[i].Length);
-                    for (int k = 0; k < current[i].Length; k++) wCol[k] = w[k, j];
-                    T sum = NumOps.Add(b[j], Engine.DotProduct(current[i], wCol));
-
-                    next[i][j] = NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)));
-                }
+                // SIMD: output = input @ weights + biases via Engine.TensorMatMul
+                var inputTensor = Tensor<T>.FromVector(current[i]).Reshape(1, current[i].Length);
+                var result = Engine.TensorBroadcastAdd(
+                    Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
+                // SIMD activation via IActivationFunction.Forward
+                result = _options.Activation.Forward(result);
+                next[i] = result.Reshape(outputSize).ToVector();
             }
 
             hiddenOutputs.Add(current);
@@ -579,37 +578,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Applies the activation function.
-    /// </summary>
-    private double ApplyActivation(double x)
-    {
-        return _options.Activation switch
-        {
-            DeepSurvActivation.ReLU => Math.Max(0, x),
-            DeepSurvActivation.SELU => x >= 0 ? 1.0507 * x : 1.0507 * 1.6733 * (Math.Exp(x) - 1),
-            DeepSurvActivation.ELU => x >= 0 ? x : Math.Exp(x) - 1,
-            DeepSurvActivation.Tanh => Math.Tanh(x),
-            DeepSurvActivation.LeakyReLU => x >= 0 ? x : 0.01 * x,
-            _ => Math.Max(0, x)
-        };
-    }
-
-    /// <summary>
-    /// Applies the activation function derivative.
-    /// </summary>
-    private double ApplyActivationDerivative(double activated)
-    {
-        return _options.Activation switch
-        {
-            DeepSurvActivation.ReLU => activated > 0 ? 1 : 0,
-            DeepSurvActivation.SELU => activated >= 0 ? 1.0507 : 1.0507 * 1.6733 * Math.Exp(activated / 1.0507),
-            DeepSurvActivation.ELU => activated >= 0 ? 1 : activated + 1,
-            DeepSurvActivation.Tanh => 1 - activated * activated,
-            DeepSurvActivation.LeakyReLU => activated >= 0 ? 1 : 0.01,
-            _ => activated > 0 ? 1 : 0
-        };
-    }
-
     private int[] GetSortedIndices(Vector<T> times)
     {
         return Enumerable.Range(0, times.Length)
@@ -692,7 +660,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         // Options
         writer.Write(_options.NumHiddenLayers);
         writer.Write(_options.HiddenLayerSize);
-        writer.Write((int)_options.Activation);
+        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
         writer.Write(_numFeatures);
 
         // Weights and biases
@@ -762,7 +730,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
         _options.NumHiddenLayers = reader.ReadInt32();
         _options.HiddenLayerSize = reader.ReadInt32();
-        _options.Activation = (DeepSurvActivation)reader.ReadInt32();
+        string activationTypeName = reader.ReadString();
+        var activationType = Type.GetType(activationTypeName);
+        _options.Activation = activationType is not null
+            ? (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new SELUActivation<T>())
+            : new SELUActivation<T>();
         _numFeatures = reader.ReadInt32();
 
         int numLayers = reader.ReadInt32();
