@@ -100,6 +100,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Marta Garnelo, Jonathan Schwarz, Dan Rosenbaum, Fabio Viola, et al.")]
 public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly NPBMLOptions<T, TInput, TOutput> _npbmlOptions;
 
     /// <summary>Parameters for the encoder (support set -> latent distribution).</summary>
@@ -167,11 +170,11 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Classification loss (backbone)
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -206,12 +209,12 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
@@ -245,11 +248,11 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                    var currentParams = ParamModel.GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                    ParamModel.SetParameters(modulatedParams);
                 }
             }
 
@@ -257,7 +260,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             totalLoss += queryLoss + _npbmlOptions.KLWeight * klLoss;
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -380,7 +383,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);

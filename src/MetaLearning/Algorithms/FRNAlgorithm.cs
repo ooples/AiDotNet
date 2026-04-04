@@ -97,6 +97,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Davis Wertheimer, Luming Tang, Bharath Hariharan")]
 public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly FRNOptions<T, TInput, TOutput> _frnOptions;
 
     /// <inheritdoc/>
@@ -231,11 +234,11 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -249,7 +252,7 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features for reconstruction
         var supportPred = MetaModel.Predict(task.SupportInput);

@@ -52,6 +52,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Pau Rodriguez, Issam Laradji, Alexandre Drouin, Alexandre Lacoste")]
 public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly ETPNOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _compressedDim;
@@ -89,7 +92,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -97,7 +100,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
             // Compute support embedding
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var supportEmb = CompressVector(supportGrad, _algoOptions.TransformDim);
 
@@ -105,7 +108,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int tIter = 0; tIter < effectiveTransIter; tIter++)
             {
                 // Compute query embedding for transductive signal
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var queryGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
                 var queryEmb = CompressVector(queryGrad, _algoOptions.TransformDim);
 
@@ -118,7 +121,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 var transform = ComputeTransform(combined);
 
                 // Adapt with transformed gradients
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 for (int d = 0; d < _paramDim; d++)
                 {
@@ -132,12 +135,12 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             int transSteps = effectiveTransIter;
             for (int step = transSteps; step < _algoOptions.AdaptationSteps; step++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Transform regularization
@@ -162,11 +165,11 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var supportEmb = CompressVector(supportGrad, _algoOptions.TransformDim);
 
@@ -177,7 +180,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             for (int d = 0; d < _paramDim; d++)
             {
@@ -187,7 +190,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -208,27 +211,27 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private double ComputeETPNLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
+            ParamModel.SetParameters(ap);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var se = CompressVector(sg, _algoOptions.TransformDim);
             var t = ComputeTransform(se);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                     ap[d] = NumOps.Subtract(ap[d],
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(t[d % _compressedDim]) * NumOps.ToDouble(g[d])));
             }
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
+            ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

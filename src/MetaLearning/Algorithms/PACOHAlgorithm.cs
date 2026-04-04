@@ -59,6 +59,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jonas Rothfuss, Vincent Fortuin, Martin Josifoski, Andreas Krause")]
 public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly PACOHOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Prior mean (meta-learned). Same as MetaModel parameters.</summary>
@@ -102,7 +105,7 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             // Inner loop: MAP estimation with prior regularization
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(theta);
+                ParamModel.SetParameters(theta);
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Prior gradient: (θ - μ_P) / σ²_P
@@ -123,7 +126,7 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
 
             adaptedParamsList.Add(theta);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(theta);
+            ParamModel.SetParameters(theta);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -134,12 +137,12 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         double pacBayesLoss = _algoOptions.KLCoefficient * klTerm / Math.Max(taskBatch.Tasks.Length, 1);
 
         // Update prior mean via meta-gradients
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             _priorMean = ApplyGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(_priorMean);
+            ParamModel.SetParameters(_priorMean);
         }
 
         // Update prior log-variance via SPSA
@@ -158,7 +161,7 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(theta);
+            ParamModel.SetParameters(theta);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             var priorGrad = new Vector<T>(_paramDim);
@@ -176,7 +179,7 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, theta);
     }
 
@@ -230,7 +233,7 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(theta);
+                ParamModel.SetParameters(theta);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                 {
@@ -242,12 +245,12 @@ public class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
 
             adapted.Add(theta);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(theta);
+            ParamModel.SetParameters(theta);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         double klPenalty = _algoOptions.KLCoefficient * ComputeAggregateKL(adapted) / Math.Max(taskBatch.Tasks.Length, 1);
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1) + klPenalty;
     }
 }

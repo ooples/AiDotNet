@@ -92,6 +92,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, et al.")]
 public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MCLOptions<T, TInput, TOutput> _mclOptions;
 
     /// <summary>Parameters for the contrastive projection head.</summary>
@@ -257,11 +260,11 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Meta-learning loss
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -299,12 +302,12 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Meta-learning loss component
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -321,14 +324,14 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             totalLoss += metaLossVal + _mclOptions.ContrastiveWeight * contrastLoss;
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract and project support features through contrastive head
         var supportPred = MetaModel.Predict(task.SupportInput);

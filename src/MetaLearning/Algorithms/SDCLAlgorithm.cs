@@ -56,6 +56,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Tommaso Furlanello, Zachary C. Lipton, Michael Tschannen, Laurent Itti, Anima Anandkumar")]
 public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly SDCLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -89,7 +92,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var paramModel = InterfaceGuard.Parameterizable(MetaModel);
+        var paramModel = ParamModel;
         var initParams = paramModel.GetParameters();
 
         try
@@ -167,7 +170,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var paramModel = InterfaceGuard.Parameterizable(MetaModel);
+        var paramModel = ParamModel;
         var initParams = paramModel.GetParameters();
 
         // Get teacher predictions
@@ -239,7 +242,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private Vector<T> GetPredictionWithParams(Vector<T> parameters, TInput input)
     {
-        var paramModel = InterfaceGuard.Parameterizable(MetaModel);
+        var paramModel = ParamModel;
         var savedParams = paramModel.GetParameters();
         paramModel.SetParameters(parameters);
         var prediction = ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);

@@ -99,6 +99,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaSGDOptions<T, TInput, TOutput> _metaSGDOptions;
 
     /// <inheritdoc/>
@@ -168,7 +171,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Initialize per-parameter optimizer with learned coefficients
-        var numParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters().Length;
+        var numParams = ParamModel.GetParameters().Length;
         _optimizer = new PerParameterOptimizer<T, TInput, TOutput>(numParams, _metaSGDOptions, Engine);
 
         // Initialize optimizer with warm-start values if enabled
@@ -324,7 +327,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Get initial parameters
-        var initialParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initialParams = ParamModel.GetParameters();
         var currentParams = new Vector<T>(initialParams.Length);
         for (int i = 0; i < initialParams.Length; i++)
         {
@@ -605,7 +608,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </remarks>
     private void InitializeOptimizer()
     {
-        int numParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters().Length;
+        int numParams = ParamModel.GetParameters().Length;
 
         for (int i = 0; i < numParams; i++)
         {

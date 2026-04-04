@@ -95,6 +95,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Yikai Wang, Chengming Xu, Chen Liu, et al.")]
 public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly ConstellationNetOptions<T, TInput, TOutput> _constellationOptions;
 
     /// <summary>Parameters for the part detection module.</summary>
@@ -146,11 +149,11 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -173,12 +176,12 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -204,11 +207,11 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                    var currentParams = ParamModel.GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                    ParamModel.SetParameters(modulatedParams);
                 }
             }
 
@@ -216,7 +219,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -314,7 +317,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);

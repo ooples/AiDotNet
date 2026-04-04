@@ -88,6 +88,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Johannes von Oswald, Christian Henning, Benjamin F. Grewe, Joao Sacramento")]
 public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly HyperMAMLOptions<T, TInput, TOutput> _hyperMAMLOptions;
 
     /// <summary>Parameters for the initialization hypernetwork.</summary>
@@ -179,23 +182,23 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Generate task-specific initialization from support features
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var taskInit = GenerateTaskInit(initParams, supportFeatures);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
+            ParamModel.SetParameters(taskInit);
 
             // Inner loop adaptation from task-specific init
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adapted);
+                var adapted = ApplyGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                ParamModel.SetParameters(adapted);
             }
 
             // Query evaluation
@@ -219,50 +222,50 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var taskInit = GenerateTaskInit(initParams, supportFeatures);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
+            ParamModel.SetParameters(taskInit);
 
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adapted);
+                var adapted = ApplyGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                ParamModel.SetParameters(adapted);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var sharedInit = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var sharedInit = ParamModel.GetParameters();
 
         // Generate task-specific initialization from support features
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(sharedInit);
+        ParamModel.SetParameters(sharedInit);
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
         var taskInit = GenerateTaskInit(sharedInit, supportFeatures);
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
+        ParamModel.SetParameters(taskInit);
 
         // Inner loop adaptation from task-specific init
         var adaptedParams = taskInit;
         for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            adaptedParams = ApplyGradients(ParamModel.GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
+            ParamModel.SetParameters(adaptedParams);
         }
 
         return new HyperMAMLModel<T, TInput, TOutput>(MetaModel, adaptedParams);

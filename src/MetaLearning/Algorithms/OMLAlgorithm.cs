@@ -52,6 +52,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Khurram Javed, Martha White")]
 public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly OMLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _plnStart;
@@ -76,7 +79,7 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -86,7 +89,7 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Only update PLN parameters (RLN stays frozen in inner loop)
@@ -95,7 +98,7 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
             }
 
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // L1 sparsity on RLN parameters
@@ -141,14 +144,14 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         // Only adapt PLN parameters
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int d = _plnStart; d < _paramDim; d++)
@@ -156,7 +159,7 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

@@ -96,6 +96,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Han-Jia Ye, Hexiang Hu, De-Chuan Zhan, Fei Sha")]
 public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly FEATOptions<T, TInput, TOutput> _featOptions;
 
     /// <summary>
@@ -178,11 +181,11 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Extract features
             var supportPred = MetaModel.Predict(task.SupportInput);
@@ -200,11 +203,11 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             var modFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
             if (modFactor.HasValue)
             {
-                var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                var currentParams = ParamModel.GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor.Value));
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                ParamModel.SetParameters(modulatedParams);
             }
 
             // Classification loss on modulated backbone (transformer affects loss)
@@ -259,7 +262,7 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
         var adaptedPrototypes = supportFeatures != null ? AdaptPrototypes(supportFeatures) : null;
@@ -278,12 +281,12 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -294,18 +297,18 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             var auxModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
             if (auxModFactor.HasValue)
             {
-                var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                var currentParams = ParamModel.GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(auxModFactor.Value));
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                ParamModel.SetParameters(modulatedParams);
             }
 
             var queryPred = MetaModel.Predict(task.QueryInput);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

@@ -41,6 +41,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     /// <summary>Learned encoder parameters for mapping context pairs to representations.</summary>
     protected Vector<T> EncoderParams;
 
@@ -254,7 +257,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected void ModulateParameters(Vector<T> initParams, double scale)
     {
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ScaleVector(initParams, scale));
+        ParamModel.SetParameters(ScaleVector(initParams, scale));
     }
 
     /// <summary>
@@ -266,11 +269,11 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
             var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
@@ -294,7 +297,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected IModel<TInput, TOutput, ModelMetadata<T>> StandardNPAdapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
         var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);

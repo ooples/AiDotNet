@@ -45,6 +45,9 @@ namespace AiDotNet.MetaLearning;
 /// </remarks>
 public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>, IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     #region Fields
 
     /// <summary>
@@ -1357,9 +1360,9 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     /// </summary>
     protected void ApplyOuterUpdate(Vector<T> initParams, List<Vector<T>> metaGradients, double outerLR)
     {
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         if (metaGradients.Count > 0)
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
+            ParamModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
     }
 
     /// <summary>
@@ -1375,7 +1378,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         var adaptedParams = initParams;
         for (int step = 0; step < steps; step++)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, innerLR);
         }
@@ -1387,14 +1390,14 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     /// </summary>
     protected double StandardAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var ip = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var ip = ParamModel.GetParameters();
         double total = 0;
         foreach (var t in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
+            ParamModel.SetParameters(ip);
             total += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
         }
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
+        ParamModel.SetParameters(ip);
         return total / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -1444,10 +1447,10 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     public override ILossFunction<T> DefaultLossFunction => LossFunction ?? new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+    public override Vector<T> GetParameters() => ParamModel.GetParameters();
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(MetaModel).SetParameters(parameters);
+    public override void SetParameters(Vector<T> parameters) => ParamModel.SetParameters(parameters);
 
     /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)

@@ -102,6 +102,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Nikhil Mishra, Mostafa Rohaninejad, Xi Chen, Pieter Abbeel")]
 public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly SNAILOptions<T, TInput, TOutput> _snailOptions;
 
     /// <summary>
@@ -242,13 +245,13 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         _isTraining = true;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Forward pass through backbone
             var supportPred = MetaModel.Predict(task.SupportInput);
@@ -279,11 +282,11 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     if (count > 0)
                     {
                         double avgRatio = sumRatio / count;
-                        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                        var currentParams = ParamModel.GetParameters();
                         var modulatedParams = new Vector<T>(currentParams.Length);
                         for (int i = 0; i < currentParams.Length; i++)
                             modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                        InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                        ParamModel.SetParameters(modulatedParams);
                     }
                 }
             }
@@ -324,12 +327,12 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var queryPredRaw = MetaModel.Predict(task.QueryInput);
@@ -355,11 +358,11 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     if (count > 0)
                     {
                         double avgRatio = sumRatio / count;
-                        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+                        var currentParams = ParamModel.GetParameters();
                         var modulatedParams = new Vector<T>(currentParams.Length);
                         for (int i = 0; i < currentParams.Length; i++)
                             modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                        InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
+                        ParamModel.SetParameters(modulatedParams);
                     }
                 }
             }
@@ -368,7 +371,7 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -402,7 +405,7 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         _isTraining = false;
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);

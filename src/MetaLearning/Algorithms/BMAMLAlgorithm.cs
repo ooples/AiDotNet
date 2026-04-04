@@ -59,6 +59,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jaesik Yoon, Taesup Kim, Ousmane Dia, et al.")]
 public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly BMAMLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -83,7 +86,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -99,7 +102,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 var taskGrads = new Vector<T>[_algoOptions.NumParticles];
                 for (int i = 0; i < _algoOptions.NumParticles; i++)
                 {
-                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(particles[i]);
+                    ParamModel.SetParameters(particles[i]);
                     taskGrads[i] = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 }
 
@@ -126,7 +129,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             var taskMetaGrads = new List<Vector<T>>();
             for (int i = 0; i < _algoOptions.NumParticles; i++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(particles[i]);
+                ParamModel.SetParameters(particles[i]);
                 var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
                 taskLosses.Add(queryLoss);
                 taskMetaGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -145,7 +148,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var initParams = ParamModel.GetParameters();
         var particles = InitializeParticles(initParams);
 
         // SVGD inner loop
@@ -156,7 +159,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             var taskGrads = new Vector<T>[_algoOptions.NumParticles];
             for (int i = 0; i < _algoOptions.NumParticles; i++)
             {
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(particles[i]);
+                ParamModel.SetParameters(particles[i]);
                 taskGrads[i] = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             }
 
@@ -178,7 +181,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         // Return ensemble mean as adapted parameters
         var ensembleMean = AverageVectors(particles.ToList());
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, ensembleMean);
     }
 

@@ -61,6 +61,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, et al.")]
 public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaLoRAOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>
@@ -112,7 +115,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -126,7 +129,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             {
                 // Compute adapted params: θ' = θ + scaling * Σ c_i * v_i
                 var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
 
                 // Compute full gradient ∂L/∂θ' on support set
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
@@ -141,7 +144,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
             // Evaluate on query set with final adapted params
             var finalAdapted = ComputeAdaptedParams(baseParams, coeffs);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(finalAdapted);
+            ParamModel.SetParameters(finalAdapted);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
 
@@ -150,11 +153,11 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Outer loop: update base parameters
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update basis vectors and initial coefficients via SPSA
@@ -168,7 +171,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         // Initialize task-specific coefficients from meta-learned init
         var coeffs = new double[_rank];
@@ -179,7 +182,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
 
             var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
@@ -191,7 +194,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         var finalParams = ComputeAdaptedParams(baseParams, coeffs);
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams); // Restore base params
+        ParamModel.SetParameters(baseParams); // Restore base params
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
@@ -236,7 +239,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// </summary>
     private double ComputeLoRALoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
@@ -249,7 +252,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 for (int j = 0; j < _rank; j++)
                 {
@@ -259,11 +262,11 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
 
             var finalAdapted = ComputeAdaptedParams(baseParams, coeffs);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(finalAdapted);
+            ParamModel.SetParameters(finalAdapted);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

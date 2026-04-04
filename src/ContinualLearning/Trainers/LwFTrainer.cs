@@ -19,6 +19,7 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// </remarks>
 public class LwFTrainerOptions<T>
 {
+
     /// <summary>
     /// Weight for the distillation loss relative to task loss.
     /// Default: 1.0 (equal weighting).
@@ -123,6 +124,9 @@ public class LwFTrainerOptions<T>
 [ModelPaper("Learning without Forgetting", "https://arxiv.org/abs/1606.09282", Year = 2017, Authors = "Zhizhong Li, Derek Hoiem")]
 public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
+    private IGradientComputable<T, TInput, TOutput>? _cachedGradModel;
+    private IGradientComputable<T, TInput, TOutput> GradModel => _cachedGradModel ??= InterfaceGuard.GradientComputable(Model);
+
     [ThreadStatic]
     private static Random? _random;
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
@@ -240,7 +244,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for the task loss
-                    var sampleGradients = InterfaceGuard.GradientComputable(Model).ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = GradModel.ComputeGradients(input, target, LossFunction);
 
                     // Accumulate task gradients
                     if (batchGradients == null)
@@ -294,7 +298,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedGradients, learningRate);
+                GradModel.ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Track losses
@@ -320,7 +324,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedReplayGradients, replayLr);
+                        GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
                 }
@@ -445,7 +449,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = InterfaceGuard.GradientComputable(Model).ComputeGradients(
+            var sampleGradients = GradModel.ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

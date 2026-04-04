@@ -73,6 +73,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Antoniou, A., Edwards, H., & Storkey, A.")]
 public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly SEALOptions<T, TInput, TOutput> _sealOptions;
     private readonly Dictionary<string, Vector<T>>? _adaptiveLearningRateState;
 
@@ -253,7 +256,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Apply weight decay if configured
         if (_sealOptions.WeightDecay > 0.0)
         {
-            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+            var currentParams = ParamModel.GetParameters();
             T decay = NumOps.FromDouble(_sealOptions.WeightDecay);
             for (int i = 0; i < metaGradients.Length; i++)
             {
@@ -262,9 +265,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Outer loop: Update meta-parameters
-        var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var currentMetaParams = ParamModel.GetParameters();
         var updatedMetaParams = ApplyGradients(currentMetaParams, metaGradients, _sealOptions.OuterLearningRate);
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
+        ParamModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSizeT);
