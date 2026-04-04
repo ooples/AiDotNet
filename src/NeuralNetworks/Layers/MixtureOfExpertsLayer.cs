@@ -467,6 +467,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _topK = topK;
         _useAuxiliaryLoss = useLoadBalancing;
         _auxiliaryLossWeight = loadBalancingWeight ?? NumOps.FromDouble(0.01); // Default to 0.01
+
+        // Register router and experts as sublayers so the tape-based autodiff
+        // system can recursively discover their parameters via GetSubLayers().
+        RegisterSubLayer(_router);
+        foreach (var expert in _experts)
+        {
+            RegisterSubLayer(expert);
+        }
     }
 
     /// <summary>

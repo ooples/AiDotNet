@@ -2628,10 +2628,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Replace layer parameter tensors with views into the contiguous buffer.
         // This makes the buffer the single source of truth — in-place updates by
         // first-order optimizers automatically reflect in the flat vector, and vice versa.
+        // Must recurse into sublayers to match CollectRecursive's walk order.
         var views = buffer.CreateAllViews();
         int viewIdx = 0;
-        foreach (var layer in Layers)
+        var seenForViews = new HashSet<ILayer<T>>();
+        ReplaceParametersWithViews(Layers, views, ref viewIdx, seenForViews);
+
+        _parameterBuffer = buffer;
+        return buffer;
+    }
+
+    /// <summary>
+    /// Recursively replaces trainable parameter tensors with buffer-backed views,
+    /// matching the same walk order as TapeTrainingStep.CollectRecursive.
+    /// </summary>
+    private static void ReplaceParametersWithViews(
+        IEnumerable<ILayer<T>> layers, Tensor<T>[] views, ref int viewIdx, HashSet<ILayer<T>> seen)
+    {
+        foreach (var layer in layers)
         {
+            if (!seen.Add(layer)) continue;
+
             if (layer is ITrainableLayer<T> trainable)
             {
                 var layerParams = trainable.GetTrainableParameters();
@@ -2640,10 +2657,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     layerViews[i] = views[viewIdx++];
                 trainable.SetTrainableParameters(layerViews);
             }
-        }
 
-        _parameterBuffer = buffer;
-        return buffer;
+            var subLayers = layer.GetSubLayers();
+            if (subLayers.Count > 0)
+            {
+                ReplaceParametersWithViews(subLayers, views, ref viewIdx, seen);
+            }
+        }
     }
 
     /// <summary>
