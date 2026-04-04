@@ -350,7 +350,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
+        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
         return copy;
     }
 
