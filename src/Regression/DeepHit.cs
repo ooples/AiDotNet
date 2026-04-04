@@ -123,7 +123,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Configuration options.
     /// </summary>
-    private readonly DeepHitOptions _options;
+    private readonly DeepHitOptions<T> _options;
 
     /// <summary>
     /// Random number generator.
@@ -138,13 +138,13 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="regularization">Optional regularization.</param>
-    public DeepHit(DeepHitOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    public DeepHit(DeepHitOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
         _olsIntercept = NumOps.Zero;
         _yMean = NumOps.Zero;
         _yStd = NumOps.Zero;
-        _options = options ?? new DeepHitOptions();
+        _options = options ?? new DeepHitOptions<T>();
         _sharedWeights = [];
         _sharedBiases = [];
         _causeWeights = [];
@@ -724,6 +724,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = input.Length;
         int outputSize = weights.Columns;
+        var weightTensor = Tensor<T>.FromMatrix(weights);
+        var biasTensor = Tensor<T>.FromVector(biases).Reshape(1, outputSize);
 
         var output = new Vector<T>[n];
         T dropoutScale = _options.DropoutRate > 0
@@ -732,18 +734,18 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            output[i] = new Vector<T>(outputSize);
-            for (int j = 0; j < outputSize; j++)
-            {
-                // Use Engine.DotProduct for input · weights[:,j]
-                var wCol = new Vector<T>(input[i].Length);
-                for (int k = 0; k < input[i].Length; k++) wCol[k] = weights[k, j];
-                T sum = NumOps.Add(biases[j], Engine.DotProduct(input[i], wCol));
+            // SIMD: output = input @ weights + biases via Engine.TensorMatMul
+            var inputTensor = Tensor<T>.FromVector(input[i]).Reshape(1, input[i].Length);
+            var result = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
 
-                output[i][j] = applyActivation
-                    ? NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)))
-                    : sum;
+            if (applyActivation)
+            {
+                // SIMD activation via IActivationFunction.Forward (Engine-backed)
+                result = _options.Activation.Forward(result);
             }
+
+            output[i] = result.Reshape(outputSize).ToVector();
         }
 
         // Apply dropout during training (simplified - always apply with prob)
@@ -954,39 +956,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return (totalLoss, gradients);
     }
 
-    /// <summary>
-    /// Applies the activation function.
-    /// </summary>
-    private double ApplyActivation(double x)
-    {
-        return _options.Activation switch
-        {
-            DeepHitActivation.ReLU => Math.Max(0, x),
-            DeepHitActivation.SELU => x >= 0 ? 1.0507 * x : 1.0507 * 1.6733 * (Math.Exp(x) - 1),
-            DeepHitActivation.ELU => x >= 0 ? x : Math.Exp(x) - 1,
-            DeepHitActivation.Tanh => Math.Tanh(x),
-            DeepHitActivation.LeakyReLU => x >= 0 ? x : 0.01 * x,
-            DeepHitActivation.GELU => 0.5 * x * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (x + 0.044715 * x * x * x))),
-            _ => Math.Max(0, x)
-        };
-    }
-
-    /// <summary>
-    /// Applies the activation function derivative.
-    /// </summary>
-    private double ApplyActivationDerivative(double activated)
-    {
-        return _options.Activation switch
-        {
-            DeepHitActivation.ReLU => activated > 0 ? 1 : 0,
-            DeepHitActivation.SELU => activated >= 0 ? 1.0507 : 1.0507 * 1.6733 * Math.Exp(activated / 1.0507),
-            DeepHitActivation.ELU => activated >= 0 ? 1 : activated + 1,
-            DeepHitActivation.Tanh => 1 - activated * activated,
-            DeepHitActivation.LeakyReLU => activated >= 0 ? 1 : 0.01,
-            DeepHitActivation.GELU => 0.5 * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * activated)),  // Approximation
-            _ => activated > 0 ? 1 : 0
-        };
-    }
 
     private Vector<T>[] CloneArray(Vector<T>[] arr)
     {
@@ -1123,7 +1092,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_options.NumCauseLayers);
         writer.Write(_options.HiddenLayerSize);
         writer.Write(_options.NumRisks);
-        writer.Write((int)_options.Activation);
+        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
         writer.Write(_numFeatures);
 
         // Time bins
@@ -1217,7 +1186,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         _options.NumCauseLayers = reader.ReadInt32();
         _options.HiddenLayerSize = reader.ReadInt32();
         _options.NumRisks = reader.ReadInt32();
-        _options.Activation = (DeepHitActivation)reader.ReadInt32();
+        string activationTypeName = reader.ReadString();
+        var activationType = Type.GetType(activationTypeName);
+        _options.Activation = activationType is not null
+            ? (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new ReLUActivation<T>())
+            : new ReLUActivation<T>();
         _numFeatures = reader.ReadInt32();
 
         int timeBinLen = reader.ReadInt32();
