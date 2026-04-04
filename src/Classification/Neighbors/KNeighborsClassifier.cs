@@ -50,8 +50,7 @@ namespace AiDotNet.Classification.Neighbors;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
     /// Gets the KNN specific options.

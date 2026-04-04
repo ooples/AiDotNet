@@ -77,8 +77,7 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Adaptive Random Forests for Evolving Data Stream Classification", "https://doi.org/10.1007/s10994-017-5642-8", Year = 2017, Authors = "Heitor Murilo Gomes, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, Talel Abdessalem")]
-public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
     private readonly AdaptiveRandomForestOptions<T> _options;
 

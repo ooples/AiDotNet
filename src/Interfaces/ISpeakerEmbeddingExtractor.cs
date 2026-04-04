@@ -36,8 +36,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("SpeakerEmbeddingExtractor")]
-public interface ISpeakerEmbeddingExtractor<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
+public interface ISpeakerEmbeddingExtractor<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
     /// Gets the expected sample rate for input audio.

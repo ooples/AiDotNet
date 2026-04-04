@@ -72,8 +72,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ModelPaper("A Time Series Forest for Classification and Feature Extraction", "https://doi.org/10.1016/j.ins.2013.01.006", Year = 2013, Authors = "Houtao Deng, George Runger, Eugene Tuv, Martyanov Vladimir")]
-public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
     private readonly TimeSeriesForestOptions<T> _options;
 

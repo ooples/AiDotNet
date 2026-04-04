@@ -83,8 +83,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class HistGradientBoostingClassifier<T> : ClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
     /// <summary>
     /// The ensemble of histogram-based decision trees.
