@@ -1089,9 +1089,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput);
-
-        SetTrainingMode(false);
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <inheritdoc/>

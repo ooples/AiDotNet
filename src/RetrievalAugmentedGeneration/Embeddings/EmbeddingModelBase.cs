@@ -189,7 +189,15 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// </remarks>
     protected virtual Vector<T> GenerateFallbackEmbedding(string text)
     {
-        var hash = text.ToLowerInvariant().GetHashCode();
+        // Use stable FNV-1a hash instead of string.GetHashCode() which is
+        // randomized per process in .NET Core/.NET 5+
+        var lower = text.ToLowerInvariant();
+        uint hash = 2166136261u;
+        foreach (char c in lower)
+        {
+            hash ^= c;
+            hash *= 16777619u;
+        }
         var dim = EmbeddingDimension;
         var values = new T[dim];
         for (int i = 0; i < dim; i++)

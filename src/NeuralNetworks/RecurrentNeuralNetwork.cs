@@ -120,7 +120,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new RecurrentNeuralNetworkOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
-        EnableDeterministicMode();
         InitializeRecurrentLayers();
     }
 
@@ -307,51 +306,11 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
         }
 
-        SetTrainingMode(true);
+        // Reset recurrent state before each training step
         foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
             layer.ResetState();
-        }
 
-        try
-        {
-            // Forward pass with memory for backpropagation
-            var output = ForwardWithMemory(input);
-
-            // Calculate loss
-            var outputVector = output.ToVector();
-            var expectedVector = expectedOutput.ToVector();
-            LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-            // Compute loss gradient
-            var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-
-            // Reshape gradient to match output tensor shape for proper BPTT
-            var gradTensor = Tensor<T>.FromVector(lossGrad);
-            if (gradTensor.Rank < output.Rank)
-                gradTensor = gradTensor.Reshape(output._shape);
-
-            // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
-            var clippedLossGrad = ClipGradient(gradTensor);
-
-            // Backpropagate error through time
-
-            // Per-layer direct update (avoids serialize/deserialize overhead)
-            T lr = _learningRate;
-            foreach (var layer in Layers)
-            {
-                if (layer.SupportsTraining)
-                    layer.UpdateParameters(lr);
-            }
-        }
-        finally
-        {
-            // Restore inference mode (per PyTorch model.train()/model.eval() pattern)
-            SetTrainingMode(false);
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
-        }
+        TrainWithTape(input, expectedOutput, NumOps.ToDouble(_learningRate));
     }
 
     /// <summary>

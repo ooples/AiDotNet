@@ -1529,7 +1529,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <inheritdoc/>

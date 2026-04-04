@@ -248,10 +248,17 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set eval mode on all layers for inference (BN uses running stats)
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
-        return Forward(input);
+        // Set eval mode on all layers for inference (BN uses running stats),
+        // then restore previous training mode after prediction.
+        SetTrainingMode(false);
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            SetTrainingMode(false); // Leave in eval mode (training sets it back)
+        }
     }
 
     /// <inheritdoc />

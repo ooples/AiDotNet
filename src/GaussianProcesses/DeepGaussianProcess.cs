@@ -667,19 +667,6 @@ internal class DGPLayer<T>
             Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
         }
 
-        // Solve Kuu * alpha_d = m_d for each output dimension,
-        // and compute posterior variance for MC sampling.
-        // Also solve Kuu * Beta = Kux for variance computation:
-        //   Var(f*) = Kxx - Kxu * Kuu^{-1} * Kux
-        var KuuInvKux = new Matrix<T>(m_points, n);
-        for (int j = 0; j < m_points; j++)
-        {
-            var kux_col = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-                kux_col[i] = Kxu[i, j]; // Kux = Kxu^T, so column j of Kux = column j across rows of Kxu
-            // We need Kuu^{-1} * Kux, solve column by column
-        }
-
         // Compute posterior variance per point: σ²(x) = K(x,x) - Kxu * Kuu^{-1} * Kux
         var posteriorVar = new double[n];
         for (int i = 0; i < n; i++)
@@ -719,8 +706,7 @@ internal class DGPLayer<T>
                 }
 
                 // Add posterior noise for MC uncertainty propagation
-                double noise = random.NextDouble() * 2 - 1; // Approximate N(0,1) via uniform
-                // Box-Muller for proper Gaussian sampling
+                // Box-Muller transform for proper Gaussian sampling: z ~ N(0,1)
                 double u1 = Math.Max(1e-10, random.NextDouble());
                 double u2 = random.NextDouble();
                 double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
