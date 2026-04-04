@@ -443,14 +443,14 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         T cycleLoss = NumOps.Add(cycleA, cycleB);
 
         // Cycle consistency gradients: A -> B -> A (back to A)
-        var cycleAGrad = CalculateL1Gradient(reconstructedA, realA, _cycleConsistencyLambda);
+        var cycleAGrad = CalculateL1Gradient(reconstructedA, realA, NumOps.ToDouble(_cycleConsistencyLambda));
         var genBtoACycleGradInput = GeneratorBtoA.BackwardWithInputGradient(cycleAGrad);
         // Add cycle gradient to GeneratorAtoB (from fakeB that was used to reconstruct A)
         for (int i = 0; i < genAtoBGrad.Length; i++)
             genAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), genBtoACycleGradInput.GetFlat(i)));
 
         // Cycle consistency gradients: B -> A -> B (back to B)
-        var cycleBGrad = CalculateL1Gradient(reconstructedB, realB, _cycleConsistencyLambda);
+        var cycleBGrad = CalculateL1Gradient(reconstructedB, realB, NumOps.ToDouble(_cycleConsistencyLambda));
         var genAtoBCycleGradInput = GeneratorAtoB.BackwardWithInputGradient(cycleBGrad);
         // Add cycle gradient to GeneratorBtoA (from fakeA that was used to reconstruct B)
         for (int i = 0; i < genBtoAGrad.Length; i++)
@@ -465,8 +465,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         T identityLoss = NumOps.Add(idLossA, idLossB);
 
         // Identity gradients
-        var identityAGrad = CalculateL1Gradient(identityA, realA, _identityLambda);
-        var identityBGrad = CalculateL1Gradient(identityB, realB, _identityLambda);
+        var identityAGrad = CalculateL1Gradient(identityA, realA, NumOps.ToDouble(_identityLambda));
+        var identityBGrad = CalculateL1Gradient(identityB, realB, NumOps.ToDouble(_identityLambda));
 
         // Combine all generator gradients before backward to avoid gradient loss
         // GeneratorAtoB receives: adversarial + cycle + identity gradients
@@ -822,8 +822,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
                 { "GeneratorBtoA_Parameters", GeneratorBtoA.GetParameterCount() },
                 { "DiscriminatorA_Parameters", DiscriminatorA.GetParameterCount() },
                 { "DiscriminatorB_Parameters", DiscriminatorB.GetParameterCount() },
-                { "CycleConsistencyLambda", _cycleConsistencyLambda },
-                { "IdentityLambda", _identityLambda }
+                { "CycleConsistencyLambda", NumOps.ToDouble(_cycleConsistencyLambda) },
+                { "IdentityLambda", NumOps.ToDouble(_identityLambda) }
             },
             ModelData = this.Serialize()
         };
@@ -845,8 +845,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         // Serialize CycleGAN-specific hyperparameters
-        writer.Write(_cycleConsistencyLambda);
-        writer.Write(_identityLambda);
+        writer.Write(NumOps.ToDouble(_cycleConsistencyLambda));
+        writer.Write(NumOps.ToDouble(_identityLambda));
 
         // Serialize all four networks
         var genAtoB = GeneratorAtoB.Serialize();
@@ -882,8 +882,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         // Deserialize CycleGAN-specific hyperparameters
-        _cycleConsistencyLambda = reader.ReadDouble();
-        _identityLambda = reader.ReadDouble();
+        _cycleConsistencyLambda = NumOps.FromDouble(reader.ReadDouble());
+        _identityLambda = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize all four networks
         int genAtoB_Length = reader.ReadInt32();
@@ -928,8 +928,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             discriminatorAOptimizer: null,
             discriminatorBOptimizer: null,
             _lossFunction,
-            _cycleConsistencyLambda,
-            _identityLambda);
+            NumOps.ToDouble(_cycleConsistencyLambda),
+            NumOps.ToDouble(_identityLambda));
     }
 
     /// <summary>
