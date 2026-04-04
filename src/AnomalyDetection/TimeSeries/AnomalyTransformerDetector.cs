@@ -435,7 +435,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 klDouble += klTerm;
             }
             // Apply absolute value for consistency with inference
-            assocDisc[i] = NumOps.FromDouble(Math.Abs(klDouble));
+            assocDisc[i] = NumOps.Abs(NumOps.FromDouble(klDouble));
         }
 
         return (output, attention, assocDisc);
@@ -835,8 +835,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
             }
             // Take absolute value
-            double klVal = Math.Abs(NumOps.ToDouble(kl));
-            assocDisc[i] = NumOps.FromDouble(klVal);
+            assocDisc[i] = NumOps.Abs(kl);
         }
 
         // Feed-forward
@@ -875,7 +874,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         int seqLen = x.Rows;
         int headDim = _modelDim / _numHeads;
-        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(headDim));
 
         // Compute Q, K, V projections (full model dimension)
         var Q = new Matrix<T>(seqLen, _modelDim);
@@ -1064,7 +1063,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     sum = NumOps.Add(sum, NumOps.Multiply(x[t, i], W1[i, j]));
                 }
                 // ReLU
-                h[j] = NumOps.FromDouble(Math.Max(0, NumOps.ToDouble(sum)));
+                h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
             }
 
             // Second layer with residual connection
@@ -1181,7 +1180,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     double val = NumOps.ToDouble(data[i, j]);
                     dist += val * val;
                 }
-                scores[i] = NumOps.FromDouble(Math.Sqrt(dist));
+                scores[i] = NumOps.Sqrt(NumOps.FromDouble(dist));
             }
         }
 
@@ -1196,7 +1195,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             double valueDev = 0;
             for (int j = 0; j < _inputDim; j++)
             {
-                double val = Math.Abs(NumOps.ToDouble(data[i, j]));
+                double val = NumOps.ToDouble(NumOps.Abs(data[i, j]));
                 valueDev += val * val;
             }
             valueDev = Math.Sqrt(valueDev);
