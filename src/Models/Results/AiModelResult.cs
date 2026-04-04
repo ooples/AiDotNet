@@ -4673,7 +4673,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot clone AiModelResult with null Model.");
         }
 
-        return WithParameters(InterfaceGuard.Parameterizable(Model).GetParameters());
+        return Model.DeepCopy();
     }
 
     /// <summary>

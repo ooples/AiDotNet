@@ -2500,7 +2500,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (!InterfaceGuard.Parameterizable(model).SupportsParameterInitialization)
+        else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true })
         {
             if (_knowledgeDistillationOptions is not null)
             {

@@ -334,7 +334,11 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        return ((IParameterizable<T, Matrix<T>, Vector<T>>)BaseModel).WithParameters(parameters);
+        if (BaseModel is IParameterizable<T, Matrix<T>, Vector<T>> p)
+            return new MappedRandomForestModel<T>(p.WithParameters(parameters), _mapper, _targetFeatures);
+        throw new NotSupportedException(
+            $"The wrapped model ({BaseModel.GetType().Name}) does not support WithParameters. " +
+            "Random forest models learn structure during training and cannot be re-parameterized.");
     }
 
     /// <inheritdoc/>
