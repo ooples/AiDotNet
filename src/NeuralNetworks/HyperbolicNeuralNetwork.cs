@@ -138,18 +138,18 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
 
             if (hiddenSizes.Length == 0)
             {
-                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, outputFeatures, _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, outputFeatures, NumOps.ToDouble(_curvature)));
             }
             else
             {
-                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], NumOps.ToDouble(_curvature)));
 
                 for (int i = 0; i < hiddenSizes.Length - 1; i++)
                 {
-                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], _curvature));
+                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_curvature)));
                 }
 
-                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_curvature)));
             }
         }
     }
@@ -361,7 +361,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new HyperbolicNeuralNetwork<T>(
             Architecture,
-            _curvature,
+            NumOps.ToDouble(_curvature),
             _optimizer,
             LossFunction,
             Convert.ToDouble(MaxGradNorm));

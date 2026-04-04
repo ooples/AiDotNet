@@ -1236,8 +1236,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Save NEAT parameters
         writer.Write(_populationSize);
-        writer.Write(_mutationRate);
-        writer.Write(_crossoverRate);
+        writer.Write(NumOps.ToDouble(_mutationRate));
+        writer.Write(NumOps.ToDouble(_crossoverRate));
         writer.Write(_innovationNumber);
 
         // Save population
@@ -1287,8 +1287,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Load NEAT parameters
         _populationSize = reader.ReadInt32();
-        _mutationRate = reader.ReadDouble();
-        _crossoverRate = reader.ReadDouble();
+        _mutationRate = NumOps.FromDouble(reader.ReadDouble());
+        _crossoverRate = NumOps.FromDouble(reader.ReadDouble());
         _innovationNumber = reader.ReadInt32();
 
         // Load population
@@ -1377,6 +1377,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new NEAT<T>(Architecture, _populationSize, _mutationRate, _crossoverRate);
+        return new NEAT<T>(Architecture, _populationSize, NumOps.ToDouble(_mutationRate), NumOps.ToDouble(_crossoverRate));
     }
 }

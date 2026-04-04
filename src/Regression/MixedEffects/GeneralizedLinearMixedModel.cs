@@ -133,17 +133,17 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the log-likelihood of the fitted model.
     /// </summary>
-    public double LogLikelihood => _logLikelihood;
+    public T LogLikelihood => _logLikelihood;
 
     /// <summary>
     /// Gets the AIC (Akaike Information Criterion).
     /// </summary>
-    public double AIC => -2 * _logLikelihood + 2 * GetNumberOfParameters();
+    public T AIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(2 * GetNumberOfParameters()));
 
     /// <summary>
     /// Gets the BIC (Bayesian Information Criterion).
     /// </summary>
-    public double BIC => -2 * _logLikelihood + Math.Log(_nObservations) * GetNumberOfParameters();
+    public T BIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(Math.Log(_nObservations) * GetNumberOfParameters()));
 
     /// <summary>
     /// Gets the dispersion parameter.
@@ -540,13 +540,13 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             double newLogLik = ComputeLogLikelihood(y, mu);
 
             // Check convergence
-            if (outerIter > 0 && Math.Abs(newLogLik - _logLikelihood) < _options.Tolerance)
+            if (outerIter > 0 && Math.Abs(newLogLik - NumOps.ToDouble(_logLikelihood)) < _options.Tolerance)
             {
-                _logLikelihood = newLogLik;
+                _logLikelihood = NumOps.FromDouble(newLogLik);
                 break;
             }
 
-            _logLikelihood = newLogLik;
+            _logLikelihood = NumOps.FromDouble(newLogLik);
         }
     }
 
