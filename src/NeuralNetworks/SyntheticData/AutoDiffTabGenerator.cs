@@ -606,9 +606,9 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private void ComputeNoiseSchedule(string schedule, int timesteps)
     {
-        _betas = new double[timesteps];
-        _alphas = new double[timesteps];
-        _alphasCumprod = new double[timesteps];
+        var betasD = new double[timesteps];
+        var alphasD = new double[timesteps];
+        var alphasCumprodD = new double[timesteps];
 
         if (schedule == "cosine")
         {
@@ -619,24 +619,28 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
                 double t2 = (double)(t + 1) / timesteps;
                 double alpha1 = Math.Cos((t1 + s) / (1 + s) * Math.PI / 2);
                 double alpha2 = Math.Cos((t2 + s) / (1 + s) * Math.PI / 2);
-                _betas[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
+                betasD[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
             }
         }
         else
         {
             for (int t = 0; t < timesteps; t++)
             {
-                _betas[t] = _options.BetaStart + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
+                betasD[t] = _options.BetaStart + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
             }
         }
 
         double cumprod = 1.0;
         for (int t = 0; t < timesteps; t++)
         {
-            _alphas[t] = 1.0 - _betas[t];
-            cumprod *= _alphas[t];
-            _alphasCumprod[t] = cumprod;
+            alphasD[t] = 1.0 - betasD[t];
+            cumprod *= alphasD[t];
+            alphasCumprodD[t] = cumprod;
         }
+
+        _betas = new Vector<T>(betasD.Select(v => NumOps.FromDouble(v)));
+        _alphas = new Vector<T>(alphasD.Select(v => NumOps.FromDouble(v)));
+        _alphasCumprod = new Vector<T>(alphasCumprodD.Select(v => NumOps.FromDouble(v)));
     }
 
     #endregion
@@ -662,8 +666,8 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             var noise = CreateStandardNormalVector(_dataWidth);
 
             // Create noisy sample: xt = sqrt(alpha_bar_t) * x0 + sqrt(1 - alpha_bar_t) * noise
-            double sqrtAlphaBar = Math.Sqrt(_alphasCumprod[t]);
-            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - _alphasCumprod[t]);
+            double sqrtAlphaBar = Math.Sqrt(NumOps.ToDouble(_alphasCumprod[t]));
+            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - NumOps.ToDouble(_alphasCumprod[t]));
 
             var xt = new Vector<T>(_dataWidth);
             for (int j = 0; j < _dataWidth; j++)
@@ -784,9 +788,9 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private Vector<T> DenoisingStep(Vector<T> xt, Vector<T> predictedNoise, int t)
     {
-        double alphaT = _alphas[t];
-        double alphaBarT = _alphasCumprod[t];
-        double betaT = _betas[t];
+        double alphaT = NumOps.ToDouble(_alphas[t]);
+        double alphaBarT = NumOps.ToDouble(_alphasCumprod[t]);
+        double betaT = NumOps.ToDouble(_betas[t]);
 
         var result = new Vector<T>(_dataWidth);
         double coeff1 = 1.0 / Math.Sqrt(alphaT);

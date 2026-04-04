@@ -537,10 +537,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },
-                { "ConnectionProbability", _connectionProbability },
-                { "SpectralRadius", _spectralRadius },
-                { "InputScaling", _inputScaling },
-                { "LeakingRate", _leakingRate },
+                { "ConnectionProbability", NumOps.ToDouble(_connectionProbability) },
+                { "SpectralRadius", NumOps.ToDouble(_spectralRadius) },
+                { "InputScaling", NumOps.ToDouble(_inputScaling) },
+                { "LeakingRate", NumOps.ToDouble(_leakingRate) },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -575,10 +575,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     {
         // Write LSM-specific properties
         writer.Write(_reservoirSize);
-        writer.Write(_connectionProbability);
-        writer.Write(_spectralRadius);
-        writer.Write(_inputScaling);
-        writer.Write(_leakingRate);
+        writer.Write(NumOps.ToDouble(_connectionProbability));
+        writer.Write(NumOps.ToDouble(_spectralRadius));
+        writer.Write(NumOps.ToDouble(_inputScaling));
+        writer.Write(NumOps.ToDouble(_leakingRate));
 
         // Write whether we're in training mode
         writer.Write(IsTrainingMode);
@@ -609,10 +609,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _reservoirSize = reader.ReadInt32();
-        _connectionProbability = reader.ReadDouble();
-        _spectralRadius = reader.ReadDouble();
-        _inputScaling = reader.ReadDouble();
-        _leakingRate = reader.ReadDouble();
+        _connectionProbability = NumOps.FromDouble(reader.ReadDouble());
+        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
+        _inputScaling = NumOps.FromDouble(reader.ReadDouble());
+        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
 
         // Read training mode
         IsTrainingMode = reader.ReadBoolean();
@@ -779,9 +779,9 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         return new LiquidStateMachine<T>(
             this.Architecture,
             _reservoirSize,
-            _connectionProbability,
-            _spectralRadius,
-            _inputScaling,
-            _leakingRate);
+            NumOps.ToDouble(_connectionProbability),
+            NumOps.ToDouble(_spectralRadius),
+            NumOps.ToDouble(_inputScaling),
+            NumOps.ToDouble(_leakingRate));
     }
 }
