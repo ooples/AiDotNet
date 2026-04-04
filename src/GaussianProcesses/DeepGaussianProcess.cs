@@ -667,7 +667,40 @@ internal class DGPLayer<T>
             Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
         }
 
-        // Solve Kuu * alpha_d = m_d for each output dimension
+        // Solve Kuu * alpha_d = m_d for each output dimension,
+        // and compute posterior variance for MC sampling.
+        // Also solve Kuu * Beta = Kux for variance computation:
+        //   Var(f*) = Kxx - Kxu * Kuu^{-1} * Kux
+        var KuuInvKux = new Matrix<T>(m_points, n);
+        for (int j = 0; j < m_points; j++)
+        {
+            var kux_col = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+                kux_col[i] = Kxu[i, j]; // Kux = Kxu^T, so column j of Kux = column j across rows of Kxu
+            // We need Kuu^{-1} * Kux, solve column by column
+        }
+
+        // Compute posterior variance per point: σ²(x) = K(x,x) - Kxu * Kuu^{-1} * Kux
+        var posteriorVar = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            // K(x,x) diagonal = kernel(x_i, x_i)
+            T kxx = _kernel.Calculate(input.GetRow(i), input.GetRow(i));
+            double kxxVal = _numOps.ToDouble(kxx);
+
+            // Kxu[i,:] * Kuu^{-1} * Kux[:,i] = Kxu[i,:] * solve(Kuu, Kxu[i,:])
+            var kxu_i = new Vector<T>(m_points);
+            for (int j = 0; j < m_points; j++)
+                kxu_i[j] = Kxu[i, j];
+
+            var solved = MatrixSolutionHelper.SolveLinearSystem(Kuu, kxu_i, MatrixDecompositionType.Cholesky);
+            double quadForm = 0;
+            for (int j = 0; j < m_points; j++)
+                quadForm += _numOps.ToDouble(kxu_i[j]) * _numOps.ToDouble(solved[j]);
+
+            posteriorVar[i] = Math.Max(kxxVal - quadForm, 1e-10);
+        }
+
         for (int d = 0; d < _outputDim; d++)
         {
             var m_d = new Vector<T>(m_points);
@@ -676,7 +709,7 @@ internal class DGPLayer<T>
 
             var alpha_d = MatrixSolutionHelper.SolveLinearSystem(Kuu, m_d, MatrixDecompositionType.Cholesky);
 
-            // Predict: mean_d = Kxu * alpha_d
+            // Predict: mean_d = Kxu * alpha_d + sqrt(var) * noise
             for (int i = 0; i < n; i++)
             {
                 T sum = _numOps.Zero;
@@ -684,7 +717,17 @@ internal class DGPLayer<T>
                 {
                     sum = _numOps.Add(sum, _numOps.Multiply(Kxu[i, j], alpha_d[j]));
                 }
-                output[i, d] = sum;
+
+                // Add posterior noise for MC uncertainty propagation
+                double noise = random.NextDouble() * 2 - 1; // Approximate N(0,1) via uniform
+                // Box-Muller for proper Gaussian sampling
+                double u1 = Math.Max(1e-10, random.NextDouble());
+                double u2 = random.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+                double meanVal = _numOps.ToDouble(sum);
+                double sampledVal = meanVal + Math.Sqrt(posteriorVar[i]) * z;
+                output[i, d] = _numOps.FromDouble(sampledVal);
             }
         }
 

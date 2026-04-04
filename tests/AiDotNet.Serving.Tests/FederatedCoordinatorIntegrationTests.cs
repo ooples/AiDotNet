@@ -447,7 +447,10 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
             .ConfigureOptimizer(optimizer)
             .BuildAsync();
 
-        result.SaveModel(modelPath);
+        using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            result.SaveModel(modelPath);
+        }
     }
 
     private void CleanupLoadedModels()
