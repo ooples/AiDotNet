@@ -302,24 +302,19 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Encoder weights not initialized.");
         }
 
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = encB1[j];
-            { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, _w0)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
+        // Layer 1: h = LeakyReLU(x @ W1 + b1)  (SIMD)
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var hPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encW1)),
+            Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
+        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
 
-        // Layer 2
-        var z = new Vector<T>(_latentDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            T sum = encB2[j];
-            { var _w1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w1[_i] = encW2[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, _w1)); }
-            z[j] = sum;
-        }
+        // Layer 2: z = h @ W2 + b2  (SIMD, linear)
+        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
+        var z = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encW2)),
+            Tensor<T>.FromVector(encB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
         return z;
     }
@@ -336,24 +331,19 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Decoder weights not initialized.");
         }
 
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = decB1[j];
-            { var _w2 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w2[_i] = decW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, _w2)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
+        // Layer 1: h = LeakyReLU(z @ W1 + b1)  (SIMD)
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
+        var hPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decW1)),
+            Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
+        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
 
-        // Layer 2
-        var xRecon = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = decB2[j];
-            { var _w3 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w3[_i] = decW2[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, _w3)); }
-            xRecon[j] = sum;
-        }
+        // Layer 2: xRecon = h @ W2 + b2  (SIMD, linear)
+        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
+        var xRecon = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(decW2)),
+            Tensor<T>.FromVector(decB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
 
         return xRecon;
     }
@@ -370,29 +360,22 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Re-encoder weights not initialized.");
         }
 
-        // Layer 1
-        var h = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = reEncB1[j];
-            { var _w4 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w4[_i] = reEncW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(xRecon, _w4)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
+        // Layer 1: h = LeakyReLU(xRecon @ W1 + b1)  (SIMD)
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var xRT = Tensor<T>.FromVector(xRecon).Reshape(1, _inputDim);
+        var hPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xRT, Tensor<T>.FromMatrix(reEncW1)),
+            Tensor<T>.FromVector(reEncB1).Reshape(1, _hiddenDim));
+        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
 
-        // Layer 2
-        var zRecon = new Vector<T>(_latentDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            T sum = reEncB2[j];
-            { var _w5 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w5[_i] = reEncW2[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, _w5)); }
-            zRecon[j] = sum;
-        }
+        // Layer 2: zRecon = h @ W2 + b2  (SIMD, linear)
+        var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
+        var zRecon = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(reEncW2)),
+            Tensor<T>.FromVector(reEncB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
         return zRecon;
     }
-
-    private static double LeakyReLU(double x, double alpha = 0.2) => x >= 0 ? x : alpha * x;
 
     private GradientAccumulators InitializeGradients()
     {
