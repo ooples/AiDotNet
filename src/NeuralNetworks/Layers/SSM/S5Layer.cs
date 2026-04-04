@@ -367,7 +367,7 @@ public class S5Layer<T> : LayerBase<T>
     {
         var delta = new double[_stateDimension];
         for (int n = 0; n < _stateDimension; n++)
-            delta[n] = Math.Exp(NumOps.ToDouble(_logDelta[n]));
+            delta[n] = NumOps.ToDouble(NumOps.Exp(_logDelta[n]));
 
         // Build kernel K[h_out, h_in, l]
         var kernelD = new double[_modelDimension, _modelDimension, seqLen];

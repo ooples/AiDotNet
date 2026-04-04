@@ -329,7 +329,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         _locationIntercept = mean;
         // Log link for scale: log(sqrt(variance))
-        _scaleIntercept = NumOps.FromDouble(Math.Log(Math.Sqrt(NumOps.ToDouble(variance))));
+        _scaleIntercept = NumOps.Log(NumOps.Sqrt(variance));
 
         // Initialize coefficients to zero
         if (_options.LocationModelType != GAMLSSModelType.Constant)
@@ -362,7 +362,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             for (int i = 0; i < n; i++)
             {
                 double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = Math.Exp(NumOps.ToDouble(etaScale[i]));
+                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
                 double yi = NumOps.ToDouble(y[i]);
 
                 // For normal distribution: weight = 1/sigma^2, z = y
@@ -437,8 +437,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             for (int i = 0; i < n; i++)
             {
                 double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = Math.Exp(NumOps.ToDouble(etaScale[i]));
-                double nu = Math.Exp(NumOps.ToDouble(etaShape[i]));  // degrees of freedom
+                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
+                double nu = NumOps.ToDouble(NumOps.Exp(etaShape[i]));  // degrees of freedom
                 double yi = NumOps.ToDouble(y[i]);
 
                 // Simplified: constant weight, linear update
@@ -571,8 +571,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < y.Length; i++)
         {
             T location = etaLocation[i];
-            T scale = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(etaScale[i])));
-            T shape = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(etaShape[i])));
+            T scale = NumOps.Exp(etaScale[i]);
+            T shape = NumOps.Exp(etaShape[i]);
 
             var dist = CreateDistribution(location, scale, shape);
             T logPdf = dist.LogPdf(y[i]);

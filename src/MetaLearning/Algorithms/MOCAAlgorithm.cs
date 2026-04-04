@@ -225,7 +225,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         for (int d = 0; d < _paramDim; d++)
         {
             double perturbation = _algoOptions.AugmentationStrength
-                                * Math.Sqrt(NumOps.ToDouble(_gradVar[d]) + 1e-10)
+                                * NumOps.ToDouble(NumOps.Sqrt(NumOps.Add(_gradVar[d], NumOps.FromDouble(1e-10))))
                                 * noise[d] / noiseNorm;
             augGrad[d] = NumOps.Add(grad[d], NumOps.FromDouble(perturbation));
         }

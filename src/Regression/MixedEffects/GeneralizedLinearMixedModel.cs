@@ -572,7 +572,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         var sqrtW = new Vector<T>(weights.Length);
         for (int i = 0; i < weights.Length; i++)
         {
-            sqrtW[i] = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(weights[i])));
+            sqrtW[i] = NumOps.Sqrt(weights[i]);
         }
 
         // Weight-transform the design matrix and response
@@ -665,7 +665,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         {
             adjustedY[i] = wY[i];
 
-            double sqrtW = Math.Sqrt(NumOps.ToDouble(weights[i]));
+            T sqrtW = NumOps.Sqrt(weights[i]);
             foreach (var re in _randomEffects)
             {
                 double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
@@ -673,7 +673,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
                 if (blup.Length > 0)
                 {
                     adjustedY[i] = NumOps.Subtract(adjustedY[i],
-                        NumOps.FromDouble(NumOps.ToDouble(blup[0]) * sqrtW));
+                        NumOps.Multiply(blup[0], sqrtW));
                 }
             }
         }
