@@ -2629,49 +2629,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // This makes the buffer the single source of truth — in-place updates by
         // first-order optimizers automatically reflect in the flat vector, and vice versa.
         // Must recurse into sublayers to match CollectRecursive's walk order.
+        // Build a map from original parameter tensor → buffer view tensor,
+        // using the same deduplication order as CollectRecursive (by tensor reference).
         var views = buffer.CreateAllViews();
-        int viewIdx = 0;
-        var seenForViews = new HashSet<ILayer<T>>();
-        ReplaceParametersWithViews(Layers, views, ref viewIdx, seenForViews);
+        var paramToView = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < trainableParams.Count; i++)
+            paramToView[trainableParams[i]] = views[i];
 
-        // Assert all views were consumed — mismatch means CollectRecursive and
-        // ReplaceParametersWithViews walked a different set of layers.
-        if (viewIdx != views.Length)
-        {
-            throw new InvalidOperationException(
-                $"Parameter buffer view mismatch: created {views.Length} views but only " +
-                $"bound {viewIdx}. This indicates a layer structure inconsistency.");
-        }
+        // Replace each layer's parameters with their buffer-backed views.
+        var seenLayers = new HashSet<ILayer<T>>();
+        ReplaceParametersFromMap(Layers, paramToView, seenLayers);
 
         _parameterBuffer = buffer;
         return buffer;
     }
 
     /// <summary>
-    /// Recursively replaces trainable parameter tensors with buffer-backed views,
-    /// matching the same walk order as TapeTrainingStep.CollectRecursive.
+    /// Recursively replaces trainable parameter tensors with buffer-backed views
+    /// using a pre-built parameter→view map. This avoids walk-order sensitivity
+    /// by looking up each layer's parameters in the map by reference identity.
     /// </summary>
-    private static void ReplaceParametersWithViews(
-        IEnumerable<ILayer<T>> layers, Tensor<T>[] views, ref int viewIdx, HashSet<ILayer<T>> seen)
+    private static void ReplaceParametersFromMap(
+        IEnumerable<ILayer<T>> layers,
+        Dictionary<Tensor<T>, Tensor<T>> paramToView,
+        HashSet<ILayer<T>> seenLayers)
     {
         foreach (var layer in layers)
         {
-            if (!seen.Add(layer)) continue;
+            if (!seenLayers.Add(layer)) continue;
 
             if (layer is ITrainableLayer<T> trainable)
             {
                 var layerParams = trainable.GetTrainableParameters();
                 var layerViews = new Tensor<T>[layerParams.Count];
+                bool anyReplaced = false;
                 for (int i = 0; i < layerParams.Count; i++)
-                    layerViews[i] = views[viewIdx++];
-                trainable.SetTrainableParameters(layerViews);
+                {
+                    if (paramToView.TryGetValue(layerParams[i], out var view))
+                    {
+                        layerViews[i] = view;
+                        anyReplaced = true;
+                    }
+                    else
+                    {
+                        layerViews[i] = layerParams[i]; // Keep original if not in buffer
+                    }
+                }
+                if (anyReplaced)
+                    trainable.SetTrainableParameters(layerViews);
             }
 
             var subLayers = layer.GetSubLayers();
             if (subLayers.Count > 0)
-            {
-                ReplaceParametersWithViews(subLayers, views, ref viewIdx, seen);
-            }
+                ReplaceParametersFromMap(subLayers, paramToView, seenLayers);
         }
     }
 

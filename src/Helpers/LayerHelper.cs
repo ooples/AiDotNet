@@ -4059,6 +4059,9 @@ public static class LayerHelper<T>
             poolingType: PoolingType.Average,
             activationFunction: (IActivationFunction<T>?)null);
 
+        // Flatten [filters, 1, 1, 1] → [filters] for the dense classification head
+        yield return new FlattenLayer<T>([finalFilters, 1, 1, 1]);
+
         // Dense output layer for classification
         IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? new SoftmaxActivation<T>()
