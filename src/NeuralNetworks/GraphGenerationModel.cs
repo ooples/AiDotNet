@@ -69,6 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("GraphRNN: Generating Realistic Graphs with an Auto-Regressive Model", "https://arxiv.org/abs/1802.08773")]
 public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 {
     private readonly GraphGenerationModelOptions _options;

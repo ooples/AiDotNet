@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -61,7 +61,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Kronos: Time-Frequency Analysis for Financial Forecasting", "https://arxiv.org/abs/2310.11838")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Kronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

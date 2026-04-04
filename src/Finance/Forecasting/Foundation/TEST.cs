@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
@@ -60,7 +60,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TEST: Text Prototype Aligned Embedding for Time Series", "https://arxiv.org/abs/2308.08241")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TEST<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

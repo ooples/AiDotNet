@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -56,7 +56,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conditional Causal Diffusion Model for Financial Time Series", "https://arxiv.org/abs/2402.06010")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

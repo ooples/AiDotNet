@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,7 +56,8 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("QueryMeldNet: Learning Query Representations for Dense Prediction", "https://arxiv.org/abs/2312.15600")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly QueryMeldNetOptions _options;

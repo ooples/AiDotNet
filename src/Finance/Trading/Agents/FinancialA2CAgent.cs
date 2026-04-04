@@ -49,7 +49,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Asynchronous Methods for Deep Reinforcement Learning", "https://arxiv.org/abs/1602.01783")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FinancialA2CAgent<T> : TradingAgentBase<T>
 {
     #region Fields

@@ -32,7 +32,8 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Amazon Polly", "https://aws.amazon.com/polly/")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AmazonPolly<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AmazonPollyOptions _options; public override ModelOptions GetOptions() => _options;

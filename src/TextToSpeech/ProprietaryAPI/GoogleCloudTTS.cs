@@ -32,7 +32,8 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Google Cloud Text-to-Speech", "https://cloud.google.com/text-to-speech")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class GoogleCloudTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly GoogleCloudTTSOptions _options; public override ModelOptions GetOptions() => _options;

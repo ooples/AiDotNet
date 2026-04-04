@@ -32,7 +32,8 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PlayHT", "https://play.ht")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PlayHTOptions _options; public override ModelOptions GetOptions() => _options;

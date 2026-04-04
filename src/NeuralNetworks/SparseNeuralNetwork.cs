@@ -49,6 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks", "https://arxiv.org/abs/1803.03635")]
 public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly SparseNeuralNetworkOptions _options;

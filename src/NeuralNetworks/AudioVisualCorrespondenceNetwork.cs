@@ -59,6 +59,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Look, Listen and Learn", "https://arxiv.org/abs/1705.08168")]
 public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioVisualCorrespondenceModel<T>
 {
     private readonly AudioVisualCorrespondenceOptions _options;

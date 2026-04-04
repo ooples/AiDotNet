@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -61,7 +61,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TOTO: Time-Series Optimized Transformer for Observability", "https://arxiv.org/abs/2407.07874")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TOTO<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

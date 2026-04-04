@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Neural Networks and Physical Systems with Emergent Collective Computational Abilities", "https://doi.org/10.1073/pnas.79.8.2554")]
 public class HopeNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopeNetworkOptions _options;
