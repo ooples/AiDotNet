@@ -262,7 +262,9 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
 #pragma warning disable CS8601
-    private T _olsIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _olsIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 #pragma warning restore CS8601
 
     public override void Train(Matrix<T> X, Vector<T> y)

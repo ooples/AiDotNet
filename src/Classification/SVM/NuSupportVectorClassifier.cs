@@ -97,7 +97,9 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Rho parameter (offset in the decision function).
     /// </summary>
-    private T _rho = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _rho = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// The nu parameter value.

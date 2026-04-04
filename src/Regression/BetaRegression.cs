@@ -79,7 +79,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the mean model.
     /// </summary>
-    private T _meanIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _meanIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
@@ -89,7 +91,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the precision model.
     /// </summary>
-    private T _precisionIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _precisionIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Number of features.
@@ -102,8 +106,12 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly BetaRegressionOptions _options;
 
     /// <summary>Y min-max scaling for mapping to (0,1).</summary>
-    private T _yMin = default;
-    private T _yMax = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yMin = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yMax = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private bool _needsTransform;
     private bool _useOLS;
 

@@ -81,7 +81,9 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Bias term (intercept) for the linear classifier.
     /// </summary>
-    private T _bias = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _bias = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Random number generator for SGD.

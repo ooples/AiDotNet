@@ -63,7 +63,9 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
-    private T _fittedEpsilon = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _fittedEpsilon = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;

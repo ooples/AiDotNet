@@ -97,7 +97,9 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Dispersion parameter (for overdispersed models).
     /// </summary>
-    private T _dispersion = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _dispersion = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Log-likelihood of the fitted model.

@@ -63,7 +63,9 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
-    private T _maxRadius = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _maxRadius = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the alpha parameter (sampling neighborhood ratio).

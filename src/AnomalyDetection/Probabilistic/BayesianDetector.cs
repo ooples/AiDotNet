@@ -52,7 +52,9 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>? _posteriorCovariance;
     private Matrix<T>? _posteriorPrecision;
     private int _nFeatures;
-    private T _logNormalization = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _logNormalization = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the prior strength parameter.

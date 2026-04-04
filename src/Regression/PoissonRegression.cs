@@ -61,7 +61,9 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// <summary>
     /// Shift applied to y to make it positive (0 if y was already positive).
     /// </summary>
-    private T _yShift = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yShift = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.

@@ -52,7 +52,9 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _numTrees;
     private readonly int _maxSamples;
     private List<IsolationTree>? _trees;
-    private T _averagePathLength = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _averagePathLength = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private int _inputDim;
 
     /// <summary>

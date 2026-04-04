@@ -31,7 +31,9 @@ namespace AiDotNet.UncertaintyQuantification.Calibration;
 public class TemperatureScaling<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private T _temperature = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _temperature = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets or sets the temperature parameter.

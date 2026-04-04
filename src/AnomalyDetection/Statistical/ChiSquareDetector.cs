@@ -43,7 +43,9 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private Vector<T>? _mean;
     private Matrix<T>? _covarianceInverse;
-    private T _chiSquareCritical = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _chiSquareCritical = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private int _nFeatures;
 
     /// <summary>

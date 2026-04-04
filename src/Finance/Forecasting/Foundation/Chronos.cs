@@ -185,8 +185,12 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
     private double _temperature;
     private FoundationModelSize _modelSize;
-    private T _lastTokenMin = default;
-    private T _lastTokenRange = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _lastTokenMin = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _lastTokenRange = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private bool _hasTokenScale;
 
     #endregion

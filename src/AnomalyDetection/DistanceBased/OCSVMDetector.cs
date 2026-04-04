@@ -53,7 +53,9 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxIterations;
     private Matrix<T>? _supportVectors;
     private Vector<T>? _alphas;
-    private T _rho = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _rho = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the nu parameter.

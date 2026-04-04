@@ -85,17 +85,23 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the location parameter.
     /// </summary>
-    private T _locationIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _locationIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Intercept for the scale parameter.
     /// </summary>
-    private T _scaleIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _scaleIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Intercept for the shape parameter.
     /// </summary>
-    private T _shapeIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _shapeIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Number of features.
@@ -137,8 +143,12 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
     /// <inheritdoc/>
     /// <summary>Y standardization for scale-invariant training.</summary>
-    private T _yMean = default;
-    private T _yStd = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yMean = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yStd = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {

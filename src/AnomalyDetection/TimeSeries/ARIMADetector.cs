@@ -58,8 +58,12 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
     private readonly int _q;
     private Vector<T>? _arCoeffs;
     private Vector<T>? _maCoeffs;
-    private T _mean = default;
-    private T _residualStd = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _mean = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _residualStd = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private Vector<T>? _lastValues;
 
     /// <summary>

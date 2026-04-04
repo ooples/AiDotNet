@@ -57,7 +57,9 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private readonly int _exclusionZone;
     private Vector<T>? _matrixProfile;
     private Vector<T>? _trainingValues;
-    private T _trainingChecksum = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _trainingChecksum = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the subsequence length.

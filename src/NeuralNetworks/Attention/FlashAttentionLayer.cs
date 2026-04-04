@@ -65,7 +65,9 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastAttentionOutput;
     private Tensor<T>? _lastSoftmaxStats;
     private Tensor<T>? _lastAlibiBias;
-    private T _lastScale = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _lastScale = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private int[]? _originalInputShape;
 
     // Gradients

@@ -53,9 +53,15 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private readonly int? _maxAnomalies;
     private Vector<T>? _seasonalPattern;
-    private T _trend = default;
-    private T _residualStd = default;
-    private T _esdCriticalValue = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _trend = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _residualStd = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _esdCriticalValue = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private int _nSamples;
 
     /// <summary>

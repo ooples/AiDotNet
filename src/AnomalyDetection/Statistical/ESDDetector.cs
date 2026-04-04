@@ -52,7 +52,9 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _stds;
     private int _nFeatures;
     private int _nSamples;
-    private T _criticalValue = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _criticalValue = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.

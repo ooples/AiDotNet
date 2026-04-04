@@ -227,7 +227,9 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         private readonly Random _random;
         private readonly INumericOperations<T> _numOps;
         private Vector<T>? _normal;
-        private T _intercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+        private T _intercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
         private ExtendedIsolationTree? _left;
         private ExtendedIsolationTree? _right;
         private int _size;

@@ -99,13 +99,17 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// Residual variance estimate.
     /// </summary>
 #pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-    private T _residualVariance = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _residualVariance = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 #pragma warning restore CS8601, CS8618
 
     /// <summary>
     /// Log-likelihood of the fitted model.
     /// </summary>
-    private T _logLikelihood = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _logLikelihood = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Number of observations.

@@ -84,7 +84,9 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <summary>
     /// Initial prediction (prior).
     /// </summary>
-    private T _initPrediction = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _initPrediction = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Random number generator.

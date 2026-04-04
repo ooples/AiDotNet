@@ -53,7 +53,9 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
     private readonly int _trendSmoothness;
     private Vector<T>? _trend;
     private Vector<T>? _seasonal;
-    private T _residualStd = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _residualStd = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// Gets the season length.

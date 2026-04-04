@@ -102,11 +102,17 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private int _numFeatures;
     private bool _useOLS;
-    private T _yMean = default;
-    private T _yStd = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yMean = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yStd = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
     private Vector<T>? _olsCoefficients;
 #pragma warning disable CS8601
-    private T _olsIntercept = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _olsIntercept = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 #pragma warning restore CS8601
 
     /// <summary>

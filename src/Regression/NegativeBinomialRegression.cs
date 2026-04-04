@@ -72,7 +72,9 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// that large deviations from the average are normal for this data.
     /// </para>
     /// </remarks>
-    private T _dispersion = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _dispersion = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     /// <summary>
     /// The configuration options for the negative binomial regression model.
@@ -116,7 +118,9 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
-    private T _yShift = default;
+#pragma warning disable CS8601 // T is always a numeric value type, default is 0
+    private T _yShift = default; // CS8601 suppressed: T is always numeric value type
+#pragma warning restore CS8601
 
     public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
