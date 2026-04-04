@@ -784,7 +784,7 @@ public class S5Layer<T> : LayerBase<T>
 
         for (int n = 0; n < _stateDimension; n++)
         {
-            double dt = Math.Exp(NumOps.ToDouble(_logDelta[n]));
+            double dt = NumOps.ToDouble(NumOps.Exp(_logDelta[n]));
             deltaArr[n] = dt;
             double ar = NumOps.ToDouble(_aReal[n]);
             double ai = NumOps.ToDouble(_aImag[n]);
