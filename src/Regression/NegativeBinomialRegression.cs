@@ -309,7 +309,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         var predictions = X.Multiply(Coefficients).Add(Intercept);
 
         // Subtract shift if data was shifted during training
-        if (_yShift > 0)
+        if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
             for (int i = 0; i < predictions.Length; i++)
                 predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));

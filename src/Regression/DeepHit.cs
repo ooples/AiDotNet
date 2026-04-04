@@ -1336,8 +1336,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         // OLS state
         writer.Write(_useOLS);
-        writer.Write(_yMean);
-        writer.Write(_yStd);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
         if (_useOLS && _olsCoefficients is not null)
         {
             writer.Write(_olsCoefficients.Length);

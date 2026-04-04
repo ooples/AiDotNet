@@ -227,10 +227,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // Denormalize: prediction = standardized_mean * yStd + yMean
             double mean = NumOps.ToDouble(distributions[i].Mean);
-            double pred = mean * _yStd + _yMean;
+            double pred = mean * NumOps.ToDouble(_yStd) + NumOps.ToDouble(_yMean);
             // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
             if (double.IsNaN(pred) || double.IsInfinity(pred))
-                pred = _yMean;
+                pred = NumOps.ToDouble(_yMean);
             predictions[i] = NumOps.FromDouble(pred);
         }
 
@@ -742,8 +742,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.ShapeModelType);
 
         // Y standardization
-        writer.Write(_yMean);
-        writer.Write(_yStd);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
 
         // State
         writer.Write(_numFeatures);

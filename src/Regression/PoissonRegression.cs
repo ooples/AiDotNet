@@ -312,7 +312,7 @@ public class PoissonRegression<T> : RegressionBase<T>
         var predictions = PredictMean(xWithIntercept, coefficientsWithIntercept);
 
         // Undo the y-shift applied during training
-        if (_yShift > 0)
+        if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
             for (int i = 0; i < predictions.Length; i++)
                 predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));

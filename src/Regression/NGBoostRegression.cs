@@ -795,8 +795,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_options.UseNaturalGradient);
 
         // Y standardization
-        writer.Write(_yMean);
-        writer.Write(_yStd);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
 
         // Initial parameters
         writer.Write(_numParams);

@@ -133,7 +133,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// typically early steps have larger rates and later steps have smaller rates.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<double> PerStepLearningRates => Array.AsReadOnly(_perStepLearningRates);
+    public Vector<T> PerStepLearningRates => _perStepLearningRates;
 
     /// <summary>
     /// Initializes a new instance of the MAML++ algorithm.
@@ -244,7 +244,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
                 // Apply per-step learning rate
                 double stepLR = _mamlOptions.UsePerStepLearningRates
-                    ? _perStepLearningRates[step]
+                    ? NumOps.ToDouble(_perStepLearningRates[step])
                     : _mamlOptions.InnerLearningRate;
 
                 taskParams = ApplyGradients(taskParams, gradients, stepLR);
@@ -315,29 +315,31 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             double lossMinus = 0;
 
             // Evaluate with alpha_k + epsilon
-            _perStepLearningRates[step] += epsilon;
+            T epsT = NumOps.FromDouble(epsilon);
+            _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
             foreach (var task in taskBatch.Tasks)
             {
                 lossPlus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
             }
 
             // Evaluate with alpha_k - epsilon (delta = 2*epsilon from current)
-            _perStepLearningRates[step] -= 2.0 * epsilon;
+            _perStepLearningRates[step] = NumOps.Subtract(_perStepLearningRates[step], NumOps.FromDouble(2.0 * epsilon));
             foreach (var task in taskBatch.Tasks)
             {
                 lossMinus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
             }
 
             // Restore original alpha_k
-            _perStepLearningRates[step] += epsilon;
+            _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
 
             // Finite difference gradient: dL/d(alpha_k) ≈ (L+ - L-) / (2 * epsilon)
             int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
             double grad = (lossPlus / numTasks - lossMinus / numTasks) / (2.0 * epsilon);
 
             // Update alpha_k, clamped to [1e-6, 1.0] for stability
-            _perStepLearningRates[step] = Math.Max(1e-6,
-                Math.Min(1.0, _perStepLearningRates[step] - outerLR * grad));
+            double newLR = Math.Max(1e-6,
+                Math.Min(1.0, NumOps.ToDouble(_perStepLearningRates[step]) - outerLR * grad));
+            _perStepLearningRates[step] = NumOps.FromDouble(newLR);
         }
     }
 
@@ -360,7 +362,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             grad = ClipGradients(grad);
-            double stepLR = _perStepLearningRates[step];
+            double stepLR = NumOps.ToDouble(_perStepLearningRates[step]);
             taskParams = ApplyGradients(taskParams, grad, stepLR);
             MetaModel.SetParameters(taskParams);
         }
@@ -406,7 +408,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             gradients = ClipGradients(gradients);
 
             double stepLR = _mamlOptions.UsePerStepLearningRates
-                ? _perStepLearningRates[step]
+                ? NumOps.ToDouble(_perStepLearningRates[step])
                 : _mamlOptions.InnerLearningRate;
 
             adaptedParams = ApplyGradients(adaptedParams, gradients, stepLR);
