@@ -277,7 +277,7 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
             double pred = 0;
             for (int j = 0; j < p; j++)
             {
-                pred += NumOps.ToDouble(arCoeffs[j]) * values[t - 1 - j];
+                pred += arCoeffs[j] * values[t - 1 - j];
             }
             residuals[t] = values[t] - pred;
         }

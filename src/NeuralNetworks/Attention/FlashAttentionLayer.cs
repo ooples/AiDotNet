@@ -387,7 +387,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             _lastValue,
             _lastAttentionOutput,
             _lastSoftmaxStats,
-            _lastScale,
+            NumOps.ToDouble(_lastScale),
             _config.UseCausalMask,
             out var gradQuery,
             out var gradKey,
@@ -613,7 +613,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastAttentionOutput = null;
         _lastSoftmaxStats = null;
         _lastAlibiBias = null;
-        _lastScale = 0;
+        _lastScale = NumOps.Zero;
         _originalInputShape = null;
 
         _queryWeightsGradient = null;

@@ -486,8 +486,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         UpdateGeneratorBtoAParameters();
 
         // Total generator loss
-        T cycleCoeff = NumOps.FromDouble(_cycleConsistencyLambda);
-        T idCoeff = NumOps.FromDouble(_identityLambda);
+        T cycleCoeff = _cycleConsistencyLambda;
+        T idCoeff = _identityLambda;
 
         T generatorLoss = NumOps.Add(advLoss,
             NumOps.Add(

@@ -313,7 +313,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         T l1Loss = CalculateL1Loss(newFakeImages, targetImages);
 
         // Total generator loss
-        T l1Coeff = NumOps.FromDouble(_l1Lambda);
+        T l1Coeff = _l1Lambda;
         T generatorLoss = NumOps.Add(advLoss, NumOps.Multiply(l1Coeff, l1Loss));
 
         // Backpropagate adversarial gradients through discriminator to get input gradients
@@ -572,7 +572,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     {
         var gradients = new Tensor<T>(predictions.Shape.ToArray());
         int count = predictions.Length;
-        T scale = NumOps.FromDouble(_l1Lambda / count);
+        T scale = NumOps.Divide(_l1Lambda, NumOps.FromDouble(count));
 
         for (int i = 0; i < count; i++)
         {

@@ -278,7 +278,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
             if (NumOps.Equals(pivot, NumOps.Zero))
             {
                 // Matrix is singular, use pseudo-inverse approximation
-                pivot = NumOps.FromDouble(epsilon);
+                pivot = epsilon;
             }
 
             for (int j = 0; j < 2 * n; j++)
