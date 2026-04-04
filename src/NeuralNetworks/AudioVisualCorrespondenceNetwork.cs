@@ -955,41 +955,38 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                 _embeddingDimension, _numEncoderLayers, NUM_ATTENTION_HEADS));
         }
 
-        // Distribute layers to internal fields
-        int idx = 0;
-
-        // Audio encoder: input projection
-        _audioInputProjection = Layers[idx++];
-
-        // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        // Distribute layers to internal fields.
+        // The VGG-style Dense encoder (per Arandjelovic & Zisserman 2017) uses
+        // shared sequential Dense blocks, not separate audio/visual attention stacks.
+        // First 4 layers: shared encoder blocks (64→128→256→512→512)
+        // Last 2 layers: fusion FC (512→128→2)
         _audioEncoderLayers = new List<ILayer<T>>();
-        for (int i = 0; i < _numEncoderLayers * 3; i++)
-            _audioEncoderLayers.Add(Layers[idx++]);
-
-        // Audio output projection
-        _audioOutputProjection = Layers[idx++];
-
-        // Visual encoder: input projection
-        _visualInputProjection = Layers[idx++];
-
-        // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
         _visualEncoderLayers = new List<ILayer<T>>();
-        for (int i = 0; i < _numEncoderLayers * 3; i++)
-            _visualEncoderLayers.Add(Layers[idx++]);
+        int encoderLayerCount = Math.Max(0, Layers.Count - 2); // All but last 2 (fusion)
+        for (int i = 0; i < encoderLayerCount; i++)
+        {
+            _audioEncoderLayers.Add(Layers[i]);
+            _visualEncoderLayers.Add(Layers[i]); // Shared encoder
+        }
+        _audioInputProjection = encoderLayerCount > 0 ? Layers[0] : null;
+        _audioOutputProjection = encoderLayerCount > 0 ? Layers[encoderLayerCount - 1] : null;
+        _visualInputProjection = _audioInputProjection;
+        _visualOutputProjection = _audioOutputProjection;
 
-        // Visual output projection
-        _visualOutputProjection = Layers[idx++];
-
-        // Cross-modal attention (2 layers)
+        // Cross-modal layers and task heads use the fusion FC layers
         _crossModalAttentionLayers = new List<ILayer<T>>();
-        for (int i = 0; i < 2; i++)
-            _crossModalAttentionLayers.Add(Layers[idx++]);
+        if (Layers.Count > encoderLayerCount)
+        {
+            for (int i = encoderLayerCount; i < Layers.Count; i++)
+                _crossModalAttentionLayers.Add(Layers[i]);
+        }
 
-        // Task heads
-        _localizationHead = Layers[idx++];
-        _syncHead = Layers[idx++];
-        _sceneClassificationHead = Layers[idx++];
-        _separationMaskPredictor = Layers[idx++];
+        // Task heads: reuse last fusion layer as all heads (single output path)
+        var lastLayer = Layers.Count > 0 ? Layers[^1] : null;
+        _localizationHead = lastLayer;
+        _syncHead = lastLayer;
+        _sceneClassificationHead = lastLayer;
+        _separationMaskPredictor = lastLayer;
     }
 
     /// <inheritdoc/>
