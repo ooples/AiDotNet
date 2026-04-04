@@ -288,6 +288,7 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
             residualStdD = residuals.Select(r => r * r).Sum() / n;
             residualStdD = Math.Sqrt(residualStdD);
         }
+        if (residualStdD < 1e-10) residualStdD = 1e-10;
         _residualStd = NumOps.FromDouble(residualStdD);
     }
 }

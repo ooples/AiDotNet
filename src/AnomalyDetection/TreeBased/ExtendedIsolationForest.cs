@@ -112,6 +112,8 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     public override void Fit(Matrix<T> X)
     {
         ValidateInput(X);
+        if (X.Rows < 2)
+            throw new ArgumentException("At least 2 samples are required for isolation forest.", nameof(X));
 
         _nFeatures = X.Columns;
         int effectiveExtension = _extensionLevel == -1 ? _nFeatures - 1 : Math.Min(_extensionLevel, _nFeatures - 1);

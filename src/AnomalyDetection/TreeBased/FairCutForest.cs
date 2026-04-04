@@ -361,17 +361,15 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
 
         if (NumOps.LessThan(point[node.SplitFeature], node.SplitValue))
         {
-            var left = node.Left;
-            return left != null
-                ? ComputePathLength(point, left, currentDepth + 1)
-                : NumOps.FromDouble(currentDepth + 1);
+            if (node.Left is null)
+                throw new InvalidOperationException("Corrupt tree: non-leaf node missing left child.");
+            return ComputePathLength(point, node.Left, currentDepth + 1);
         }
         else
         {
-            var right = node.Right;
-            return right != null
-                ? ComputePathLength(point, right, currentDepth + 1)
-                : NumOps.FromDouble(currentDepth + 1);
+            if (node.Right is null)
+                throw new InvalidOperationException("Corrupt tree: non-leaf node missing right child.");
+            return ComputePathLength(point, node.Right, currentDepth + 1);
         }
     }
 
