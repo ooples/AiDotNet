@@ -462,7 +462,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // Output layer
         T outSum = discB3[0];
         { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, Engine.DotProduct(h2, _e1)); }
-        T output = NumOps.Sigmoid(outSum);
+        T output = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(outSum))));
 
         return (h1, h2, output);
     }

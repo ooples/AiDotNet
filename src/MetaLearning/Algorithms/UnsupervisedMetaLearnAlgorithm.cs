@@ -82,7 +82,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         // Initialize centroids randomly
         _centroids = new Vector<T>[options.NumClusters];
-        _clusterCounts = new double[options.NumClusters];
+        _clusterCounts = new Vector<T>(options.NumClusters);
         for (int k = 0; k < options.NumClusters; k++)
         {
             _centroids[k] = new Vector<T>(_clusterDim);

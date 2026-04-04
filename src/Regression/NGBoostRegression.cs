@@ -312,7 +312,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // Denormalize: prediction = standardized_mean * yStd + yMean
             double mean = NumOps.ToDouble(distributions[i].Mean);
-            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
+            predictions[i] = NumOps.FromDouble(mean * NumOps.ToDouble(_yStd) + NumOps.ToDouble(_yMean));
         }
 
         return predictions;

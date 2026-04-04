@@ -677,7 +677,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     private Matrix<T> ScaleToSpectralRadius(Matrix<T> matrix, double targetRadius)
     {
         // Calculate the current spectral radius using the power method
-        double currentRadius = CalculateSpectralRadius(matrix);
+        double currentRadius = NumOps.ToDouble(CalculateSpectralRadius(matrix));
 
         // Scale the matrix to achieve the target radius
         double scaleFactor = targetRadius / currentRadius;
