@@ -153,27 +153,32 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         var diffValues = ApplyDifferencing(values, _d);
 
         // Store last values for prediction (undifferencing)
-        _lastValues = new double[Math.Max(_p, _d) + 1];
-        for (int i = 0; i < _lastValues.Length && i < n; i++)
+        int lastValLen = Math.Max(_p, _d) + 1;
+        _lastValues = new Vector<T>(lastValLen);
+        for (int i = 0; i < lastValLen && i < n; i++)
         {
-            _lastValues[i] = values[n - 1 - i];
+            _lastValues[i] = NumOps.FromDouble(values[n - 1 - i]);
         }
 
         // Fit AR coefficients using Yule-Walker equations (simplified)
-        _mean = diffValues.Average();
-        var centered = diffValues.Select(v => v - _mean).ToArray();
+        double meanD = diffValues.Average();
+        _mean = NumOps.FromDouble(meanD);
+        var centered = diffValues.Select(v => v - meanD).ToArray();
 
-        _arCoeffs = FitARCoefficients(centered, _p);
-        _maCoeffs = FitMACoefficients(centered, _arCoeffs, _q);
+        var arCoeffsD = FitARCoefficients(centered, _p);
+        var maCoeffsD = FitMACoefficients(centered, arCoeffsD, _q);
+        _arCoeffs = new Vector<T>(arCoeffsD.Select(v => NumOps.FromDouble(v)));
+        _maCoeffs = new Vector<T>(maCoeffsD.Select(v => NumOps.FromDouble(v)));
 
         // Compute residuals (skip leading zeros from warm-up period)
         var residuals = ComputeResiduals(centered);
         int warmupPeriod = Math.Max(_p, _q);
         var validResiduals = residuals.Skip(warmupPeriod).ToArray();
-        _residualStd = validResiduals.Length > 0
+        double residualStdD = validResiduals.Length > 0
             ? Math.Sqrt(validResiduals.Average(r => r * r))
             : 1.0;
-        if (_residualStd < 1e-10) _residualStd = 1;
+        if (residualStdD < 1e-10) residualStdD = 1;
+        _residualStd = NumOps.FromDouble(residualStdD);
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -363,7 +368,8 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
 
         // Apply differencing
         var diffValues = ApplyDifferencing(values, _d);
-        var centered = diffValues.Select(v => v - _mean).ToArray();
+        double meanD2 = NumOps.ToDouble(_mean);
+        var centered = diffValues.Select(v => v - meanD2).ToArray();
 
         // Compute residuals
         var residuals = ComputeResiduals(centered);
@@ -386,7 +392,7 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
                 if (residualIdx >= 0 && residualIdx < residuals.Length)
                 {
                     // Standardized absolute residual
-                    score = Math.Abs(residuals[residualIdx]) / _residualStd;
+                    score = Math.Abs(residuals[residualIdx]) / NumOps.ToDouble(_residualStd);
                 }
                 else
                 {
