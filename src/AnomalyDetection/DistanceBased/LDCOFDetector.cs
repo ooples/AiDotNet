@@ -46,6 +46,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Local Density Cluster-Based Outlier Factor", "https://doi.org/10.1016/j.patrec.2009.07.008")]
 public class LDCOFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numClusters;

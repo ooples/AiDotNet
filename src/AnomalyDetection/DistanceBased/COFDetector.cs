@@ -43,6 +43,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Connectivity-Based Outlier Factor", "https://dl.acm.org/doi/10.1145/775047.775149")]
 public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

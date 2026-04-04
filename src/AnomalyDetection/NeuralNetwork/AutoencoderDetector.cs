@@ -47,6 +47,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Reducing the Dimensionality of Data with Neural Networks", "https://doi.org/10.1126/science.1127647")]
 public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _encodingDim;

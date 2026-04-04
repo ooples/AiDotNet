@@ -44,6 +44,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Robust Random Cut Forest Based Anomaly Detection on Streams", "https://doi.org/10.1145/2806416.2806568")]
 public class FairCutForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;
