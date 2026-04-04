@@ -189,6 +189,10 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// </remarks>
     protected virtual Vector<T> GenerateFallbackEmbedding(string text)
     {
+        Guard.NotNull(text);
+        if (EmbeddingDimension <= 0)
+            throw new InvalidOperationException("EmbeddingDimension must be positive.");
+
         // Use stable FNV-1a hash instead of string.GetHashCode() which is
         // randomized per process in .NET Core/.NET 5+
         var lower = text.ToLowerInvariant();

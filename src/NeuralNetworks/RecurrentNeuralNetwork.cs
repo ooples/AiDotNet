@@ -310,7 +310,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.ResetState();
 
-        TrainWithTape(input, expectedOutput, NumOps.ToDouble(_learningRate));
+        TrainWithTape(input, expectedOutput);
     }
 
     /// <summary>
