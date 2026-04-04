@@ -64,8 +64,6 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
 
     private T _residualStd;
 
-    private Vector<T>? _lastValues;
-
     /// <summary>
     /// Gets the AR order (p).
     /// </summary>
@@ -158,14 +156,6 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         // Apply differencing
         var diffValues = ApplyDifferencing(values, _d);
 
-        // Store last values for prediction (undifferencing)
-        int lastValLen = Math.Max(_p, _d) + 1;
-        _lastValues = new Vector<T>(lastValLen);
-        for (int i = 0; i < lastValLen && i < n; i++)
-        {
-            _lastValues[i] = NumOps.FromDouble(values[n - 1 - i]);
-        }
-
         // Fit AR coefficients using Yule-Walker equations (simplified)
         double meanD = diffValues.Average();
         _mean = NumOps.FromDouble(meanD);
@@ -183,7 +173,7 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         double residualStdD = validResiduals.Length > 0
             ? Math.Sqrt(validResiduals.Average(r => r * r))
             : 1.0;
-        if (residualStdD < 1e-10) residualStdD = 1;
+        if (residualStdD < 1e-10) residualStdD = 1e-10;
         _residualStd = NumOps.FromDouble(residualStdD);
 
         // Calculate scores for training data to set threshold

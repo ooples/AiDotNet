@@ -59,9 +59,6 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
 
     private T _residualStd;
 
-
-    private T _esdCriticalValue;
-
     private int _nSamples;
 
     /// <summary>
@@ -93,7 +90,6 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
-        _esdCriticalValue = NumOps.Zero;
         _residualStd = NumOps.Zero;
         _trend = NumOps.Zero;
         if (seasonLength < 2)
@@ -146,9 +142,7 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         // Compute seasonal decomposition
         DecomposeTimeSeries(values);
 
-        // Compute ESD critical value based on maxAnomalies
-        int effectiveMaxAnomalies = _maxAnomalies ?? Math.Max(1, (int)(n * _contamination));
-        _esdCriticalValue = NumOps.FromDouble(ComputeESDCriticalValue(n, effectiveMaxAnomalies));
+        // ESD critical value computed but not stored — scoring uses its own threshold
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
