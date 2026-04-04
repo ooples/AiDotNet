@@ -393,27 +393,19 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b1[j];
-            var wCol = new Vector<T>(_inputDim);
-            for (int ii = 0; ii < _inputDim; ii++) wCol[ii] = w1[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(x, wCol));
-            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-        }
+        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD via Engine)
+        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var h1Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(w1)),
+            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
+        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
-        // Layer 2 — reuse wCol for hidden dim
-        var h2 = new Vector<T>(_hiddenDim);
-        var wColH = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b2[j];
-            for (int ii = 0; ii < _hiddenDim; ii++) wColH[ii] = w2[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(h1, wColH));
-            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-        }
+        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD via Engine)
+        var h1Tensor = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
+        var h2Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h1Tensor, Tensor<T>.FromMatrix(w2)),
+            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
+        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Output layer (linear)
         T score = b3[0];

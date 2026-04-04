@@ -857,17 +857,13 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
     private Vector<T> ForwardFC(Vector<T> input, Matrix<T> W, Vector<T> b)
     {
+        // SIMD: output = input @ W + b via Engine.TensorMatMul
         int outputSize = W.Columns;
-        var output = new Vector<T>(outputSize);
-        var wCol = new Vector<T>(input.Length);
-
-        for (int j = 0; j < outputSize; j++)
-        {
-            for (int i = 0; i < input.Length; i++) wCol[i] = W[i, j];
-            output[j] = NumOps.Add(b[j], Engine.DotProduct(input, wCol));
-        }
-
-        return output;
+        var inputTensor = Tensor<T>.FromVector(input).Reshape(1, input.Length);
+        var result = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(inputTensor, Tensor<T>.FromMatrix(W)),
+            Tensor<T>.FromVector(b).Reshape(1, outputSize));
+        return result.Reshape(outputSize).ToVector();
     }
 
     private Vector<T> ForwardFCNoOffset(Vector<T> input, Matrix<T> W, int outputSize)

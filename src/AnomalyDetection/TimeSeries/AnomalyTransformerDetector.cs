@@ -1052,29 +1052,31 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         var h = new Vector<T>(ffDim);
         var wCol = new Vector<T>(ffDim);
 
+        var w1Tensor = Tensor<T>.FromMatrix(W1);
+        var b1Tensor = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
+        var w2Tensor = Tensor<T>.FromMatrix(W2);
+        var b2Tensor = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
+
         for (int t = 0; t < seqLen; t++)
         {
-            // First layer with ReLU
-            for (int j = 0; j < ffDim; j++)
-            {
-                T sum = b1[j];
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(x[t, i], W1[i, j]));
-                }
-                // ReLU
-                h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-            }
+            // Extract row as vector for SIMD
+            var xRow = new Vector<T>(_modelDim);
+            for (int i = 0; i < _modelDim; i++) xRow[i] = x[t, i];
+            var xTensor = Tensor<T>.FromVector(xRow).Reshape(1, _modelDim);
 
-            // Second layer with residual connection
+            // Layer 1: h = ReLU(x @ W1 + b1)  (SIMD via Engine)
+            var h1Pre = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(xTensor, w1Tensor), b1Tensor);
+            var hVec = Engine.ReLU(h1Pre.Reshape(ffDim).ToVector());
+
+            // Layer 2: out = h @ W2 + b2  (SIMD via Engine)
+            var hTensor = Tensor<T>.FromVector(hVec).Reshape(1, ffDim);
+            var l2Out = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(hTensor, w2Tensor), b2Tensor).Reshape(_modelDim).ToVector();
+
+            // Residual connection
             for (int j = 0; j < _modelDim; j++)
-            {
-                T sum = b2[j];
-                for (int ii = 0; ii < ffDim; ii++) wCol[ii] = W2[ii, j];
-                sum = NumOps.Add(sum, Engine.DotProduct(h, wCol));
-                // Residual connection
-                output[t, j] = NumOps.Add(sum, x[t, j]);
-            }
+                output[t, j] = NumOps.Add(l2Out[j], x[t, j]);
         }
 
         return output;
