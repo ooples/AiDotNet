@@ -213,7 +213,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 
         var scores = ScoreAnomalies(X);
         var predictions = new Vector<T>(scores.Length);
-        T criticalT = NumOps.FromDouble(_chiSquareCritical);
+        T criticalT = _chiSquareCritical;
 
         for (int i = 0; i < scores.Length; i++)
         {
