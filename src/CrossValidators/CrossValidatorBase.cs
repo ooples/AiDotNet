@@ -173,7 +173,7 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
                     "This indicates the optimizer was unable to find a valid solution.");
             }
 
-            foldModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+            ((IParameterizable<T, TInput, TOutput>)foldModel).SetParameters(((IParameterizable<T, TInput, TOutput>)optimizationResult.BestSolution).GetParameters());
 
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;

@@ -21,7 +21,8 @@ namespace AiDotNet.Interfaces
     /// trial management, and optimization settings.
     /// </remarks>
     [AiDotNet.Configuration.YamlConfigurable("AutoMLModel")]
-    public interface IAutoMLModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+    public interface IAutoMLModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+        IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
     {
         /// <summary>
         /// Gets the current optimization status

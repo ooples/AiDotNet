@@ -60,7 +60,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
     }
 
     /// <inheritdoc/>
@@ -68,7 +68,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         int K = Math.Max(2, _algoOptions.AdaptationSteps); // JMP requires at least 2 steps for both phases
         int K1 = Math.Min(Math.Max((int)(K * _algoOptions.Phase1Fraction), 1), K - 1);
@@ -82,7 +82,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             double phase1LR = _algoOptions.InnerLearningRate * _algoOptions.Phase1LRMultiplier;
             for (int step = 0; step < K1; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, phase1LR);
             }
@@ -95,7 +95,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             double phase2LR = _algoOptions.InnerLearningRate * _algoOptions.Phase2LRMultiplier;
             for (int step = K1; step < K; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 for (int d = 0; d < _paramDim; d++)
@@ -108,7 +108,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -122,7 +122,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
@@ -132,7 +132,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         double phase1LR = _algoOptions.InnerLearningRate * _algoOptions.Phase1LRMultiplier;
         for (int step = 0; step < K1; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, phase1LR);
         }
@@ -143,7 +143,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         double phase2LR = _algoOptions.InnerLearningRate * _algoOptions.Phase2LRMultiplier;
         for (int step = K1; step < K; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             for (int d = 0; d < _paramDim; d++)
             {
@@ -154,7 +154,7 @@ public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

@@ -372,13 +372,13 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         {
             int clientId = kvp.Key;
             var clientParams = ToVector<T>(kvp.Value);
-            clientModels[clientId] = (IFullModel<T, Matrix<T>, Vector<T>>)globalModel.WithParameters(clientParams);
+            clientModels[clientId] = ((IParameterizable<T, Matrix<T>, Vector<T>>)globalModel).WithParameters(clientParams);
             clientWeights[clientId] = state.PendingClientWeights[clientId];
         }
 
         var aggregator = CreateAggregationStrategy<T>(state.Options);
         var aggregated = aggregator.Aggregate(clientModels, clientWeights);
-        var p = aggregated.GetParameters();
+        var p = ((IParameterizable<T, Matrix<T>, Vector<T>>)aggregated).GetParameters();
         return p.Select(v => Convert.ToDouble(v)).ToArray();
     }
 

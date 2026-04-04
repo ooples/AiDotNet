@@ -181,7 +181,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
         if (_columns.Count == 0)
         {
             // First task: store base parameter count
-            _baseParameterCount = model.ParameterCount;
+            _baseParameterCount = ((IParameterizable<T, TInput, TOutput>)model).ParameterCount;
         }
         else
         {
@@ -295,7 +295,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
     {
         // Store the parameters for the current column
         var currentColumn = _columns[^1];
-        var allParams = model.GetParameters();
+        var allParams = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
 
         // Extract parameters for this column
         int startIdx = (_columns.Count - 1) * _baseParameterCount;

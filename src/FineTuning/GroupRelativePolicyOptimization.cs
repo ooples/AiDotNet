@@ -301,8 +301,8 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 // Compute and apply gradients scaled by capped advantage
                 var cappedAdvantage = Math.Max(-1.0, Math.Min(1.0, advantage));
                 var scaledLearningRate = learningRate * cappedAdvantage;
-                var gradients = policyModel.ComputeGradients(input, groupResponses[g]);
-                policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
+                var gradients = ((IGradientComputable<T, TInput, TOutput>)policyModel).ComputeGradients(input, groupResponses[g]);
+                ((IGradientComputable<T, TInput, TOutput>)policyModel).ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
 
                 totalReward += groupRewards[g];
                 sampleCount++;

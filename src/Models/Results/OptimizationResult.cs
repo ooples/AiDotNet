@@ -503,7 +503,7 @@ public class OptimizationResult<T, TInput, TOutput>
     {
         return new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = BestSolution?.WithParameters(parameters),
+            BestSolution = (BestSolution as IParameterizable<T, TInput, TOutput>)?.WithParameters(parameters),
             BestIntercept = BestIntercept,
             BestFitnessScore = BestFitnessScore,
             Iterations = Iterations,

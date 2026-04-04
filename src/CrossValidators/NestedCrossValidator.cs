@@ -164,7 +164,7 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
                     "This indicates the optimizer was unable to find a valid solution.");
             }
 
-            bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+            ((IParameterizable<T, TInput, TOutput>)bestModel).SetParameters(((IParameterizable<T, TInput, TOutput>)optimizationResult.BestSolution).GetParameters());
 
             var validationIndices = outerFoldResult.ValidationIndices ?? throw new InvalidOperationException(
                 $"ValidationIndices not available for outer fold {outerFoldResult.FoldIndex}. " +

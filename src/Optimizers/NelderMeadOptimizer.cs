@@ -236,14 +236,14 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // centroid = sum(simplex points excluding worst) / (simplex.Count - 1)
 
         var templateModel = simplex[0];
-        var templateParams = templateModel.GetParameters();
+        var templateParams = ((IParameterizable<T, TInput, TOutput>)templateModel).GetParameters();
         var centroidCoefficients = new Vector<T>(templateParams.Length);
 
         // Sum all parameters vectorized (exclude worst point: last simplex entry)
         int pointCount = simplex.Count - 1;
         for (int i = 0; i < pointCount; i++)
         {
-            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, simplex[i].GetParameters());
+            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, ((IParameterizable<T, TInput, TOutput>)simplex[i]).GetParameters());
         }
 
         // Vectorized division by number of points to get the average
@@ -251,7 +251,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, pointCountScalar);
 
         // Create a new model with the centroid parameters using WithParameters
-        return templateModel.WithParameters(centroidCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)templateModel).WithParameters(centroidCoefficients);
     }
 
     /// <summary>
@@ -273,15 +273,15 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private IFullModel<T, TInput, TOutput> Reflect(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         // Vectorized: result = centroid + alpha * (centroid - worst)
-        var centroidParams = centroid.GetParameters();
-        var worstParams = worst.GetParameters();
+        var centroidParams = ((IParameterizable<T, TInput, TOutput>)centroid).GetParameters();
+        var worstParams = ((IParameterizable<T, TInput, TOutput>)worst).GetParameters();
         var alphaVec = Engine.Fill<T>(centroidParams.Length, _alpha);
 
         var diff = (Vector<T>)Engine.Subtract(centroidParams, worstParams);
         var scaled = (Vector<T>)Engine.Multiply(diff, alphaVec);
         var result = (Vector<T>)Engine.Add(centroidParams, scaled);
 
-        return centroid.WithParameters(result);
+        return ((IParameterizable<T, TInput, TOutput>)centroid).WithParameters(result);
     }
 
     /// <summary>
@@ -322,15 +322,15 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private IFullModel<T, TInput, TOutput> Contract(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         // Vectorized: result = centroid + beta * (worst - centroid)
-        var centroidParams = centroid.GetParameters();
-        var worstParams = worst.GetParameters();
+        var centroidParams = ((IParameterizable<T, TInput, TOutput>)centroid).GetParameters();
+        var worstParams = ((IParameterizable<T, TInput, TOutput>)worst).GetParameters();
         var betaVec = Engine.Fill<T>(centroidParams.Length, _beta);
 
         var diff = (Vector<T>)Engine.Subtract(worstParams, centroidParams);
         var scaled = (Vector<T>)Engine.Multiply(diff, betaVec);
         var result = (Vector<T>)Engine.Add(centroidParams, scaled);
 
-        return centroid.WithParameters(result);
+        return ((IParameterizable<T, TInput, TOutput>)centroid).WithParameters(result);
     }
 
     /// <summary>
@@ -349,18 +349,18 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private void Shrink(List<IFullModel<T, TInput, TOutput>> simplex)
     {
         var best = simplex[0];
-        var bestParams = best.GetParameters();
+        var bestParams = ((IParameterizable<T, TInput, TOutput>)best).GetParameters();
         var deltaVec = Engine.Fill<T>(bestParams.Length, _delta);
 
         for (int i = 1; i < simplex.Count; i++)
         {
             // Vectorized: result = best + delta * (simplex[i] - best)
-            var currentParams = simplex[i].GetParameters();
+            var currentParams = ((IParameterizable<T, TInput, TOutput>)simplex[i]).GetParameters();
             var diff = (Vector<T>)Engine.Subtract(currentParams, bestParams);
             var scaled = (Vector<T>)Engine.Multiply(diff, deltaVec);
             var result = (Vector<T>)Engine.Add(bestParams, scaled);
 
-            simplex[i] = best.WithParameters(result);
+            simplex[i] = ((IParameterizable<T, TInput, TOutput>)best).WithParameters(result);
         }
     }
 
@@ -387,8 +387,8 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // Most Nelder-Mead operations follow pattern: a + factor * (a - b) or a + factor * (b - a)
         // Vectorizing the common pattern while keeping backward compatibility
 
-        var parametersA = a.GetParameters();
-        var parametersB = b.GetParameters();
+        var parametersA = ((IParameterizable<T, TInput, TOutput>)a).GetParameters();
+        var parametersB = ((IParameterizable<T, TInput, TOutput>)b).GetParameters();
 
         // Check if this is the common pattern: a + factor * (a - b)
         // Validate across the whole vector to avoid degenerate mis-detections
@@ -412,7 +412,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             var diff = (Vector<T>)Engine.Subtract(parametersA, parametersB);
             var scaled = (Vector<T>)Engine.Multiply(diff, factor);
             var newCoefficients = (Vector<T>)Engine.Add(parametersA, scaled);
-            return a.WithParameters(newCoefficients);
+            return ((IParameterizable<T, TInput, TOutput>)a).WithParameters(newCoefficients);
         }
 
         // Fall back to element-wise for custom operations
@@ -422,7 +422,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             result[i] = operation(parametersA[i], parametersB[i], factor);
         }
 
-        return a.WithParameters(result);
+        return ((IParameterizable<T, TInput, TOutput>)a).WithParameters(result);
     }
 
     /// <summary>

@@ -66,7 +66,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. ATAML requires a model with at least one parameter.");
         if (options.AttentionDim <= 0)
@@ -88,7 +88,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -98,7 +98,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             double lastEntropy = 0;
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute compressed gradient features
@@ -117,7 +117,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Entropy regularization (penalize low entropy to prevent attention collapse)
@@ -138,13 +138,13 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var compressed = CompressGradient(grad);
             var (weights, _) = ComputeAttention(compressed);
@@ -157,7 +157,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -220,14 +220,14 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private double ComputeATAMLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 var c = CompressGradient(g);
                 var (w, _) = ComputeAttention(c);
@@ -235,10 +235,10 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     ap[d] = NumOps.Subtract(ap[d],
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(w[d % _compressedDim]) * NumOps.ToDouble(g[d])));
             }
-            MetaModel.SetParameters(ap);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

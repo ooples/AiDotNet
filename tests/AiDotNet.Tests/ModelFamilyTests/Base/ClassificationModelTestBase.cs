@@ -341,7 +341,7 @@ public abstract class ClassificationModelTestBase
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
-        Assert.True(model.GetParameters().Length > 0, "Trained classifier should have learnable parameters.");
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained classifier should have learnable parameters.");
     }
 
     // =====================================================

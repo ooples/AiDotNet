@@ -135,7 +135,7 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = ((IParameterizable<T, TInput, TOutput>)inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients and get locally-updated model

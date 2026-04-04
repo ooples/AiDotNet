@@ -41,7 +41,7 @@ public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(median);
         }
 
-        return reference.WithParameters(aggregated);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "Median";

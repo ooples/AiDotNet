@@ -71,7 +71,7 @@ public abstract class SafetyModuleBase<T> : ModelBase<T, Vector<T>, Vector<T>>, 
     public override IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        ((IParameterizable<T, Vector<T>, Vector<T>>)copy).SetParameters(parameters);
         return copy;
     }
 

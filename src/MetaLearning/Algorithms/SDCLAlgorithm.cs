@@ -76,10 +76,10 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new ArgumentOutOfRangeException(nameof(options), "DistillationWeight must be non-negative.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
 
         // Initialize teacher as copy of student
-        var initParams = options.MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters();
         _teacherParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) _teacherParams[d] = initParams[d];
     }
@@ -89,12 +89,12 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Get teacher's soft targets on support set
-            MetaModel.SetParameters(_teacherParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(_teacherParams);
             var teacherSupportPred = ConvertToVector(MetaModel.Predict(task.SupportInput))
                 ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for support input.");
             var teacherQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput))
@@ -106,7 +106,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(studentParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(studentParams);
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute distillation gradient: encourage student to match teacher's soft outputs
@@ -121,7 +121,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
 
             // Evaluate on query set
-            MetaModel.SetParameters(studentParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(studentParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Add distillation loss on query set
@@ -134,12 +134,12 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Outer loop: update student
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(newParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(newParams);
 
             // Update teacher via EMA
             double alpha = _algoOptions.TeacherEmaDecay;
@@ -156,10 +156,10 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Get teacher predictions
-        MetaModel.SetParameters(_teacherParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(_teacherParams);
         var teacherPred = ConvertToVector(MetaModel.Predict(task.SupportInput)) ?? new Vector<T>(1);
 
         var studentParams = new Vector<T>(_paramDim);
@@ -167,7 +167,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(studentParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(studentParams);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             var distillGrad = ComputeDistillationGradient(studentParams, teacherPred, task.SupportInput);
@@ -179,7 +179,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, studentParams);
     }
 
@@ -227,10 +227,10 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private Vector<T> GetPredictionWithParams(Vector<T> parameters, TInput input)
     {
-        var savedParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(parameters);
+        var savedParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(parameters);
         var prediction = ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);
-        MetaModel.SetParameters(savedParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(savedParams);
         return prediction;
     }
 

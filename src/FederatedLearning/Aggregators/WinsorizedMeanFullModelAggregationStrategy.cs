@@ -77,7 +77,7 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
             aggregated[i] = NumOps.FromDouble(sum / n);
         }
 
-        return reference.WithParameters(aggregated);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "WinsorizedMean";

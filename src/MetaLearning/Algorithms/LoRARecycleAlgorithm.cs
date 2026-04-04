@@ -92,7 +92,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
         _rank = Math.Max(1, options.Rank);
         _prototypeDim = Math.Max(1, options.PrototypeDim);
 
@@ -119,19 +119,19 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Phase 1: Gradient-adapt a fresh LoRA adapter for this task
-            MetaModel.SetParameters(baseParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
                 adaptedParams[d] = baseParams[d];
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -142,7 +142,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 adapterDelta[d] = NumOps.Subtract(adaptedParams[d], baseParams[d]);
 
             // Compute support set embedding for this task
-            MetaModel.SetParameters(baseParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
             var supportEmbed = ComputeTaskEmbedding(task.SupportInput);
 
             // Add adapter and prototype to bank (circular buffer)
@@ -156,11 +156,11 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 for (int d = 0; d < _paramDim; d++)
                     fusedParams[d] = NumOps.Add(baseParams[d], fusedDelta[d]);
 
-                MetaModel.SetParameters(fusedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(fusedParams);
             }
             else
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             }
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -169,11 +169,11 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         // Outer loop: update base parameters
-        MetaModel.SetParameters(baseParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update encoder params via SPSA
@@ -185,7 +185,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         if (_adapterBank.Count == 0)
         {
@@ -195,11 +195,11 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
-            MetaModel.SetParameters(baseParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
             return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
         }
 
@@ -315,12 +315,12 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
     private double ComputeRecycleLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
             if (_adapterBank.Count == 0) continue;
 
             var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
@@ -329,11 +329,11 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             for (int d = 0; d < _paramDim; d++)
                 fusedParams[d] = NumOps.Add(baseParams[d], fusedDelta[d]);
 
-            MetaModel.SetParameters(fusedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(fusedParams);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(baseParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

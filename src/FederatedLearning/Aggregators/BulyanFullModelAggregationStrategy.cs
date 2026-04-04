@@ -69,7 +69,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
         {
             // Weighting in Bulyan is not standard; provide as an optional mode by averaging the selected subset.
             var averagedParameters = WeightedAverageOrUnweightedAverage(selectedClientIds, clientParameters, clientWeights, useClientWeights: true);
-            return reference.WithParameters(averagedParameters);
+            return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(averagedParameters);
         }
 
         var aggregated = new Vector<T>(parameterCount);
@@ -92,7 +92,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(sum / kept);
         }
 
-        return reference.WithParameters(aggregated);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregated);
     }
 
     private List<int> SelectMultiKrumCandidates(

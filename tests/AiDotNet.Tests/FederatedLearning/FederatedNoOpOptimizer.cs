@@ -34,7 +34,7 @@ internal sealed class FederatedNoOpOptimizer : IOptimizer<double, Matrix<double>
 
         return new OptimizationResult<double, Matrix<double>, Vector<double>>
         {
-            BestSolution = best.WithParameters(best.GetParameters()),
+            BestSolution = ((IParameterizable<double, Matrix<double>, Vector<double>>)best).WithParameters(((IParameterizable<double, Matrix<double>, Vector<double>>)best).GetParameters()),
             Iterations = _options.MaxIterations
         };
     }

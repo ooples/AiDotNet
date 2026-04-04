@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -255,9 +255,9 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update MetaModel parameters
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var updatedParams = ApplyGradients(currentParams, modelGradients, _options.OuterLearningRate);
-        MetaModel.SetParameters(updatedParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
 
         // Update metric scale parameters using finite differences
         UpdateMetricScale(task, loss);
@@ -905,7 +905,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Regularize MetaModel parameters (feature encoder)
         if (MetaModel != null)
         {
-            var modelParams = MetaModel.GetParameters();
+            var modelParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
             for (int i = 0; i < modelParams.Length; i++)
             {
                 T val = modelParams[i];

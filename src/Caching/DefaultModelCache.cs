@@ -131,7 +131,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
         if (inputData == null) throw new ArgumentNullException(nameof(inputData));
 
         // Get solution parameters
-        Vector<T> parameters = solution.GetParameters();
+        Vector<T> parameters = ((IParameterizable<T, TInput, TOutput>)solution).GetParameters();
 
         // Create stable descriptor of input data structure
         string inputDataDescriptor = DeterministicCacheKeyGenerator.CreateInputDataDescriptor<T, TInput, TOutput>(

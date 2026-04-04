@@ -243,9 +243,9 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             }
 
             // Update feature encoder parameters
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _protoNetsOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
         }
 
         // Return average loss

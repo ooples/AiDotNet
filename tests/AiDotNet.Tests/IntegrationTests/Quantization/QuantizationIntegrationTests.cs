@@ -75,7 +75,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         Assert.Equal(originalParams.Length, quantizedParams.Length);
         Assert.Equal(8, quantizer.BitWidth);
@@ -132,7 +132,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         Assert.Equal(originalParams.Length, quantizedParams.Length);
         Assert.Equal(16, quantizer.BitWidth);
@@ -169,7 +169,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         Assert.Equal(originalParams.Length, quantizedParams.Length);
         Assert.Equal(4, quantizer.BitWidth); // GPTQ typically targets 4-bit
@@ -208,8 +208,8 @@ public class QuantizationIntegrationTests
         var quantizedWithoutActOrder = quantizerWithoutActOrder.Quantize(model, configWithoutActOrder);
 
         // Assert - Both should complete successfully but may have different results
-        var paramsWithActOrder = quantizedWithActOrder.GetParameters();
-        var paramsWithoutActOrder = quantizedWithoutActOrder.GetParameters();
+        var paramsWithActOrder = ((IParameterizable<double, double[], double[]>)quantizedWithActOrder).GetParameters();
+        var paramsWithoutActOrder = ((IParameterizable<double, double[], double[]>)quantizedWithoutActOrder).GetParameters();
 
         Assert.Equal(paramsWithActOrder.Length, paramsWithoutActOrder.Length);
     }
@@ -233,7 +233,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         Assert.Equal(originalParams.Length, quantizedParams.Length);
         Assert.Equal(4, quantizer.BitWidth);
@@ -270,7 +270,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         Assert.Equal(originalParams.Length, quantizedParams.Length);
         Assert.Equal(8, quantizer.BitWidth);
@@ -348,7 +348,7 @@ public class QuantizationIntegrationTests
         Assert.True(quantizer.IsCalibrated);
         Assert.Equal(4, quantizer.BitWidth);
 
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(16, quantizedParams.Length);
 
         // All quantized values should be finite
@@ -399,7 +399,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(originalParams.Length, quantizedParams.Length);
     }
 
@@ -429,7 +429,7 @@ public class QuantizationIntegrationTests
         Assert.True(quantizer.IsCalibrated);
         Assert.Equal(2, quantizer.BitWidth);
 
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(32, quantizedParams.Length);
     }
 
@@ -446,7 +446,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(originalParams.Length, quantizedParams.Length);
 
         // All values should be finite
@@ -500,7 +500,7 @@ public class QuantizationIntegrationTests
 
         // Quantized values should be limited to 4 possible levels
         // (In simulation, values are dequantized, so we verify they're within expected range)
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         for (int i = 0; i < quantizedParams.Length; i++)
         {
             Assert.False(double.IsNaN(quantizedParams[i]), "Quantized params contain NaN");
@@ -528,7 +528,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(FP8Format.E4M3, quantizer.Format);
         Assert.Equal(8, quantizer.BitWidth);
 
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(100, quantizedParams.Length);
     }
 
@@ -598,7 +598,7 @@ public class QuantizationIntegrationTests
         // Assert
         Assert.True(quantizer.IsCalibrated);
         Assert.Equal(4, quantizer.BitWidth);
-        Assert.Equal(64, quantizedModel.GetParameters().Length);
+        Assert.Equal(64, ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters().Length);
     }
 
     [Fact]
@@ -626,7 +626,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(originalParams.Length, quantizedParams.Length);
 
         // All values should be finite
@@ -656,7 +656,7 @@ public class QuantizationIntegrationTests
         // Assert
         Assert.True(quantizer.IsCalibrated);
         Assert.Equal(4, quantizer.BitWidth);
-        Assert.Equal(64, quantizedModel.GetParameters().Length);
+        Assert.Equal(64, ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters().Length);
     }
 
     [Fact]
@@ -686,7 +686,7 @@ public class QuantizationIntegrationTests
 
         // Assert
         Assert.Equal(16, quantizer.BlockSize);
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(100, quantizedParams.Length);
 
         // All values should be finite
@@ -985,7 +985,7 @@ public class QuantizationIntegrationTests
         // Assert
         Assert.NotNull(quantizedModel);
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(originalParams.Length, quantizedParams.Length);
     }
 
@@ -1106,7 +1106,7 @@ public class QuantizationIntegrationTests
 
         // Assert - Verify compression ratio
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         // Parameter count should be preserved
         Assert.Equal(originalParams.Length, quantizedParams.Length);
@@ -1137,7 +1137,7 @@ public class QuantizationIntegrationTests
 
         // Assert - Compute Mean Squared Error
         var originalParams = model.GetParameters();
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
 
         double mse = 0;
         for (int i = 0; i < originalParams.Length; i++)
@@ -1167,7 +1167,7 @@ public class QuantizationIntegrationTests
         // Assert
         Assert.Equal(4, quantizer.BitWidth);
 
-        var quantizedParams = quantizedModel.GetParameters();
+        var quantizedParams = ((IParameterizable<double, double[], double[]>)quantizedModel).GetParameters();
         Assert.Equal(256, quantizedParams.Length);
 
         // All values should be finite
@@ -1225,8 +1225,8 @@ public class QuantizationIntegrationTests
         var quantized16 = quantizer16.Quantize(model, config16);
 
         // Compute MSE for each
-        double mse8 = ComputeMSE(originalParams, quantized8.GetParameters());
-        double mse16 = ComputeMSE(originalParams, quantized16.GetParameters());
+        double mse8 = ComputeMSE(originalParams, ((IParameterizable<double, double[], double[]>)quantized8).GetParameters());
+        double mse16 = ComputeMSE(originalParams, ((IParameterizable<double, double[], double[]>)quantized16).GetParameters());
 
         // FP16 should generally have lower error than INT8
         // (This is a general expectation, may vary with specific values)
@@ -1265,19 +1265,19 @@ public class QuantizationIntegrationTests
             ["Int8"] = () => {
                 var q = new Int8Quantizer<double, double[], double[]>();
                 q.Calibrate(model, calibrationData);
-                return q.Quantize(model, config).GetParameters();
+                return ((IParameterizable<double, double[], double[]>)q.Quantize(model, config)).GetParameters();
             },
             ["Float16"] = () => {
                 var q = new Float16Quantizer<double, double[], double[]>();
-                return q.Quantize(model, config).GetParameters();
+                return ((IParameterizable<double, double[], double[]>)q.Quantize(model, config)).GetParameters();
             },
             ["NF4"] = () => {
                 var q = new NF4Quantizer<double, double[], double[]>(blockSize: 16);
-                return q.Quantize(model, config).GetParameters();
+                return ((IParameterizable<double, double[], double[]>)q.Quantize(model, config)).GetParameters();
             },
             ["MXFP4"] = () => {
                 var q = new MXFP4Quantizer<double, double[], double[]>(blockSize: 16);
-                return q.Quantize(model, config).GetParameters();
+                return ((IParameterizable<double, double[], double[]>)q.Quantize(model, config)).GetParameters();
             }
         };
 

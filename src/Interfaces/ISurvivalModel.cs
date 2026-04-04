@@ -28,7 +28,8 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("SurvivalModel")]
-public interface ISurvivalModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public interface ISurvivalModel<T> : IFullModel<T, Matrix<T>, Vector<T>>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Fits the survival model to time-to-event data.

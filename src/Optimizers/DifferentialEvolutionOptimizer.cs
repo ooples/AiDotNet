@@ -134,7 +134,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     {
         var population = InitializePopulation(inputData.XTrain, _deOptions.PopulationSize);
         // Use model's parameter count instead of input dimensions for trial vectors
-        int paramCount = population.Count > 0 ? population[0].ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        int paramCount = population.Count > 0 ? ((IParameterizable<T, TInput, TOutput>)population[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();
@@ -210,10 +210,10 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         var currentModel = population[currentIndex];
 
         // Get parameters from each model
-        var aParams = population[a].GetParameters();
-        var bParams = population[b].GetParameters();
-        var cParams = population[c].GetParameters();
-        var currentParams = currentModel.GetParameters();
+        var aParams = ((IParameterizable<T, TInput, TOutput>)population[a]).GetParameters();
+        var bParams = ((IParameterizable<T, TInput, TOutput>)population[b]).GetParameters();
+        var cParams = ((IParameterizable<T, TInput, TOutput>)population[c]).GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters();
 
         // === Partially Vectorized Differential Evolution Mutation using IEngine (Phase B: US-GPU-015) ===
         // Vectorized differential mutation: mutant = a + F * (b - c)
@@ -239,7 +239,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         }
 
         // Create a new model with the modified parameters
-        return currentModel.WithParameters(trialParams);
+        return ((IParameterizable<T, TInput, TOutput>)currentModel).WithParameters(trialParams);
     }
 
     /// <summary>

@@ -254,7 +254,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected void ModulateParameters(Vector<T> initParams, double scale)
     {
-        MetaModel.SetParameters(ScaleVector(initParams, scale));
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ScaleVector(initParams, scale));
     }
 
     /// <summary>
@@ -266,11 +266,11 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
             var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
@@ -294,7 +294,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected IModel<TInput, TOutput, ModelMetadata<T>> StandardNPAdapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
         var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
@@ -348,7 +348,7 @@ public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, T
 
     public override TOutput Predict(TInput input)
     {
-        BaseModel.SetParameters(_params);
+        ((IParameterizable<T, TInput, TOutput>)BaseModel).SetParameters(_params);
         return BaseModel.Predict(input);
     }
 

@@ -76,7 +76,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     private void InitializeAdaptiveParameters(IFullModel<T, TInput, TOutput> currentSolution)
     {
         base.InitializeAdaptiveParameters();
-        int dimensions = currentSolution.GetParameters().Length;
+        int dimensions = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Length;
         _learningRates = Vector<T>.CreateDefault(dimensions, NumOps.FromDouble(_options.InitialLearningRate));
         _momentums = Vector<T>.CreateDefault(dimensions, NumOps.FromDouble(_options.InitialMomentum));
         _previousUpdate = Vector<T>.CreateDefault(dimensions, NumOps.Zero);
@@ -149,7 +149,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var newCoefficients = currentSolution.GetParameters().Clone();
+        var newCoefficients = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Clone();
 
         for (int i = 0; i < newCoefficients.Length; i++)
         {
@@ -158,7 +158,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
             newCoefficients[i] = NumOps.Add(newCoefficients[i], update);
         }
 
-        return currentSolution.WithParameters(newCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -176,16 +176,16 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     private T CalculatePartialDerivative(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData, int index)
     {
         var epsilon = NumOps.FromDouble(1e-6);
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         var originalCoeff = parameters[index];
 
         var coefficientsPlus = parameters.Clone();
         coefficientsPlus[index] = NumOps.Add(originalCoeff, epsilon);
-        var modelPlus = model.WithParameters(coefficientsPlus);
+        var modelPlus = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(coefficientsPlus);
 
         var coefficientsMinus = parameters.Clone();
         coefficientsMinus[index] = NumOps.Subtract(originalCoeff, epsilon);
-        var modelMinus = model.WithParameters(coefficientsMinus);
+        var modelMinus = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(coefficientsMinus);
 
         var lossPlus = CalculateLoss(modelPlus, inputData);
         var lossMinus = CalculateLoss(modelMinus, inputData);

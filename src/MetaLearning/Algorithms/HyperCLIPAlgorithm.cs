@@ -72,7 +72,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             throw new ArgumentOutOfRangeException(nameof(options), "ProjectionDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
 
         int embDim = options.EmbeddingDim;
         int projDim = options.ProjectionDim;
@@ -89,7 +89,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
         int numTasks = taskBatch.Tasks.Length;
@@ -103,7 +103,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             var task = taskBatch.Tasks[i];
 
             // Task embedding from support gradient
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var gradFeatures = CompressVector(supportGrad, embDim);
             taskEmbeddings[i] = ProjectTask(gradFeatures);
@@ -114,7 +114,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -124,7 +124,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             paramEmbeddings[i] = ProjectParam(paramDelta);
 
             // Query loss
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -151,18 +151,18 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -244,7 +244,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     private double ComputeCLIPLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
         int numTasks = taskBatch.Tasks.Length;
@@ -257,7 +257,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             var task = taskBatch.Tasks[i];
 
             // Task embedding from support gradient
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             taskEmbs[i] = ProjectTask(CompressVector(supportGrad, embDim));
 
@@ -266,7 +266,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
@@ -274,7 +274,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             // Param embedding from delta
             paramEmbs[i] = ProjectParam(CompressParamDelta(initParams, ap, embDim));
 
-            MetaModel.SetParameters(ap);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
@@ -282,7 +282,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         double contrastive = ComputeInfoNCE(taskEmbs, paramEmbs, numTasks, projDim);
         totalLoss += _algoOptions.ContrastiveWeight * contrastive * numTasks;
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(numTasks, 1);
     }
 }

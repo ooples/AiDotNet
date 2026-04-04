@@ -167,11 +167,11 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             // Classification loss (backbone)
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -206,12 +206,12 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
@@ -245,11 +245,11 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = MetaModel.GetParameters();
+                    var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    MetaModel.SetParameters(modulatedParams);
+                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
                 }
             }
 
@@ -257,7 +257,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             totalLoss += queryLoss + _npbmlOptions.KLWeight * klLoss;
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -380,7 +380,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -477,7 +477,7 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
                     modulatedParams[i] = NumOps.Multiply(_backboneParams[i],
                         NumOps.FromDouble(baseMod * sampleScale));
                 }
-                _model.SetParameters(modulatedParams);
+                ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulatedParams);
                 bestPred = _model.Predict(input);
             }
             // Return prediction from last sample (best approximates posterior mean
@@ -493,11 +493,11 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            _model.SetParameters(modulatedParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulatedParams);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

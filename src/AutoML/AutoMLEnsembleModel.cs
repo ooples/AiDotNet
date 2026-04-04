@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -259,7 +259,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Ensemble has no members.");
         }
 
-        var vectors = Members.Select(m => m.GetParameters()).ToArray();
+        var vectors = Members.Select(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).GetParameters()).ToArray();
         return Vector<T>.Concatenate(vectors);
     }
 
@@ -279,24 +279,24 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         int offset = 0;
         foreach (var member in Members)
         {
-            int count = member.ParameterCount;
+            int count = ((IParameterizable<T, Matrix<T>, Vector<T>>)member).ParameterCount;
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
                 segment[i] = parameters[offset + i];
             }
 
-            member.SetParameters(segment);
+            ((IParameterizable<T, Matrix<T>, Vector<T>>)member).SetParameters(segment);
             offset += count;
         }
     }
 
-    public override int ParameterCount => Members.Sum(m => m.ParameterCount);
+    public override int ParameterCount => Members.Sum(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).ParameterCount);
 
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        ((IParameterizable<T, Matrix<T>, Vector<T>>)copy).SetParameters(parameters);
         return copy;
     }
 
@@ -310,7 +310,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         var indices = new HashSet<int>();
         foreach (var member in Members)
         {
-            foreach (var idx in member.GetActiveFeatureIndices())
+            foreach (var idx in ((IFeatureAware)member).GetActiveFeatureIndices())
             {
                 indices.Add(idx);
             }
@@ -323,13 +323,13 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
     {
         foreach (var member in Members)
         {
-            member.SetActiveFeatureIndices(featureIndices);
+            ((IFeatureAware)member).SetActiveFeatureIndices(featureIndices);
         }
     }
 
     public override bool IsFeatureUsed(int featureIndex)
     {
-        return Members.Any(m => m.IsFeatureUsed(featureIndex));
+        return Members.Any(m => ((IFeatureAware)m).IsFeatureUsed(featureIndex));
     }
 
     public override Dictionary<string, T> GetFeatureImportance()
@@ -400,7 +400,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         }
 
         var gradients = Members
-            .Select(m => m.ComputeGradients(input, target, lossFunction))
+            .Select(m => ((IGradientComputable<T, Matrix<T>, Vector<T>>)m).ComputeGradients(input, target, lossFunction))
             .ToArray();
 
         return Vector<T>.Concatenate(gradients);
@@ -422,14 +422,14 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         int offset = 0;
         foreach (var member in Members)
         {
-            int count = member.ParameterCount;
+            int count = ((IParameterizable<T, Matrix<T>, Vector<T>>)member).ParameterCount;
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
                 segment[i] = gradients[offset + i];
             }
 
-            member.ApplyGradients(segment, learningRate);
+            ((IGradientComputable<T, Matrix<T>, Vector<T>>)member).ApplyGradients(segment, learningRate);
             offset += count;
         }
     }

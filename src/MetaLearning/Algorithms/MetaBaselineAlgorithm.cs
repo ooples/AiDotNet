@@ -65,11 +65,11 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -89,7 +89,7 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Extract and L2-normalize support features for cosine-similarity classification
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -161,11 +161,11 @@ internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
             for (int i = 0; i < _params.Length; i++)
                 modulated[i] = NumOps.Multiply(_params[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_params);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_params);
         }
         return _model.Predict(input);
     }

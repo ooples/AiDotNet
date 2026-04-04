@@ -105,7 +105,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
 
         _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
         _previousGradient = null;
@@ -117,7 +117,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             NotifyEpochStart(epoch);
             _iteration++;
 
-            parameters = currentSolution.GetParameters();
+            parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient, inputData);
 
@@ -162,7 +162,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         // === Vectorized BFGS Update using IEngine (Phase B: US-GPU-015) ===
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
 
         if (_inverseHessian is null)
         {
@@ -184,7 +184,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
         var newCoefficients = parameters.Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

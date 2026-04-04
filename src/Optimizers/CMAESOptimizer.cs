@@ -129,7 +129,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         InitializeAdaptiveParameters();
         // Always use a deep copy of Model to avoid mutating the original during optimization
         var initialSolution = InitializeRandomSolution(inputData.XTrain);
-        _mean = initialSolution.GetParameters();
+        _mean = ((IParameterizable<T, TInput, TOutput>)initialSolution).GetParameters();
         // Use parameter count (coefficients + intercept), not input size (features only)
         // This ensures covariance matrix dimensions match the mean vector length
         int dimensions = _mean.Length;
@@ -157,7 +157,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             UpdateDistribution(population, fitnessValues);
 
             // Create a new solution with the updated mean parameters
-            var currentSolution = currentBestModel.WithParameters(_mean);
+            var currentSolution = ((IParameterizable<T, TInput, TOutput>)currentBestModel).WithParameters(_mean);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -288,7 +288,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         for (int i = 0; i < population.Rows; i++)
         {
             // Create a new solution with the population member's parameters
-            var solution = templateModel.WithParameters(population.GetRow(i));
+            var solution = ((IParameterizable<T, TInput, TOutput>)templateModel).WithParameters(population.GetRow(i));
             var stepData = EvaluateSolution(solution, inputData);
             fitnessValues[i] = stepData.FitnessScore;
 

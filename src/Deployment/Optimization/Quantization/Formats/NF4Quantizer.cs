@@ -103,10 +103,10 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
 
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         var quantizedParams = QuantizeWithNF4(parameters);
 
-        return model.WithParameters(quantizedParams);
+        return ((IParameterizable<T, TInput, TOutput>)model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -126,7 +126,7 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         var activationStats = calibrationHelper.CollectActivationStatistics(model, dataList);
 
         // Pre-compute block scales
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         int numBlocks = (parameters.Length + _blockSize - 1) / _blockSize;
 
         // Get activation magnitudes if available

@@ -93,7 +93,7 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = ((IParameterizable<T, TInput, TOutput>)inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients
@@ -132,7 +132,7 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                     var fullParameters = Config.CommunicationBackend.AllGather(updatedShard);
 
                     // Step 5: Create model with reconstructed full parameters
-                    var finalModel = localResult.BestSolution.WithParameters(fullParameters);
+                    var finalModel = ((IParameterizable<T, TInput, TOutput>)localResult.BestSolution).WithParameters(fullParameters);
                     localResult.BestSolution = finalModel;
                 }
             }

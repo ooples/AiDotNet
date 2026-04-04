@@ -236,7 +236,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         double signFlipProbability = 0.05)
     {
         // Get current parameters
-        var currentParameters = model.GetParameters();
+        var currentParameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
 
         // Create new parameters by applying random adjustments
         var newParameters = AdjustParameters(
@@ -245,7 +245,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             signFlipProbability);
 
         // Apply the new parameters to the model
-        var updatedModel = model.WithParameters(newParameters);
+        var updatedModel = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(newParameters);
     }
 
     /// <summary>
@@ -401,7 +401,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         List<int> selectedFeaturesIndices;
 
-        if (!solution.SupportsParameterInitialization)
+        if (!((IParameterizable<T, TInput, TOutput>)solution).SupportsParameterInitialization)
         {
             selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
         }
@@ -793,13 +793,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         // Models that don't support parameter initialization (time series, density-based clustering)
         // may not have parameters before training — use type name + hash code as fallback.
-        if (!solution.SupportsParameterInitialization)
+        if (!((IParameterizable<T, TInput, TOutput>)solution).SupportsParameterInitialization)
         {
             return $"{solution.GetType().Name}_{solution.GetHashCode()}";
         }
 
         // Generate a simple cache key based on parameter values
-        var parameters = solution.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)solution).GetParameters();
         var paramHash = parameters.GetHashCode();
         return $"{solution.GetType().Name}_{paramHash}";
     }
@@ -1459,7 +1459,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Use the Strategy pattern: let the model decide if it supports parameter initialization.
         // Models like decision trees, meta classifiers, and untrained clustering models don't
         // support having random parameters injected — they learn their structure during training.
-        if (!RequireModel().SupportsParameterInitialization)
+        if (!((IParameterizable<T, TInput, TOutput>)RequireModel()).SupportsParameterInitialization)
         {
             return RequireModel().Clone();
         }
@@ -1485,7 +1485,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = RequireModel().ParameterCount;
+            int paramCount = ((IParameterizable<T, TInput, TOutput>)RequireModel()).ParameterCount;
 
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
@@ -1565,7 +1565,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = RequireModel().ParameterCount;
+            int paramCount = ((IParameterizable<T, TInput, TOutput>)RequireModel()).ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1577,7 +1577,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = RequireModel().ParameterCount;
+            int paramCount = ((IParameterizable<T, TInput, TOutput>)RequireModel()).ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
@@ -1593,11 +1593,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Let the model sanitize parameters to satisfy structural constraints
         // (e.g., monotonically increasing thresholds for ordinal models)
-        randomParams = RequireModel().SanitizeParameters(randomParams);
+        randomParams = ((IParameterizable<T, TInput, TOutput>)RequireModel()).SanitizeParameters(randomParams);
 
         // Create a new model with these sanitized random parameters
         var randomModel = RequireModel().Clone();
-        randomModel.SetParameters(randomParams);
+        ((IParameterizable<T, TInput, TOutput>)randomModel).SetParameters(randomParams);
         return randomModel;
     }
 
@@ -1622,14 +1622,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual int[] GetInputShape()
     {
         var model = RequireModel();
-        return new[] { model.ParameterCount };
+        return new[] { ((IParameterizable<T, TInput, TOutput>)model).ParameterCount };
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
         var model = RequireModel();
-        return new[] { model.ParameterCount };
+        return new[] { ((IParameterizable<T, TInput, TOutput>)model).ParameterCount };
     }
 
     /// <inheritdoc/>

@@ -62,7 +62,7 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
             aggregated[i] = NumOps.FromDouble(sum / kept);
         }
 
-        return reference.WithParameters(aggregated);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "TrimmedMean";

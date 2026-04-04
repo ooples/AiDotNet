@@ -140,11 +140,11 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             // Extract features
             var supportPred = MetaModel.Predict(task.SupportInput);
@@ -165,11 +165,11 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 double modFactor = 1.0 / (1.0 + emdScore * _deepEmdOptions.Temperature);
                 modFactor = Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor, MinModulationFactor + modFactor));
 
-                var currentParams = MetaModel.GetParameters();
+                var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                MetaModel.SetParameters(modulatedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
             }
 
             var queryPred2 = MetaModel.Predict(task.QueryInput);
@@ -201,7 +201,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
 
@@ -404,11 +404,11 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

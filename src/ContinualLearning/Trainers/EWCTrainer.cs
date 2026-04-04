@@ -210,7 +210,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = Model.ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -252,7 +252,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, learningRate);
+                ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Track losses
@@ -277,7 +277,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        Model.ApplyGradients(adjustedReplayGradients, replayLr);
+                        ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
                 }
@@ -402,7 +402,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = Model.ComputeGradients(
+            var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

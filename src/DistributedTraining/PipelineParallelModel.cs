@@ -226,7 +226,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// </remarks>
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = ((IParameterizable<T, TInput, TOutput>)WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
 
         _virtualStagePartitions.Clear();
@@ -624,7 +624,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Gather full parameters before training
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(fullParams);
 
         // Save parameters BEFORE training to compute gradients
         var parametersBefore = new Vector<T>(fullParams.ToArray());
@@ -660,7 +660,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
                 var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
 
-                var gradientVector = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+                var gradientVector = ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ComputeGradients(microBatchInput, microBatchTarget);
 
                 ReceiveAndAccumulateDownstreamGradients(gradientVector, op.MicroBatchIndex, op.VirtualStageIndex);
                 SendGradientsUpstream(gradientVector, op.MicroBatchIndex, op.VirtualStageIndex);
@@ -692,7 +692,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 {
                     // Emulated decomposition: compute full gradients now, send activation grads upstream,
                     // cache weight gradients for BackwardWeight step to accumulate later.
-                    var fullGradients = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+                    var fullGradients = ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ComputeGradients(microBatchInput, microBatchTarget);
 
                     ReceiveAndAccumulateDownstreamGradients(fullGradients, op.MicroBatchIndex, op.VirtualStageIndex);
                     SendGradientsUpstream(fullGradients, op.MicroBatchIndex, op.VirtualStageIndex);
@@ -732,7 +732,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                         // Fallback: recompute full gradients
                         var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
                         var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
-                        weightGradients = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+                        weightGradients = ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ComputeGradients(microBatchInput, microBatchTarget);
                     }
                 }
 
@@ -750,12 +750,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], microBatchCount);
             }
 
-            WrappedModel.SetParameters(parametersBefore);
-            WrappedModel.ApplyGradients(accumulatedGradients, Config.LearningRate);
+            ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(parametersBefore);
+            ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ApplyGradients(accumulatedGradients, Config.LearningRate);
         }
 
         // Extract this stage's parameter shard
-        var updatedParams = WrappedModel.GetParameters();
+        var updatedParams = ((IParameterizable<T, TInput, TOutput>)WrappedModel).GetParameters();
         UpdateLocalShardFromFullParameters(updatedParams);
         InvalidateCache();
 
@@ -1281,7 +1281,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override TOutput Predict(TInput input)
     {
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(fullParams);
 
         TInput stageInput = input;
 
@@ -1336,7 +1336,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config, _microBatchCount,
+            ((IParameterizable<T, TInput, TOutput>)WrappedModel).WithParameters(parameters), Config, _microBatchCount,
             _partitionStrategy, _schedule, _checkpointConfig);
     }
 

@@ -130,11 +130,11 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             var queryLoss = ComputeLossFromOutput(
                 MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -167,7 +167,7 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
 
@@ -375,11 +375,11 @@ internal class SIBModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

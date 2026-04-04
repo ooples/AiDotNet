@@ -1567,10 +1567,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     }
 
                     // Compute gradients without updating parameters
-                    var gradients = _model.ComputeGradients(processedInput, target, lossFunction);
+                    var gradients = ((IGradientComputable<T, TInput, TOutput>)_model).ComputeGradients(processedInput, target, lossFunction);
 
                     // Apply gradients with current learning rate
-                    _model.ApplyGradients(gradients, learningRate);
+                    ((IGradientComputable<T, TInput, TOutput>)_model).ApplyGradients(gradients, learningRate);
 
                     // Accumulate loss for monitoring (optional - compute prediction loss)
                     var prediction = _model.Predict(processedInput);
@@ -2500,7 +2500,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (!model.SupportsParameterInitialization)
+        else if (!((IParameterizable<T, TInput, TOutput>)model).SupportsParameterInitialization)
         {
             if (_knowledgeDistillationOptions is not null)
             {
@@ -7389,7 +7389,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
 
         // Get model parameters for size calculation
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         // Estimate parameter size based on type: 8 bytes for double, 4 for float/int, 2 for half
         int bytesPerParameter = typeof(T) == typeof(float) ? 4
             : typeof(T) == typeof(double) ? 8
@@ -7434,11 +7434,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
                 // Apply fake quantization to model parameters to condition them for quantization
                 // This simulates what would happen during QAT training iterations
-                var currentParams = model.GetParameters();
+                var currentParams = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
                 var qatConditionedParams = qatHook.ApplyFakeQuantization(currentParams, "model_weights");
 
                 // Create a new model with QAT-conditioned parameters
-                model = model.WithParameters(qatConditionedParams);
+                model = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(qatConditionedParams);
 
                 Console.WriteLine($"QAT simulation applied using {internalConfig.QATMethod} method");
             }
@@ -7450,7 +7450,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Apply quantization - this returns a NEW model with quantized parameters
         var quantizedModel = quantizer.Quantize(model, internalConfig);
-        var quantizedParameters = quantizedModel.GetParameters();
+        var quantizedParameters = ((IParameterizable<T, TInput, TOutput>)quantizedModel).GetParameters();
 
         // Calculate actual quantized size based on bit width
         // For sub-byte quantization (4-bit), we need to account for packing

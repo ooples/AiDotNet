@@ -19,6 +19,7 @@ namespace AiDotNet.Interfaces;
 /// numeric values on a continuous scale.
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("Regression")]
-public interface IRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public interface IRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
 {
 }

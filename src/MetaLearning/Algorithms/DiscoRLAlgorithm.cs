@@ -81,7 +81,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             throw new ArgumentOutOfRangeException(nameof(options), "SelectionTemperature must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
         _numSkills = options.NumSkills;
         _skillRank = options.SkillRank;
         _compressedDim = Math.Min(_paramDim, 64);
@@ -104,12 +104,12 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Compute initial gradient for skill selection
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var compressed = CompressGradient(initGrad);
 
@@ -131,7 +131,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 for (int d = 0; d < _paramDim; d++)
                     effectiveParams[d] = NumOps.Add(adaptedParams[d], delta[d % _compressedDim]);
 
-                MetaModel.SetParameters(effectiveParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var compGrad = CompressGradient(grad);
 
@@ -159,7 +159,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             for (int d = 0; d < _paramDim; d++)
                 finalParams[d] = NumOps.Add(adaptedParams[d], finalDelta[d % _compressedDim]);
 
-            MetaModel.SetParameters(finalParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(finalParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Entropy bonus for diverse skill usage
@@ -187,8 +187,8 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(initParams);
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var gating = ComputeGating(CompressGradient(initGrad));
         var coeffs = new double[_numSkills * _skillRank];
@@ -200,7 +200,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             for (int d = 0; d < _paramDim; d++)
                 effectiveParams[d] = NumOps.Add(initParams[d], delta[d % _compressedDim]);
 
-            MetaModel.SetParameters(effectiveParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(effectiveParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var compGrad = CompressGradient(grad);
 
@@ -223,7 +223,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         for (int d = 0; d < _paramDim; d++)
             adaptedParams[d] = NumOps.Add(initParams[d], finalDelta[d % _compressedDim]);
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -280,10 +280,10 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private double ComputeDiscoRLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var gating = ComputeGating(CompressGradient(initGrad));
             var coeffs = new double[_numSkills * _skillRank];
@@ -293,7 +293,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 var delta = ComposeSkillDelta(coeffs, gating);
                 var ep = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++) ep[d] = NumOps.Add(initParams[d], delta[d % _compressedDim]);
-                MetaModel.SetParameters(ep);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ep);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var cg = CompressGradient(grad);
                 for (int k = 0; k < _numSkills; k++)
@@ -310,7 +310,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             var fd = ComposeSkillDelta(coeffs, gating);
             var fp = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) fp[d] = NumOps.Add(initParams[d], fd[d % _compressedDim]);
-            MetaModel.SetParameters(fp);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(fp);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             // Include entropy bonus to match MetaTrain objective
@@ -322,7 +322,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             }
             totalLoss += queryLoss - _algoOptions.SkillEntropyBonus * entropy;
         }
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

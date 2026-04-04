@@ -147,11 +147,11 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -173,12 +173,12 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -196,11 +196,11 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                         sumConf += 0.5 + 0.5 / (1.0 + Math.Exp(-d));
                     }
                     double avgConf = sumConf / refinedDistributions.Length;
-                    var currentParams = MetaModel.GetParameters();
+                    var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgConf));
-                    MetaModel.SetParameters(modulatedParams);
+                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
                 }
             }
 
@@ -208,7 +208,7 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -321,7 +321,7 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -406,11 +406,11 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            _model.SetParameters(modulatedParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulatedParams);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

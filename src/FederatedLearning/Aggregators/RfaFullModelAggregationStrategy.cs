@@ -130,7 +130,7 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(current[i]);
         }
 
-        return reference.WithParameters(aggregated);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "RFA";

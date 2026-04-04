@@ -37,7 +37,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("NoisePredictor")]
-public interface INoisePredictor<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface INoisePredictor<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the number of input channels the predictor expects.

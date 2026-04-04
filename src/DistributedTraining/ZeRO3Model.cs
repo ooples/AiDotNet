@@ -95,7 +95,7 @@ public class ZeRO3Model<T, TInput, TOutput> : FSDPModel<T, TInput, TOutput>
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = ((IParameterizable<T, TInput, TOutput>)WrappedModel).WithParameters(parameters);
         return new ZeRO3Model<T, TInput, TOutput>(newModel, Config);
     }
 

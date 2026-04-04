@@ -97,7 +97,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         }
 
         // Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
 
         // Map target data to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -155,7 +155,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         }
 
         // Step 2: Get dimensions
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
 
         // Step 3: Map target data to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);

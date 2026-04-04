@@ -496,7 +496,7 @@ public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
         return copy;
     }
 

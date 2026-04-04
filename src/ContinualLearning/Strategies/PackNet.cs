@@ -197,7 +197,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        int numParams = model.ParameterCount;
+        int numParams = ((IParameterizable<T, TInput, TOutput>)model).ParameterCount;
 
         if (_parameterOwnership == null)
         {
@@ -219,7 +219,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         _gradientCount = 0;
 
         // Store pre-task parameters
-        _preTaskParameters = CloneVector(model.GetParameters());
+        _preTaskParameters = CloneVector(((IParameterizable<T, TInput, TOutput>)model).GetParameters());
 
         RecordMetric($"Task{TaskCount}_AvailableCapacity", AvailableCapacity);
         RecordMetric($"Task{TaskCount}_PrepareTime", DateTime.UtcNow);
@@ -271,7 +271,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     /// <inheritdoc/>
     public override void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
-        var currentParams = model.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         int taskId = TaskCount + 1; // 1-indexed task IDs
 
         // Compute importance scores for pruning

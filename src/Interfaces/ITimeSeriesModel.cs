@@ -23,7 +23,8 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("TimeSeriesModel")]
-public interface ITimeSeriesModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public interface ITimeSeriesModel<T> : IFullModel<T, Matrix<T>, Vector<T>>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Evaluates the model's performance using test data.

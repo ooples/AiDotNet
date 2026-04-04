@@ -274,7 +274,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         // Then apply proximal operator (regularization)
 
         var stepSize = CurrentLearningRate;
-        var parameters = currentSolution.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
 
         // Save pre-update parameters for reverse updates (vectorized copy)
         _previousParameters = new Vector<T>(parameters);
@@ -286,7 +286,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         // Apply proximal operator (regularization)
         newCoefficients = _regularization.Regularize(newCoefficients);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

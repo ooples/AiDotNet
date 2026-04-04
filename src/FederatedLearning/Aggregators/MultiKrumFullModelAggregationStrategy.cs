@@ -100,7 +100,7 @@ public sealed class MultiKrumFullModelAggregationStrategy<T, TInput, TOutput> :
             clientWeights,
             useClientWeights: _useClientWeightsForAveraging);
 
-        return reference.WithParameters(aggregatedParameters);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(aggregatedParameters);
     }
 
     public override string GetStrategyName() => "MultiKrum";

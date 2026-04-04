@@ -71,7 +71,7 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             throw new ArgumentOutOfRangeException(nameof(options), "NumDomainSlots must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
 
         _domainBuffers = new Vector<T>[options.NumDomainSlots];
         for (int k = 0; k < options.NumDomainSlots; k++)
@@ -87,14 +87,14 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var tasks = taskBatch.Tasks;
 
         // Compute initial gradients for all tasks
         var taskGrads = new List<Vector<T>>();
         foreach (var task in tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             taskGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput)));
         }
 
@@ -111,7 +111,7 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Apply collaborative modulation
@@ -119,7 +119,7 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 adaptedParams = ApplyGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -134,13 +134,13 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             // Use domain buffers for collaborative adaptation
@@ -148,7 +148,7 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             adaptedParams = ApplyGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

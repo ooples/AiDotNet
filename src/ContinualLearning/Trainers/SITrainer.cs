@@ -202,7 +202,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
         Vector<T>? previousParams = null;
         if (_siStrategy != null)
         {
-            previousParams = CloneVector(Model.GetParameters());
+            previousParams = CloneVector(((IParameterizable<T, TInput, TOutput>)Model).GetParameters());
         }
 
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
@@ -233,7 +233,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = Model.ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -272,20 +272,20 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                 // Update path integral for SI before parameter update
                 if (_siStrategy != null && previousParams != null)
                 {
-                    _siStrategy.NotifyParameterUpdate(Model.GetParameters());
+                    _siStrategy.NotifyParameterUpdate(((IParameterizable<T, TInput, TOutput>)Model).GetParameters());
                 }
 
                 // Adjust gradients using strategy (SI adds regularization gradients)
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, learningRate);
+                ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Update previous parameters for next path integral computation
                 if (_siStrategy != null)
                 {
-                    previousParams = CloneVector(Model.GetParameters());
+                    previousParams = CloneVector(((IParameterizable<T, TInput, TOutput>)Model).GetParameters());
                 }
 
                 // Track losses
@@ -310,13 +310,13 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        Model.ApplyGradients(adjustedReplayGradients, replayLr);
+                        ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
 
                         // Update previous parameters after replay
                         if (_siStrategy != null)
                         {
-                            previousParams = CloneVector(Model.GetParameters());
+                            previousParams = CloneVector(((IParameterizable<T, TInput, TOutput>)Model).GetParameters());
                         }
                     }
                 }
@@ -441,7 +441,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = Model.ComputeGradients(
+            var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

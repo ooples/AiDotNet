@@ -61,7 +61,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
     }
 
     /// <inheritdoc/>
@@ -72,7 +72,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         var realLosses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Collect per-task gradients for interpolation
         var taskGradients = new List<Vector<T>>();
@@ -85,7 +85,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             Vector<T>? lastGrad = null;
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 lastGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, lastGrad, _algoOptions.InnerLearningRate);
             }
@@ -93,7 +93,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             if (lastGrad != null)
                 taskGradients.Add(lastGrad);
 
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             realLosses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -131,7 +131,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
                 // Evaluate synthetic task using a randomly selected real task's query set
                 int evalIdx = RandomGenerator.Next(taskBatch.Tasks.Length);
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var synthLoss = ComputeLossFromOutput(
                     MetaModel.Predict(taskBatch.Tasks[evalIdx].QueryInput),
                     taskBatch.Tasks[evalIdx].QueryOutput);
@@ -156,18 +156,18 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

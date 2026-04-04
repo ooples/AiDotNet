@@ -69,7 +69,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         if (options.ImportanceDecay <= 0 || options.ImportanceDecay >= 1)
@@ -89,7 +89,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -99,7 +99,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             // Inner loop with importance-protected learning rates
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Update importance: EMA of squared gradients
@@ -120,7 +120,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Report query loss only — this matches the meta-gradient which is computed from query loss.
@@ -138,7 +138,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
@@ -148,7 +148,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int d = 0; d < _paramDim; d++)
@@ -164,7 +164,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

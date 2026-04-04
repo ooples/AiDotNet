@@ -399,7 +399,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             individual.SetParameters(newParams);
 
             // Copy should remain unchanged
-            var copyParams = copy.GetParameters();
+            var copyParams = ((IParameterizable<double, double[], double[]>)copy).GetParameters();
             Assert.NotEqual(originalParams[0] + 100.0, copyParams[0], 5);
         }
 
@@ -424,7 +424,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
 
             // Verify parameters are copied
             var originalParams = individual.GetParameters();
-            var cloneParams = clone.GetParameters();
+            var cloneParams = ((IParameterizable<double, double[], double[]>)clone).GetParameters();
             Assert.Equal(originalParams.Length, cloneParams.Length);
             for (int i = 0; i < originalParams.Length; i++)
             {

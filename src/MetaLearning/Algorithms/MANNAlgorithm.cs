@@ -247,9 +247,9 @@ public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
 
             // Update controller parameters
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _mannOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
         }
 
         // Apply memory consolidation if configured
@@ -1069,7 +1069,7 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     /// <summary>
     /// Gets controller parameters.
     /// </summary>
-    public Vector<T> GetParameters() => _controller.GetParameters();
+    public Vector<T> GetParameters() => ((IParameterizable<T, TInput, TOutput>)_controller).GetParameters();
 
     /// <summary>
     /// Gets model metadata.

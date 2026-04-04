@@ -15,7 +15,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.Equal(0.0, aggregated.GetParameters()[0], 12);
+        Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.Equal(0.0, aggregated.GetParameters()[0], 12);
+        Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.Equal(0.0, aggregated.GetParameters()[0], 12);
+        Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] <= 1.0);
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] <= 1.0);
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] < 100.0);
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] < 100.0);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class RobustFullModelAggregationStrategyTests
         var weights = CreateEqualWeights(models.Keys);
 
         var aggregated = aggregator.Aggregate(models, weights);
-        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] <= 1.0);
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
     private static Dictionary<int, IFullModel<double, Matrix<double>, Vector<double>>> CreateClientModels(double[] firstParameterValues)

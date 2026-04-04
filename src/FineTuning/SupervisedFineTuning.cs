@@ -142,10 +142,10 @@ public class SupervisedFineTuning<T, TInput, TOutput> : FineTuningBase<T, TInput
             var prediction = model.Predict(input);
 
             // Compute gradients
-            var gradients = model.ComputeGradients(input, output, lossFunction);
+            var gradients = ((IGradientComputable<T, TInput, TOutput>)model).ComputeGradients(input, output, lossFunction);
 
             // Apply gradients
-            model.ApplyGradients(gradients, learningRate);
+            ((IGradientComputable<T, TInput, TOutput>)model).ApplyGradients(gradients, learningRate);
 
             // Accumulate loss for logging
             var predVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);

@@ -144,7 +144,7 @@ public class ParameterAnalyzer<T>
             throw new ArgumentNullException(nameof(model));
         }
 
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         return AnalyzeParameters(parameters);
     }
 

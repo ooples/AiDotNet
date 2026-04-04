@@ -84,11 +84,11 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             // Inner loop adaptation
             var taskParams = new Vector<T>(initParams.Length);
@@ -99,7 +99,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             {
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 taskParams = ApplyGradients(taskParams, grad, _pmfOptions.InnerLearningRate);
-                MetaModel.SetParameters(taskParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(taskParams);
             }
 
             // Outer loop loss on query set (at adapted parameters)
@@ -130,7 +130,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(initParams.Length);
         for (int i = 0; i < initParams.Length; i++)
             adaptedParams[i] = initParams[i];
@@ -138,7 +138,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Inner-loop adaptation
         for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.InnerLearningRate);
         }
@@ -148,13 +148,13 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         {
             for (int step = 0; step < _pmfOptions.FineTuningSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.FineTuningLearningRate);
             }
         }
 
-        MetaModel.SetParameters(initParams); // Restore base parameters
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams); // Restore base parameters
         return new PMFModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -172,7 +172,7 @@ internal class PMFModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     { _model = model; _params = adaptedParams; }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input) { ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_params); return _model.Predict(input); }
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) =>
         throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");

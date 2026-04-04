@@ -606,7 +606,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
                 $"For production use, implement IGradientComputable for efficient backpropagation.");
         }
 
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         var gradients = new Vector<T>(parameters.Length);
 
         // Compute baseline loss
@@ -638,13 +638,13 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
                 delta[i] = RandomGenerator.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
 
             var eDelta = Engine.Multiply(delta, epsilon);
-            model.SetParameters(Engine.Add(parameters, eDelta));
+            ((IParameterizable<T, TInput, TOutput>)model).SetParameters(Engine.Add(parameters, eDelta));
             var predPlus = ConvertToVector(model.Predict(input));
             T lossPlus = predPlus is not null
                 ? LossFunction.CalculateLoss(predPlus, expectedVector)
                 : baseLoss;
 
-            model.SetParameters(Engine.Subtract(parameters, eDelta));
+            ((IParameterizable<T, TInput, TOutput>)model).SetParameters(Engine.Subtract(parameters, eDelta));
             var predMinus = ConvertToVector(model.Predict(input));
             T lossMinus = predMinus is not null
                 ? LossFunction.CalculateLoss(predMinus, expectedVector)
@@ -659,7 +659,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));
 
         // Restore original parameters
-        model.SetParameters(parameters);
+        ((IParameterizable<T, TInput, TOutput>)model).SetParameters(parameters);
 
         return gradients;
     }
@@ -716,12 +716,12 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         // and performs nearly as well in practice (Finn et al., 2017)
 
         // First, perform adaptation
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         foreach (var (input, target) in adaptationSteps)
         {
             var gradients = ComputeGradients(model, input, target);
             parameters = ApplyGradients(parameters, gradients, NumOps.ToDouble(innerLearningRate));
-            model.SetParameters(parameters);
+            ((IParameterizable<T, TInput, TOutput>)model).SetParameters(parameters);
         }
 
         // Compute gradients on query set (first-order approximation)
@@ -787,10 +787,10 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     {
         if (model is not ILayeredModel<T> layeredModel || perLayerLearningRates == null)
         {
-            return ApplyGradients(model.GetParameters(), gradients, defaultLearningRate);
+            return ApplyGradients(((IParameterizable<T, TInput, TOutput>)model).GetParameters(), gradients, defaultLearningRate);
         }
 
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         if (gradients.Length != parameters.Length)
         {
             throw new InvalidOperationException(
@@ -1357,9 +1357,9 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     /// </summary>
     protected void ApplyOuterUpdate(Vector<T> initParams, List<Vector<T>> metaGradients, double outerLR)
     {
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         if (metaGradients.Count > 0)
-            MetaModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
     }
 
     /// <summary>
@@ -1375,7 +1375,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         var adaptedParams = initParams;
         for (int step = 0; step < steps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, innerLR);
         }
@@ -1387,14 +1387,14 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     /// </summary>
     protected double StandardAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var ip = MetaModel.GetParameters();
+        var ip = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         double total = 0;
         foreach (var t in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(ip);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ip);
             total += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
         }
-        MetaModel.SetParameters(ip);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ip);
         return total / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -1444,16 +1444,16 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     public override ILossFunction<T> DefaultLossFunction => LossFunction ?? new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => MetaModel.GetParameters();
+    public override Vector<T> GetParameters() => ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => MetaModel.SetParameters(parameters);
+    public override void SetParameters(Vector<T> parameters) => ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(parameters);
 
     /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        ((IParameterizable<T, TInput, TOutput>)copy).SetParameters(parameters);
         return copy;
     }
 

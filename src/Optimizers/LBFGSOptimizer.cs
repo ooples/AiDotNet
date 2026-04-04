@@ -152,7 +152,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            UpdateLBFGSMemory(currentSolution.GetParameters(), newSolution.GetParameters(), gradient, previousGradient);
+            UpdateLBFGSMemory(((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters(), ((IParameterizable<T, TInput, TOutput>)newSolution).GetParameters(), gradient, previousGradient);
 
             previousGradient = gradient;
             currentSolution = newSolution;
@@ -261,9 +261,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
-        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
+        var newCoefficients = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

@@ -109,7 +109,7 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = ((IParameterizable<T, TInput, TOutput>)inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients (and apply them locally)

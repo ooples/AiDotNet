@@ -43,7 +43,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(2.0, p[0], Tol);
         Assert.Equal(5.0, p[1], Tol);
@@ -63,7 +63,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 100.0, [1] = 300.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(25.0, p[0], Tol);
         Assert.Equal(35.0, p[1], Tol);
@@ -78,7 +78,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(7.0, p[0], Tol);
         Assert.Equal(8.0, p[1], Tol);
@@ -100,7 +100,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 2.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(2.75, p[0], Tol);
     }
@@ -144,7 +144,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(3.0, p[0], Tol);
         Assert.Equal(20.0, p[1], Tol);
@@ -165,7 +165,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(25.0, p[0], Tol);
     }
@@ -186,7 +186,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(3.0, p[0], Tol);
     }
@@ -221,7 +221,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(3.0, p[0], Tol);
     }
@@ -240,7 +240,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(20.0, p[0], Tol);
     }
@@ -262,7 +262,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(20.0 / 3.0, p[0], Tol);
         Assert.Equal(3.0, p[1], Tol);
@@ -312,7 +312,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(3.0, p[0], Tol);
     }
@@ -331,7 +331,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(20.0, p[0], Tol);
     }
@@ -387,7 +387,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         // Should select client0 (or client1 or client2 - all have score 1)
         // Implementation sorts by score then by clientId, so client0 wins
@@ -465,7 +465,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(1.5, p[0], Tol);
     }
@@ -512,7 +512,7 @@ public class FederatedLearningDeepMathIntegrationTests
             { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0, [5] = 1.0, [6] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         // The result should be close to the middle values (robust against outlier 100)
         // After MultiKrum selection of 5 (likely excluding client6 + another boundary),
@@ -567,7 +567,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         Assert.Equal(5.0, p[0], 1e-6);
         Assert.Equal(10.0, p[1], 1e-6);
@@ -592,7 +592,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         // Geometric median of [1,2,3,4,1000] in 1D is just the regular median = 3
         // (for 1D, geometric median equals median)
@@ -614,7 +614,7 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0 };
 
         var result = agg.Aggregate(models, weights);
-        var p = result.GetParameters();
+        var p = ((IParameterizable<double, double[], double[]>)result).GetParameters();
 
         // With 2 points, Weiszfeld converges to midpoint (both have equal weight)
         Assert.Equal(5.0, p[0], 1e-4);
@@ -658,8 +658,8 @@ public class FederatedLearningDeepMathIntegrationTests
             (1, new[] { 3.0, 4.0 }));
         var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 };
 
-        var proxResult = fedProx.Aggregate(models, weights).GetParameters();
-        var avgResult = fedAvg.Aggregate(models, weights).GetParameters();
+        var proxResult = ((IParameterizable<double, double[], double[]>)fedProx.Aggregate(models, weights)).GetParameters();
+        var avgResult = ((IParameterizable<double, double[], double[]>)fedAvg.Aggregate(models, weights)).GetParameters();
 
         Assert.Equal(avgResult[0], proxResult[0], Tol);
         Assert.Equal(avgResult[1], proxResult[1], Tol);
@@ -722,7 +722,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
         foreach (var (name, aggFunc) in strategies)
         {
-            var p = aggFunc().GetParameters();
+            var p = ((IParameterizable<double, double[], double[]>)aggFunc()).GetParameters();
             Assert.Equal(5.0, p[0], 1e-4);
             Assert.Equal(10.0, p[1], 1e-4);
         }
@@ -746,10 +746,10 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double>
             { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0, [5] = 1.0, [6] = 1.0 };
 
-        var median = new MedianFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights).GetParameters();
-        var trimmed = new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights).GetParameters();
-        var winsorized = new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights).GetParameters();
-        var rfa = new RfaFullModelAggregationStrategy<double, double[], double[]>(maxIterations: 100).Aggregate(models, weights).GetParameters();
+        var median = new ((IParameterizable<double, double[], double[]>)MedianFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var trimmed = new ((IParameterizable<double, double[], double[]>)TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var winsorized = new ((IParameterizable<double, double[], double[]>)WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var rfa = new ((IParameterizable<double, double[], double[]>)RfaFullModelAggregationStrategy<double, double[], double[]>(maxIterations: 100).Aggregate(models, weights)).GetParameters();
 
         // Median of [1,2,3,4,5,6,1000] = 4
         Assert.Equal(4.0, median[0], Tol);
@@ -764,7 +764,7 @@ public class FederatedLearningDeepMathIntegrationTests
             $"RFA result {rfa[0]} should be in [1, 7]");
 
         // FedAvg would be skewed by outlier: (1+2+3+4+5+6+1000)/7 ≈ 145.9
-        var fedAvg = new FedAvgFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights).GetParameters();
+        var fedAvg = new ((IParameterizable<double, double[], double[]>)FedAvgFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
         Assert.True(fedAvg[0] > 100.0, "FedAvg should be heavily influenced by outlier");
     }
 

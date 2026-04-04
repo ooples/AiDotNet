@@ -143,6 +143,6 @@ public abstract class AnomalyDetectorTestBase
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
-        Assert.True(model.GetParameters().Length > 0, "Trained anomaly detector should have parameters.");
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained anomaly detector should have parameters.");
     }
 }

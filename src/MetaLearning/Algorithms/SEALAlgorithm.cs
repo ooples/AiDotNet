@@ -192,7 +192,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             // Inner loop: Adapt to the task using support set
             var adaptedParameters = InnerLoopAdaptation(taskModel, task);
-            taskModel.SetParameters(adaptedParameters);
+            ((IParameterizable<T, TInput, TOutput>)taskModel).SetParameters(adaptedParameters);
 
             // Evaluate on query set to get meta-loss
             var queryPredictions = taskModel.Predict(task.QueryInput);
@@ -253,7 +253,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Apply weight decay if configured
         if (_sealOptions.WeightDecay > 0.0)
         {
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
             T decay = NumOps.FromDouble(_sealOptions.WeightDecay);
             for (int i = 0; i < metaGradients.Length; i++)
             {
@@ -262,9 +262,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Outer loop: Update meta-parameters
-        var currentMetaParams = MetaModel.GetParameters();
+        var currentMetaParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var updatedMetaParams = ApplyGradients(currentMetaParams, metaGradients, _sealOptions.OuterLearningRate);
-        MetaModel.SetParameters(updatedMetaParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSizeT);
@@ -314,7 +314,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        ((IParameterizable<T, TInput, TOutput>)adaptedModel).SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -356,7 +356,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </remarks>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         Vector<T>? runningSquaredGrads = null;
 
         // Initialize running squared gradients for RunningMean mode
@@ -387,7 +387,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 parameters = ApplyGradients(parameters, gradients, _sealOptions.InnerLearningRate);
             }
 
-            model.SetParameters(parameters);
+            ((IParameterizable<T, TInput, TOutput>)model).SetParameters(parameters);
         }
 
         return parameters;

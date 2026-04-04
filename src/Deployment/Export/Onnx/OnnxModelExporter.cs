@@ -154,7 +154,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
         });
 
         // Add MatMul operation for linear model
-        var parameters = fullModel.GetParameters();
+        var parameters = ((IParameterizable<T, T[], T[]>)fullModel).GetParameters();
 
         graph.Operations.Add(new OnnxOperation
         {
@@ -422,7 +422,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
         }
 
         // Try to infer from model parameters
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TModelInput, TModelOutput>)model).GetParameters();
         if (parameters != null && parameters.Length > 0)
         {
             var shape = new[] { parameters.Length };

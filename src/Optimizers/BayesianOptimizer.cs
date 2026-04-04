@@ -105,7 +105,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         // Get the parameter count from a random solution (includes coefficients + intercept)
         // This is different from inputSize which is just the feature count
         var firstSolution = InitializeRandomSolution(inputData.XTrain);
-        int paramCount = firstSolution.ParameterCount;
+        int paramCount = ((IParameterizable<T, TInput, TOutput>)firstSolution).ParameterCount;
 
         // Initial random sampling - use paramCount (model parameters), not inputSize (features)
         _sampledPoints = new Matrix<T>(_options.InitialSamples, paramCount);
@@ -114,7 +114,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         // Evaluate the first solution we already created
         var firstStepData = EvaluateSolution(firstSolution, inputData);
         UpdateBestSolution(firstStepData, ref bestStepData);
-        var firstParams = firstSolution.GetParameters();
+        var firstParams = ((IParameterizable<T, TInput, TOutput>)firstSolution).GetParameters();
         for (int j = 0; j < firstParams.Length; j++)
         {
             _sampledPoints[0, j] = firstParams[j];
@@ -127,7 +127,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             var randomSolution = InitializeRandomSolution(inputData.XTrain);
             var stepData = EvaluateSolution(randomSolution, inputData);
             UpdateBestSolution(stepData, ref bestStepData);
-            var parameters = randomSolution.GetParameters();
+            var parameters = ((IParameterizable<T, TInput, TOutput>)randomSolution).GetParameters();
 
             // Set values in the matrix and vector using indexing
             for (int j = 0; j < parameters.Length; j++)
@@ -146,7 +146,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             // Find next point to sample using acquisition function - use paramCount, not inputSize
             var nextPoint = OptimizeAcquisitionFunction(paramCount);
             var baseSolution = InitializeRandomSolution(inputData.XTrain);
-            var currentSolution = baseSolution.WithParameters(nextPoint);
+            var currentSolution = ((IParameterizable<T, TInput, TOutput>)baseSolution).WithParameters(nextPoint);
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);

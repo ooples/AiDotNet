@@ -26,7 +26,8 @@ namespace AiDotNet.Models;
 /// all the common delegation so wrapper classes only implement what's different.
 /// </para>
 /// </remarks>
-public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -70,13 +71,13 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IParameterizable ---
 
     /// <inheritdoc/>
-    public virtual Vector<T> GetParameters() => BaseModel.GetParameters();
+    public virtual Vector<T> GetParameters() => ((IParameterizable<T, TInput, TOutput>)BaseModel).GetParameters();
 
     /// <inheritdoc/>
-    public virtual void SetParameters(Vector<T> parameters) => BaseModel.SetParameters(parameters);
+    public virtual void SetParameters(Vector<T> parameters) => ((IParameterizable<T, TInput, TOutput>)BaseModel).SetParameters(parameters);
 
     /// <inheritdoc/>
-    public virtual int ParameterCount => BaseModel.ParameterCount;
+    public virtual int ParameterCount => ((IParameterizable<T, TInput, TOutput>)BaseModel).ParameterCount;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -99,11 +100,11 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
 
     /// <inheritdoc/>
     public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
-        => BaseModel.ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
+        => ((IGradientComputable<T, TInput, TOutput>)BaseModel).ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
 
     /// <inheritdoc/>
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
-        => BaseModel.ApplyGradients(gradients, learningRate);
+        => ((IGradientComputable<T, TInput, TOutput>)BaseModel).ApplyGradients(gradients, learningRate);
 
     // --- IModelSerializer ---
 
@@ -134,14 +135,14 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IFeatureAware ---
 
     /// <inheritdoc/>
-    public virtual IEnumerable<int> GetActiveFeatureIndices() => BaseModel.GetActiveFeatureIndices();
+    public virtual IEnumerable<int> GetActiveFeatureIndices() => ((IFeatureAware)BaseModel).GetActiveFeatureIndices();
 
     /// <inheritdoc/>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-        => BaseModel.SetActiveFeatureIndices(featureIndices);
+        => ((IFeatureAware)BaseModel).SetActiveFeatureIndices(featureIndices);
 
     /// <inheritdoc/>
-    public virtual bool IsFeatureUsed(int featureIndex) => BaseModel.IsFeatureUsed(featureIndex);
+    public virtual bool IsFeatureUsed(int featureIndex) => ((IFeatureAware)BaseModel).IsFeatureUsed(featureIndex);
 
     // --- IFeatureImportance ---
 

@@ -71,10 +71,10 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             throw new ArgumentOutOfRangeException(nameof(options), "DistillationTemperature must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
 
         // Initialize teacher as copy of student
-        var initParams = options.MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters();
         _teacherParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) _teacherParams[d] = initParams[d];
     }
@@ -84,7 +84,7 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -94,19 +94,19 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             // Query loss with adapted params
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Knowledge distillation loss: L2 distance between student and teacher predictions
             // Student prediction (already computed) vs teacher prediction
             var studentPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
-            MetaModel.SetParameters(_teacherParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(_teacherParams);
             var teacherPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
 
             double distillLoss = 0;
@@ -124,7 +124,7 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             losses.Add(NumOps.FromDouble(combinedLoss));
 
             // Compute meta-gradient: blend task gradient with distillation gradient
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
 
             // Add distillation gradient: d/dθ (distillLoss) ≈ 2*(student - teacher)/T² per param
@@ -155,12 +155,12 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Outer loop: update student params
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(newParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(newParams);
 
             // Update teacher via EMA
             double decay = _algoOptions.TeacherEmaDecay;
@@ -176,18 +176,18 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

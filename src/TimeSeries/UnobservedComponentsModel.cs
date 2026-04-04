@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -898,7 +898,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         var result = optimizer.Optimize(inputData);
 
         // Update model parameters with optimized values
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        UpdateModelParameters((result.BestSolution as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

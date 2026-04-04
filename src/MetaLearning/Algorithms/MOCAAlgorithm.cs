@@ -72,7 +72,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         if (options.AugmentationStrength < 0)
@@ -93,7 +93,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -104,7 +104,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             Vector<T>? lastGrad = null;
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedOriginal);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedOriginal);
                 lastGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedOriginal = ApplyGradients(adaptedOriginal, lastGrad, _algoOptions.InnerLearningRate);
             }
@@ -122,7 +122,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 }
             }
 
-            MetaModel.SetParameters(adaptedOriginal);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedOriginal);
             var originalLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // === Augmented task adaptation(s) ===
@@ -134,7 +134,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
-                    MetaModel.SetParameters(adaptedAug);
+                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedAug);
                     var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                     // Create complementary perturbation orthogonal to gradient
@@ -142,7 +142,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                     adaptedAug = ApplyGradients(adaptedAug, augGrad, _algoOptions.InnerLearningRate);
                 }
 
-                MetaModel.SetParameters(adaptedAug);
+                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedAug);
                 augLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
 
@@ -156,7 +156,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
 
             losses.Add(totalLoss);
-            MetaModel.SetParameters(adaptedOriginal);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedOriginal);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -169,18 +169,18 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

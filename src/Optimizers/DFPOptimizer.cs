@@ -111,7 +111,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.GetParameters().Length);
+        _inverseHessian = Matrix<T>.CreateIdentity(((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Length);
 
         InitializeAdaptiveParameters();
 
@@ -188,9 +188,9 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
 
         var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, stepSize);
-        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
+        var newCoefficients = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -215,7 +215,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
         }
 
         // Vectorized parameter and gradient differences
-        var s = (Vector<T>)Engine.Subtract(newSolution.GetParameters(), currentSolution.GetParameters());
+        var s = (Vector<T>)Engine.Subtract(((IParameterizable<T, TInput, TOutput>)newSolution).GetParameters(), ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters());
         var y = (Vector<T>)Engine.Subtract(gradient, _previousGradient);
 
         var sTy = s.DotProduct(y);

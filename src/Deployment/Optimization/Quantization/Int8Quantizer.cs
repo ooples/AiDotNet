@@ -39,13 +39,13 @@ public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         }
 
         // Get current parameters via IParameterizable<T, TInput, TOutput>
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
 
         // Quantize the parameters
         var quantizedParams = QuantizeParameters(parameters, config);
 
         // Create new model with quantized parameters using WithParameters
-        var quantizedModel = model.WithParameters(quantizedParams);
+        var quantizedModel = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(quantizedParams);
 
         return quantizedModel;
     }
@@ -59,7 +59,7 @@ public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             throw new ArgumentException("Calibration data cannot be null or empty", nameof(calibrationData));
 
         // Collect parameter statistics
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
         var paramValues = new List<double>();
 
         for (int i = 0; i < parameters.Length; i++)

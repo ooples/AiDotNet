@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -138,7 +138,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
 
         // Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -199,7 +199,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Step 2: Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
 
         // Step 3: Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -333,7 +333,7 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        return BaseModel.WithParameters(parameters);
+        return ((IParameterizable<T, Matrix<T>, Vector<T>>)BaseModel).WithParameters(parameters);
     }
 
     /// <inheritdoc/>

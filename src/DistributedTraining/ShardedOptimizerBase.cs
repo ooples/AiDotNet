@@ -143,13 +143,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         }
 
         // Get current parameters
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
 
         // Average parameters across all processes
         Config.CommunicationBackend.AllReduce(parameters, ReductionOperation.Average);
 
         // Update model with averaged parameters
-        model.SetParameters(parameters);
+        ((IParameterizable<T, TInput, TOutput>)model).SetParameters(parameters);
     }
 
     /// <inheritdoc/>

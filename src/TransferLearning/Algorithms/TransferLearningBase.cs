@@ -84,7 +84,7 @@ public abstract class TransferLearningBase<T, TInput, TOutput>
     protected bool RequiresCrossDomainTransfer(IFullModel<T, TInput, TOutput> sourceModel, TInput targetData)
     {
         // Get active features from source model
-        var sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        var sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
 
         // Get target features based on input type
         int targetFeatures = InputHelper<T, TInput>.GetInputSize(targetData);

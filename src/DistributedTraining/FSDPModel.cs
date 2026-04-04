@@ -109,11 +109,11 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
 
         // Gather full parameters for gradient computation (just-in-time gathering)
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(fullParams);
 
         // Compute TRUE gradients using the model's gradient computation
         // This calls the model's backpropagation without updating parameters
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ComputeGradients(input, expectedOutput);
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
@@ -124,23 +124,23 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
 
             // Apply the averaged gradients to update full parameters
             // Note: For adaptive optimizers, use FSDPOptimizer which properly handles optimizer state.
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
+            ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated full parameters
-            var updatedParams = WrappedModel.GetParameters();
+            var updatedParams = ((IParameterizable<T, TInput, TOutput>)WrappedModel).GetParameters();
 
             // Update local shard from full parameters (invalidates cache)
             // This extracts our portion and "releases" the full parameters from memory
             UpdateLocalShardFromFull(updatedParams);
 
             // Apply updated parameters back to the model for consistency
-            WrappedModel.SetParameters(updatedParams);
+            ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(updatedParams);
         }
         else
         {
             // No auto-sync: apply gradients locally without synchronization
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
-            var updatedParams = WrappedModel.GetParameters();
+            ((IGradientComputable<T, TInput, TOutput>)WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
+            var updatedParams = ((IParameterizable<T, TInput, TOutput>)WrappedModel).GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
             UpdateLocalShardFromFull(updatedParams);
@@ -155,7 +155,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     {
         // Gather full parameters for prediction
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        ((IParameterizable<T, TInput, TOutput>)WrappedModel).SetParameters(fullParams);
 
         // Use wrapped model for prediction
         return WrappedModel.Predict(input);
@@ -203,7 +203,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = ((IParameterizable<T, TInput, TOutput>)WrappedModel).WithParameters(parameters);
         return new FSDPModel<T, TInput, TOutput>(newModel, Config);
     }
 
@@ -339,18 +339,18 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        return WrappedModel.GetActiveFeatureIndices();
+        return ((IFeatureAware)WrappedModel).GetActiveFeatureIndices();
     }
 
     /// <inheritdoc/>
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        WrappedModel.SetActiveFeatureIndices(featureIndices);
+        ((IFeatureAware)WrappedModel).SetActiveFeatureIndices(featureIndices);
     }
 
     /// <inheritdoc/>
     public override bool IsFeatureUsed(int featureIndex)
     {
-        return WrappedModel.IsFeatureUsed(featureIndex);
+        return ((IFeatureAware)WrappedModel).IsFeatureUsed(featureIndex);
     }
 }

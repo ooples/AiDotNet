@@ -188,7 +188,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <returns>The model parameters as a vector.</returns>
     public Vector<T> GetParameters()
     {
-        return _innerModel.GetParameters();
+        return ((IParameterizable<T, TInput, TOutput>)_innerModel).GetParameters();
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        _innerModel = _innerModel.WithParameters(parameters);
+        _innerModel = ((IParameterizable<T, TInput, TOutput>)_innerModel).WithParameters(parameters);
     }
 
     /// <summary>
@@ -207,7 +207,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <returns>A new model with the specified parameters.</returns>
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = _innerModel.WithParameters(parameters);
+        var newModel = ((IParameterizable<T, TInput, TOutput>)_innerModel).WithParameters(parameters);
 
         return new ModelIndividual<T, TInput, TOutput, TGene>(
             newModel,
@@ -253,7 +253,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        return _innerModel.GetActiveFeatureIndices();
+        return ((IFeatureAware)_innerModel).GetActiveFeatureIndices();
     }
 
     public virtual Dictionary<string, T> GetFeatureImportance()
@@ -263,12 +263,12 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        _innerModel.SetActiveFeatureIndices(featureIndices);
+        ((IFeatureAware)_innerModel).SetActiveFeatureIndices(featureIndices);
     }
 
     public bool IsFeatureUsed(int featureIndex)
     {
-        return _innerModel.IsFeatureUsed(featureIndex);
+        return ((IFeatureAware)_innerModel).IsFeatureUsed(featureIndex);
     }
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
@@ -311,13 +311,13 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public virtual void SetParameters(Vector<T> parameters)
     {
-        _innerModel = _innerModel.WithParameters(parameters);
+        _innerModel = ((IParameterizable<T, TInput, TOutput>)_innerModel).WithParameters(parameters);
         _parameterCountCache = null; // invalidate cache
     }
 
     private int? _parameterCountCache;
     public virtual int ParameterCount
-        => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
+        => _parameterCountCache ??= ((IParameterizable<T, TInput, TOutput>)_innerModel).GetParameters()?.Length ?? 0;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -374,7 +374,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// </summary>
     public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
     {
-        return _innerModel.ComputeGradients(input, target, lossFunction);
+        return ((IGradientComputable<T, TInput, TOutput>)_innerModel).ComputeGradients(input, target, lossFunction);
     }
 
     /// <summary>
@@ -382,7 +382,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// </summary>
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _innerModel.ApplyGradients(gradients, learningRate);
+        ((IGradientComputable<T, TInput, TOutput>)_innerModel).ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>
@@ -428,7 +428,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
             if (_innerModel is null)
                 return false;
 
-            return _innerModel.SupportsJitCompilation;
+            return ((IJitCompilable<T>)_innerModel).SupportsJitCompilation;
         }
     }
 
@@ -469,12 +469,12 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
             throw new InvalidOperationException(
                 "Cannot export computation graph: Inner model is null.");
 
-        if (!_innerModel.SupportsJitCompilation)
+        if (!((IJitCompilable<T>)_innerModel).SupportsJitCompilation)
             throw new NotSupportedException(
                 $"The inner model of type {_innerModel.GetType().Name} does not support JIT compilation. " +
                 "JIT compilation availability depends on the inner model's capabilities.");
 
-        return _innerModel.ExportComputationGraph(inputNodes);
+        return ((IJitCompilable<T>)_innerModel).ExportComputationGraph(inputNodes);
     }
 
     #endregion

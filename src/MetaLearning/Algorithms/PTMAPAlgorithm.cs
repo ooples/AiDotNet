@@ -156,11 +156,11 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -274,7 +274,7 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Extract support and query features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -385,11 +385,11 @@ internal class PTMAPModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
             for (int i = 0; i < baseParams.Length; i++)
                 modulated[i] = NumOps.Multiply(baseParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(baseParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(baseParams);
         }
         return _model.Predict(input);
     }

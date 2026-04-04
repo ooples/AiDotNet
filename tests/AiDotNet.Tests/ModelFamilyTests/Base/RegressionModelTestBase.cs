@@ -556,7 +556,7 @@ public abstract class RegressionModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters();
         Assert.True(parameters.Length > 0, "Trained model should have learnable parameters.");
     }
 
@@ -572,7 +572,7 @@ public abstract class RegressionModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
-        var activeFeatures = model.GetActiveFeatureIndices().ToList();
+        var activeFeatures = ((IFeatureAware)model).GetActiveFeatureIndices().ToList();
 
         Assert.True(activeFeatures.Count > 0, "Trained model should have at least one active feature.");
         foreach (var idx in activeFeatures)

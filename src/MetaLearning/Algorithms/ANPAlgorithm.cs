@@ -56,11 +56,11 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
@@ -104,7 +104,7 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
@@ -190,11 +190,11 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
         double totalLoss = 0;
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var sf = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var sl = ConvertToVector(task.SupportOutput);
             var cr = BuildContextRepresentations(sf, sl);
@@ -205,7 +205,7 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             ModulateParameters(initParams, ComputeScale(z, att));
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

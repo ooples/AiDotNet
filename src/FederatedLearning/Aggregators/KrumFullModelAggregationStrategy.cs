@@ -78,7 +78,7 @@ public sealed class KrumFullModelAggregationStrategy<T, TInput, TOutput> :
         }
 
         var selectedParameters = clientParameters[bestClientId];
-        return reference.WithParameters(selectedParameters);
+        return ((IParameterizable<T, TInput, TOutput>)reference).WithParameters(selectedParameters);
     }
 
     public override string GetStrategyName() => "Krum";

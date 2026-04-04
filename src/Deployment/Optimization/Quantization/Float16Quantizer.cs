@@ -28,13 +28,13 @@ public class Float16Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutpu
             throw new ArgumentNullException(nameof(model));
 
         // Get current parameters via IParameterizable<T, TInput, TOutput>
-        var parameters = model.GetParameters();
+        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
 
         // Quantize to FP16 and back
         var quantizedParams = QuantizeParametersToFp16(parameters);
 
         // Create new model with quantized parameters using WithParameters
-        var quantizedModel = model.WithParameters(quantizedParams);
+        var quantizedModel = ((IParameterizable<T, TInput, TOutput>)model).WithParameters(quantizedParams);
 
         return quantizedModel;
     }

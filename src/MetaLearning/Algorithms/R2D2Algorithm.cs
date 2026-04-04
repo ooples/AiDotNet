@@ -202,12 +202,12 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Set current parameters
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
 
             // Forward pass through backbone for support and query
             var supportPred = MetaModel.Predict(task.SupportInput);
@@ -276,7 +276,7 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -527,14 +527,14 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         double epsilon = 1e-5;
         double originalLambda = _lambda;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
 
         // Compute loss at current lambda using ridge regression predictions
         double baseLoss = 0;
         _lambda = originalLambda;
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var supportLabels = ConvertToVector(task.SupportOutput);
@@ -552,7 +552,7 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                     var modulated = new Vector<T>(initParams.Length);
                     for (int i = 0; i < initParams.Length; i++)
                         modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(modFactor));
-                    MetaModel.SetParameters(modulated);
+                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulated);
                 }
             }
             baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
@@ -565,7 +565,7 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         double perturbedLoss = 0;
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var supportLabels = ConvertToVector(task.SupportOutput);
@@ -582,7 +582,7 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                     var modulated = new Vector<T>(initParams.Length);
                     for (int i = 0; i < initParams.Length; i++)
                         modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(modFactor));
-                    MetaModel.SetParameters(modulated);
+                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulated);
                 }
             }
             perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
@@ -595,7 +595,7 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         // Update lambda with gradient descent, constrain to be positive
         _lambda = Math.Max(1e-6, originalLambda - _r2d2Options.OuterLearningRate * lambdaGrad);
-        MetaModel.SetParameters(initParams);
+        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
     }
 
 }
@@ -650,11 +650,11 @@ internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

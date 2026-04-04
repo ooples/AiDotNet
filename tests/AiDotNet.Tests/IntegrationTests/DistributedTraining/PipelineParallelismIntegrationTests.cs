@@ -992,13 +992,13 @@ public class PipelineParallelismIntegrationTests
             Assert.NotSame(pipelineModel, cloned);
 
             // Train original, clone should remain unchanged
-            var clonedParamsBefore = cloned.GetParameters().ToArray();
+            var clonedParamsBefore = ((IParameterizable<double, Vector<double>, Vector<double>>)cloned).GetParameters().ToArray();
 
             var input = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)i).ToArray());
             var target = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)(i * 2)).ToArray());
             pipelineModel.Train(input, target);
 
-            var clonedParamsAfter = cloned.GetParameters().ToArray();
+            var clonedParamsAfter = ((IParameterizable<double, Vector<double>, Vector<double>>)cloned).GetParameters().ToArray();
             Assert.Equal(clonedParamsBefore.Length, clonedParamsAfter.Length);
             for (int i = 0; i < clonedParamsBefore.Length; i++)
             {
