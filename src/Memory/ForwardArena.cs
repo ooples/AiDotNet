@@ -86,7 +86,7 @@ internal sealed class ForwardArena<T>
     /// </summary>
     public void EnsureCapacity(int[] shape, int count)
     {
-        var key = new ShapeKey(shape);
+        var key = new ShapeKey(shape, defensiveCopy: true);
         if (_slabs.TryGetValue(key, out var existing) && existing.Length >= count)
             return;
 
@@ -138,9 +138,9 @@ public readonly struct ShapeKey : IEquatable<ShapeKey>
     private readonly int _hash;
     private readonly int[] _dims;
 
-    public ShapeKey(int[] shape)
+    public ShapeKey(int[] shape, bool defensiveCopy = false)
     {
-        _dims = (int[])shape.Clone();
+        _dims = defensiveCopy ? (int[])shape.Clone() : shape;
         unchecked
         {
             int hash = (int)2166136261;

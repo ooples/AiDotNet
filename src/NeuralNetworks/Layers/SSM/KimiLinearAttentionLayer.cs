@@ -280,8 +280,8 @@ public class KimiLinearAttentionLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         // Store KV gate values
         _lastKVGate = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
