@@ -598,7 +598,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         T distSq = NumOps.Zero;
                         for (int j = 0; j < d; j++)
                         {
-                            T diff = NumOps.Subtract(FittedWeights[r, c][j], _weights[nr, nc][j]);
+                            T diff = NumOps.Subtract(FittedWeights[r, c][j], FittedWeights[nr, nc][j]);
                             distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
                         }
 

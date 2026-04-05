@@ -68,6 +68,7 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// Training target values.
     /// </summary>
     private Vector<T>? _y;
+    private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
     /// Prior covariance matrix.

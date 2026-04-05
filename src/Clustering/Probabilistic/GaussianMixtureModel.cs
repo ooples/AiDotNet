@@ -60,11 +60,11 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T[]? _weights;
-    private T[,]? _means;
-    private T[,,]? _covariances;
-    private T[,]? _responsibilities;
-    private T _lowerBound = default(T) ?? MathHelper.GetNumericOperations<T>().Zero;
+    private Vector<T>? _weights;
+    private Matrix<T>? _means;
+    private Tensor<T>? _covariances;
+    private Matrix<T>? _responsibilities;
+    private T _lowerBound = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new GaussianMixtureModel instance.
@@ -77,25 +77,25 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         NumClusters = _options.NumComponents;
     }
 
-    private T[] FittedWeights => _weights ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
-    private T[,] FittedMeans => _means ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
-    private T[,,] FittedCovariances => _covariances ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
-    private T[,] FittedResponsibilities => _responsibilities ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private Vector<T> FittedWeights => _weights ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private Matrix<T> FittedMeans => _means ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private Tensor<T> FittedCovariances => _covariances ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private Matrix<T> FittedResponsibilities => _responsibilities ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
 
     /// <summary>
     /// Gets the mixture weights.
     /// </summary>
-    public T[]? Weights => _weights;
+    public Vector<T>? Weights => _weights;
 
     /// <summary>
     /// Gets the component means.
     /// </summary>
-    public T[,]? Means => _means;
+    public Matrix<T>? Means => _means;
 
     /// <summary>
     /// Gets the component covariances.
     /// </summary>
-    public T[,,]? Covariances => _covariances;
+    public Tensor<T>? Covariances => _covariances;
 
     /// <summary>
     /// Gets the lower bound (ELBO) from the last training.
@@ -138,11 +138,11 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
 
         if (_weights is not null)
-            clone._weights = (T[])FittedWeights.Clone();
+            clone._weights = _weights.Clone();
         if (_means is not null)
-            clone._means = (T[,])FittedMeans.Clone();
+            clone._means = _means.Clone();
         if (_covariances is not null)
-            clone._covariances = (T[,,])FittedCovariances.Clone();
+            clone._covariances = _covariances.Clone();
 
         return clone;
     }
@@ -173,10 +173,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
 
         T bestLowerBound = NumOps.MinValue;
-        T[]? bestWeights = null;
-        T[,]? bestMeans = null;
-        T[,,]? bestCovariances = null;
-        T[,]? bestResponsibilities = null;
+        Vector<T>? bestWeights = null;
+        Matrix<T>? bestMeans = null;
+        Tensor<T>? bestCovariances = null;
+        Matrix<T>? bestResponsibilities = null;
 
         // Run multiple initializations
         for (int init = 0; init < _options.NumInitializations; init++)
@@ -214,10 +214,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             if (NumOps.GreaterThan(_lowerBound, bestLowerBound))
             {
                 bestLowerBound = _lowerBound;
-                bestWeights = (T[])FittedWeights.Clone();
-                bestMeans = (T[,])FittedMeans.Clone();
-                bestCovariances = (T[,,])FittedCovariances.Clone();
-                bestResponsibilities = (T[,])FittedResponsibilities.Clone();
+                bestWeights = FittedWeights.Clone();
+                bestMeans = FittedMeans.Clone();
+                bestCovariances = FittedCovariances.Clone();
+                bestResponsibilities = FittedResponsibilities.Clone();
             }
         }
 
@@ -261,10 +261,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeParameters(Matrix<T> data, int n, int d, int k)
     {
-        _weights = new T[k];
-        _means = new T[k, d];
-        _covariances = new T[k, d, d];
-        _responsibilities = new T[n, k];
+        _weights = new Vector<T>(k);
+        _means = new Matrix<T>(k, d);
+        _covariances = new Tensor<T>([k, d, d]);
+        _responsibilities = new Matrix<T>(n, k);
 
         // Initialize weights uniformly
         T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(k));

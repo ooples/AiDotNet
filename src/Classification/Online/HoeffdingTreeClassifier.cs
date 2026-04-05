@@ -245,9 +245,10 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             // Re-initialize with saved ranges and freeze them so bin assignment is
             // consistent for ALL samples in pass 2 (no range drift).
             InitializeFeatureStats(_root, NumFeatures);
+            var featureStats = _root.FeatureStatistics ?? throw new InvalidOperationException("Feature statistics not initialized.");
             for (int f = 0; f < NumFeatures; f++)
             {
-                var stats = _root.FeatureStatistics[f];
+                var stats = featureStats[f];
                 stats.Min = savedRanges[f].Min;
                 stats.Max = savedRanges[f].Max;
                 stats.RangeFrozen = true;
