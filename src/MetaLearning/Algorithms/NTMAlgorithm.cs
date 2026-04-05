@@ -1415,11 +1415,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
     }
 
-    private T Tanh(T x)
-    {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(Math.Tanh(val));
-    }
+    private T Tanh(T x) => NumOps.Tanh(x);
 
     /// <inheritdoc/>
     public List<Tensor<T>> GenerateReadKeys(Tensor<T> output)
@@ -1793,11 +1789,7 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
         return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
     }
 
-    private T Tanh(T x)
-    {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(Math.Tanh(val));
-    }
+    private T Tanh(T x) => NumOps.Tanh(x);
 
     /// <inheritdoc/>
     public List<Tensor<T>> GenerateReadKeys(Tensor<T> output)

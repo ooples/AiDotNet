@@ -1269,7 +1269,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
             int start = e * bucketSize;
             for (int d = start; d < start + bucketSize && d < vector.Length; d++)
                 sum += NumOps.ToDouble(vector[d]);
-            result[e] = NumOps.FromDouble(Math.Tanh(sum / bucketSize));
+            result[e] = NumOps.Tanh(NumOps.FromDouble(sum / bucketSize));
         }
         return result;
     }

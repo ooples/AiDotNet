@@ -176,7 +176,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             int start = e * bucketSize;
             for (int d = start; d < start + bucketSize && d < _paramDim; d++)
                 sum += NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-            result[e] = NumOps.FromDouble(Math.Tanh(sum / bucketSize));
+            result[e] = NumOps.Tanh(NumOps.FromDouble(sum / bucketSize));
         }
         return result;
     }
