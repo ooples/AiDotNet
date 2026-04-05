@@ -150,13 +150,13 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
 
         for (int i = 0; i < latentDim; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
             {
                 int paramIdx = (i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sum += NumOps.ToDouble(representation[j]) * NumOps.ToDouble(_latentEncoderParams[paramIdx]);
+                sum = NumOps.Add(sum, NumOps.Multiply(representation[j], _latentEncoderParams[paramIdx]));
             }
-            mean[i] = NumOps.FromDouble(Math.Tanh(sum));
+            mean[i] = sum;
 
             double sumVar = 0;
             for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
@@ -167,6 +167,7 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
             logvar[i] = NumOps.FromDouble(Math.Max(-4, Math.Min(2, sumVar)));
         }
 
+        mean = VectorTanh(mean);
         return (mean, logvar);
     }
 
