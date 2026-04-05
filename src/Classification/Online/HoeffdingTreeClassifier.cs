@@ -201,6 +201,11 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// </summary>
     public void PartialFit(Matrix<T> features, Vector<T> labels)
     {
+        if (features.Rows != labels.Length)
+            throw new ArgumentException(
+                $"Feature rows ({features.Rows}) must match label count ({labels.Length}).",
+                nameof(labels));
+
         for (int i = 0; i < features.Rows; i++)
         {
             var sample = new Vector<T>(features.Columns);
@@ -716,27 +721,23 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         leaf.FeatureStatistics = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Not supported — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// </summary>
     public Vector<T> GetParameters()
-    {
-        // Tree structure is complex - return empty for now
-        return new Vector<T>(0);
-    }
+        => throw new NotSupportedException("Hoeffding trees do not support flat parameter access.");
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Not supported — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// </summary>
     public void SetParameters(Vector<T> parameters)
-    {
-        // Tree is structural, cannot set from flat parameters
-    }
+        => throw new NotSupportedException("Hoeffding trees do not support flat parameter setting.");
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a fresh instance — tree structure cannot be reconstructed from flat parameters.
+    /// </summary>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
-    {
-        // Return a cold instance to avoid inconsistent state and shared mutable references.
-        // Tree structure cannot be set from flat parameters - deep cloning would be needed
-        // to properly copy the tree, which is non-trivial.
-        return new HoeffdingTreeClassifier<T>(_options);
-    }
+        => new HoeffdingTreeClassifier<T>(_options);
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -852,7 +853,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 var featureDict = new Dictionary<string, object?>
                 {
                     ["Min"] = kvp.Value.Min,
-                    ["Max"] = kvp.Value.Max
+                    ["Max"] = kvp.Value.Max,
+                    ["RangeFrozen"] = kvp.Value.RangeFrozen
                 };
 
                 if (kvp.Value.BinsByClass is not null)
@@ -911,7 +913,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                     var stats = new FeatureStats
                     {
                         Min = featureObj["Min"]?.ToObject<double>() ?? double.MaxValue,
-                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue
+                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue,
+                        RangeFrozen = featureObj["RangeFrozen"]?.ToObject<bool>() ?? false
                     };
 
                     if (featureObj["BinsByClass"] is JObject binsObj)
