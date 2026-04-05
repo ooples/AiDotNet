@@ -171,9 +171,18 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         // Ensure the network is in inference mode
         IsTrainingMode = false;
 
-        // Validate input shape
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(FeedForwardNeuralNetwork<T>), "prediction");
+        // Validate input shape — accept batched input [B, ...expectedShape]
+        // by validating trailing dimensions match the architecture's input shape.
+        var expectedShape = Architecture.GetInputShape();
+        if (input.Rank == expectedShape.Length + 1 && input.Length / input.Shape[0] == expectedShape.Aggregate(1, (a, b) => a * b))
+        {
+            // Batched input — trailing dims match, proceed
+        }
+        else
+        {
+            TensorValidator.ValidateShape(input, expectedShape,
+                nameof(FeedForwardNeuralNetwork<T>), "prediction");
+        }
 
         // Just perform a forward pass
         var predictions = Forward(input);
