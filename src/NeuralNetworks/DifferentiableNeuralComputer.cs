@@ -910,6 +910,18 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// DNC overrides ForwardForTraining because its forward pass includes memory
+    /// read/write operations that aren't captured in the Layers list. The base
+    /// ForwardForTraining only iterates Layers, producing raw controller output
+    /// instead of the final DNC output after memory combination.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return ProcessInput(input, true);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);

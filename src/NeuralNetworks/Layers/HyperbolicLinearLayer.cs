@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
-public class HyperbolicLinearLayer<T> : LayerBase<T>
+public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 {
 
     /// <summary>

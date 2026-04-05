@@ -214,6 +214,12 @@ public class SUBCLU<T> : ClusteringBase<T>
                 xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - featureMeans[j]) / featureStds[j]);
         x = xNorm;
 
+        // Update _trainingData to normalized version so Predict distance comparisons
+        // use the same scale as the clustered data
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < d; j++)
+                _trainingData[i, j] = xNorm[i, j];
+
         _subspaceClusterInfos = new List<SubspaceClusterInfo>();
 
         // Find 1-D dense clusters

@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class MinLSTMLayer<T> : LayerBase<T>
+public partial class MinLSTMLayer<T> : LayerBase<T>
 {
     // Configuration
     private readonly int _modelDimension;
@@ -432,6 +432,19 @@ public class MinLSTMLayer<T> : LayerBase<T>
         _cellCandidateBias = Engine.TensorAdd(_cellCandidateBias, Engine.TensorMultiplyScalar(_cellCandidateBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_forgetGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_forgetGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_cellCandidateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cellCandidateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

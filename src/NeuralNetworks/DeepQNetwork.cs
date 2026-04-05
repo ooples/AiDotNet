@@ -542,8 +542,10 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // If replay buffer is empty, fall back to standard supervised training
+        // per Mnih et al. 2015 — direct input→target training still works for DQN
         if (_replayBuffer.Count < _batchSize)
         {
+            TrainWithTape(input, expectedOutput, _trainOptimizer);
             return;
         }
 

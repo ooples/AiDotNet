@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class BASEDLayer<T> : LayerBase<T>
+public partial class BASEDLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -981,6 +981,19 @@ public class BASEDLayer<T> : LayerBase<T>
         _mixingGateBias = Engine.TensorAdd(_mixingGateBias, Engine.TensorMultiplyScalar(_mixingGateBiasGradient, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_linearQueryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linearKeyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linearValueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_windowQueryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_windowKeyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_windowValueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_mixingGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_mixingGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

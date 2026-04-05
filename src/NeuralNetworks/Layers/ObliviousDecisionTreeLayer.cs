@@ -24,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
+public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _depth;
@@ -310,6 +310,12 @@ public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
             Engine.TensorMultiplyScalar(_thresholdsGrad, learningRate));
         _leafValues = Engine.TensorSubtract(_leafValues,
             Engine.TensorMultiplyScalar(_leafValuesGrad, learningRate));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_featureSelectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_thresholds, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_leafValues, PersistentTensorRole.Weights);
+
     }
 
     /// <inheritdoc/>

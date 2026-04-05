@@ -1493,73 +1493,21 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// VideoCLIP overrides ForwardForTraining because its forward pass extracts
+    /// video embeddings through a custom pipeline (frame encoding → temporal
+    /// encoding → projection → normalization) that isn't captured in the Layers list.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return Predict(input);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Parse input based on rank
-        var frames = new List<Tensor<T>>();
-
-        if (input.Shape.Length == 4)
-        {
-            // Input is [numFrames, channels, height, width] - split into individual frames
-            int numFrames = input.Shape[0];
-            int channels = input.Shape[1];
-            int height = input.Shape[2];
-            int width = input.Shape[3];
-
-            for (int f = 0; f < numFrames; f++)
-            {
-                var frame = Tensor<T>.CreateDefault([channels, height, width], NumOps.Zero);
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            frame[c, h, w] = input[f, c, h, w];
-                        }
-                    }
-                }
-                frames.Add(frame);
-            }
-        }
-        else if (input.Shape.Length == 3)
-        {
-            // Input is [channels, height, width] - treat as single frame
-            frames.Add(input);
-        }
-        else
-        {
-            // Fallback for other shapes
-            frames.Add(input);
-        }
-
-        var embedding = GetVideoEmbedding(frames);
-        var embeddingTensor = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            embeddingTensor[0, i] = embedding[i];
-        }
-
-        LastLoss = LossFunction.CalculateLoss(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var lossGradient = LossFunction.CalculateDerivative(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-
-        // Update parameters using the optimizer's gradient-based update
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradOptimizer)
-        {
-            gradOptimizer.UpdateParameters(Layers);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Optimizer type '{_optimizer.GetType().Name}' does not implement IGradientBasedOptimizer. " +
-                "VideoCLIP training requires a gradient-based optimizer (e.g., AdamOptimizer).");
-        }
-
-        SetTrainingMode(false);
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <inheritdoc/>

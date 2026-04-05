@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
-public class SoftTreeLayer<T> : LayerBase<T>
+public partial class SoftTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _depth;

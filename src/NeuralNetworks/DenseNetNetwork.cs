@@ -248,9 +248,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set eval mode on all layers for inference (BN uses running stats)
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
+        SetTrainingMode(false);
         return Forward(input);
     }
 

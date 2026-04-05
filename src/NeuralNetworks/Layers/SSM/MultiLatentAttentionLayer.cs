@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class MultiLatentAttentionLayer<T> : LayerBase<T>
+public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -408,6 +408,18 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
         _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(outputGateBiasGradient, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outputProjectionWeightsGradient, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outputProjectionBiasGradient, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_compressWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_compressBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_keyUpWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueUpWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

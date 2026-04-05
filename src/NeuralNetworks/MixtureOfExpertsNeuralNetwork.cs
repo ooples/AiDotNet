@@ -388,36 +388,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
-        // Forward pass to get prediction
-        var prediction = Forward(input);
-
-        // Calculate primary loss
-        var primaryLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate auxiliary losses from layers that support them (e.g., load balancing loss)
-        T auxiliaryLoss = NumOps.Zero;
-        foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
-        {
-            var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-            var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-            auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-        }
-
-        // Combine primary and auxiliary losses
-        LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
-
-        // Calculate output gradient (derivative of loss with respect to network output)
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-
-        // Backpropagation
-
-        // Update parameters using the optimizer
-        _optimizer.UpdateParameters(Layers);
-
-        IsTrainingMode = false;
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <summary>

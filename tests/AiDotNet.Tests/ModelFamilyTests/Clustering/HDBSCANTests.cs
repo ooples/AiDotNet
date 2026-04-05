@@ -10,9 +10,9 @@ public class HDBSCANTests : ClusteringModelTestBase
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new HDBSCAN<double>(new AiDotNet.Clustering.Options.HDBSCANOptions<double>
         {
-            MinClusterSize = 3,
+            MinClusterSize = 5,
             MinSamples = 3,
-            ClusterSelection = AiDotNet.Clustering.Options.HDBSCANClusterSelection.Leaf
+            ClusterSelection = AiDotNet.Clustering.Options.HDBSCANClusterSelection.EOM
         });
 
     // HDBSCAN is density-based — doesn't have centroid parameters

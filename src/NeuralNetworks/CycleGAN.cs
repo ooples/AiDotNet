@@ -748,6 +748,16 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { }
 
+    /// <summary>
+    /// CycleGAN's parameters are in its sub-networks, not in the Layers list.
+    /// Override to sum all generator and discriminator parameters.
+    /// </summary>
+    public override int ParameterCount =>
+        GeneratorAtoB.GetParameterCount() +
+        GeneratorBtoA.GetParameterCount() +
+        DiscriminatorA.GetParameterCount() +
+        DiscriminatorB.GetParameterCount();
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -759,6 +769,13 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Add batch dimension if missing (1D [features] → 2D [1, features])
+        // CycleGAN's TrainStep expects batched input with Shape[0] as batch size
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+        if (expectedOutput.Rank == 1)
+            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
+
         TrainStep(input, expectedOutput);
     }
 

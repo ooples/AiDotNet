@@ -1090,16 +1090,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        var perceiverFeatures = ExtractPerceiverFeatures(input);
-
-        LastLoss = LossFunction.CalculateLoss(perceiverFeatures.ToVector(), expectedOutput.ToVector());
-        var lossGradient = LossFunction.CalculateDerivative(perceiverFeatures.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        var currentParams = GetParameters();
-        UpdateParameters(currentParams);
-
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         SetTrainingMode(false);
     }
 

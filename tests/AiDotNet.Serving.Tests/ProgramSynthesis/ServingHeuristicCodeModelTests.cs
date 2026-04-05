@@ -22,13 +22,16 @@ public sealed class ServingHeuristicCodeModelTests
     [Fact]
     public void Deserialize_MismatchedArchitecture_Throws()
     {
-        var modelA = CreateDefaultModel(ProgramLanguage.Generic);
-        var payload = (byte[])Invoke(modelA, "Serialize")!;
+        using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var modelA = CreateDefaultModel(ProgramLanguage.Generic);
+            var payload = (byte[])Invoke(modelA, "Serialize")!;
 
-        var modelB = CreateDefaultModel(ProgramLanguage.Python);
+            var modelB = CreateDefaultModel(ProgramLanguage.Python);
 
-        var ex = Assert.Throws<TargetInvocationException>(() => Invoke(modelB, "Deserialize", payload));
-        Assert.IsType<InvalidOperationException>(ex.InnerException);
+            var ex = Assert.Throws<TargetInvocationException>(() => Invoke(modelB, "Deserialize", payload));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+        }
     }
 
     private static object CreateDefaultModel(ProgramLanguage language)

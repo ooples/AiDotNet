@@ -30,6 +30,9 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
 public class SwishActivation<T> : ActivationFunctionBase<T>
 {
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => true;
+
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>
