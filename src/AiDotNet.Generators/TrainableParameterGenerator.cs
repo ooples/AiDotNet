@@ -119,24 +119,32 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
-            // Fallback: discover trainable parameters from RegisterTrainableParameter() calls
+            // Discover trainable parameters from RegisterTrainableParameter() calls
             // in the class body. This handles layers that use the registration API but haven't
-            // been annotated with [TrainableParameter] yet. Same pattern as sublayer discovery.
-            if (paramFields.Count == 0)
+            // been fully annotated with [TrainableParameter]. When the attribute count is less
+            // than the registration count, the registration-based discovery takes precedence
+            // to ensure all trainable fields are included in the tape autodiff system.
             {
+                // Always run discovery to compare counts
                 var registeredFields = DiscoverFromRegisterCalls(classDecl, model, "RegisterTrainableParameter");
+                var existingFieldNames = new HashSet<string>(paramFields.Select(p => p.Name));
                 foreach (var (fieldName, role) in registeredFields)
                 {
-                    // Verify the field exists and is a Tensor<T>
+                    // Skip fields already discovered via [TrainableParameter] attributes
+                    if (existingFieldNames.Contains(fieldName)) continue;
+
+                    // Verify the field exists, is a Tensor<T>, and is non-nullable
                     var matchingField = classSymbol.GetMembers()
                         .OfType<IFieldSymbol>()
-                        .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type));
+                        .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type)
+                            && f.NullableAnnotation != NullableAnnotation.Annotated
+                            && f.Type.NullableAnnotation != NullableAnnotation.Annotated);
                     if (matchingField is not null)
                     {
                         paramFields.Add(new ParameterFieldInfo(matchingField.Name, role, paramFields.Count));
+                        existingFieldNames.Add(fieldName);
                     }
                 }
-
             }
 
             if (paramFields.Count == 0 && subLayerFields.Count == 0) continue;
