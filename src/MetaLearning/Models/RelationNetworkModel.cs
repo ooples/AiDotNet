@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -455,7 +455,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
     public Vector<T> GetParameters()
     {
         // Combine parameters from both networks
-        var encoderParams = _featureEncoder.GetParameters();
+        var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
         var relationParams = _relationModule.GetParameters();
 
         var combined = new Vector<T>(encoderParams.Length + relationParams.Length);

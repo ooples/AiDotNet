@@ -42,7 +42,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("MusicSourceSeparator")]
-public interface IMusicSourceSeparator<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface IMusicSourceSeparator<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the expected sample rate for input audio.

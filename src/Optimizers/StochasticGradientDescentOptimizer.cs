@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -182,11 +183,11 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
         // params = params - learningRate * gradient
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var updatedCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
 
-        return currentSolution.WithParameters(updatedCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedCoefficients);
     }
 
     /// <summary>

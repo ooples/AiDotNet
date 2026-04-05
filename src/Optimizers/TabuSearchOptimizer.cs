@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -201,7 +202,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <returns>A string hash representation of the solution.</returns>
     private string GetSolutionHash(IFullModel<T, TInput, TOutput> solution)
     {
-        var parameters = solution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
 
         // Create a MD5 hash of the parameters
         using System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
@@ -256,7 +257,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var neighbors = new List<IFullModel<T, TInput, TOutput>>();
 
         // Convert the current solution to a ModelIndividual
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var genes = new List<ModelParameterGene<T>>();
 
         for (int i = 0; i < parameters.Length; i++)
@@ -276,7 +277,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
                     newParams[gene.Index] = gene.Value;
                 }
 
-                return model.WithParameters(newParams);
+                return InterfaceGuard.Parameterizable(model).WithParameters(newParams);
             };
 
         var individual = new ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>(

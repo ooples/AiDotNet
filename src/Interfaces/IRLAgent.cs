@@ -26,7 +26,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("RLAgent")]
-public interface IRLAgent<T> : IFullModel<T, Vector<T>, Vector<T>>
+public interface IRLAgent<T> : IFullModel<T, Vector<T>, Vector<T>>,
+    IParameterizable<T, Vector<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Vector<T>, Vector<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Selects an action given the current state observation.

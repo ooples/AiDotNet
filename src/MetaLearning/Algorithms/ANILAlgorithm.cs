@@ -79,6 +79,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Aniruddh Raghu, Maithra Raghu, Samy Bengio, Oriol Vinyals")]
 public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly ANILOptions<T, TInput, TOutput> _anilOptions;
 
     // Head parameters (adapted per-task)
@@ -387,7 +390,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private void InitializeHeadParameters()
     {
         // Compute body and head parameter counts
-        var totalParams = MetaModel.GetParameters();
+        var totalParams = ParamModel.GetParameters();
 
         // Estimate head size based on options
         _headParameterCount = _anilOptions.FeatureDimension * _anilOptions.NumClasses;
@@ -664,7 +667,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         // Set the adapted head parameters in the model before computing body gradients
         // This ensures body gradients are computed with respect to the adapted classifier head
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var paramsWithAdaptedHead = new Vector<T>(currentParams.Length);
 
         // Copy body parameters as-is
@@ -693,13 +696,13 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Temporarily set adapted head parameters
-        MetaModel.SetParameters(paramsWithAdaptedHead);
+        ParamModel.SetParameters(paramsWithAdaptedHead);
 
         // Use the base model's gradient computation with adapted head
         var fullGradients = ComputeGradients(MetaModel, input, expectedOutput);
 
         // Restore original parameters
-        MetaModel.SetParameters(currentParams);
+        ParamModel.SetParameters(currentParams);
 
         // Extract only body gradients (first _bodyParameterCount parameters)
         var bodyGradients = new Vector<T>(_bodyParameterCount);
@@ -717,7 +720,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private void UpdateBodyParameters(Vector<T> gradients)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var updatedParams = new Vector<T>(currentParams.Length);
 
         // Update body parameters (first _bodyParameterCount)
@@ -736,7 +739,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             updatedParams[i] = currentParams[i];
         }
 
-        MetaModel.SetParameters(updatedParams);
+        ParamModel.SetParameters(updatedParams);
     }
 
     #endregion

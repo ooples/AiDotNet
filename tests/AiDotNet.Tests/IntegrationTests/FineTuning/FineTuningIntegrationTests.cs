@@ -105,7 +105,7 @@ public class FineTuningIntegrationTests
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
             var copy = DeepCopy();
-            copy.SetParameters(parameters);
+            ((IParameterizable<double, Vector<double>, Vector<double>>)copy).SetParameters(parameters);
             return copy;
         }
 

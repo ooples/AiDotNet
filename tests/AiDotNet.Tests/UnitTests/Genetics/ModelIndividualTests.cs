@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Genetics;
@@ -399,7 +400,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             individual.SetParameters(newParams);
 
             // Copy should remain unchanged
-            var copyParams = copy.GetParameters();
+            var copyParams = InterfaceGuard.Parameterizable(copy).GetParameters();
             Assert.NotEqual(originalParams[0] + 100.0, copyParams[0], 5);
         }
 
@@ -424,7 +425,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
 
             // Verify parameters are copied
             var originalParams = individual.GetParameters();
-            var cloneParams = clone.GetParameters();
+            var cloneParams = InterfaceGuard.Parameterizable(clone).GetParameters();
             Assert.Equal(originalParams.Length, cloneParams.Length);
             for (int i = 0; i < originalParams.Length; i++)
             {

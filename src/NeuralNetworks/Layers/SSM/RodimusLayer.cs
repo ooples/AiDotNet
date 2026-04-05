@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -312,7 +312,7 @@ public class RodimusLayer<T> : LayerBase<T>
             _temperatureBias.Reshape(1, _numHeads)).Reshape(batchSize, seqLen, _numHeads);
         _lastTemperatureRaw = tempRaw;
 
-        var temperature = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var temperature = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
         for (int i = 0; i < temperature.Length; i++)
             temperature[i] = Softplus(tempRaw[i]);
         _lastTemperature = temperature;
@@ -383,9 +383,9 @@ public class RodimusLayer<T> : LayerBase<T>
         T baseScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var selectionWeightsCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var selectionWeightsCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -485,11 +485,9 @@ public class RodimusLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

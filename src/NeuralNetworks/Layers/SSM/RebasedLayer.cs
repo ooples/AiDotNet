@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -314,11 +314,11 @@ public class RebasedLayer<T> : LayerBase<T>
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Cache feature maps for backward pass
-        var phiQCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
-        var phiKCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
-        var phiQNormCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var phiKNormCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var denomCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var phiQCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var phiKCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var phiQNormCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var phiKNormCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var denomCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         // Per-head state: S[featureDim, headDim] and z[featureDim]
         var stateS = new T[batchSize, _numHeads, _headDimension, _headDimension];
@@ -601,11 +601,9 @@ public class RebasedLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

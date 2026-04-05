@@ -62,8 +62,9 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
-public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
+[ModelPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
+public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the QDA-specific options.
@@ -675,7 +676,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // QDA doesn't have a simple parameter vector like linear classifiers
         // Return flattened class means for serialization
@@ -698,20 +699,20 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // QDA computes parameters from class statistics, not direct parameter setting.
         // Accept silently so the optimizer can initialize the model without crashing.
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return CreateNewInstance();
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // QDA is a closed-form solution, not gradient-based
         // Return zero gradients
@@ -719,7 +720,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // QDA is a closed-form solution, not gradient-based
         // This is a no-op

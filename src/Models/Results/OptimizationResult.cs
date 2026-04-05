@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 namespace AiDotNet.Models.Results;
 
 /// <summary>
@@ -503,7 +504,7 @@ public class OptimizationResult<T, TInput, TOutput>
     {
         return new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = BestSolution?.WithParameters(parameters),
+            BestSolution = InterfaceGuard.TryParameterizable(BestSolution)?.WithParameters(parameters),
             BestIntercept = BestIntercept,
             BestFitnessScore = BestFitnessScore,
             Iterations = Iterations,

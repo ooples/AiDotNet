@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
 
@@ -29,7 +30,7 @@ public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
 
         var first = clientModels.First().Value;
-        var firstParams = first.GetParameters();
+        var firstParams = InterfaceGuard.Parameterizable(first).GetParameters();
 
         var aggregated = new Vector<T>(firstParams.Length);
         for (int i = 0; i < aggregated.Length; i++)
@@ -41,7 +42,7 @@ public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
         {
             int clientId = kvp.Key;
             var model = kvp.Value;
-            var parameters = model.GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
             if (parameters.Length != aggregated.Length)
             {
                 throw new ArgumentException($"Parameter length mismatch for client {clientId}.", nameof(clientModels));
@@ -59,7 +60,7 @@ public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
             }
         }
 
-        return first.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(first).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "FedAvg";

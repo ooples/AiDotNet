@@ -51,6 +51,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Tianshi Li, Zhixiang Chi, Yang Wang, et al.")]
 public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly GCDPLNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _numNodes;
@@ -71,7 +74,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             throw new ArgumentOutOfRangeException(nameof(options), "NumGraphNodes must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _numNodes = Math.Max(1, options.NumGraphNodes);
@@ -88,7 +91,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -97,7 +100,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute per-group features (mean absolute gradient)
@@ -117,7 +120,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -134,13 +137,13 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var nodeFeatures = ComputeNodeFeatures(grad);
             for (int round = 0; round < _algoOptions.MessagePassingSteps; round++)
@@ -155,7 +158,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -208,14 +211,14 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private double ComputeGraphLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var nf = ComputeNodeFeatures(g);
                 for (int r = 0; r < _algoOptions.MessagePassingSteps; r++) nf = MessagePass(nf);
@@ -226,10 +229,10 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * (1.0 + NumOps.ToDouble(nf[grp])) * NumOps.ToDouble(g[d])));
                 }
             }
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

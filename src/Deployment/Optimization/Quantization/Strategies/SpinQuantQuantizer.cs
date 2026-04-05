@@ -108,7 +108,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Learn optimal rotation matrix using the provided config
         var rotation = LearnRotationMatrix(parameters, config);
@@ -125,7 +125,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         var rotationTranspose = rotation.Transpose();
         var quantizedOriginalSpace = ApplyRotation(quantizedRotated, rotationTranspose);
 
-        return model.WithParameters(quantizedOriginalSpace);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedOriginalSpace);
     }
 
     /// <inheritdoc/>
@@ -177,7 +177,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         }
 
         // Compute scale factors from model parameters
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         ComputeScaleFactors(parameters, _config);
 
         IsCalibrated = true;

@@ -125,7 +125,7 @@ public class SEALTrainerIntegrationTests
 
         // Get initial parameters
         var metaModel = algorithm.GetMetaModel();
-        var initialParams = metaModel.GetParameters();
+        var initialParams = ((IParameterizable<double, Tensor<double>, Tensor<double>>)metaModel).GetParameters();
         var initialParamsClone = initialParams.Clone();
 
         // Act - Meta-train for multiple iterations
@@ -136,7 +136,7 @@ public class SEALTrainerIntegrationTests
         }
 
         // Assert - Parameters should have changed
-        var finalParams = metaModel.GetParameters();
+        var finalParams = ((IParameterizable<double, Tensor<double>, Tensor<double>>)metaModel).GetParameters();
         bool paramsChanged = false;
         for (int i = 0; i < initialParamsClone.Length; i++)
         {
@@ -285,7 +285,7 @@ public class SEALTrainerIntegrationTests
 
         // Get original meta-model parameters
         var metaModel = algorithm.GetMetaModel();
-        var metaParams = metaModel.GetParameters().Clone();
+        var metaParams = ((IParameterizable<double, Tensor<double>, Tensor<double>>)metaModel).GetParameters().Clone();
 
         // Act - Adapt to a new task
         var newTask = CreateMockTask(100);  // Different seed for novel task
@@ -295,7 +295,7 @@ public class SEALTrainerIntegrationTests
         Assert.NotNull(adaptedModel);
 
         // Meta-model parameters should remain unchanged
-        var currentMetaParams = metaModel.GetParameters();
+        var currentMetaParams = ((IParameterizable<double, Tensor<double>, Tensor<double>>)metaModel).GetParameters();
         bool metaParamsUnchanged = true;
         for (int i = 0; i < metaParams.Length; i++)
         {

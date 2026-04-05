@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
@@ -93,7 +94,7 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients
@@ -132,7 +133,7 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                     var fullParameters = Config.CommunicationBackend.AllGather(updatedShard);
 
                     // Step 5: Create model with reconstructed full parameters
-                    var finalModel = localResult.BestSolution.WithParameters(fullParameters);
+                    var finalModel = InterfaceGuard.Parameterizable(localResult.BestSolution).WithParameters(fullParameters);
                     localResult.BestSolution = finalModel;
                 }
             }

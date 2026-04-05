@@ -716,20 +716,20 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Tree structure is complex - return empty for now
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Tree is structural, cannot set from flat parameters
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Return a cold instance to avoid inconsistent state and shared mutable references.
         // Tree structure cannot be set from flat parameters - deep cloning would be needed
@@ -744,14 +744,14 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Tree-based model - no gradients
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree-based model - no gradient application
     }

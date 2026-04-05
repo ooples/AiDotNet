@@ -100,6 +100,6 @@ public abstract class SurvivalModelTestBase
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
-        Assert.True(model.GetParameters().Length > 0, "Trained survival model should have parameters.");
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained survival model should have parameters.");
     }
 }

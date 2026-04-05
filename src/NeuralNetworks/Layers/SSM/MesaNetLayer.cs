@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -371,10 +371,10 @@ public class MesaNetLayer<T> : LayerBase<T>
         // State: inner weights W and inverse covariance P per head
         // W: [batch, numHeads, headDim, headDim]
         // P: [batch, numHeads, headDim, headDim] — initialized to (1/lambda) * I
-        var innerW = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var pMatrix = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allInnerW = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var allP = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var innerW = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var pMatrix = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allInnerW = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var allP = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         T invLambda = NumOps.Divide(NumOps.One, _regularization);
 
@@ -618,11 +618,9 @@ public class MesaNetLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

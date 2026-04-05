@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -687,7 +687,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             // Sparse aggregation using scatter operations (production-recommended for large graphs)
             // For each batch, gather source features and scatter-add to target nodes
-            output = new Tensor<T>([batchSize, numNodes, outputFeatures]);
+            output = TensorAllocator.Rent<T>([batchSize, numNodes, outputFeatures]);
             output.Fill(NumOps.Zero);
 
             int numEdges = _edgeSourceIndices.Length;

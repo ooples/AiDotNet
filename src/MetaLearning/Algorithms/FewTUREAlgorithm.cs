@@ -92,6 +92,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Markus Hiller, Rongkai Ma, Mehrtash Harber, Bjorn Ommer")]
 public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly FewTUREOptions<T, TInput, TOutput> _fewTUREOptions;
 
     /// <summary>Parameters for the uncertainty estimation module.</summary>
@@ -168,11 +171,11 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -193,12 +196,12 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -215,17 +218,17 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 double meanAbs = sumAbs / uncertaintyWeights.Length;
                 double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
 
-                var currentParams = MetaModel.GetParameters();
+                var currentParams = ParamModel.GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                MetaModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(modulatedParams);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -276,7 +279,7 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support and query features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -353,11 +356,11 @@ internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

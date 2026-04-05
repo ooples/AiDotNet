@@ -72,8 +72,9 @@ namespace AiDotNet.Classification.Online;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
+[ModelPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
+public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     private readonly OnlineNaiveBayesOptions<T> _options;
 
@@ -336,7 +337,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Pack means and variances into parameter vector
         if (_classStats.Count == 0 || NumFeatures == 0)
@@ -374,7 +375,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         if (NumFeatures == 0 || _knownClasses.Count == 0)
         {
@@ -421,7 +422,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new OnlineNaiveBayesClassifier<T>(_options);
         clone._knownClasses.AddRange(_knownClasses);
@@ -439,14 +440,14 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Naive Bayes doesn't use gradients
         return new Vector<T>(GetParameters().Length);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Naive Bayes doesn't use gradients
     }

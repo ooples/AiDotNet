@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
@@ -301,8 +302,8 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 // Compute and apply gradients scaled by capped advantage
                 var cappedAdvantage = Math.Max(-1.0, Math.Min(1.0, advantage));
                 var scaledLearningRate = learningRate * cappedAdvantage;
-                var gradients = policyModel.ComputeGradients(input, groupResponses[g]);
-                policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
+                var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, groupResponses[g]);
+                InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
 
                 totalReward += groupRewards[g];
                 sampleCount++;

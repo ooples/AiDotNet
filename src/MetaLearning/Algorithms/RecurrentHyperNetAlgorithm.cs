@@ -53,6 +53,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "David Ha, Andrew Dai, Quoc V. Le")]
 public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly RecurrentHyperNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -75,7 +78,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             throw new ArgumentOutOfRangeException(nameof(options), "InputDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         int hidDim = options.HiddenStateDim;
         int inDim = options.InputDim;
@@ -93,7 +96,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         int hidDim = _algoOptions.HiddenStateDim;
 
         foreach (var task in taskBatch.Tasks)
@@ -106,7 +109,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compress gradient to input dim
@@ -125,7 +128,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Cell state regularization
@@ -148,7 +151,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
@@ -157,7 +160,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var input = CompressVector(grad, _algoOptions.InputDim);
             hidden = GRUStep(hidden, input);
@@ -171,7 +174,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -237,7 +240,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private double ComputeRecurrentLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         int hidDim = _algoOptions.HiddenStateDim;
         foreach (var task in taskBatch.Tasks)
         {
@@ -246,7 +249,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             var hid = new double[hidDim];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var inp = CompressVector(g, _algoOptions.InputDim);
                 hid = GRUStep(hid, inp);
@@ -257,7 +260,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * mod * NumOps.ToDouble(g[d])));
                 }
             }
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             // Include cell regularization in SPSA objective to match training loss
@@ -265,7 +268,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             for (int h = 0; h < hidDim; h++) cellNorm += hid[h] * hid[h];
             totalLoss += queryLoss + _algoOptions.CellRegWeight * cellNorm / hidDim;
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

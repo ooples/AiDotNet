@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -337,10 +337,10 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: RMSNorm on Q and K
-        var qNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var kNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var qRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var kRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var qNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var kNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var qRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var kRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         ApplyRMSNorm(q, _queryNormScale, qNormed, qRmsInv, batchSize, seqLen);
         ApplyRMSNorm(k, _keyNormScale, kNormed, kRmsInv, batchSize, seqLen);
@@ -362,8 +362,8 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         _lastAttnRaw = attnRaw;
 
         // Step 5: RMSNorm on attention output
-        var attnNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var attnRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var attnNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var attnRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
         ApplyRMSNorm(attnRaw, _outputNormScale, attnNormed, attnRmsInv, batchSize, seqLen);
         _lastAttnNormed = attnNormed;
         _lastAttnRmsInv = attnRmsInv;
@@ -524,11 +524,9 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

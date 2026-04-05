@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -132,11 +133,11 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         // === Vectorized Gradient Descent Update using IEngine (Phase B: US-GPU-015) ===
         // params = params - learningRate * gradient
 
-        Vector<T> currentParams = currentSolution.GetParameters();
+        Vector<T> currentParams = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var updatedParams = (Vector<T>)Engine.Subtract(currentParams, scaledGradient);
 
-        return currentSolution.WithParameters(updatedParams);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
     /// <summary>
@@ -206,7 +207,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     private T CalculateLoss(IFullModel<T, TInput, TOutput> solution, TInput X, TOutput y)
     {
         TOutput predictions = solution.Predict(X);
-        var parameters = solution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
         T loss;
 
         if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -205,10 +206,10 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

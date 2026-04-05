@@ -55,6 +55,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Keunhong Park, Utkarsh Sinha, Peter Hedman, et al.")]
 public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly HyperNeRFMetaOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _peDim;
@@ -76,7 +79,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. HyperNeRF requires a model with at least one parameter.");
         if (options.NumFrequencyBands <= 0)
@@ -118,7 +121,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -126,7 +129,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
             // Compute task latent code from support gradient
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var latentCode = CompressGradient(supportGrad);
 
@@ -135,7 +138,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Apply position-aware, task-conditioned modulation
@@ -149,14 +152,14 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 // Recompute latent code for dynamic conditioning (optional: every other step)
                 if (step < _algoOptions.AdaptationSteps - 1 && step % 2 == 0)
                 {
-                    MetaModel.SetParameters(adaptedParams);
+                    ParamModel.SetParameters(adaptedParams);
                     var newGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                     latentCode = CompressGradient(newGrad);
                     modulation = ComputeModulation(latentCode);
                 }
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Conditioning weight regularization
@@ -181,18 +184,18 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
-        MetaModel.SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var latentCode = CompressGradient(supportGrad);
         var modulation = ComputeModulation(latentCode);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int d = 0; d < _paramDim; d++)
@@ -203,7 +206,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             }
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -257,18 +260,18 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private double ComputeNeRFLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var lc = CompressGradient(sg);
             var mod = ComputeModulation(lc);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                 {
@@ -277,10 +280,10 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(mod[grp]) * NumOps.ToDouble(g[d])));
                 }
             }
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

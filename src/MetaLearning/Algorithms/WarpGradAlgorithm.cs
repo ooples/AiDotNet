@@ -105,6 +105,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Flennerhag, S., Rusu, A. A., Pascanu, R., Visin, F., Yin, H., & Hadsell, R.")]
 public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly WarpGradOptions<T, TInput, TOutput> _warpOptions;
 
     /// <summary>
@@ -190,7 +193,7 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// </remarks>
     private void InitializeWarpLayers()
     {
-        var modelParams = MetaModel.GetParameters();
+        var modelParams = ParamModel.GetParameters();
         int paramsPerLayer = modelParams.Length / Math.Max(_warpOptions.NumWarpLayers, 1);
 
         for (int i = 0; i < _warpOptions.NumWarpLayers; i++)
@@ -247,7 +250,7 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         var warpGradientsList = new List<List<Vector<T>>>();
         var losses = new List<T>();
 
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -258,7 +261,7 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 taskParams[i] = initParams[i];
             }
 
-            MetaModel.SetParameters(taskParams);
+            ParamModel.SetParameters(taskParams);
 
             // Inner loop: adapt with warped gradients
             for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
@@ -268,7 +271,7 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 warpedGradients = ClipGradients(warpedGradients);
 
                 taskParams = ApplyGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate);
-                MetaModel.SetParameters(taskParams);
+                ParamModel.SetParameters(taskParams);
             }
 
             // Evaluate on query set
@@ -286,14 +289,14 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Restore original params before applying outer update
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
 
         // Average and apply meta-gradients to initialization
         if (metaGradients.Count > 0)
         {
             var avgMetaGrad = AverageVectors(metaGradients);
             var updatedParams = ApplyGradients(initParams, avgMetaGrad, _warpOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
+            ParamModel.SetParameters(updatedParams);
         }
 
         // Average and apply warp-layer gradients
@@ -334,14 +337,14 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Start from meta-learned initialization
-        var adaptedParams = new Vector<T>(MetaModel.GetParameters().Length);
-        var initParams = MetaModel.GetParameters();
+        var adaptedParams = new Vector<T>(ParamModel.GetParameters().Length);
+        var initParams = ParamModel.GetParameters();
         for (int i = 0; i < initParams.Length; i++)
         {
             adaptedParams[i] = initParams[i];
         }
 
-        MetaModel.SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
 
         // Inner loop: adapt with warped gradients
         for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
@@ -351,7 +354,7 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             warpedGradients = ClipGradients(warpedGradients);
 
             adaptedParams = ApplyGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
         }
 
         // Return adapted model wrapped for inference
@@ -484,14 +487,14 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             taskParams[i] = initParams[i];
         }
 
-        MetaModel.SetParameters(taskParams);
+        ParamModel.SetParameters(taskParams);
 
         for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
         {
             var rawGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var warpedGrad = ApplyWarpLayers(rawGrad);
             taskParams = ApplyGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate);
-            MetaModel.SetParameters(taskParams);
+            ParamModel.SetParameters(taskParams);
         }
 
         return ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -633,7 +636,7 @@ internal class WarpGradModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     /// </remarks>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_adaptedParams);
+        InterfaceGuard.Parameterizable(_model).SetParameters(_adaptedParams);
         return _model.Predict(input);
     }
 

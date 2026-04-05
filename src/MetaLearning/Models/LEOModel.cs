@@ -126,7 +126,7 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     public Vector<T> GetParameters()
     {
         // Return combined feature encoder + classifier parameters + latent code
-        var encoderParams = _featureEncoder.GetParameters();
+        var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
         int totalSize = encoderParams.Length + _classifierParams.Length + _latentCode.Length;
         var combined = new Vector<T>(totalSize);
 

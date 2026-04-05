@@ -739,7 +739,7 @@ public abstract class AssociativeMemoryTestBase
 
         // Also verify parameters are preserved
         var paramsBefore = network.GetParameters();
-        var paramsAfter = cloned.GetParameters();
+        var paramsAfter = ((IParameterizable<double, Tensor<double>, Tensor<double>>)cloned).GetParameters();
         Assert.Equal(paramsBefore.Length, paramsAfter.Length);
         for (int i = 0; i < paramsBefore.Length; i++)
         {

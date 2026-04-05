@@ -57,6 +57,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Menglin Jia, Luming Tang, Bor-Chun Chen, et al.")]
 public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly FreqPromptOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _numComponents;
@@ -88,7 +91,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             throw new ArgumentOutOfRangeException(nameof(options), "PromptInitScale must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _numComponents = options.NumFreqComponents;
 
         // Initialize basis vectors using DCT-like cosine basis
@@ -116,7 +119,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -129,7 +132,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                MetaModel.SetParameters(effectiveParams);
+                ParamModel.SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Project gradient onto basis vectors to get coefficient gradients
@@ -147,19 +150,19 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
 
             // Evaluate with adapted prompt
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
-            MetaModel.SetParameters(finalParams);
+            ParamModel.SetParameters(finalParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
         // Outer loop: update backbone
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             var newBaseParams = ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(newBaseParams);
+            ParamModel.SetParameters(newBaseParams);
         }
 
         // Update prompt basis and initial coefficients via SPSA
@@ -172,7 +175,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         var coeffs = new double[_numComponents];
         for (int k = 0; k < _numComponents; k++)
@@ -181,7 +184,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-            MetaModel.SetParameters(effectiveParams);
+            ParamModel.SetParameters(effectiveParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int k = 0; k < _numComponents; k++)
@@ -195,7 +198,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         var adaptedParams = ComputeEffectiveParams(baseParams, coeffs);
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -222,7 +225,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     private double ComputeFreqPromptLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -233,7 +236,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                MetaModel.SetParameters(effectiveParams);
+                ParamModel.SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 for (int k = 0; k < _numComponents; k++)
@@ -249,11 +252,11 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             }
 
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
-            MetaModel.SetParameters(finalParams);
+            ParamModel.SetParameters(finalParams);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

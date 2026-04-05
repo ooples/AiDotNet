@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -524,7 +524,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </remarks>
     private static Tensor<T> ReverseSequence(Tensor<T> input)
     {
-        var reversed = new Tensor<T>(input.Shape.ToArray());
+        var reversed = TensorAllocator.Rent<T>(input.Shape.ToArray());
         int timeSteps = input.Shape[1];
 
         for (int i = 0; i < timeSteps; i++)

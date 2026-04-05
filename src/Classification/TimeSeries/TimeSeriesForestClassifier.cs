@@ -311,20 +311,20 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Serialize tree structure (simplified - just returns tree count)
         return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees?.Count ?? 0) };
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Trees are structural - cannot be set from simple parameters
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new TimeSeriesForestClassifier<T>(_options);
         clone._trees = _trees;
@@ -343,14 +343,14 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Tree-based model - no gradient computation
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree-based model - no gradient application
     }

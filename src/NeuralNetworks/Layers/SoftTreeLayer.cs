@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -185,10 +185,10 @@ public class SoftTreeLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputePathProbabilities(Tensor<T> rightProbs, int batchSize)
     {
-        var pathProbs = new Tensor<T>([batchSize, _numLeaves]);
+        var pathProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
 
         // Initialize all paths with probability 1 at root
-        var nodeProbs = new Tensor<T>([batchSize, _numInternalNodes + _numLeaves]);
+        var nodeProbs = TensorAllocator.Rent<T>([batchSize, _numInternalNodes + _numLeaves]);
         for (int b = 0; b < batchSize; b++)
         {
             nodeProbs[b * (nodeProbs.Shape[1])] = NumOps.One;  // Root node

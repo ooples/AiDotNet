@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
@@ -154,7 +155,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
         });
 
         // Add MatMul operation for linear model
-        var parameters = fullModel.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(fullModel).GetParameters();
 
         graph.Operations.Add(new OnnxOperation
         {
@@ -422,7 +423,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
         }
 
         // Try to infer from model parameters
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         if (parameters != null && parameters.Length > 0)
         {
             var shape = new[] { parameters.Length };

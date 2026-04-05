@@ -163,7 +163,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         {
             // Clone the meta model for this task
             var taskModel = CloneModel();
-            var initialParams = taskModel.GetParameters();
+            var initialParams = InterfaceGuard.Parameterizable(taskModel).GetParameters();
 
             // Inner loop: Adapt to the task using support set
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
@@ -189,7 +189,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             }
 
             // Evaluate on query set for loss tracking
-            taskModel.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
             var queryPredictions = taskModel.Predict(task.QueryInput);
             T taskLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
             totalLoss = NumOps.Add(totalLoss, taskLoss);
@@ -209,7 +209,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Update meta-parameters using interpolation
         // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update
-        var currentMetaParams = MetaModel.GetParameters();
+        var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedMetaParams = new Vector<T>(currentMetaParams.Length);
         T stepSize = NumOps.FromDouble(_reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
 
@@ -221,7 +221,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             );
         }
 
-        MetaModel.SetParameters(updatedMetaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average loss
         return NumOps.Divide(totalLoss, batchSizeT);
@@ -262,7 +262,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        InterfaceGuard.Parameterizable(adaptedModel).SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -282,7 +282,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </remarks>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Reptile can perform many inner steps since no backprop through them
         int totalSteps = _reptileOptions.AdaptationSteps * _reptileOptions.InnerBatches;
@@ -294,7 +294,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
             // Apply gradients with inner learning rate
             parameters = ApplyGradients(parameters, gradients, _reptileOptions.InnerLearningRate);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
         return parameters;

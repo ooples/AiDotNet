@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -102,6 +102,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
 public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly TADAMOptions<T, TInput, TOutput> _tadamOptions;
 
     // Learnable metric scaling parameters (alpha)
@@ -255,9 +258,9 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update MetaModel parameters
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var updatedParams = ApplyGradients(currentParams, modelGradients, _options.OuterLearningRate);
-        MetaModel.SetParameters(updatedParams);
+        ParamModel.SetParameters(updatedParams);
 
         // Update metric scale parameters using finite differences
         UpdateMetricScale(task, loss);
@@ -905,7 +908,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Regularize MetaModel parameters (feature encoder)
         if (MetaModel != null)
         {
-            var modelParams = MetaModel.GetParameters();
+            var modelParams = ParamModel.GetParameters();
             for (int i = 0; i < modelParams.Length; i++)
             {
                 T val = modelParams[i];

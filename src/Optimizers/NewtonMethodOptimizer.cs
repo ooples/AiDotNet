@@ -196,7 +196,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>The Hessian matrix at the current point.</returns>
     private Matrix<T> CalculateHessian(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int n = model.GetParameters().Length;
+        int n = InterfaceGuard.Parameterizable(model).GetParameters().Length;
         var hessian = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -229,7 +229,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>The approximated second partial derivative.</returns>
     private T CalculateSecondPartialDerivative(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData, int i, int j)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var epsilon = NumOps.FromDouble(1e-5);
         var originalI = parameters[i];
         var originalJ = parameters[j];
@@ -284,11 +284,11 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // newCoefficients = parameters + learningRate * direction
         // Note: direction is already negated (-H^{-1} * g), so adding moves downhill
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
         var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

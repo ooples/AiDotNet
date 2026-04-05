@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -38,7 +39,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
 
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
 
-        var firstParams = first.GetParameters();
+        var firstParams = InterfaceGuard.Parameterizable(first).GetParameters();
         var bnRanges = GetBatchNormParameterRanges(firstNet);
 
         var aggregated = new Vector<T>(firstParams.Length);
@@ -51,7 +52,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         {
             int clientId = kvp.Key;
             var model = kvp.Value;
-            var parameters = model.GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
             if (parameters.Length != aggregated.Length)
             {
                 throw new ArgumentException($"Parameter length mismatch for client {clientId}.", nameof(clientModels));
@@ -83,7 +84,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
             }
         }
 
-        return first.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(first).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "FedBN";

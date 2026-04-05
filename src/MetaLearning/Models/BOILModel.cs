@@ -177,7 +177,7 @@ public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     /// </summary>
     private void ApplyAdaptedBodyParameters()
     {
-        var currentParams = _baseModel.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(_baseModel).GetParameters();
         var updatedParams = new Vector<T>(currentParams.Length);
 
         // Apply adapted body parameters
@@ -193,7 +193,7 @@ public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
             updatedParams[i] = currentParams[i];
         }
 
-        _baseModel.SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(_baseModel).SetParameters(updatedParams);
     }
 
     /// <summary>

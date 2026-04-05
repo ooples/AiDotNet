@@ -247,7 +247,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        var paramCount = model.ParameterCount;
+        var paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
 
         // Initialize omega if first task
         if (_omega == null || _omega.Length != paramCount)
@@ -282,7 +282,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
             return NumOps.Zero;
         }
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != _omega.Length)
         {
@@ -345,7 +345,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         AccumulateImportance(taskImportance);
 
         // Store current parameters as optimal
-        _optimalParameters = CloneVector(model.GetParameters());
+        _optimalParameters = CloneVector(InterfaceGuard.Parameterizable(model).GetParameters());
 
         // Record metrics
         RecordMetric($"Task{TaskCount}_MeanImportance", ComputeMean(taskImportance));
@@ -376,7 +376,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private Vector<T> ComputeOutputSensitivity(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = model.ParameterCount;
+        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -484,7 +484,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private void ComputeFiniteDifferenceImportance(IFullModel<T, TInput, TOutput> model, TInput input, Vector<T> omega)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var epsilon = NumOps.FromDouble(1e-5);
 
         // Get baseline output norm
@@ -502,14 +502,14 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
 
             // Perturb parameter
             parameters[i] = NumOps.Add(original, epsilon);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
 
             var perturbedOutput = model.Predict(input);
             var perturbedNorm = ComputeOutputNorm(ConvertToVector(perturbedOutput));
 
             // Restore parameter
             parameters[i] = original;
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
 
             // Finite difference gradient magnitude
             var diff = NumOps.Subtract(perturbedNorm, baseNorm);
@@ -535,7 +535,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeRandomProjectionImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = model.ParameterCount;
+        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -629,7 +629,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeFisherDiagonalImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = model.ParameterCount;
+        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -702,7 +702,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private void ComputeFiniteDifferenceFisher(IFullModel<T, TInput, TOutput> model, TInput input, Vector<T> omega)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var epsilon = NumOps.FromDouble(1e-5);
 
         var baseOutput = model.Predict(input);
@@ -716,13 +716,13 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
             var original = parameters[i];
 
             parameters[i] = NumOps.Add(original, epsilon);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
 
             var perturbedOutput = model.Predict(input);
             var perturbedNorm = ComputeOutputNorm(ConvertToVector(perturbedOutput));
 
             parameters[i] = original;
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
 
             // Finite difference gradient magnitude, squared for Fisher
             var diff = NumOps.Subtract(perturbedNorm, baseNorm);
@@ -748,7 +748,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeHebbianImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = model.ParameterCount;
+        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -798,7 +798,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 // Get parameter values and weight by output magnitude
                 // Hebbian: importance ~ input_activation * output_activation
                 // We approximate this as: parameter_magnitude * output_magnitude
-                var parameters = model.GetParameters();
+                var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
                 for (int i = 0; i < Math.Min(paramCount, parameters.Length); i++)
                 {

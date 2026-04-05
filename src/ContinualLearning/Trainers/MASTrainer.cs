@@ -20,6 +20,7 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// </remarks>
 public class MASTrainerOptions<T>
 {
+
     /// <summary>
     /// Weight for the regularization loss relative to task loss.
     /// Default: 1.0 (equal weighting).
@@ -130,6 +131,9 @@ public class MASTrainerOptions<T>
 [ModelPaper("Memory Aware Synapses: Learning What (Not) to Forget", "https://arxiv.org/abs/1711.09601", Year = 2018, Authors = "Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, Tinne Tuytelaars")]
 public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
+    private IGradientComputable<T, TInput, TOutput>? _cachedGradModel;
+    private IGradientComputable<T, TInput, TOutput> GradModel => _cachedGradModel ??= InterfaceGuard.GradientComputable(Model);
+
     [ThreadStatic]
     private static Random? _random;
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
@@ -236,7 +240,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = Model.ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = GradModel.ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -281,7 +285,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, learningRate);
+                GradModel.ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Track losses
@@ -306,7 +310,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        Model.ApplyGradients(adjustedReplayGradients, replayLr);
+                        GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
                 }
@@ -472,7 +476,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = Model.ComputeGradients(
+            var sampleGradients = GradModel.ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

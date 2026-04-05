@@ -88,6 +88,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Yan Wang, Wei-Lun Chao, Kilian Q. Weinberger, Laurens van der Maaten")]
 public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly SimpleShotOptions<T, TInput, TOutput> _simpleShotOptions;
 
     /// <summary>
@@ -144,11 +147,11 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Standard forward pass and loss computation
             var queryLoss = ComputeLossFromOutput(
@@ -195,7 +198,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -379,11 +382,11 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

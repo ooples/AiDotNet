@@ -1,6 +1,7 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -902,7 +903,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
             case PNAScaler.Amplification:
                 // Scale by degree / avgDegree (amplify high-degree nodes)
                 // Per PNA paper: amplification increases signal from high-degree nodes
-                var avgDegreeTensor = new Tensor<T>([batchSize, numNodes, 1]);
+                var avgDegreeTensor = TensorAllocator.Rent<T>([batchSize, numNodes, 1]);
                 avgDegreeTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 var ampFactor = Engine.TensorBroadcastDivide(degreesExpanded, avgDegreeTensor);
@@ -911,7 +912,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
             case PNAScaler.Attenuation:
                 // Scale by avgDegree / degree (attenuate high-degree nodes)
                 // Per PNA paper: attenuation reduces signal from high-degree nodes
-                var avgDegTensor = new Tensor<T>([batchSize, numNodes, 1]);
+                var avgDegTensor = TensorAllocator.Rent<T>([batchSize, numNodes, 1]);
                 avgDegTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 var attFactor = Engine.TensorBroadcastDivide(avgDegTensor, degExpanded);
@@ -941,7 +942,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         int numAggregators = _aggregators.Length;
         int numScalers = _scalers.Length;
 
-        var transformedGrad = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
+        var transformedGrad = TensorAllocator.Rent<T>([batchSize, numNodes, _inputFeatures]);
         transformedGrad.Fill(NumOps.Zero);
 
         // Hoist loop-invariant computations

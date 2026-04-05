@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -321,9 +321,9 @@ public class HGRN2Layer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         // Save all states for backward pass: [batch, seqLen+1, numHeads, headDim, headDim]
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
@@ -390,11 +390,9 @@ public class HGRN2Layer<T> : LayerBase<T>
         // SiLU(x) = x * sigmoid(x)
         // SiLU'(x) = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

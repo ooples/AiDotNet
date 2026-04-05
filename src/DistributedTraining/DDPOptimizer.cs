@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
@@ -109,7 +110,7 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients (and apply them locally)

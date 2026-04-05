@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -201,8 +201,8 @@ public class InteractingLayer<T> : LayerBase<T>
     private Tensor<T> MultiHeadAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
         int batchSize, int numFeatures)
     {
-        var output = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
-        var attentionScores = new Tensor<T>([batchSize, numFeatures, numFeatures]);
+        var output = TensorAllocator.Rent<T>([batchSize, numFeatures, _attentionDim]);
+        var attentionScores = TensorAllocator.Rent<T>([batchSize, numFeatures, numFeatures]);
         var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
         for (int b = 0; b < batchSize; b++)

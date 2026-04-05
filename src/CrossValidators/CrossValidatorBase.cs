@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 namespace AiDotNet.CrossValidators;
 
 
@@ -173,7 +174,7 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
                     "This indicates the optimizer was unable to find a valid solution.");
             }
 
-            foldModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+            InterfaceGuard.Parameterizable(foldModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
 
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;

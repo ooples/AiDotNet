@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Validation;
 
@@ -53,7 +54,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
             var model = _modelFactory();
 
             // Get model parameters - if insufficient (untrained model), determine correct dimensions
-            var parameters = model.GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
             // Check if model is untrained by comparing parameter count to input dimensions
             // Different model types have different parameter requirements:
@@ -88,7 +89,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
 
             // Initialize parameters based on the initialization method
             InitializeParameters(parameters, model, initializationMethod);
-            model = model.WithParameters(parameters);
+            model = InterfaceGuard.Parameterizable(model).WithParameters(parameters);
 
             // Convert model to a ModelIndividual
             var genes = CreateGenesFromParameters(parameters);
@@ -126,7 +127,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
             parameters[i] = genesList[i].Value;
         }
 
-        return model.WithParameters(parameters);
+        return InterfaceGuard.Parameterizable(model).WithParameters(parameters);
     }
 
     private void InitializeParameters(Vector<T> parameters, IFullModel<T, TInput, TOutput> model,
@@ -323,7 +324,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     {
         // Try to estimate input dimension from model's metadata or type information
         var metadata = model.GetModelMetadata();
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (metadata.AdditionalInfo.TryGetValue("InputFeatures", out object? inputFeaturesObj))
         {
@@ -439,7 +440,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
         model.Deserialize(modelData);
 
         // Get genes from model
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var genes = CreateGenesFromParameters(parameters);
 
         var individual = new ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>(

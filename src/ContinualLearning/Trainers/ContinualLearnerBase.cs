@@ -134,7 +134,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             long total = MemoryBuffer.EstimatedMemoryBytes;
             total += Strategy.MemoryUsageBytes;
             // Estimate model size (rough approximation)
-            total += Model.GetParameters().Length * sizeof(double);
+            total += InterfaceGuard.Parameterizable(Model).GetParameters().Length * sizeof(double);
             return total;
         }
     }

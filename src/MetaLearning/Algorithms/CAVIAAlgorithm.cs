@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -239,9 +239,9 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
 
             // Update body (model) parameters
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, accumulatedBodyGradients, _caviaOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 
         // Return average meta-loss

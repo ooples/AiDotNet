@@ -288,7 +288,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     public virtual IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = Clone();
-        clone.SetParameters(parameters);
+        ((IParameterizable<T, Vector<T>, Vector<T>>)clone).SetParameters(parameters);
         return clone;
     }
 

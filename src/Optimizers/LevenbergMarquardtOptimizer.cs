@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -175,7 +176,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         int m = InputHelper<T, TInput>.GetBatchSize(X);
 
         // Get number of parameters
-        int n = model.GetParameters().Length;
+        int n = InterfaceGuard.Parameterizable(model).GetParameters().Length;
 
         // Create the Jacobian matrix
         var jacobian = new Matrix<T>(m, n);
@@ -217,7 +218,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     private T CalculatePartialDerivative(IFullModel<T, TInput, TOutput> model, TInput x, int paramIndex)
     {
         var epsilon = NumOps.FromDouble(1e-8);
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var originalParam = parameters[paramIndex];
 
         // Create a batch with just one example
@@ -225,19 +226,19 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
 
         // Modify the parameter and get prediction with increased value
         parameters[paramIndex] = NumOps.Add(originalParam, epsilon);
-        var modifiedModel = model.WithParameters(parameters);
+        var modifiedModel = InterfaceGuard.Parameterizable(model).WithParameters(parameters);
         TOutput yPlusBatch = modifiedModel.Predict(singleItemBatch);
         T yPlus = ConversionsHelper.ConvertToScalar<T, TOutput>(yPlusBatch);
 
         // Modify the parameter and get prediction with decreased value
         parameters[paramIndex] = NumOps.Subtract(originalParam, epsilon);
-        modifiedModel = model.WithParameters(parameters);
+        modifiedModel = InterfaceGuard.Parameterizable(model).WithParameters(parameters);
         TOutput yMinusBatch = modifiedModel.Predict(singleItemBatch);
         T yMinus = ConversionsHelper.ConvertToScalar<T, TOutput>(yMinusBatch);
 
         // Restore the original parameter
         parameters[paramIndex] = originalParam;
-        model.WithParameters(parameters);
+        InterfaceGuard.Parameterizable(model).WithParameters(parameters);
 
         // Calculate the central difference approximation of the derivative
         return NumOps.Divide(NumOps.Subtract(yPlus, yMinus), NumOps.FromDouble(2 * 1e-8));
@@ -305,8 +306,8 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         var delta = SolveLinearSystem(lhs, jTr);
 
         // Vectorized parameter update
-        var newCoefficients = (Vector<T>)Engine.Add(currentSolution.GetParameters(), delta);
-        return currentSolution.WithParameters(newCoefficients);
+        var newCoefficients = (Vector<T>)Engine.Add(InterfaceGuard.Parameterizable(currentSolution).GetParameters(), delta);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

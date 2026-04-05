@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -105,7 +106,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
         _previousGradient = null;
@@ -117,7 +118,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             NotifyEpochStart(epoch);
             _iteration++;
 
-            parameters = currentSolution.GetParameters();
+            parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient, inputData);
 
@@ -162,7 +163,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         // === Vectorized BFGS Update using IEngine (Phase B: US-GPU-015) ===
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         if (_inverseHessian is null)
         {
@@ -184,7 +185,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
         var newCoefficients = parameters.Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

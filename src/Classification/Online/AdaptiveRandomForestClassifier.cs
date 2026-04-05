@@ -527,20 +527,20 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         : 0;
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Ensemble is structural, return minimal parameters
         return new Vector<T>(1) { [0] = NumOps.FromDouble(_ensemble.Count) };
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Ensemble structure cannot be set from flat parameters
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Return a cold instance to avoid inconsistent state.
         // Structural parameters only - ensemble cannot be set from flat parameters.
@@ -554,14 +554,14 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Tree ensemble - no gradients
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree ensemble - no gradient application
     }

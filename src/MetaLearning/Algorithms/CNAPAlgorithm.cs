@@ -79,6 +79,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "James Requeima, Jonathan Gordon, John Bronskill, et al.")]
 public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly CNAPOptions<T, TInput, TOutput> _cnapOptions;
 
     // Task representation state
@@ -132,7 +135,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         _encoderWeights = InitializeWeights(encoderSize);
 
         // Adaptation network: maps representation to fast weights
-        int modelParamCount = MetaModel.GetParameters().Length;
+        int modelParamCount = ParamModel.GetParameters().Length;
         int adaptationSize = _cnapOptions.RepresentationDimension * _cnapOptions.HiddenDimension +
                             _cnapOptions.HiddenDimension * modelParamCount;
         _adaptationNetworkWeights = InitializeWeights(adaptationSize);
@@ -269,9 +272,9 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var baseModelGradients = ComputeBaseModelGradients(taskBatch);
         if (baseModelGradients != null)
         {
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = ParamModel.GetParameters();
             var updatedParams = ApplyGradients(currentParams, baseModelGradients, _cnapOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
+            ParamModel.SetParameters(updatedParams);
         }
 
         return NumOps.Divide(totalLoss, batchSizeT);
@@ -402,7 +405,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <returns>Fast weights to be applied to the base model.</returns>
     private Vector<T> GenerateFastWeights(Vector<T> taskRepresentation)
     {
-        int numModelParams = MetaModel.GetParameters().Length;
+        int numModelParams = ParamModel.GetParameters().Length;
         var fastWeights = new Vector<T>(numModelParams);
 
         // Apply adaptation network to generate fast weights
@@ -456,7 +459,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <param name="fastWeights">The fast weights to apply.</param>
     private void ApplyFastWeights(IFullModel<T, TInput, TOutput> model, Vector<T> fastWeights)
     {
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != fastWeights.Length)
         {
@@ -495,7 +498,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 break;
         }
 
-        model.SetParameters(modifiedParams);
+        InterfaceGuard.Parameterizable(model).SetParameters(modifiedParams);
     }
 
     /// <summary>
@@ -656,7 +659,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private int EstimateInputOutputDimension()
     {
         // Use model parameter count as a proxy
-        return Math.Max(128, MetaModel.GetParameters().Length / 10);
+        return Math.Max(128, ParamModel.GetParameters().Length / 10);
     }
 
     /// <summary>

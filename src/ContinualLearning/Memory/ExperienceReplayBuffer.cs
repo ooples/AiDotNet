@@ -921,7 +921,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, TInput, T
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
         return copy;
     }
 

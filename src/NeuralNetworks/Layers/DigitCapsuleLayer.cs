@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -435,7 +435,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
 
         // Compute predictions u_hat_ij = W_ij * u_i
         // prediction[b,i,c,l] = sum_d(weights[i,c,d,l] * input[b,i,d])
-        var predictions = new Tensor<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
+        var predictions = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _inputCapsules; i++)
@@ -455,7 +455,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             }
         }
 
-        var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
+        var couplings = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);
 
         var output = TensorAllocator.Rent<T>([batchSize, _numClasses, _outputCapsuleDimension]);

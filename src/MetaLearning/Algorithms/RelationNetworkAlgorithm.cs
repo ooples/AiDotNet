@@ -101,6 +101,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
 public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly RelationNetworkOptions<T, TInput, TOutput> _relationOptions;
     private readonly RelationModule<T> _relationModule;
     private readonly List<RelationModule<T>> _multiHeadModules;
@@ -463,7 +466,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // L2 regularization for feature encoder
         if (_relationOptions.FeatureEncoderL2Reg > 0.0)
         {
-            var encoderParams = MetaModel.GetParameters();
+            var encoderParams = ParamModel.GetParameters();
             T encoderReg = ComputeL2Regularization(encoderParams);
             T regWeight = NumOps.FromDouble(_relationOptions.FeatureEncoderL2Reg);
             totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(regWeight, encoderReg));
@@ -517,9 +520,9 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // Update feature encoder using base class gradient computation
         var featureGradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
         featureGradients = ClipGradients(featureGradients);
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
         var updatedParams = ApplyGradients(currentParams, featureGradients, _relationOptions.OuterLearningRate);
-        MetaModel.SetParameters(updatedParams);
+        ParamModel.SetParameters(updatedParams);
 
         // Update relation module parameters using sampled finite differences
         var relationParams = _relationModule.GetParameters();

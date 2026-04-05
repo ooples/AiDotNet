@@ -463,10 +463,10 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
                 var (input, output) = data.GetSample(idx);
 
                 // Compute gradients
-                var gradients = _baseModel.ComputeGradients(input, output);
+                var gradients = InterfaceGuard.GradientComputable(_baseModel).ComputeGradients(input, output);
 
                 // Apply gradients with learning rate
-                _baseModel.ApplyGradients(gradients, _config.LearningRate);
+                InterfaceGuard.GradientComputable(_baseModel).ApplyGradients(gradients, _config.LearningRate);
 
                 // Accumulate loss (use gradient magnitude as proxy for loss)
                 var sampleLoss = ComputeLoss(input, output);

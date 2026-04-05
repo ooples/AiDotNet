@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -378,7 +378,7 @@ public class RetNetLayer<T> : LayerBase<T>
         _lastDecayMasks = decayMasks;
 
         // Store retention scores for backward pass: [batch, numHeads, seqLen, seqLen]
-        var retentionScores = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        var retentionScores = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
         _lastRetentionScores = retentionScores;
 
         // For each head, compute retention
@@ -439,12 +439,12 @@ public class RetNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
-        var meanTensor = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var varTensor = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var meanTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var varTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -580,11 +580,9 @@ public class RetNetLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

@@ -52,8 +52,9 @@ namespace AiDotNet.Classification.Calibration;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
-public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
+[ModelPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
+public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// The base classifier being calibrated.
@@ -825,7 +826,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Return calibration parameters
         return new Vector<T>(new[]
@@ -840,7 +841,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length < 6)
         {
@@ -857,7 +858,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = Clone();
         if (newModel is CalibratedClassifier<T> calibrated)
@@ -868,7 +869,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Calibration wrappers don't use gradient-based optimization
         // The calibration is fitted using closed-form solutions or simple optimization
@@ -876,7 +877,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Calibration wrappers don't use gradient-based optimization
         // This is a no-op for compatibility

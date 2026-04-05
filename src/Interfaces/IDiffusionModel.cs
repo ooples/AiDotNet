@@ -43,7 +43,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("DiffusionModel")]
-public interface IDiffusionModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface IDiffusionModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the step scheduler used for the diffusion process.

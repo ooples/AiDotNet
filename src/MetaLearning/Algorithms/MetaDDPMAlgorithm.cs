@@ -62,6 +62,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jonathan Ho, Ajay Jain, Pieter Abbeel")]
 public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaDDPMOptions<T, TInput, TOutput> _algoOptions;
 
     private readonly double[] _betas;
@@ -104,7 +107,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be positive with BetaStart < BetaEnd.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _condDim = options.TaskConditionDim;
         _compressedDim = Math.Min(_paramDim, MaxCompressedDim);
         _numTimesteps = options.NumTimesteps;
@@ -156,11 +159,11 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
 
             // Get target: gradient-adapted weights (compressed delta)
             var targetDelta = ComputeTargetDelta(baseParams, task);
@@ -192,7 +195,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             // Also evaluate actual task performance
             var generated = SampleDDPM(condition, Math.Min(_algoOptions.SamplingSteps, 5));
             var adaptedParams = ApplyCompressedDelta(baseParams, generated);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(NumOps.Add(queryLoss, NumOps.FromDouble(noiseLoss)));
@@ -201,11 +204,11 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update denoiser and task encoder via SPSA
@@ -226,8 +229,8 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(baseParams);
+        var baseParams = ParamModel.GetParameters();
+        ParamModel.SetParameters(baseParams);
 
         var condition = ComputeTaskCondition(task.SupportInput);
         var generated = SampleDDPM(condition, _algoOptions.SamplingSteps);
@@ -279,7 +282,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(current);
+            ParamModel.SetParameters(current);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             current = ApplyGradients(current, grad, _algoOptions.InnerLearningRate);
         }
@@ -378,12 +381,12 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
     private double ComputeDDPMLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var target = ComputeTargetDelta(baseParams, task);
             int t = RandomGenerator.Next(_numTimesteps);
             var eps = SampleGaussian(_compressedDim);
@@ -400,7 +403,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             totalLoss += mse / _compressedDim;
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

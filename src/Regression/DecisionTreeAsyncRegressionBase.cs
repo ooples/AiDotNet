@@ -565,28 +565,6 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     }
 
     /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    /// <param name="parameters">A vector containing the model parameters.</param>
-    /// <inheritdoc/>
-    public bool SupportsParameterInitialization => false;
-
-    public virtual void SetParameters(Vector<T> parameters)
-    {
-        throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");
-    }
-
-    /// <summary>
-    /// Sets the active feature indices for this model.
-    /// </summary>
-    /// <param name="featureIndices">The indices of features to activate.</param>
-    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-    {
-        // Tree-based models select features during construction, not post-training.
-        // Silently accept this call so optimizer pipelines don't crash.
-    }
-
-    /// <summary>
     /// Gets the feature importance scores as a dictionary.
     /// </summary>
     /// <returns>A dictionary mapping feature names to their importance scores.</returns>
