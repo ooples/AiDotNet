@@ -605,7 +605,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 // Add small epsilon to avoid log(0)
                 predictedProb = NumOps.Add(predictedProb, NumOps.FromDouble(1e-8));
 
-                T logProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(predictedProb)));
+                T logProb = NumOps.Log(predictedProb);
                 T exampleLoss = NumOps.Negate(logProb);
 
                 totalLoss = NumOps.Add(totalLoss, exampleLoss);
@@ -658,7 +658,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 T squared = NumOps.Multiply(features[i, j], features[i, j]);
                 sumSquares = NumOps.Add(sumSquares, squared);
             }
-            T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
+            T norm = NumOps.Sqrt(sumSquares);
 
             // Normalize if norm is not zero
             if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-8)))

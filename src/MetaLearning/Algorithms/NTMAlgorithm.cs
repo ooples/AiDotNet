@@ -2060,7 +2060,7 @@ public class NTMReadHead<T>
             double similarity = NumOps.ToDouble(dotProduct) / (keyNormVal * memNormVal);
 
             // Apply softmax-like transformation
-            T expSim = NumOps.FromDouble(Math.Exp(similarity));
+            T expSim = NumOps.Exp(NumOps.FromDouble(similarity));
             weights[i] = expSim;
             sumWeights = NumOps.Add(sumWeights, expSim);
         }
@@ -2143,7 +2143,7 @@ public class NTMWriteHead<T>
             double similarity = NumOps.ToDouble(dotProduct) / (keyNormVal * memNormVal);
 
             // Apply softmax-like transformation
-            T expSim = NumOps.FromDouble(Math.Exp(similarity));
+            T expSim = NumOps.Exp(NumOps.FromDouble(similarity));
             weights[i] = expSim;
             sumWeights = NumOps.Add(sumWeights, expSim);
         }

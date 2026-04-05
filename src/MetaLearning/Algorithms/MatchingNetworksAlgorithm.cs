@@ -492,7 +492,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             {
                 T predictedProb = predictions[i, trueClass];
                 predictedProb = NumOps.Add(predictedProb, NumOps.FromDouble(1e-8));
-                T logProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(predictedProb)));
+                T logProb = NumOps.Log(predictedProb);
                 totalLoss = NumOps.Subtract(totalLoss, logProb);
             }
         }
