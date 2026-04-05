@@ -286,7 +286,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
         var h = TensorAllocator.Rent<T>(new[] { batchSize, _recurrenceDimension });
-        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
+        var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
         for (int t = 0; t < seqLen; t++)

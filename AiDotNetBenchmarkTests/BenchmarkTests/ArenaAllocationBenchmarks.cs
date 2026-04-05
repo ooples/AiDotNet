@@ -120,6 +120,7 @@ public class ArenaAllocationBenchmarks
     public int Workspace_RWKV7Pattern()
     {
         int count = 0;
+        _workspace.BeginForward(BatchSize, SeqLen); // Include sizing check in measurement
         // Sequence buffers (pre-allocated, same tensor every call)
         count += _workspace.Sequence(SqAllR).Length;
         count += _workspace.Sequence(SqAllK).Length;

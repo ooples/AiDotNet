@@ -37,6 +37,8 @@ public sealed class LayerWorkspace<T>
     /// </summary>
     public LayerWorkspace(int timestepCount, int sequenceCount)
     {
+        if (timestepCount < 0) throw new ArgumentOutOfRangeException(nameof(timestepCount));
+        if (sequenceCount < 0) throw new ArgumentOutOfRangeException(nameof(sequenceCount));
         _timestepSuffixes = new int[timestepCount][];
         _sequenceSuffixes = new int[sequenceCount][];
         _timestepBuffers = new Tensor<T>?[timestepCount];
@@ -50,6 +52,8 @@ public sealed class LayerWorkspace<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void DeclareTimestep(int index, params int[] shapeSuffix)
     {
+        if ((uint)index >= (uint)_timestepSuffixes.Length)
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} out of range [0, {_timestepSuffixes.Length})");
         _timestepSuffixes[index] = shapeSuffix;
     }
 
@@ -60,6 +64,8 @@ public sealed class LayerWorkspace<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void DeclareSequence(int index, params int[] shapeSuffix)
     {
+        if ((uint)index >= (uint)_sequenceSuffixes.Length)
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} out of range [0, {_sequenceSuffixes.Length})");
         _sequenceSuffixes[index] = shapeSuffix;
     }
 

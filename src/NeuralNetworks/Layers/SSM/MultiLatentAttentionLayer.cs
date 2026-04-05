@@ -309,7 +309,7 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
         int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allAttnWeights = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        var allAttnWeights = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int bi = 0; bi < batchSize; bi++)

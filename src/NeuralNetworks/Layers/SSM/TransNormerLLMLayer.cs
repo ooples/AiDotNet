@@ -404,8 +404,8 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

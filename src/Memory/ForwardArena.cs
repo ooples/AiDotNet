@@ -52,13 +52,13 @@ public sealed class ForwardArena<T>
         var key = new ShapeKey(shape);
 
         if (!_slabs.TryGetValue(key, out var slab))
-            return GrowAndRent(key, shape);
+            return GrowAndRent(key, shape, clear: false);
 
         if (!_cursors.TryGetValue(key, out var cursor))
             cursor = 0;
 
         if (cursor >= slab.Length)
-            return GrowAndRent(key, shape);
+            return GrowAndRent(key, shape, clear: false);
 
         _cursors[key] = cursor + 1;
         return slab[cursor];
@@ -71,7 +71,8 @@ public sealed class ForwardArena<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
     {
-        foreach (var key in _cursors.Keys)
+        var keys = new List<ShapeKey>(_cursors.Keys);
+        foreach (var key in keys)
             _cursors[key] = 0;
     }
 
@@ -110,7 +111,7 @@ public sealed class ForwardArena<T>
     /// </summary>
     public int CurrentRented => _cursors.Values.Sum();
 
-    private Tensor<T> GrowAndRent(ShapeKey key, int[] shape)
+    private Tensor<T> GrowAndRent(ShapeKey key, int[] shape, bool clear = true)
     {
         int currentSize = _slabs.TryGetValue(key, out var existing) ? existing.Length : 0;
         int newSize = Math.Max(currentSize * GrowthFactor, DefaultSlabSize);
@@ -119,7 +120,7 @@ public sealed class ForwardArena<T>
         var cursor = _cursors.TryGetValue(key, out var c) ? c : 0;
         _cursors[key] = cursor + 1;
         var tensor = _slabs[key][cursor];
-        tensor.Data.Span.Clear();
+        if (clear) tensor.Data.Span.Clear();
         return tensor;
     }
 }
@@ -131,29 +132,17 @@ public sealed class ForwardArena<T>
 public readonly struct ShapeKey : IEquatable<ShapeKey>
 {
     private readonly int _hash;
-    private readonly int _rank;
-    private readonly int _dim0;
-    private readonly int _dim1;
-    private readonly int _dim2;
-    private readonly int _dim3;
+    private readonly int[] _dims;
 
     public ShapeKey(int[] shape)
     {
-        _rank = shape.Length;
-        _dim0 = shape.Length > 0 ? shape[0] : 0;
-        _dim1 = shape.Length > 1 ? shape[1] : 0;
-        _dim2 = shape.Length > 2 ? shape[2] : 0;
-        _dim3 = shape.Length > 3 ? shape[3] : 0;
-
-        // FNV-1a hash for fast dictionary lookup
+        _dims = shape;
         unchecked
         {
             int hash = (int)2166136261;
-            hash = (hash ^ _rank) * 16777619;
-            hash = (hash ^ _dim0) * 16777619;
-            hash = (hash ^ _dim1) * 16777619;
-            hash = (hash ^ _dim2) * 16777619;
-            hash = (hash ^ _dim3) * 16777619;
+            hash = (hash ^ shape.Length) * 16777619;
+            for (int i = 0; i < shape.Length; i++)
+                hash = (hash ^ shape[i]) * 16777619;
             _hash = hash;
         }
     }
@@ -162,7 +151,11 @@ public readonly struct ShapeKey : IEquatable<ShapeKey>
 
     public override bool Equals(object? obj) => obj is ShapeKey other && Equals(other);
 
-    public bool Equals(ShapeKey other) =>
-        _rank == other._rank && _dim0 == other._dim0 &&
-        _dim1 == other._dim1 && _dim2 == other._dim2 && _dim3 == other._dim3;
+    public bool Equals(ShapeKey other)
+    {
+        if (_dims.Length != other._dims.Length) return false;
+        for (int i = 0; i < _dims.Length; i++)
+            if (_dims[i] != other._dims[i]) return false;
+        return true;
+    }
 }

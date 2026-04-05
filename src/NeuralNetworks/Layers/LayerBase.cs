@@ -56,7 +56,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerWorkspace<T>? Workspace { get; set; }
 
     /// <summary>
-    /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
     /// <remarks>

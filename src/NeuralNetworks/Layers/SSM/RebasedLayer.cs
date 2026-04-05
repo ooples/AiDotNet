@@ -421,9 +421,9 @@ public class RebasedLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) LinearAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

@@ -249,9 +249,9 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Matrix cell state per head: C[batch, head, headDim, headDim]
-        var cellState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var cellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         // Normalizer state per head: n[batch, head, headDim]
-        var normState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension });
+        var normState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
 
         // Store gates and projections for backward
         var allInputGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
@@ -260,9 +260,9 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         var allQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var allK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var allV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allHiddenPreProj = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allCellStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var allNormStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
+        var allHiddenPreProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

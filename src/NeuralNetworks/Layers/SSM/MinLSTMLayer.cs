@@ -367,9 +367,9 @@ public class MinLSTMLayer<T> : LayerBase<T>
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
         // Cell state: [batch, expandedDim] -- initialized to zero
-        var cellState = TensorAllocator.Rent<T>(new[] { batchSize, _expandedDimension });
+        var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
         // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]
-        var allCellStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
+        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
         // Initial cell state (zeros) is already at t=0
 
         for (int t = 0; t < seqLen; t++)

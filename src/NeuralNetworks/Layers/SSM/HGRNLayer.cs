@@ -321,7 +321,7 @@ public class HGRNLayer<T> : LayerBase<T>
 
         // Store all hidden states for backward pass: [batch, seqLen+1, modelDim]
         // Index 0 is the initial zero state, indices 1..seqLen are states after each step
-        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _modelDimension });
+        var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _modelDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

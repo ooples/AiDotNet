@@ -424,7 +424,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
 
         // Save all states for backward: [batch, seqLen+1, numMemories, numHeads, headDim, headDim]
         // This would be very large, so we only save the final states per timestep
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numMemories, _numHeads, _headDimension, _headDimension });
+        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numMemories, _numHeads, _headDimension, _headDimension });
 
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 

@@ -320,7 +320,6 @@ public class RWKV7Block<T> : LayerBase<T>
         Workspace.DeclareTimestep(TsAInput, _modelDimension);
         Workspace.DeclareTimestep(TsBInput, _modelDimension);
         Workspace.DeclareTimestep(TsWkvOut, _modelDimension);
-        Workspace.DeclareTimestep(TsYt, _modelDimension);
         // ChannelMixing timestep buffers
         Workspace.DeclareTimestep(TsCmRInput, _modelDimension);
         Workspace.DeclareTimestep(TsCmKInput, _modelDimension);
@@ -383,6 +382,9 @@ public class RWKV7Block<T> : LayerBase<T>
 
         _lastInput = input3D;
 
+        // Pre-size workspace for this forward pass
+        Ws.BeginForward(batchSize, seqLen);
+
         // Time mixing sub-layer with residual
         var normed1 = ApplyLayerNorm(input3D, _normGamma1, _normBeta1, batchSize, seqLen);
         _lastNormed1 = normed1;
@@ -417,7 +419,6 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        Ws.BeginForward(batchSize, seqLen);
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head
@@ -492,9 +493,7 @@ public class RWKV7Block<T> : LayerBase<T>
             SafeSetSlice(allB, t, bProj, batchSize, _modelDimension);
 
             // WKV-7 kernel per head
-            var wkvOutput = Workspace is not null
-                ? Ws.Timestep(TsWkvOut)
-                : new Tensor<T>(new[] { batchSize, _modelDimension });
+            var wkvOutput = Ws.Timestep(TsWkvOut);
 
             for (int bi = 0; bi < batchSize; bi++)
             {

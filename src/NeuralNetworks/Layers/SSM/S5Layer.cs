@@ -504,12 +504,12 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Hidden state: [batch, stateDim] real and imaginary
-        var hReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
-        var hImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var hReal = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var hImag = new Tensor<T>(new[] { batchSize, _stateDimension });
 
         // Store all hidden states for backward pass: [batch, seqLen+1, stateDim]
-        var allHiddenReal = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
-        var allHiddenImag = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenReal = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenImag = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
