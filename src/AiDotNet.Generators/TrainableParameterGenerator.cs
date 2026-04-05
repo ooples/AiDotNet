@@ -119,30 +119,41 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
-            // Discover trainable parameters from RegisterTrainableParameter() calls
-            // in the class body. This handles layers that use the registration API but haven't
-            // been fully annotated with [TrainableParameter]. When the attribute count is less
-            // than the registration count, the registration-based discovery takes precedence
-            // to ensure all trainable fields are included in the tape autodiff system.
+            // Discover trainable parameters from RegisterTrainableParameter() calls.
+            // Registration order is the canonical order — it matches _registeredTensors
+            // in LayerBase, so base.SetTrainableParameters positional assignment works.
+            // If RegisterTrainableParameter calls exist, they REPLACE attribute-discovered
+            // params to ensure correct ordering (attributes may be in declaration order
+            // which differs from registration order).
             {
-                // Always run discovery to compare counts
                 var registeredFields = DiscoverFromRegisterCalls(classDecl, model, "RegisterTrainableParameter");
-                var existingFieldNames = new HashSet<string>(paramFields.Select(p => p.Name));
-                foreach (var (fieldName, role) in registeredFields)
+                if (registeredFields.Count > 0)
                 {
-                    // Skip fields already discovered via [TrainableParameter] attributes
-                    if (existingFieldNames.Contains(fieldName)) continue;
+                    // Build attribute-discovered roles map for enrichment
+                    var attrRoles = new Dictionary<string, string>();
+                    foreach (var pf in paramFields)
+                        attrRoles[pf.Name] = pf.Role;
 
-                    // Verify the field exists, is a Tensor<T>, and is non-nullable
-                    var matchingField = classSymbol.GetMembers()
-                        .OfType<IFieldSymbol>()
-                        .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type)
-                            && f.NullableAnnotation != NullableAnnotation.Annotated
-                            && f.Type.NullableAnnotation != NullableAnnotation.Annotated);
-                    if (matchingField is not null)
+                    // Replace paramFields with registration-ordered list
+                    paramFields.Clear();
+                    var seen = new HashSet<string>();
+                    foreach (var (fieldName, role) in registeredFields)
                     {
-                        paramFields.Add(new ParameterFieldInfo(matchingField.Name, role, paramFields.Count));
-                        existingFieldNames.Add(fieldName);
+                        if (!seen.Add(fieldName)) continue;
+
+                        // Verify the field exists, is a Tensor<T>, and is non-nullable
+                        var matchingField = classSymbol.GetMembers()
+                            .OfType<IFieldSymbol>()
+                            .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type)
+                                && f.NullableAnnotation != NullableAnnotation.Annotated
+                                && f.Type.NullableAnnotation != NullableAnnotation.Annotated);
+                        if (matchingField is not null)
+                        {
+                            // Prefer attribute role if available (more specific)
+                            var finalRole = attrRoles.TryGetValue(fieldName, out var attrRole)
+                                ? attrRole : role;
+                            paramFields.Add(new ParameterFieldInfo(matchingField.Name, finalRole, paramFields.Count));
+                        }
                     }
                 }
             }
