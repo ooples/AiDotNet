@@ -68,7 +68,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private T[,][]? _weights;
-    private T[,][] FittedWeights => _weights ?? throw new InvalidOperationException("SOM not fitted. Call FitPredict() first.");
+    private T[,][] FittedWeights => _weights ?? throw new InvalidOperationException("SOM not fitted. Call Fit() or FitPredict() first.");
     private int[]? _neuronLabels;
 
     /// <summary>

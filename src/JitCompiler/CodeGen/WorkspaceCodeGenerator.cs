@@ -235,7 +235,7 @@ public class WorkspaceCodeGenerator
     private Expression EmitConv2DInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression input, Expression kernel, Conv2DOp conv)
     {
-        var method = typeof(IEngine).GetMethod("Conv2DInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"Conv2DInto"} not found");
+        var method = typeof(IEngine).GetMethod("Conv2DInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.Conv2DInto not found");
         return Expression.Call(engine, method, dest, input, kernel,
             Expression.Constant(conv.Stride[0]),
             Expression.Constant(conv.Padding[0]),
@@ -245,7 +245,7 @@ public class WorkspaceCodeGenerator
     private Expression EmitGroupNormInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, GroupNormOp gn)
     {
-        var method = typeof(IEngine).GetMethod("GroupNormInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"GroupNormInto"} not found");
+        var method = typeof(IEngine).GetMethod("GroupNormInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.GroupNormInto not found");
         var meanVar = Expression.Variable(typeof(Tensor<T>), "gn_mean");
         var varVar = Expression.Variable(typeof(Tensor<T>), "gn_var");
         return Expression.Block(
@@ -257,7 +257,7 @@ public class WorkspaceCodeGenerator
     private Expression EmitGroupNormSwishInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, FusedGroupNormActivationOp fgna)
     {
-        var method = typeof(IEngine).GetMethod("GroupNormSwishInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"GroupNormSwishInto"} not found");
+        var method = typeof(IEngine).GetMethod("GroupNormSwishInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.GroupNormSwishInto not found");
         return Expression.Call(engine, method, dest, inputs[0],
             Expression.Constant(fgna.NumGroups), inputs[1], inputs[2],
             Expression.Constant(fgna.Epsilon));
@@ -267,7 +267,7 @@ public class WorkspaceCodeGenerator
         ParameterExpression dest, Expression[] inputs, FusedConv2DBiasActivationOp fcba)
     {
         // Use IEngine.FusedConv2D which does Conv+Bias+Activation in single kernel
-        var method = typeof(IEngine).GetMethod("FusedConv2D")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"FusedConv2D"} not found");
+        var method = typeof(IEngine).GetMethod("FusedConv2D")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.FusedConv2D not found");
         var fusedResult = Expression.Call(engine, method,
             inputs[0], inputs[1], inputs[2],
             Expression.Constant(fcba.Stride[0]), Expression.Constant(fcba.Stride[1]),
@@ -285,8 +285,8 @@ public class WorkspaceCodeGenerator
     {
         // Two-step: GroupNormSwishInto(temp, input, ...) then Conv2DInto(dest, temp, kernel, ...)
         // temp reuses the input's workspace slot since input is consumed by this point
-        var gnSwishMethod = typeof(IEngine).GetMethod("GroupNormSwishInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"GroupNormSwishInto"} not found");
-        var conv2dIntoMethod = typeof(IEngine).GetMethod("Conv2DInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"Conv2DInto"} not found");
+        var gnSwishMethod = typeof(IEngine).GetMethod("GroupNormSwishInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.GroupNormSwishInto not found");
+        var conv2dIntoMethod = typeof(IEngine).GetMethod("Conv2DInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.Conv2DInto not found");
 
         // Use a temp variable for the intermediate
         var tempVar = Expression.Variable(typeof(Tensor<T>), $"fgnac_temp");
@@ -308,7 +308,7 @@ public class WorkspaceCodeGenerator
     private Expression EmitAddGroupNormInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, FusedAddGroupNormOp fagn)
     {
-        var agnMethod = typeof(IEngine).GetMethod("AddGroupNormInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"AddGroupNormInto"} not found");
+        var agnMethod = typeof(IEngine).GetMethod("AddGroupNormInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.AddGroupNormInto not found");
         return Expression.Call(engine, agnMethod, dest, inputs[0], inputs[1],
             Expression.Constant(fagn.NumGroups), inputs[2], inputs[3],
             Expression.Constant(fagn.Epsilon));
@@ -318,7 +318,7 @@ public class WorkspaceCodeGenerator
         ParameterExpression dest, Expression input)
     {
         // Simple 2D transpose
-        var method = typeof(IEngine).GetMethod("TransposeInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"TransposeInto"} not found");
+        var method = typeof(IEngine).GetMethod("TransposeInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.TransposeInto not found");
         return Expression.Call(engine, method, dest, input,
             Expression.Constant(new[] { 1, 0 }));
     }
@@ -334,7 +334,7 @@ public class WorkspaceCodeGenerator
     private Expression EmitConcatInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, ConcatOp concat)
     {
-        var method = typeof(IEngine).GetMethod("ConcatInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{"ConcatInto"} not found");
+        var method = typeof(IEngine).GetMethod("ConcatInto")?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException("IEngine.ConcatInto not found");
         var arrayExpr = Expression.NewArrayInit(typeof(Tensor<T>), inputs);
         return Expression.Call(engine, method, dest, arrayExpr, Expression.Constant(concat.Axis));
     }

@@ -77,10 +77,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         NumClusters = _options.NumComponents;
     }
 
-    private T[] FittedWeights => _weights ?? throw new InvalidOperationException("Model not fitted. Call FitPredict() first.");
-    private T[,] FittedMeans => _means ?? throw new InvalidOperationException("Model not fitted. Call FitPredict() first.");
-    private T[,,] FittedCovariances => _covariances ?? throw new InvalidOperationException("Model not fitted. Call FitPredict() first.");
-    private T[,] FittedResponsibilities => _responsibilities ?? throw new InvalidOperationException("Model not fitted. Call FitPredict() first.");
+    private T[] FittedWeights => _weights ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private T[,] FittedMeans => _means ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private T[,,] FittedCovariances => _covariances ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
+    private T[,] FittedResponsibilities => _responsibilities ?? throw new InvalidOperationException("Model not fitted. Call Fit() or FitPredict() first.");
 
     /// <summary>
     /// Gets the mixture weights.
@@ -236,7 +236,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             T maxResp = FittedResponsibilities[i, 0];
             for (int c = 1; c < k; c++)
             {
-                if (NumOps.GreaterThan(_responsibilities[i, c], maxResp))
+                if (NumOps.GreaterThan(FittedResponsibilities[i, c], maxResp))
                 {
                     maxResp = _responsibilities[i, c];
                     bestCluster = c;
@@ -427,7 +427,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                         {
                             FittedCovariances[c, i, j] = globalCov[i, j];
                         }
-                        FittedCovariances[c, i, i] = NumOps.Add(_covariances[c, i, i], reg);
+                        FittedCovariances[c, i, i] = NumOps.Add(FittedCovariances[c, i, i], reg);
                     }
                 }
                 break;
@@ -637,7 +637,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         for (int c = 0; c < k; c++)
         {
             FittedWeights[c] = NumOps.Divide(nk[c], nT);
-            if (!_options.AllowLowWeights && NumOps.LessThan(_weights[c], minWeight))
+            if (!_options.AllowLowWeights && NumOps.LessThan(FittedWeights[c], minWeight))
             {
                 _weights[c] = minWeight;
             }
@@ -703,7 +703,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     FittedCovariances[c, p, q] = NumOps.Divide(sum, nk[c]);
                     if (p == q)
                     {
-                        FittedCovariances[c, p, q] = NumOps.Add(_covariances[c, p, q], reg);
+                        FittedCovariances[c, p, q] = NumOps.Add(FittedCovariances[c, p, q], reg);
                     }
                 }
             }
@@ -749,7 +749,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     FittedCovariances[c, p, q] = NumOps.Divide(sharedCov[p, q], totalWeight);
                     if (p == q)
                     {
-                        FittedCovariances[c, p, q] = NumOps.Add(_covariances[c, p, q], reg);
+                        FittedCovariances[c, p, q] = NumOps.Add(FittedCovariances[c, p, q], reg);
                     }
                 }
             }
