@@ -479,8 +479,7 @@ public class HyenaLayer<T> : LayerBase<T>
         var sig = Engine.Sigmoid(x);
         var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onesT = new Tensor<T>(xTimesOneMinusSig.Shape.ToArray()); onesT.Fill(NumOps.One);
-        var onePlusXSig = Engine.TensorAdd(onesT, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

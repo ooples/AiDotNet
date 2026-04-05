@@ -478,7 +478,7 @@ public class ABCLayer<T> : LayerBase<T>
         var sig = Engine.Sigmoid(x);
         var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(CreateOnesLike(xTimesOneMinusSig), xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

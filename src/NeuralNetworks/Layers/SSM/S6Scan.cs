@@ -98,13 +98,13 @@ public static class S6Scan<T>
         Tensor<T> h;
         if (initialState != null)
         {
-            // Copy initial state so we don't mutate the caller's tensor
-            h = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
-            h = Engine.TensorAdd(h, initialState);
+            // Clone initial state so we don't mutate the caller's tensor
+            h = new Tensor<T>(initialState.Shape.ToArray());
+            initialState.Data.Span.CopyTo(h.Data.Span);
         }
         else
         {
-            h = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
+            h = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
         }
 
         // Store all hidden states for backward pass: [batch, seqLen+1, innerDim, stateDim]

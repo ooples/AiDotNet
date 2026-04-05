@@ -11,10 +11,11 @@ namespace AiDotNet.Memory;
 /// and GC pressure during the forward pass. Tensors are pre-created during warmup
 /// and recycled across calls.
 /// </summary>
-public sealed class ForwardArena<T>
+internal sealed class ForwardArena<T>
 {
     private readonly Dictionary<ShapeKey, Tensor<T>[]> _slabs = new();
     private readonly Dictionary<ShapeKey, int> _cursors = new();
+    private ShapeKey[]? _cursorKeysCache;
     private const int DefaultSlabSize = 4;
     private const int GrowthFactor = 2;
 
@@ -71,9 +72,12 @@ public sealed class ForwardArena<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
     {
-        var keys = new List<ShapeKey>(_cursors.Keys);
-        foreach (var key in keys)
-            _cursors[key] = 0;
+        // Use cached keys array to avoid allocation during reset
+        if (_cursorKeysCache is null || _cursorKeysCache.Length != _cursors.Count)
+            _cursorKeysCache = new ShapeKey[_cursors.Count];
+        _cursors.Keys.CopyTo(_cursorKeysCache, 0);
+        for (int i = 0; i < _cursorKeysCache.Length; i++)
+            _cursors[_cursorKeysCache[i]] = 0;
     }
 
     /// <summary>
@@ -136,7 +140,7 @@ public readonly struct ShapeKey : IEquatable<ShapeKey>
 
     public ShapeKey(int[] shape)
     {
-        _dims = shape;
+        _dims = (int[])shape.Clone();
         unchecked
         {
             int hash = (int)2166136261;

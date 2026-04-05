@@ -346,7 +346,7 @@ public class RWKV7Block<T> : LayerBase<T>
 
     // Workspace buffer indices — TimeMixing timestep buffers
     private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
-    private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5, TsYt = 6;
+    private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5;
     // Workspace buffer indices — ChannelMixing timestep buffers
     private const int TsCmRInput = 7, TsCmKInput = 8, TsCmKSiLU = 9;
     // Workspace buffer indices — TimeMixing sequence buffers

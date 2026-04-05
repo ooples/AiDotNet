@@ -623,8 +623,7 @@ public class TTTLayer<T> : LayerBase<T>
         var sig = Engine.Sigmoid(x);
         var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var ones_t = new Tensor<T>(xTimesOneMinusSig.Shape.ToArray()); ones_t.Fill(NumOps.One);
-        var onePlusXSig = Engine.TensorAdd(ones_t, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

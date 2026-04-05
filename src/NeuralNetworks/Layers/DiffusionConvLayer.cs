@@ -5,7 +5,6 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
