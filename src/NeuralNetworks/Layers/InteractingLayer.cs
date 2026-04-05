@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class InteractingLayer<T> : LayerBase<T>
+public partial class InteractingLayer<T> : LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;

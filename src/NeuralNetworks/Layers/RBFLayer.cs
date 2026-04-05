@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class RBFLayer<T> : LayerBase<T>
+public partial class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the center positions of each RBF neuron in the input space.

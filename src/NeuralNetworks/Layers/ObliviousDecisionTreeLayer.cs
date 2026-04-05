@@ -24,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
+public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _depth;

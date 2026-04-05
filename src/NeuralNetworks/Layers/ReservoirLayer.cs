@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
-public class ReservoirLayer<T> : LayerBase<T>
+public partial class ReservoirLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of the input vector at each time step.

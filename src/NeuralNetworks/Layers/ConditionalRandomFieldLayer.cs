@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConditionalRandomFieldLayer<T> : LayerBase<T>
+public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
     private Tensor<T> _transitionMatrix;
     private Tensor<T> _startScores;

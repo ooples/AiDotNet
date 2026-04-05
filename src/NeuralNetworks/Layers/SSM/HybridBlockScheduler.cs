@@ -81,7 +81,7 @@ public enum HybridSchedulePattern
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class HybridBlockScheduler<T> : LayerBase<T>
+public partial class HybridBlockScheduler<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _sequenceLength;

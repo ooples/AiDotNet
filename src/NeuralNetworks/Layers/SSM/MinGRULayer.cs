@@ -75,7 +75,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class MinGRULayer<T> : LayerBase<T>
+public partial class MinGRULayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _expandedDimension;
@@ -379,6 +379,17 @@ public class MinGRULayer<T> : LayerBase<T>
             Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias,
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_candidateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_candidateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

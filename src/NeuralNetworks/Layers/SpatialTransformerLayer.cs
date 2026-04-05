@@ -46,7 +46,7 @@ public enum SpatialTransformerDataFormat
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.

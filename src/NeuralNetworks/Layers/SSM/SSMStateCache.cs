@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SSMStateCache<T>
+public partial class SSMStateCache<T>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
     private static INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
