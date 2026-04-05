@@ -390,11 +390,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                         var concat = concats[t];
 
                         // Gradient of h = o * tanh(c)
-                        var tanhC = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            tanhC[i] = NumOps.Tanh(cCurr[i]);
-                        }
+                        var tanhC = Engine.Tanh(cCurr);
 
                         var do_gate = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)

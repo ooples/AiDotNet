@@ -407,12 +407,12 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
         var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
-        // Output layer (linear)
-        T score = b3[0];
-        for (int ii = 0; ii < _hiddenDim; ii++) wColH[ii] = w3[ii, 0];
-        score = NumOps.Add(score, Engine.DotProduct(h2, wColH));
-
-        return score;
+        // Output layer (linear, SIMD)
+        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var scorePre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
+            Tensor<T>.FromVector(b3).Reshape(1, 1));
+        return scorePre[0];
     }
 
     private (Vector<T> h1, Vector<T> h2, T score) ForwardWithCache(Vector<T> x)

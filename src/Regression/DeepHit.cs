@@ -742,7 +742,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             if (applyActivation)
             {
                 // SIMD activation via IActivationFunction.Forward (Engine-backed)
-                result = _options.Activation.Forward(result);
+                result = _options.Activation.Activate(result);
             }
 
             output[i] = result.Reshape(outputSize).ToVector();
@@ -1070,7 +1070,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 { "HiddenLayerSize", _options.HiddenLayerSize },
                 { "NumTimeBins", _options.NumTimeBins },
                 { "NumRisks", _options.NumRisks },
-                { "Activation", _options.Activation.ToString() },
+                { "Activation", _options.Activation.GetType().Name },
                 { "NumberOfFeatures", _numFeatures }
             }
         };

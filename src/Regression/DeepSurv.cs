@@ -393,7 +393,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 var result = Engine.TensorBroadcastAdd(
                     Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
                 // SIMD activation via IActivationFunction.Forward
-                result = _options.Activation.Forward(result);
+                result = _options.Activation.Activate(result);
                 next[i] = result.Reshape(outputSize).ToVector();
             }
 
@@ -641,7 +641,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 { "NumHiddenLayers", _options.NumHiddenLayers },
                 { "HiddenLayerSize", _options.HiddenLayerSize },
-                { "Activation", _options.Activation.ToString() },
+                { "Activation", _options.Activation.GetType().Name },
                 { "NumberOfFeatures", _numFeatures }
             }
         };

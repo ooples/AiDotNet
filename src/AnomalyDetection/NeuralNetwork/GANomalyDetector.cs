@@ -308,7 +308,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var hPre = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encW1)),
             Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
-        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
+        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: z = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
@@ -337,7 +337,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var hPre = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decW1)),
             Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
-        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
+        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: xRecon = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
@@ -366,7 +366,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var hPre = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(xRT, Tensor<T>.FromMatrix(reEncW1)),
             Tensor<T>.FromVector(reEncB1).Reshape(1, _hiddenDim));
-        var h = (Vector<T>)Engine.LeakyReLU(hPre.Reshape(_hiddenDim).ToVector(), leakyAlpha);
+        var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: zRecon = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
@@ -447,7 +447,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             {
                 encH1Pre[j] += NumOps.ToDouble(x[i]) * NumOps.ToDouble(encW1[i, j]);
             }
-            encH1[j] = LeakyReLU(encH1Pre[j]);
+            encH1[j] = (encH1Pre[j] >= 0 ? encH1Pre[j] : 0.2 * encH1Pre[j]);
         }
 
         // Decoder layer 1
@@ -460,7 +460,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             {
                 decH1Pre[j] += NumOps.ToDouble(z[i]) * NumOps.ToDouble(decW1[i, j]);
             }
-            decH1[j] = LeakyReLU(decH1Pre[j]);
+            decH1[j] = (decH1Pre[j] >= 0 ? decH1Pre[j] : 0.2 * decH1Pre[j]);
         }
 
         // Re-encoder layer 1
@@ -473,7 +473,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             {
                 reEncH1Pre[j] += NumOps.ToDouble(xRecon[i]) * NumOps.ToDouble(reEncW1[i, j]);
             }
-            reEncH1[j] = LeakyReLU(reEncH1Pre[j]);
+            reEncH1[j] = (reEncH1Pre[j] >= 0 ? reEncH1Pre[j] : 0.2 * reEncH1Pre[j]);
         }
 
         // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
