@@ -114,8 +114,13 @@ public static class DeserializationHelper
             // Two constructor overloads: scalar (IActivationFunction) vs vector (IVectorActivationFunction)
             int inputDim = inputShape[^1];
             int outputDim = outputShape[^1];
-            int hidden1 = TryGetInt(additionalParams, "Hidden1Dim") ?? 512;
-            int hidden2 = TryGetInt(additionalParams, "Hidden2Dim") ?? 1024;
+            // Support both current (Hidden1Dim) and legacy (Hidden1Dimension) metadata keys
+            int hidden1 = TryGetInt(additionalParams, "Hidden1Dim")
+                       ?? TryGetInt(additionalParams, "Hidden1Dimension")
+                       ?? 512;
+            int hidden2 = TryGetInt(additionalParams, "Hidden2Dim")
+                       ?? TryGetInt(additionalParams, "Hidden2Dimension")
+                       ?? 1024;
             bool useVector = additionalParams != null
                 && additionalParams.TryGetValue("UseVectorActivation", out var uvVal)
                 && bool.TryParse(uvVal as string, out var uv) && uv;
