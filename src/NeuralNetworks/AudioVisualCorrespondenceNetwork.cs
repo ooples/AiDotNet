@@ -996,8 +996,18 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var embedding = GetAudioEmbedding(input, _audioSampleRate);
-        return Tensor<T>.FromVector(embedding);
+        // VGG-style Dense encoder: simple sequential forward through all layers
+        // per Arandjelovic & Zisserman 2017
+        Tensor<T> current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return Predict(input);
     }
 
     /// <inheritdoc/>
