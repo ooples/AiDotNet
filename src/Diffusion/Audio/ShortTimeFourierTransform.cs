@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
@@ -420,7 +420,7 @@ public class ShortTimeFourierTransform<T>
         }
         outputLength = targetLength ?? outputLength;
 
-        var output = new Tensor<T>(new[] { batchSize, outputLength });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, outputLength });
 
         for (int b = 0; b < batchSize; b++)
         {
