@@ -2502,6 +2502,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Forward + loss under tape — uses the buffer-backed view tensors
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
+
+        // Align output shape to target: squeeze leading batch dim when batch=1
+        // (ForwardForTraining may add a batch dim that the target doesn't have)
+        if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+        {
+            output = output.Reshape(expected._shape);
+        }
+        else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+        {
+            expected = expected.Reshape(output._shape);
+        }
+
         var lossTensor = loss.ComputeTapeLoss(output, expected);
 
         // Compute gradients
