@@ -242,7 +242,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
                 MissingAttribute, location, className, "ModelInput"));
         }
 
-        if (paperAttr is not null && !HasAttribute(attributes, paperAttr))
+        if (paperAttr is null || !HasAttribute(attributes, paperAttr))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 MissingAttribute, location, className, "ModelPaper"));

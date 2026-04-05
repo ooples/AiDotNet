@@ -39,7 +39,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("LOF: Identifying Density-Based Local Outliers", "https://doi.org/10.1145/342009.335388")]
+[ModelPaper("Efficient Algorithms for Mining Outliers from Large Data Sets", "https://doi.org/10.1145/335191.335437", Year = 2000, Authors = "Sridhar Ramaswamy, Rajeev Rastogi, Kyuseok Shim")]
 public class KNNDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

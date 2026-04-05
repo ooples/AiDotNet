@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Machine Learning: A Probabilistic Perspective", "https://mitpress.mit.edu/9780262018029")]
+[ModelPaper("Bayesian Anomaly Detection Methods for Social Networks", "https://doi.org/10.1214/10-AOAS370", Year = 2010, Authors = "Savage, Coull, Heard")]
 public class BayesianDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _priorStrength;
