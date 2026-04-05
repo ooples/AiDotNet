@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-internal class GatedLinearAttentionLayer<T> : LayerBase<T>
+internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;

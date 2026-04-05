@@ -299,6 +299,13 @@ public partial class InteractingLayer<T> : LayerBase<T>
         {
             _residualWeights = Engine.TensorSubtract(_residualWeights, Engine.TensorMultiplyScalar(_residualWeightsGrad, learningRate));
         }
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+
     }
 
     /// <inheritdoc/>

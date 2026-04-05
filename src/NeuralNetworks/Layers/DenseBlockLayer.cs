@@ -15,7 +15,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
-internal class DenseBlockLayer<T> : LayerBase<T>
+internal partial class DenseBlockLayer<T> : LayerBase<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;

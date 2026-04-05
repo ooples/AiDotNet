@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4")]
-internal class MambaBlock<T> : LayerBase<T>
+internal partial class MambaBlock<T> : LayerBase<T>
 {
     // Configuration
     private readonly int _modelDimension;

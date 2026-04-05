@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class BatchEnsembleLayer<T> : LayerBase<T>
+public partial class BatchEnsembleLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -415,6 +415,12 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         {
             _sVectors = Engine.TensorSubtract(_sVectors, Engine.TensorMultiplyScalar(_sVectorsGrad, learningRate));
         }
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_rVectors, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_sVectors, PersistentTensorRole.Weights);
+
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class IntersampleAttentionLayer<T> : LayerBase<T>
+public partial class IntersampleAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -81,6 +81,11 @@ public class IntersampleAttentionLayer<T> : LayerBase<T>
         // Initialize layer normalization parameters
         _layerNormGamma = Tensor<T>.CreateDefault([embeddingDim], NumOps.One);
         _layerNormBeta = new Tensor<T>([embeddingDim]);
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_layerNormGamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_layerNormBeta, PersistentTensorRole.NormalizationParams);
+
     }
 
     /// <summary>

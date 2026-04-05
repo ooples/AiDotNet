@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4")]
-internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
+internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _maxSequenceLength;

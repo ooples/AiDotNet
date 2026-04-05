@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
-internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
+internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
