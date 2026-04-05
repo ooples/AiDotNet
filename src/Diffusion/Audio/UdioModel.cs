@@ -98,7 +98,6 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Udio: Text-to-Music Generation", "https://www.udio.com")]
 public class UdioModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

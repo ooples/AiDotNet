@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Learning Enhanced Black-Litterman", "https://doi.org/10.2469/faj.v48.n5.28")]
+[ModelPaper("Global Portfolio Optimization", "https://doi.org/10.2469/faj.v48.n5.28")]
 public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

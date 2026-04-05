@@ -77,10 +77,6 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <summary>
-    /// Returns the model type identifier for this classifier.
-    /// </summary>
-
-    /// <summary>
     /// Trains the Ridge Classifier using closed-form solution.
     /// </summary>
     public override void Train(Matrix<T> x, Vector<T> y)

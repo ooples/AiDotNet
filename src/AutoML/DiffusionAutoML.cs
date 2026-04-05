@@ -544,14 +544,20 @@ namespace AiDotNet.AutoML
             }
         }
 
-        private UNetNoisePredictor<T> CreateNoisePredictor(DiffusionTrialConfig<T> config)
+        private INoisePredictor<T> CreateNoisePredictor(DiffusionTrialConfig<T> config)
         {
-            return new UNetNoisePredictor<T>(
-                inputChannels: config.LatentDim,
-                outputChannels: config.LatentDim,
-                baseChannels: config.BaseChannels,
-                numResBlocks: config.NumResBlocks,
-                seed: config.Seed);
+            return config.NoisePredictorType switch
+            {
+                NoisePredictorType.UNet => new UNetNoisePredictor<T>(
+                    inputChannels: config.LatentDim,
+                    outputChannels: config.LatentDim,
+                    baseChannels: config.BaseChannels,
+                    numResBlocks: config.NumResBlocks,
+                    seed: config.Seed),
+                _ => throw new NotSupportedException(
+                    $"Noise predictor type '{config.NoisePredictorType}' is not yet implemented. " +
+                    "Supported types: UNet.")
+            };
         }
 
         private StandardVAE<T> CreateVAE(DiffusionTrialConfig<T> config)
@@ -569,32 +575,19 @@ namespace AiDotNet.AutoML
             int numSteps = config.InferenceSteps;
             var schedulerConfig = SchedulerConfig<T>.CreateDefault();
 
-            INoiseScheduler<T> scheduler;
-            switch (config.SchedulerType)
+            INoiseScheduler<T> scheduler = config.SchedulerType switch
             {
-                case DiffusionSchedulerType.DDPM:
-                    // DDPM is the original slow scheduler; DDIM is a more efficient equivalent
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.DDIM:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.Euler:
-                case DiffusionSchedulerType.EulerAncestral:
-                case DiffusionSchedulerType.DPMSolver:
-                    // PNDM uses pseudo numerical methods similar to Euler/DPM-Solver
-                    // and provides high quality with fewer steps
-                    scheduler = new PNDMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.LCM:
-                    // LCM uses few steps with high quality - PNDM is best suited for few-step inference
-                    scheduler = new PNDMScheduler<T>(schedulerConfig);
-                    numSteps = Math.Min(4, numSteps);
-                    break;
-                default:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
-            }
+                DiffusionSchedulerType.DDIM => new DDIMScheduler<T>(schedulerConfig),
+                DiffusionSchedulerType.DDPM => new DDIMScheduler<T>(schedulerConfig),
+                DiffusionSchedulerType.Euler or DiffusionSchedulerType.EulerAncestral or DiffusionSchedulerType.DPMSolver
+                    => new PNDMScheduler<T>(schedulerConfig),
+                DiffusionSchedulerType.LCM => new PNDMScheduler<T>(schedulerConfig),
+                _ => throw new NotSupportedException(
+                    $"Scheduler type '{config.SchedulerType}' is not supported. " +
+                    "Supported types: DDIM, DDPM, Euler, EulerAncestral, DPMSolver, LCM.")
+            };
+            if (config.SchedulerType == DiffusionSchedulerType.LCM)
+                numSteps = Math.Min(4, numSteps);
 
             scheduler.SetTimesteps(numSteps);
             return scheduler;

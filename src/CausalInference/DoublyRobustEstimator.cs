@@ -104,10 +104,6 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     private readonly int _numFolds;
 
     /// <summary>
-    /// Gets the model type.
-    /// </summary>
-
-    /// <summary>
     /// Initializes a new instance of the DoublyRobustEstimator class.
     /// </summary>
     /// <param name="trimMin">Minimum propensity score. Default is 0.01.</param>

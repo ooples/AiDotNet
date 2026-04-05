@@ -32,7 +32,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("You Only Look Once: Unified, Real-Time Object Detection", "https://arxiv.org/abs/1506.02640")]
+[ModelPaper("YOLOv8", "https://github.com/ultralytics/ultralytics")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YOLOSeg<T> : InstanceSegmenterBase<T>
 {

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("NVIDIA Cosmos: World Foundation Models", "https://www.nvidia.com/en-us/ai/cosmos/")]
+    [ModelPaper("Cosmos World Foundation Model Platform for Physical AI", "https://arxiv.org/abs/2501.03575")]
 public class CosmosModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

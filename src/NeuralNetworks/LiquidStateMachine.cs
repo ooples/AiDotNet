@@ -473,14 +473,14 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-try
-{
-    TrainWithTape(input, expectedOutput, _optimizer);
-}
-finally
-{
-    SetTrainingMode(false);
-}
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
