@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -521,7 +521,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = new Tensor<T>([batchSize, _sequenceLength, _numClasses]);
+        var output = TensorAllocator.Rent<T>([batchSize, _sequenceLength, _numClasses]);
 
         // === VECTORIZED: Apply activation to entire normalized input ===
         Tensor<T> sequenceScores;

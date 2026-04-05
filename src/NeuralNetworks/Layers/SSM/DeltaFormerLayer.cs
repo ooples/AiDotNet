@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -286,7 +286,7 @@ public class DeltaFormerLayer<T> : LayerBase<T>
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Store attention weights for backward pass
-        _lastAttentionWeights = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        _lastAttentionWeights = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -364,8 +364,8 @@ public class DeltaFormerLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int t = 0; t < seqLen; t++)
@@ -444,12 +444,12 @@ public class DeltaFormerLayer<T> : LayerBase<T>
         int batchSize, int seqLen,
         out Tensor<T> dQ, out Tensor<T> dK, out Tensor<T> dV)
     {
-        dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-        var dState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var dState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var lastStates = _lastStates ?? throw new InvalidOperationException("States not computed.");
 
         for (int t = seqLen - 1; t >= 0; t--)
@@ -528,9 +528,9 @@ public class DeltaFormerLayer<T> : LayerBase<T>
         int batchSize, int seqLen,
         out Tensor<T> dQ, out Tensor<T> dK, out Tensor<T> dV)
     {
-        dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
         var lastAttnWeights = _lastAttentionWeights ?? throw new InvalidOperationException("Attention weights not computed.");

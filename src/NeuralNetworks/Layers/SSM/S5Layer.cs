@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -412,7 +413,7 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
-        var output = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < seqLen; t++)
@@ -614,7 +615,7 @@ public class S5Layer<T> : LayerBase<T>
 
         // Step 1: Conv backward — compute dK[ho, hi, l] and dX[b, t, hi]
         var dK = new double[_modelDimension, _modelDimension, seqLen];
-        var dX = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+        var dX = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
 
         for (int ho = 0; ho < _modelDimension; ho++)
         {
@@ -753,7 +754,7 @@ public class S5Layer<T> : LayerBase<T>
     private Tensor<T> MIMOScanBackward(
         Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
     {
-        var dU = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dU = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Initialize gradient accumulators
         _aRealGradient = new Tensor<T>(new[] { _stateDimension });
@@ -788,8 +789,8 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Running gradient of hidden state (complex): dL/dh[t]
-        var dhReal = new Tensor<T>(new[] { batchSize, _stateDimension });
-        var dhImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
 
         for (int t = seqLen - 1; t >= 0; t--)
         {

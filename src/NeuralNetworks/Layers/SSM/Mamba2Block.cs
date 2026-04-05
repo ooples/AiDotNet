@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -469,10 +470,10 @@ public class Mamba2Block<T> : LayerBase<T>
         var D2D = D1D.Reshape(1, _innerDimension);
 
         // Hidden state: [batch, numHeads, headDim, stateDim]
-        var hiddenState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _stateDimension });
+        var hiddenState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _stateDimension });
 
         // Store hidden states for backward: [batch, seqLen+1, numHeads, headDim, stateDim]
-        var allHiddenStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
+        var allHiddenStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
 
         // Process in chunks of _chunkSize (Mamba-2 SSD structure).
         // Within each chunk, tokens are processed sequentially with the SSM recurrence.
@@ -485,8 +486,8 @@ public class Mamba2Block<T> : LayerBase<T>
             var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
 
             // For each head, apply the SSM recurrence
-            var y_t = new Tensor<T>(new[] { batchSize, _innerDimension });
-            var h_flat = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+            var y_t = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension });
+            var h_flat = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
             for (int hi = 0; hi < _numHeads; hi++)
             {
@@ -544,7 +545,7 @@ public class Mamba2Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -582,10 +583,10 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> hiddenStates, int batchSize, int seqLen,
         out Tensor<T> dDelta, out Tensor<T> dB, out Tensor<T> dC)
     {
-        var dX = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
-        dDelta = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        dB = new Tensor<T>(new[] { batchSize, seqLen, _stateDimension });
-        dC = new Tensor<T>(new[] { batchSize, seqLen, _stateDimension });
+        var dX = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
+        dDelta = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        dB = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _stateDimension });
+        dC = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _stateDimension });
 
         _aLogGradient = new Tensor<T>(new[] { _numHeads });
         _dParamGradient = new Tensor<T>(new[] { _numHeads });
@@ -596,7 +597,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
         // Per Mamba paper: recompute states during backward for numerical consistency
         var recomputedStates = new Tensor<T>[seqLen + 1];
-        var h_recomp = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var h_recomp = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
         recomputedStates[0] = h_recomp.Clone();
         for (int t = 0; t < seqLen; t++)
         {
@@ -644,7 +645,7 @@ public class Mamba2Block<T> : LayerBase<T>
         }
 
         // Running dh: [batch, innerDim, stateDim]
-        var dh = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var dh = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
         for (int t = seqLen - 1; t >= 0; t--)
         {
@@ -745,7 +746,7 @@ public class Mamba2Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

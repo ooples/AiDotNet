@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -373,12 +374,12 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
         _lastLambdaImag = lambdaImag;
 
         // Hidden state: [batch, stateDimension] real and imaginary parts
-        var hReal = new Tensor<T>(new[] { batchSize, _stateDimension });
-        var hImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var hReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var hImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
 
         // Store hidden states for backward pass: [batch, seqLen+1, stateDimension]
-        var allHiddenReal = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
-        var allHiddenImag = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenReal = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenImag = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
 
         // D for skip connection: [1, modelDimension]
         var D2D = _dParam.Reshape(1, _modelDimension);
@@ -482,7 +483,7 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
     private Tensor<T> DiagonalComplexRecurrenceBackward(
         Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
     {
-        var dU = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dU = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Initialize gradient accumulators
         _nuGradient = new Tensor<T>(new[] { _stateDimension });
@@ -503,8 +504,8 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
             ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Running gradient of hidden state (complex): dL/dh[t]
-        var dhReal = new Tensor<T>(new[] { batchSize, _stateDimension });
-        var dhImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
 
         for (int t = seqLen - 1; t >= 0; t--)
         {

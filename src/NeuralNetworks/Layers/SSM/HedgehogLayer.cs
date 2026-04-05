@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -326,12 +326,12 @@ public class HedgehogLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: Apply trainable feature map to Q and K
-        var phiQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var phiK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var phiQHidden = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiKHidden = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiQPreAct = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiKPreAct = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
+        var phiQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var phiK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var phiQHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
+        var phiKHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
+        var phiQPreAct = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
+        var phiKPreAct = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
 
         var headVec = new T[_headDimension];
         var featureOut = new T[_headDimension];
@@ -433,7 +433,7 @@ public class HedgehogLayer<T> : LayerBase<T>
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Store denominators for backward pass
-        var denominators = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var denominators = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         // Per-head state: S[headDim, headDim] and z[headDim]
         var stateS = new T[batchSize, _numHeads, _headDimension, _headDimension];
@@ -574,11 +574,9 @@ public class HedgehogLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

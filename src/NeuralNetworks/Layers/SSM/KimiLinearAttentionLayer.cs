@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -284,8 +284,8 @@ public class KimiLinearAttentionLayer<T> : LayerBase<T>
         var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         // Store KV gate values
-        _lastKVGate = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        _lastKVGateRaw = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        _lastKVGate = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        _lastKVGateRaw = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
@@ -371,11 +371,9 @@ public class KimiLinearAttentionLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

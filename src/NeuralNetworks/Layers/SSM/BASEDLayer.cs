@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -430,8 +431,8 @@ public class BASEDLayer<T> : LayerBase<T>
             }
 
         // Cache feature maps for backward pass
-        var featureQCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
-        var featureKCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
+        var featureQCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
+        var featureKCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
         _lastLinearFeatureQ = featureQCache;
         _lastLinearFeatureK = featureKCache;
 
@@ -518,7 +519,7 @@ public class BASEDLayer<T> : LayerBase<T>
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Store attention scores for backward pass: [batch, seqLen, numHeads, windowSize]
-        var scores = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _windowSize });
+        var scores = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _windowSize });
         _lastWindowScores = scores;
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -602,7 +603,7 @@ public class BASEDLayer<T> : LayerBase<T>
         Tensor<T> linearOutput, Tensor<T> windowOutput,
         Tensor<T> alpha, int batchSize, int seqLen)
     {
-        var combined = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var combined = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -637,9 +638,9 @@ public class BASEDLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) SlidingWindowAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -722,9 +723,9 @@ public class BASEDLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) LinearAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         var featureMapScaleGrad = _featureMapScaleGradient
             ?? throw new InvalidOperationException("Gradients must be initialized before backward pass.");

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -229,14 +229,14 @@ internal class GatedLinearAttentionLayer<T> : LayerBase<T>
         _lastGate = gate;
 
         // Gated linear attention recurrence per head
-        var output = new Tensor<T>(new[] { batchSize, seqLen, totalDim });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, totalDim });
 
         for (int hi = 0; hi < _numHeads; hi++)
         {
             int dimStart = hi * _headDimension;
 
             // State matrix: [batch, headDim, keyDim] (KV outer product accumulator)
-            var state = new Tensor<T>(new[] { batchSize, _headDimension, _keyDimension });
+            var state = TensorAllocator.Rent<T>(new[] { batchSize, _headDimension, _keyDimension });
 
             for (int t = 0; t < seqLen; t++)
             {

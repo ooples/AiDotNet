@@ -1,7 +1,8 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -822,7 +823,7 @@ public partial class GRULayer<T> : LayerBase<T>
         // Reset hidden state if needed
         if (_lastHiddenState == null)
         {
-            _lastHiddenState = new Tensor<T>([batchSize, _hiddenSize]);
+            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
         }
 
         // Initialize list to store all hidden states if returning sequences

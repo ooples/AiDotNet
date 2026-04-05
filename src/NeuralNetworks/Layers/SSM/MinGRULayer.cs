@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -318,7 +318,7 @@ public class MinGRULayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
 
         // Store all hidden states including h_0 for backward pass: [batch, seqLen+1, expandedDim]
-        var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
+        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
         // h_0 is initialized to zero (already default)
 
         for (int t = 0; t < seqLen; t++)

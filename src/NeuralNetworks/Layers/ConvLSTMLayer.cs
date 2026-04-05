@@ -1,7 +1,8 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -614,8 +615,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
 
         // Rent output (fully overwritten), states need zero init for initial timestep
         var output = TensorAllocator.Rent<T>([batchSize, timeSteps, height, width, _filters]);
-        _lastHiddenState = new Tensor<T>([batchSize, height, width, _filters]);
-        _lastCellState = new Tensor<T>([batchSize, height, width, _filters]);
+        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
+        _lastCellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
 
         for (int t = 0; t < timeSteps; t++)
         {

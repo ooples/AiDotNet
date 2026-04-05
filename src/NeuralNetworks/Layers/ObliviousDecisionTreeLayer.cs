@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -183,7 +183,7 @@ public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSplitDecisions(Tensor<T> input, Tensor<T> featureSelections, int batchSize)
     {
         // [batchSize, depth] - probability of going right at each level
-        var decisions = new Tensor<T>([batchSize, _depth]);
+        var decisions = TensorAllocator.Rent<T>([batchSize, _depth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -211,7 +211,7 @@ public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 
     private Tensor<T> ComputeLeafProbabilities(Tensor<T> splitDecisions, int batchSize)
     {
-        var leafProbs = new Tensor<T>([batchSize, _numLeaves]);
+        var leafProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -237,7 +237,7 @@ public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 
     private Tensor<T> ComputeOutput(Tensor<T> leafProbs, int batchSize)
     {
-        var output = new Tensor<T>([batchSize, _outputDim]);
+        var output = TensorAllocator.Rent<T>([batchSize, _outputDim]);
 
         for (int b = 0; b < batchSize; b++)
         {

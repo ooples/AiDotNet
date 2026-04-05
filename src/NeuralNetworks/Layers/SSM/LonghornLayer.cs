@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -351,9 +351,9 @@ public class LonghornLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         // Save all states for backward pass: [batch, seqLen+1, numHeads, headDim, headDim]
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int t = 0; t < seqLen; t++)
@@ -428,7 +428,7 @@ public class LonghornLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -94,7 +94,7 @@ public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
         _inputCache = input;
 
         int batchSize = input.Shape[0];
-        var output = new Tensor<T>([batchSize, _numFeatures * _numBins]);
+        var output = TensorAllocator.Rent<T>([batchSize, _numFeatures * _numBins]);
 
         for (int b = 0; b < batchSize; b++)
         {

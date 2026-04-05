@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -294,8 +294,8 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: Apply Householder reflections to Q and K
-        var reflectedQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var reflectedK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var reflectedQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var reflectedK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -380,7 +380,7 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
-        _lastAttentionWeights = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        _lastAttentionWeights = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

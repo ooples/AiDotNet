@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
@@ -215,7 +215,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         var bias = ComputeBias(queryLen, keyLen);
 
         // Add bias to scores
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
 
         if (rank == 4)
         {

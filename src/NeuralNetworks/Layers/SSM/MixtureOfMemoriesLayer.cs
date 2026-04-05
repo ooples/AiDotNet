@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -508,7 +508,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         Tensor<T> dOutput, Tensor<T> softmaxOutput,
         int batchSize, int seqLen, int dim)
     {
-        var dLogits = new Tensor<T>(new[] { batchSize, seqLen, dim });
+        var dLogits = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -533,11 +533,9 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

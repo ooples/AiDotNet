@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -326,17 +327,17 @@ public class RWKVLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State for WKV: numerator [batch, numHeads, headDim, headDim] and denominator [batch, numHeads, headDim]
-        var stateNum = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var stateDen = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
+        var stateNum = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var stateDen = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension });
 
-        var xPrev = new Tensor<T>(new[] { batchSize, _modelDimension });  // initialized to zeros (token shift)
+        var xPrev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });  // initialized to zeros (token shift)
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
             // Token shift: mix current and previous token
-            var shifted = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var shifted = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -354,9 +355,9 @@ public class RWKVLayer<T> : LayerBase<T>
             }
 
             // Compute receptance, key, value with token-shifted inputs
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var vInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var rInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var kInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var vInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -387,7 +388,7 @@ public class RWKVLayer<T> : LayerBase<T>
             decay = Engine.TensorBroadcastAdd(decay, decayBias2D);
 
             // WKV computation per head with exponential decay
-            var wkvOutput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var wkvOutput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -479,7 +480,7 @@ public class RWKVLayer<T> : LayerBase<T>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var xPrev = new Tensor<T>(new[] { batchSize, _modelDimension });
+        var xPrev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
         int expandedDim = _modelDimension * 4;
 
         for (int t = 0; t < seqLen; t++)
@@ -487,8 +488,8 @@ public class RWKVLayer<T> : LayerBase<T>
             var x_t = x.GetSliceAlongDimension(t, 1);
 
             // Token shift for channel mixing
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var rInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var kInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -513,7 +514,7 @@ public class RWKVLayer<T> : LayerBase<T>
             var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, expandedDim]
 
             // Squared ReLU: max(0, k)^2
-            var kSquared = new Tensor<T>(new[] { batchSize, expandedDim });
+            var kSquared = TensorAllocator.Rent<T>(new[] { batchSize, expandedDim });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < expandedDim; d++)
