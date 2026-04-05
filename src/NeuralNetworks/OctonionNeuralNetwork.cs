@@ -240,7 +240,15 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput, _optimizer);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

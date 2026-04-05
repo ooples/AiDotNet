@@ -244,7 +244,15 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput, _optimizer);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

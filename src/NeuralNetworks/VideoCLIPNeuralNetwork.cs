@@ -1496,6 +1496,8 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+        try
+        {
 
         // Parse input based on rank
         var frames = new List<Tensor<T>>();
@@ -1545,6 +1547,11 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Use tape-based autodiff for gradient computation and parameter update.
         // The tape records all forward operations and computes gradients automatically.
         TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
