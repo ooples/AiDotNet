@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -368,10 +368,10 @@ public class MEGALayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> EmaForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _emaDimension });
 
         // Store all states for backward: [batch, seqLen+1, emaDim]
-        var states = new Tensor<T>(new[] { batchSize, seqLen + 1, _emaDimension });
+        var states = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _emaDimension });
         // States at t=0 are zero (already initialized)
 
         for (int t = 0; t < seqLen; t++)
@@ -414,7 +414,7 @@ public class MEGALayer<T> : LayerBase<T>
         T headScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Store attention scores: [batch, numHeads, seqLen, seqLen]
-        var attnScores = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        var attnScores = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

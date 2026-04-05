@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -314,11 +314,11 @@ public class RebasedLayer<T> : LayerBase<T>
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Cache feature maps for backward pass
-        var phiQCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
-        var phiKCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
-        var phiQNormCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var phiKNormCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var denomCache = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var phiQCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var phiKCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var phiQNormCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var phiKNormCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var denomCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         // Per-head state: S[featureDim, headDim] and z[featureDim]
         var stateS = new T[batchSize, _numHeads, _headDimension, _headDimension];
@@ -421,9 +421,9 @@ public class RebasedLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) LinearAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

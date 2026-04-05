@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -337,10 +337,10 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: RMSNorm on Q and K
-        var qNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var kNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var qRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var kRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var qNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var kNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var qRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var kRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         ApplyRMSNorm(q, _queryNormScale, qNormed, qRmsInv, batchSize, seqLen);
         ApplyRMSNorm(k, _keyNormScale, kNormed, kRmsInv, batchSize, seqLen);
@@ -362,8 +362,8 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         _lastAttnRaw = attnRaw;
 
         // Step 5: RMSNorm on attention output
-        var attnNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var attnRmsInv = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var attnNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var attnRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
         ApplyRMSNorm(attnRaw, _outputNormScale, attnNormed, attnRmsInv, batchSize, seqLen);
         _lastAttnNormed = attnNormed;
         _lastAttnRmsInv = attnRmsInv;
@@ -404,8 +404,8 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

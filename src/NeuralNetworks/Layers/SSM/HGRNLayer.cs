@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -243,8 +243,8 @@ public class HGRNLayer<T> : LayerBase<T>
         _lastProjectedInput = projected3D;
 
         // Step 2: Compute forget and input gates from projected input
-        var forgetGate3D = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var inputGate3D = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var forgetGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var inputGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         var fBias = _forgetGateBias.Reshape(1, _modelDimension);
         var iBias = _inputGateBias.Reshape(1, _modelDimension);
@@ -317,11 +317,11 @@ public class HGRNLayer<T> : LayerBase<T>
         int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var h = new Tensor<T>(new[] { batchSize, _modelDimension });
+        var h = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
 
         // Store all hidden states for backward pass: [batch, seqLen+1, modelDim]
         // Index 0 is the initial zero state, indices 1..seqLen are states after each step
-        var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _modelDimension });
+        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _modelDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -351,7 +351,7 @@ public class GatedSlotAttentionLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Slot state per head: [batch, numHeads, numSlots, headDim]
-        var slotState = new Tensor<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
+        var slotState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
 
         // Initialize slots from learned initial embeddings
         for (int bi = 0; bi < batchSize; bi++)
@@ -361,7 +361,7 @@ public class GatedSlotAttentionLayer<T> : LayerBase<T>
                         slotState[new[] { bi, hi, si, di }] = _initialSlots[new[] { hi, si, di }];
 
         // Save all slot states for backward pass: [batch, seqLen+1, numHeads, numSlots, headDim]
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
 
         // Save initial state at t=0
         for (int bi = 0; bi < batchSize; bi++)

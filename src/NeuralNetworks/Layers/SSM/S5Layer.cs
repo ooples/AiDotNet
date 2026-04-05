@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -503,12 +504,12 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Hidden state: [batch, stateDim] real and imaginary
-        var hReal = new Tensor<T>(new[] { batchSize, _stateDimension });
-        var hImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var hReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var hImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
 
         // Store all hidden states for backward pass: [batch, seqLen+1, stateDim]
-        var allHiddenReal = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
-        var allHiddenImag = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenReal = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenImag = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -753,7 +754,7 @@ public class S5Layer<T> : LayerBase<T>
     private Tensor<T> MIMOScanBackward(
         Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
     {
-        var dU = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dU = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Initialize gradient accumulators
         _aRealGradient = new Tensor<T>(new[] { _stateDimension });
@@ -788,8 +789,8 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Running gradient of hidden state (complex): dL/dh[t]
-        var dhReal = new Tensor<T>(new[] { batchSize, _stateDimension });
-        var dhImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
 
         for (int t = seqLen - 1; t >= 0; t--)
         {

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -424,7 +424,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
 
         // Save all states for backward: [batch, seqLen+1, numMemories, numHeads, headDim, headDim]
         // This would be very large, so we only save the final states per timestep
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numMemories, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numMemories, _numHeads, _headDimension, _headDimension });
 
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
@@ -508,7 +508,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         Tensor<T> dOutput, Tensor<T> softmaxOutput,
         int batchSize, int seqLen, int dim)
     {
-        var dLogits = new Tensor<T>(new[] { batchSize, seqLen, dim });
+        var dLogits = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

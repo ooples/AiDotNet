@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -398,8 +398,8 @@ public class TTTLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Inner weights state: starts from W_0 (learnable initialization) for each batch element
-        var innerW = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allInnerW = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var innerW = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allInnerW = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         // Initialize inner weights to W_0
         for (int bi = 0; bi < batchSize; bi++)

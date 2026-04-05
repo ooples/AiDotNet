@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -755,8 +755,8 @@ public class RWKV7Block<T> : LayerBase<T>
             // d(gated)/d(wkv_num) = sigmoid(r)
             // We need wkv_num = gated / sigmoid(r)
 
-            var sigR = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var wkvNum = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var sigR = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var wkvNum = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -786,7 +786,7 @@ public class RWKV7Block<T> : LayerBase<T>
             Tensor<T> x_prev;
             if (t == 0)
             {
-                x_prev = new Tensor<T>(new[] { batchSize, _modelDimension }); // zeros
+                x_prev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension }); // zeros
             }
             else
             {
@@ -807,7 +807,7 @@ public class RWKV7Block<T> : LayerBase<T>
 
             // 6. Receptance weight gradient: dW_r += rInput_t^T @ dR_t
             // Reconstruct rInput from token shift
-            var rInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var rInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -828,7 +828,7 @@ public class RWKV7Block<T> : LayerBase<T>
             // Similarly accumulate K, V, A, B token shift and weight gradients
             // (same pattern as R but through different paths — approximate contribution)
             var dK = Engine.TensorMatMul(dGated, _keyWeights.Transpose(new[] { 1, 0 }));
-            var kInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var kInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -863,7 +863,7 @@ public class RWKV7Block<T> : LayerBase<T>
                             NumOps.Multiply(dV[new[] { bi, d }], diff));
                 }
             }
-            var vInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var vInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     vInput_t[new[] { bi, d }] = NumOps.Add(
@@ -883,7 +883,7 @@ public class RWKV7Block<T> : LayerBase<T>
                         _timeMixAGrad[d] = NumOps.Add(_timeMixAGrad[d],
                             NumOps.Multiply(dAInput[new[] { bi, d }], diff));
                 }
-            var aInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var aInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     aInput_t[new[] { bi, d }] = NumOps.Add(
@@ -904,7 +904,7 @@ public class RWKV7Block<T> : LayerBase<T>
                         _timeMixBGrad[d] = NumOps.Add(_timeMixBGrad[d],
                             NumOps.Multiply(dBInput[new[] { bi, d }], diff));
                 }
-            var bInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var bInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     bInput_t[new[] { bi, d }] = NumOps.Add(
@@ -1012,7 +1012,7 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input,
         Tensor<T> gamma, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-6);
         T invDim = NumOps.FromDouble(1.0 / _modelDimension);
 

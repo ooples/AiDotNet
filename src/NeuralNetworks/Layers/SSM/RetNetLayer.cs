@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -378,7 +378,7 @@ public class RetNetLayer<T> : LayerBase<T>
         _lastDecayMasks = decayMasks;
 
         // Store retention scores for backward pass: [batch, numHeads, seqLen, seqLen]
-        var retentionScores = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        var retentionScores = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
         _lastRetentionScores = retentionScores;
 
         // For each head, compute retention
@@ -443,8 +443,8 @@ public class RetNetLayer<T> : LayerBase<T>
         T eps = NumOps.FromDouble(1e-6);
 
         // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
-        var meanTensor = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        var varTensor = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var meanTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        var varTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

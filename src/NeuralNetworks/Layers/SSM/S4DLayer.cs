@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -591,12 +592,12 @@ public class S4DLayer<T> : LayerBase<T>
         }
 
         // Hidden state: [batch, innerDim, stateDim] real and imaginary
-        var hReal = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
-        var hImag = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var hReal = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var hImag = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
         // Store hidden states for backward pass
-        var allHiddenReal = new Tensor<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
-        var allHiddenImag = new Tensor<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
+        var allHiddenReal = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
+        var allHiddenImag = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
 
         // D for skip connection: [1, innerDim]
         var D2D = _dParam.Reshape(1, _innerDimension);
@@ -850,7 +851,7 @@ public class S4DLayer<T> : LayerBase<T>
     private Tensor<T> ComplexRecurrentScanBackward(
         Tensor<T> dOutput, Tensor<T> x, int batchSize, int seqLen)
     {
-        var dX = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dX = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Initialize gradient accumulators
         _aRealGradient = new Tensor<T>(new[] { _innerDimension, _stateDimension });
@@ -888,8 +889,8 @@ public class S4DLayer<T> : LayerBase<T>
         var D2D = _dParam.Reshape(1, _innerDimension);
 
         // Running gradient of hidden state (complex)
-        var dhReal = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
-        var dhImag = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
         // Hoist invariant null guards out of the loop
         var lastHiddenReal = _lastHiddenStatesReal ?? throw new InvalidOperationException("_lastHiddenStatesReal has not been initialized.");

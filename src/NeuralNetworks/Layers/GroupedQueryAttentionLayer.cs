@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -330,7 +330,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         if (_numKVHeads == _numHeads)
             return kv; // No expansion needed (standard MHA)
 
-        var expanded = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, _headDimension });
+        var expanded = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, _headDimension });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -387,7 +387,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         T negInf = NumOps.MinValue;
 
         var output = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-        attentionWeightsOut = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
+        attentionWeightsOut = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -452,7 +452,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         if (_numKVHeads == _numHeads)
             return expandedGrad; // No aggregation needed (standard MHA)
 
-        var aggregated = new Tensor<T>(new[] { batchSize, _numKVHeads, seqLen, _headDimension });
+        var aggregated = TensorAllocator.Rent<T>(new[] { batchSize, _numKVHeads, seqLen, _headDimension });
 
         for (int b = 0; b < batchSize; b++)
         {

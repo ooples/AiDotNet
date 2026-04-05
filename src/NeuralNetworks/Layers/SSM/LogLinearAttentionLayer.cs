@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -373,8 +373,8 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
 
         // Precompute softmax of level mixing weights per head
         var levelAlpha = new T[_numHeads, _numLevels];
-        var levelOutputs = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numLevels, _headDimension });
-        var levelMixSoftmax = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numLevels });
+        var levelOutputs = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels, _headDimension });
+        var levelMixSoftmax = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels });
 
         for (int hi = 0; hi < _numHeads; hi++)
         {

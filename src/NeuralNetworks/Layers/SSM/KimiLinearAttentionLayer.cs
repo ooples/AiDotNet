@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -280,12 +280,12 @@ public class KimiLinearAttentionLayer<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
 
         // Store KV gate values
-        _lastKVGate = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-        _lastKVGateRaw = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        _lastKVGate = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
+        _lastKVGateRaw = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
 
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 

@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -170,7 +170,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastInput = input2D;
 
         int batchSize = input2D.Shape[0];
-        var probabilities = new Tensor<T>(new[] { batchSize, stateSize });
+        var probabilities = TensorAllocator.Rent<T>(new[] { batchSize, stateSize });
 
         for (int b = 0; b < batchSize; b++)
         {
