@@ -439,7 +439,7 @@ public class RetNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
@@ -580,11 +580,10 @@ public class RetNetLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var ones_t = new Tensor<T>(xTimesOneMinusSig.Shape.ToArray()); ones_t.Fill(NumOps.One);
+        var onePlusXSig = Engine.TensorAdd(ones_t, xTimesOneMinusSig);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

@@ -419,7 +419,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         }
 
         // Causal convolution: output[b,t,d] = sum_l K[d,l] * emaInput[b,t-l,d]
-        var output = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _emaDimension]);
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
                 for (int d = 0; d < _emaDimension; d++)
@@ -431,7 +431,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                 }
 
         // Apply timestep normalization (gamma * x + beta per dimension)
-        var normed = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+        var normed = TensorAllocator.Rent<T>([batchSize, seqLen, _emaDimension]);
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
                 for (int d = 0; d < _emaDimension; d++)
@@ -793,7 +793,7 @@ public class MegalodonLayer<T> : LayerBase<T>
             throw new InvalidOperationException("CEMAKernelForward must be called first.");
 
         // TimestepNorm backward: y = gamma * x + beta → dx = gamma * dy
-        var dPreNorm = new Tensor<T>(dOutput.Shape.ToArray());
+        var dPreNorm = TensorAllocator.Rent<T>(dOutput.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
                 for (int d = 0; d < _emaDimension; d++)
@@ -805,7 +805,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
         // Conv backward: dK[d,l] and dInput[b,t,d]
         var dK = new double[_emaDimension, seqLen];
-        var dEmaInput3D = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+        var dEmaInput3D = TensorAllocator.Rent<T>([batchSize, seqLen, _emaDimension]);
 
         for (int d = 0; d < _emaDimension; d++)
         {

@@ -428,7 +428,7 @@ public class LonghornLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)

@@ -476,11 +476,9 @@ public class ABCLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAdd(CreateOnesLike(xTimesOneMinusSig), xTimesOneMinusSig);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

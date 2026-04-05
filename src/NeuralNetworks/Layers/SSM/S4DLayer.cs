@@ -492,7 +492,7 @@ public class S4DLayer<T> : LayerBase<T>
         _cachedKernel = kernel;
 
         // Causal convolution: y[b, t, d] = sum_{l=0}^{t} K[d, l] * x[b, t-l, d] + D[d] * x[b, t, d]
-        var output = new Tensor<T>([batchSize, seqLen, _innerDimension]);
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _innerDimension]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -686,7 +686,7 @@ public class S4DLayer<T> : LayerBase<T>
         // dx[b,t,d] = sum_l dOut[b,t+l,d] * K[d,l] + D[d] * dOut[b,t,d]
         // dD[d] = sum_b sum_t dOut[b,t,d] * x[b,t,d]
         var dK = new double[_innerDimension, seqLen];
-        var dX = new Tensor<T>([batchSize, seqLen, _innerDimension]);
+        var dX = TensorAllocator.Rent<T>([batchSize, seqLen, _innerDimension]);
 
         for (int d = 0; d < _innerDimension; d++)
         {

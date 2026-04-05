@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -271,7 +271,7 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         int expandedBatchSize = output.Shape[0];
         int batchSize = expandedBatchSize / _numMembers;
 
-        var averaged = new Tensor<T>([batchSize, _outputDim]);
+        var averaged = TensorAllocator.Rent<T>([batchSize, _outputDim]);
         var scale = NumOps.FromDouble(1.0 / _numMembers);
 
         for (int b = 0; b < batchSize; b++)

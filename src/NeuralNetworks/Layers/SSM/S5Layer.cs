@@ -413,7 +413,7 @@ public class S5Layer<T> : LayerBase<T>
         }
 
         // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
-        var output = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < seqLen; t++)
@@ -615,7 +615,7 @@ public class S5Layer<T> : LayerBase<T>
 
         // Step 1: Conv backward — compute dK[ho, hi, l] and dX[b, t, hi]
         var dK = new double[_modelDimension, _modelDimension, seqLen];
-        var dX = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+        var dX = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
 
         for (int ho = 0; ho < _modelDimension; ho++)
         {

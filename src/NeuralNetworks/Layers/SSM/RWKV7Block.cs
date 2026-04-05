@@ -671,7 +671,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -924,7 +924,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize)
     {
-        var dInput = new Tensor<T>(input.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

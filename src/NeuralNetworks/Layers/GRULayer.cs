@@ -823,7 +823,7 @@ public partial class GRULayer<T> : LayerBase<T>
         // Reset hidden state if needed
         if (_lastHiddenState == null)
         {
-            _lastHiddenState = new Tensor<T>([batchSize, _hiddenSize]);
+            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
         }
 
         // Initialize list to store all hidden states if returning sequences

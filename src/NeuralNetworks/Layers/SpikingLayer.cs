@@ -816,7 +816,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         int inputSize = InputShape[0];
 
         // Convert to float array to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape.ToArray());
+        var inputTensor = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < inputData.Length; i++)
         {
             inputTensor[i] = NumOps.FromDouble(inputData[i]);

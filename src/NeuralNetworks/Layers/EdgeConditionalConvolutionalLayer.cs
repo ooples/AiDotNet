@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -321,7 +321,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Reshape to [batch, numEdges, inputFeatures, outputFeatures]
         // Store as [batch, numNodes, numNodes, inputFeatures, outputFeatures] for backward compatibility
-        _lastEdgeWeights = new Tensor<T>([batchSize, numNodes, numNodes, _inputFeatures, _outputFeatures]);
+        _lastEdgeWeights = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _inputFeatures, _outputFeatures]);
 
         // Map flat edge weights to node pairs
         for (int b = 0; b < batchSize; b++)
