@@ -1275,28 +1275,54 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     }
 
     /// <summary>
-    /// Computes softmax over a Vector&lt;T&gt; of logits using the max-subtraction trick for numerical stability.
+    /// Computes softmax over a Vector&lt;T&gt; of logits (SIMD-accelerated via Engine).
     /// </summary>
-    protected Vector<T> Softmax(Vector<T> logits)
-    {
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > max) max = v;
-        }
+    protected Vector<T> Softmax(Vector<T> logits) => Engine.Softmax(logits);
 
-        var result = new Vector<T>(logits.Length);
-        double sumExp = 0;
-        var exps = new double[logits.Length];
-        for (int i = 0; i < logits.Length; i++)
-        {
-            exps[i] = Math.Exp(NumOps.ToDouble(logits[i]) - max);
-            sumExp += exps[i];
-        }
-        for (int i = 0; i < logits.Length; i++)
-            result[i] = NumOps.FromDouble(exps[i] / (sumExp + 1e-10));
-        return result;
+    /// <summary>
+    /// Computes element-wise exponential (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> VectorExp(Vector<T> input)
+    {
+        var tensor = Tensor<T>.FromVector(input);
+        return Engine.TensorExp(tensor).ToVector();
+    }
+
+    /// <summary>
+    /// Computes element-wise natural logarithm (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> VectorLog(Vector<T> input)
+    {
+        var tensor = Tensor<T>.FromVector(input);
+        return Engine.TensorLog(tensor).ToVector();
+    }
+
+    /// <summary>
+    /// Computes element-wise tanh (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> VectorTanh(Vector<T> input) => Engine.Tanh(input);
+
+    /// <summary>
+    /// Computes element-wise sigmoid (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> VectorSigmoid(Vector<T> input) => Engine.Sigmoid(input);
+
+    /// <summary>
+    /// Computes element-wise ReLU (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> VectorReLU(Vector<T> input) => Engine.ReLU(input);
+
+    /// <summary>
+    /// Performs matrix-vector multiply: output = input @ weights + bias (SIMD-accelerated via Engine).
+    /// </summary>
+    protected Vector<T> LinearForward(Vector<T> input, Matrix<T> weights, Vector<T> bias)
+    {
+        int outputSize = weights.Columns;
+        var inputTensor = Tensor<T>.FromVector(input).Reshape(1, input.Length);
+        var result = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(inputTensor, Tensor<T>.FromMatrix(weights)),
+            Tensor<T>.FromVector(bias).Reshape(1, outputSize));
+        return result.Reshape(outputSize).ToVector();
     }
 
     /// <summary>

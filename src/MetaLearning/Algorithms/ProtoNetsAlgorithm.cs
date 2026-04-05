@@ -545,33 +545,14 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         for (int q = 0; q < numQueries; q++)
         {
-            // Find maximum distance for numerical stability
-            T maxDistance = scaledDistances[q, 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(scaledDistances[q, c], maxDistance))
-                {
-                    maxDistance = scaledDistances[q, c];
-                }
-            }
-
-            // Compute exp(-distance + max) and sum
-            var expValues = new T[numClasses];
-            T sumExp = NumOps.Zero;
-
+            // Extract negated distances as logits, apply Softmax (SIMD via Engine)
+            var logits = new Vector<T>(numClasses);
             for (int c = 0; c < numClasses; c++)
-            {
-                T negDistance = NumOps.Negate(scaledDistances[q, c]);
-                T shifted = NumOps.Add(negDistance, maxDistance);
-                expValues[c] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-                sumExp = NumOps.Add(sumExp, expValues[c]);
-            }
+                logits[c] = NumOps.Negate(scaledDistances[q, c]);
 
-            // Normalize to probabilities
+            var probs = Softmax(logits);
             for (int c = 0; c < numClasses; c++)
-            {
-                probabilities[q, c] = NumOps.Divide(expValues[c], sumExp);
-            }
+                probabilities[q, c] = probs[c];
         }
 
         return probabilities;

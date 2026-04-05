@@ -424,38 +424,7 @@ public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <summary>
     /// Applies softmax to a vector.
     /// </summary>
-    private Vector<T> ApplySoftmax(Vector<T> values)
-    {
-        var result = new Vector<T>(values.Length);
-
-        // Find max for numerical stability
-        T maxVal = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxVal))
-            {
-                maxVal = values[i];
-            }
-        }
-
-        // Compute exp values and sum
-        T sumExp = NumOps.Zero;
-        var expValues = new T[values.Length];
-        for (int i = 0; i < values.Length; i++)
-        {
-            T shifted = NumOps.Subtract(values[i], maxVal);
-            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
-        }
-
-        // Normalize
-        for (int i = 0; i < values.Length; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sumExp);
-        }
-
-        return result;
-    }
+    private Vector<T> ApplySoftmax(Vector<T> values) => Softmax(values);
 
     /// <summary>
     /// Generates a memory key from input at specified index.
