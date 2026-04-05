@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -541,8 +541,8 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastInput = processInput;
 
         // Step 1: Compute messages
-        _lastMessages = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
-        _lastMessageHidden = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        _lastMessages = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        _lastMessageHidden = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _messageFeatures]);
 
         // Handle adjacency matrix that may be 2D [nodes, nodes] or 3D [batch, nodes, nodes]
         bool adj2D = _adjacencyMatrix.Shape.Length == 2;
@@ -623,7 +623,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Step 2: Aggregate messages (sum aggregation)
-        _lastAggregated = new Tensor<T>([batchSize, numNodes, _messageFeatures]);
+        _lastAggregated = TensorAllocator.Rent<T>([batchSize, numNodes, _messageFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -142,7 +142,7 @@ public class RobustRegression<T> : RegressionBase<T>
         // Initial regression estimate
         IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
         initialRegression.Train(x, y);
-        Vector<T> parameters = initialRegression.GetParameters();
+        Vector<T> parameters = ((IParameterizable<T, Matrix<T>, Vector<T>>)initialRegression).GetParameters();
 
         // Extract coefficients and intercept from parameters
         if (Options.UseIntercept)

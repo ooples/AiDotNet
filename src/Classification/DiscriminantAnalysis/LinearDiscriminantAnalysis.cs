@@ -73,7 +73,8 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
+public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// LDA computes parameters from class covariance matrices during training.
@@ -603,7 +604,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // LDA doesn't have a simple parameter vector like linear classifiers
         // Return flattened class means for serialization
@@ -626,21 +627,21 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // LDA computes parameters from class statistics, not direct parameter setting.
         // Accept silently so the optimizer can initialize the model without crashing.
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Return a fresh instance — LDA parameters come from training, not direct setting
         return CreateNewInstance();
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // LDA is a closed-form solution, not gradient-based
         // Return zero gradients
@@ -648,7 +649,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // LDA is a closed-form solution, not gradient-based
         // This is a no-op

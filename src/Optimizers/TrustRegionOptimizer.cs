@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -284,7 +285,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </remarks>
     private Matrix<T> CalculateHessian(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var coefficients = currentSolution.GetParameters();
+        var coefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var hessian = new Matrix<T>(coefficients.Length, coefficients.Length);
         var epsilon = NumOps.FromDouble(1e-8);
 
@@ -314,10 +315,10 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
                 coeffs4[i] = NumOps.Subtract(coeffs4[i], epsilon);
                 coeffs4[j] = NumOps.Subtract(coeffs4[j], epsilon);
 
-                perturbed1 = perturbed1.WithParameters(coeffs1);
-                perturbed2 = perturbed2.WithParameters(coeffs2);
-                perturbed3 = perturbed3.WithParameters(coeffs3);
-                perturbed4 = perturbed4.WithParameters(coeffs4);
+                perturbed1 = InterfaceGuard.Parameterizable(perturbed1).WithParameters(coeffs1);
+                perturbed2 = InterfaceGuard.Parameterizable(perturbed2).WithParameters(coeffs2);
+                perturbed3 = InterfaceGuard.Parameterizable(perturbed3).WithParameters(coeffs3);
+                perturbed4 = InterfaceGuard.Parameterizable(perturbed4).WithParameters(coeffs4);
 
                 var f11 = EvaluateSolution(perturbed1, inputData).FitnessScore;
                 var f12 = EvaluateSolution(perturbed2, inputData).FitnessScore;
@@ -353,12 +354,12 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         // new_params = current_params + direction * stepSize
 
         var newModel = currentSolution.Clone();
-        var currentCoefficients = newModel.GetParameters();
+        var currentCoefficients = InterfaceGuard.Parameterizable(newModel).GetParameters();
 
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, stepSize);
         var newCoefficients = (Vector<T>)Engine.Add(currentCoefficients, scaledDirection);
 
-        return newModel.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(newModel).WithParameters(newCoefficients);
     }
 
     /// <summary>

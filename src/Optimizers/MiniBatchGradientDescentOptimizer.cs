@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -176,11 +177,11 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
         // === Vectorized Mini-Batch GD Update using IEngine (Phase B: US-GPU-015) ===
         // params = params - learningRate * gradient
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

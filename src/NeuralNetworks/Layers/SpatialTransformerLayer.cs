@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -748,7 +748,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         int batchSize = transformationParams.Shape[0];
-        var tensor = new Tensor<T>([batchSize, 2, 3]);
+        var tensor = TensorAllocator.Rent<T>([batchSize, 2, 3]);
 
         T scale = NumOps.FromDouble(0.1);
         for (int b = 0; b < batchSize; b++)

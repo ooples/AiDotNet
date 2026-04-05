@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -121,7 +121,7 @@ public class IntersampleAttentionLayer<T> : LayerBase<T>
         for (int f = 0; f < numFeatures; f++)
         {
             // Extract feature slice [batchSize, embDim]
-            var featureSlice = new Tensor<T>([batchSize, embDim]);
+            var featureSlice = TensorAllocator.Rent<T>([batchSize, embDim]);
             int fOffset = f * batchSize * embDim;
             for (int i = 0; i < batchSize * embDim; i++)
             {

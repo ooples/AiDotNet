@@ -300,7 +300,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </summary>
     private void UpdateCoefficientsAndIntercept()
     {
-        Coefficients = _bestModel?.GetParameters() ?? Vector<T>.Empty();
+        Coefficients = (_bestModel as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty();
 
         if (HasIntercept && Coefficients.Length > 0)
         {
@@ -359,7 +359,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         writer.Write(baseData);
 
         // Serialize GeneticAlgorithmRegression specific data
-        var parameters = _bestModel?.GetParameters() ?? Vector<T>.Empty();
+        var parameters = (_bestModel as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty();
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {

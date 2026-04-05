@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -504,7 +504,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Run optimization
         var result = optimizer.Optimize(inputData);
 
-        var optimizedParameters = result.BestSolution?.GetParameters();
+        var optimizedParameters = (result.BestSolution as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters();
         if (optimizedParameters != null && optimizedParameters.Length > 0)
         {
             ApplyParameters(optimizedParameters);

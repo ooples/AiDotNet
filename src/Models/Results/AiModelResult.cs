@@ -2521,7 +2521,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             : target;
 
         // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
-        return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
+        return InterfaceGuard.GradientComputable(Model).ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
     }
 
     /// <summary>
@@ -2547,7 +2547,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        Model.ApplyGradients(gradients, learningRate);
+        InterfaceGuard.GradientComputable(Model).ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>
@@ -2648,8 +2648,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Apply adapted parameters to this model
             // The meta-learner adapts its BaseModel, so we need to copy those parameters
-            var adaptedParameters = MetaLearner.BaseModel.GetParameters();
-            Model.SetParameters(adaptedParameters);
+            var adaptedParameters = InterfaceGuard.Parameterizable(MetaLearner.BaseModel).GetParameters();
+            InterfaceGuard.Parameterizable(Model).SetParameters(adaptedParameters);
         }
         else
         {
@@ -2791,7 +2791,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        return Model.GetParameters();
+        return InterfaceGuard.Parameterizable(Model).GetParameters();
     }
 
     /// <summary>
@@ -2823,7 +2823,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return 0;
             }
 
-            return Model.ParameterCount;
+            return InterfaceGuard.Parameterizable(Model).ParameterCount;
         }
     }
 
@@ -2831,7 +2831,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc/>
-    public Vector<T> SanitizeParameters(Vector<T> parameters) => Model?.SanitizeParameters(parameters) ?? parameters;
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => InterfaceGuard.TryParameterizable(Model)?.SanitizeParameters(parameters) ?? parameters;
 
     /// <summary>
     /// Creates a new instance with the specified parameters.
@@ -2858,7 +2858,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        var newModel = Model.WithParameters(parameters);
+        var newModel = InterfaceGuard.Parameterizable(Model).WithParameters(parameters);
 
         // Deep-copy OptimizationResult and update its BestSolution to reference newModel
         // This ensures metadata consistency - BestSolution should always point to the current model
@@ -2935,7 +2935,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        return Model.GetActiveFeatureIndices();
+        return InterfaceGuard.FeatureAware(Model).GetActiveFeatureIndices();
     }
 
     /// <summary>
@@ -2968,7 +2968,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        return Model.IsFeatureUsed(featureIndex);
+        return InterfaceGuard.FeatureAware(Model).IsFeatureUsed(featureIndex);
     }
 
     /// <summary>
@@ -4673,7 +4673,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot clone AiModelResult with null Model.");
         }
 
-        return WithParameters(Model.GetParameters());
+        return Model.DeepCopy();
     }
 
     /// <summary>

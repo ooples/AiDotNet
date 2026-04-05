@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -922,7 +922,7 @@ namespace AiDotNet.AutoML
         public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
             var copy = DeepCopy();
-            copy.SetParameters(parameters);
+            ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
             return copy;
         }
 

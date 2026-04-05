@@ -103,6 +103,6 @@ public abstract class CausalModelTestBase
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
         model.Train(trainX, trainY);
-        Assert.True(model.GetParameters().Length > 0, "Trained causal model should have parameters.");
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained causal model should have parameters.");
     }
 }

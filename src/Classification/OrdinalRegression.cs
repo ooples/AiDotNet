@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -77,7 +77,8 @@ namespace AiDotNet.Classification;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Regression Models for Ordinal Data", "https://doi.org/10.1111/j.2517-6161.1980.tb01109.x", Year = 1980, Authors = "Peter McCullagh")]
-public class OrdinalRegression<T> : ClassifierBase<T>
+public class OrdinalRegression<T> : ClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Configuration options for the ordinal regression model.
@@ -654,7 +655,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// This packages all the model's learned values into a single list.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         int numParams = NumFeatures + Math.Max(0, NumClasses - 1);
         if (numParams <= 0) return new Vector<T>(0);
@@ -689,7 +690,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// Sets all the model's learned values from a single list. Useful for loading a saved model.
     /// </para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // If model is untrained, infer dimensions from parameters
         int expectedLength = NumFeatures + NumClasses - 1;
@@ -748,7 +749,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// <param name="parameters">A vector containing all model parameters.</param>
     /// <returns>A new model instance with the specified parameters.</returns>
     /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = new OrdinalRegression<T>(_options, Regularization);
         newModel.NumFeatures = NumFeatures;
@@ -807,7 +808,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// Gradients tell the optimization algorithm how to adjust parameters to improve predictions.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var (coeffGradient, threshGradient, _) = ComputeGradients(input, target);
 
@@ -842,7 +843,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// This applies the computed gradients to update the model's parameters during training.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {

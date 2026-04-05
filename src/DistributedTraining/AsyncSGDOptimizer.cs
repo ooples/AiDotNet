@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
@@ -105,12 +106,12 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
 
             // For this framework implementation, we provide simplified async pattern
             // Production would use parameter server or async AllReduce
-            var parameters = result.BestSolution.GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(result.BestSolution).GetParameters();
 
             // Simulate async update - in production, this would be non-blocking
             Config.CommunicationBackend.AllReduce(parameters, ReductionOperation.Average);
 
-            result.BestSolution.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(result.BestSolution).SetParameters(parameters);
         }
 
         // NO barrier at end - continue immediately!

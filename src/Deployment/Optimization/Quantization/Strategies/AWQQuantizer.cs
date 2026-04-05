@@ -94,9 +94,9 @@ public class AWQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
                 "AWQ requires calibration data to compute activation importance. Call Calibrate() first.");
         }
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeWithAWQ(parameters, config);
-        return model.WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>

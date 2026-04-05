@@ -1,5 +1,6 @@
 using AiDotNet.CausalInference;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalInference;
@@ -1393,7 +1394,7 @@ public class CausalInferenceDeepMathIntegrationTests
         var newModel = ipw.WithParameters(params_);
 
         Assert.NotNull(newModel);
-        var newParams = newModel.GetParameters();
+        var newParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)newModel).GetParameters();
         Assert.Equal(params_.Length, newParams.Length);
     }
 

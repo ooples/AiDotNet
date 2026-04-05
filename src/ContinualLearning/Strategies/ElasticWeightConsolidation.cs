@@ -235,7 +235,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         if (_taskParameters.Count == 0)
             return NumOps.Zero;
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
         T totalLoss = NumOps.Zero;
 
         // Sum over all previous tasks
@@ -271,7 +271,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         if (_accumulatedFisher == null || _consolidatedParameters == null)
             return NumOps.Zero;
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != _consolidatedParameters.Length)
             throw new InvalidOperationException("Parameter dimension mismatch");
@@ -311,7 +311,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// <inheritdoc/>
     public override void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
         var fisherInfo = ComputeFisherInformation(model);
 
         if (_normalizeFisher)
@@ -380,7 +380,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// </summary>
     private Vector<T> ComputeFisherInformation(IFullModel<T, TInput, TOutput> model)
     {
-        int numParams = model.ParameterCount;
+        int numParams = InterfaceGuard.Parameterizable(model).ParameterCount;
         var fisher = new Vector<T>(numParams);
 
         // Initialize with minimum value

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -231,8 +231,8 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _lastProjectedInput = projected3D;
 
         // Step 2: Compute gates and value projection
-        var recGate3D = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
-        var inpGate3D = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var recGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var inpGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -285,9 +285,9 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
-        var h = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+        var h = TensorAllocator.Rent<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
-        var allDecay = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
         for (int t = 0; t < seqLen; t++)
         {

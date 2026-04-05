@@ -58,6 +58,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Chengsong Huang, Qian Liu, Bill Yuchen Lin, Tianyu Pang, Chao Du, Min Lin")]
 public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaLoRABankOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>
@@ -87,7 +90,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _bankSize = Math.Max(1, options.BankSize);
         _rank = Math.Max(1, options.Rank);
         _topK = Math.Max(1, Math.Min(options.TopK, _bankSize));
@@ -113,12 +116,12 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         var moduleUsageCounts = new double[_bankSize];
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
 
             // Compute task embedding from support features
             var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
@@ -142,7 +145,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             {
                 var delta = CombineModulesWithWeights(selectedIndices, currentWeights);
                 var adaptedParams = AddVectors(baseParams, delta);
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
 
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
@@ -160,7 +163,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Evaluate on query set with final adapted params
             var finalDelta = CombineModulesWithWeights(selectedIndices, currentWeights);
             var finalParams = AddVectors(baseParams, finalDelta);
-            MetaModel.SetParameters(finalParams);
+            ParamModel.SetParameters(finalParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
@@ -173,11 +176,11 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Outer loop: update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update module bank and gating network via SPSA
@@ -190,8 +193,8 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(baseParams);
+        var baseParams = ParamModel.GetParameters();
+        ParamModel.SetParameters(baseParams);
 
         var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
         var scores = ComputeGatingScores(taskEmbed);
@@ -205,7 +208,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             var delta = CombineModulesWithWeights(selectedIndices, currentWeights);
             var adaptedParams = AddVectors(baseParams, delta);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
 
             var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             for (int k = 0; k < selectedIndices.Length; k++)
@@ -218,7 +221,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         var finalDelta = CombineModulesWithWeights(selectedIndices, currentWeights);
         var finalParams = AddVectors(baseParams, finalDelta);
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
@@ -365,22 +368,22 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     private double ComputeBankLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
             var scores = ComputeGatingScores(taskEmbed);
             var (selectedIndices, gatingWeights) = SelectTopK(scores);
             var delta = CombineModulesWithWeights(selectedIndices, gatingWeights);
             var adaptedParams = AddVectors(baseParams, delta);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

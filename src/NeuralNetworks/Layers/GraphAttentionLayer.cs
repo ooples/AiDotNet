@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -368,7 +368,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 }
             }
 
-            output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+            output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
             output.Fill(NumOps.Zero);
 
             for (int b = 0; b < batchSize; b++)
@@ -432,7 +432,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Dense aggregation path (original implementation)
         // Step 1: Transform input for each head using Engine operations
         // transformed[b,h,n,f] = sum_i(input[b,n,i] * weights[h,i,f])
-        _lastTransformed = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
+        _lastTransformed = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
 
         for (int h = 0; h < _numHeads; h++)
         {
@@ -449,8 +449,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         // Step 2: Compute attention scores using vectorized operations
-        _lastPreSoftmaxScores = new Tensor<T>([batchSize, _numHeads, numNodes, numNodes]);
-        _lastAttentionCoefficients = new Tensor<T>([batchSize, _numHeads, numNodes, numNodes]);
+        _lastPreSoftmaxScores = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
+        _lastAttentionCoefficients = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
 
         for (int h = 0; h < _numHeads; h++)
         {
@@ -485,7 +485,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Step 3: Apply softmax over neighbors for each node (already done in ComputeAttentionScores)
 
         // Step 4: Aggregate using attention coefficients
-        _lastHeadOutputs = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
+        _lastHeadOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
 
         for (int h = 0; h < _numHeads; h++)
         {
@@ -843,7 +843,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
 
         // Gradient from averaging heads: dL/d(headOutput) = dL/d(output) / numHeads
-        var headOutputGrad = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
+        var headOutputGrad = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < _numHeads; h++)

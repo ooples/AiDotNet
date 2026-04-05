@@ -1,4 +1,4 @@
-﻿global using AiDotNet.ActivationFunctions;
+global using AiDotNet.ActivationFunctions;
 global using AiDotNet.NeuralNetworks;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -405,7 +405,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         };
 
         OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        UpdateModelParameters((result.BestSolution as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

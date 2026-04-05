@@ -61,6 +61,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Kaiyu Hu")]
 public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaDMOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Feature denoiser parameters for generating synthetic features.</summary>
@@ -83,7 +86,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _prototypeDim = Math.Max(1, options.PrototypeDim);
         _diffusionSteps = Math.Max(1, options.DiffusionTimesteps);
 
@@ -110,11 +113,11 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
 
             // Extract support features and compute prototype
             var supportFeatures = ExtractFeatures(task.SupportInput);
@@ -132,7 +135,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
 
                 // Gradient from real support data
                 var realGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
@@ -143,7 +146,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
             }
 
             // Evaluate on query set
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.MatchingWeight * matchingLoss));
@@ -153,11 +156,11 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         }
 
         // Outer loop: update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update denoiser via SPSA
@@ -169,8 +172,8 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(baseParams);
+        var baseParams = ParamModel.GetParameters();
+        ParamModel.SetParameters(baseParams);
 
         var supportFeatures = ExtractFeatures(task.SupportInput);
         var prototype = ComputePrototype(supportFeatures);
@@ -181,13 +184,13 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var realGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var augGrad = ModulateWithSynthetic(realGrad, syntheticFeatures, prototype);
             adaptedParams = ApplyGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -380,12 +383,12 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
 
     private double ComputeAugLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var sf = ExtractFeatures(task.SupportInput);
             var proto = ComputePrototype(sf);
             var synth = GenerateSyntheticFeatures(proto, _algoOptions.SyntheticSamplesPerClass);
@@ -395,13 +398,13 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 var augGrad = ModulateWithSynthetic(grad, synth, proto);
                 adaptedParams = ApplyGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             // Include matching loss to match MetaTrain objective
@@ -409,7 +412,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
             totalLoss += queryLoss + _algoOptions.MatchingWeight * matchingLoss;
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

@@ -49,6 +49,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Kwonjoon Lee, Subhransu Maji, Avinash Ravichandran, Stefano Soatto")]
 public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly DynamicTaskSamplingOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -70,7 +73,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.");
         if (options.TaskTemperature <= 0)
@@ -92,7 +95,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         _totalIterations++;
 
         // Ensure arrays are large enough
@@ -112,12 +115,12 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
 
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
-                    MetaModel.SetParameters(adaptedParams);
+                    ParamModel.SetParameters(adaptedParams);
                     var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                     adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
                 }
 
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
                 double lossVal = NumOps.ToDouble(queryLoss);
 
@@ -132,7 +135,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         }
         finally
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
         }
 
         // Compute difficulty-proportional weights with UCB exploration
@@ -164,7 +167,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                     weightedGrad[d] = NumOps.Add(weightedGrad[d],
                         NumOps.FromDouble(weights[t] * NumOps.ToDouble(metaGradients[t][d])));
 
-            MetaModel.SetParameters(ApplyGradients(initParams, weightedGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(initParams, weightedGrad, _algoOptions.OuterLearningRate));
         }
 
         return ComputeMean(losses);
@@ -174,18 +177,18 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

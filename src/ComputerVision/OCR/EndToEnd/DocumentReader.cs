@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
@@ -409,7 +409,7 @@ public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
         return copy;
     }
 

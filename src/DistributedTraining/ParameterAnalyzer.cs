@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -144,7 +145,7 @@ public class ParameterAnalyzer<T>
             throw new ArgumentNullException(nameof(model));
         }
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         return AnalyzeParameters(parameters);
     }
 

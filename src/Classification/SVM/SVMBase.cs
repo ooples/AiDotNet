@@ -26,7 +26,8 @@ namespace AiDotNet.Classification.SVM;
 /// - Kernel Trick: A way to handle non-linear boundaries without explicitly computing new features
 /// </para>
 /// </remarks>
-public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>
+public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the SVM specific options.
@@ -188,14 +189,14 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Return intercepts as parameters
         return _intercept ?? new Vector<T>(0);
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = Clone();
         if (newModel is SVMBase<T> svm)
@@ -206,7 +207,7 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         if (_intercept != null && parameters.Length == _intercept.Length)
         {
@@ -218,7 +219,7 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // SVMs don't use gradient-based optimization in the typical sense
         // They use quadratic programming
@@ -226,7 +227,7 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // SVMs don't use gradient-based optimization
     }

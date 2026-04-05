@@ -335,7 +335,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
             clientState,
             clusterState);
 
-        var headSplitParams = headSplitStart.GetParameters();
+        var headSplitParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)headSplitStart).GetParameters();
         Assert.Equal(99.0, headSplitParams[4], precision: 12);
         Assert.Equal(100.0, headSplitParams[5], precision: 12);
 
@@ -359,7 +359,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
             clientState,
             clusterState);
 
-        var clusteredParams = clusteredStart.GetParameters();
+        var clusteredParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)clusteredStart).GetParameters();
         Assert.Equal(-5.0, clusteredParams[4], precision: 12);
         Assert.Equal(-6.0, clusteredParams[5], precision: 12);
 
@@ -377,7 +377,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
             pFedMeClientState,
             null);
         Assert.True(pFedMeClientState.ContainsKey(1));
-        Assert.Equal(globalParams[0], pFedMeStart.GetParameters()[0], precision: 12);
+        Assert.Equal(globalParams[0], ((IParameterizable<double, Matrix<double>, Vector<double>>)pFedMeStart).GetParameters()[0], precision: 12);
 
         // Unknown/Ditto: returns the global model reference.
         var dittoStart = InvokePrivateInstance<IFullModel<double, Matrix<double>, Vector<double>>>(

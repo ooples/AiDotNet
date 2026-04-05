@@ -97,9 +97,9 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
 
         // Use provided config for any overridable settings (currently uses instance format/calibration)
         var effectiveConfig = config ?? _config;
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeToFP8(parameters, effectiveConfig);
-        return model.WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -119,7 +119,7 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         var activationStats = calibrationHelper.CollectActivationStatistics(model, dataList);
 
         // Collect parameter statistics
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         double paramMaxAbs = 0;
 
         for (int i = 0; i < parameters.Length; i++)

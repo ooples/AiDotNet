@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
@@ -83,7 +84,7 @@ public static class S6Scan<T>
         if (c.Rank != 3 || c.Shape[0] != batchSize || c.Shape[1] != seqLen || c.Shape[2] != stateDimension)
             throw new ArgumentException($"c must be [batch={batchSize}, seqLen={seqLen}, stateDim={stateDimension}], got [{string.Join(",", c.Shape.ToArray())}].");
 
-        var output = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, innerDimension });
 
         // Pre-compute A = -exp(A_log) as tensor: [innerDim, stateDim]
         var negA = Engine.TensorNegate(Engine.TensorExp(aLog));
@@ -97,9 +98,9 @@ public static class S6Scan<T>
         Tensor<T> h;
         if (initialState != null)
         {
-            // Copy initial state so we don't mutate the caller's tensor
-            h = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
-            h = Engine.TensorAdd(h, initialState);
+            // Clone initial state so we don't mutate the caller's tensor
+            h = new Tensor<T>(initialState.Shape.ToArray());
+            initialState.Data.Span.CopyTo(h.Data.Span);
         }
         else
         {
@@ -107,7 +108,7 @@ public static class S6Scan<T>
         }
 
         // Store all hidden states for backward pass: [batch, seqLen+1, innerDim, stateDim]
-        var allHiddenStates = new Tensor<T>(new[] { batchSize, seqLen + 1, innerDimension, stateDimension });
+        var allHiddenStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, innerDimension, stateDimension });
 
         // Store initial state at index 0
         if (initialState != null)
@@ -193,10 +194,10 @@ public static class S6Scan<T>
         if (hiddenStates.Rank != 4 || hiddenStates.Shape[0] != batchSize || hiddenStates.Shape[1] != seqLen + 1)
             throw new ArgumentException($"hiddenStates must be [batch={batchSize}, seqLen+1={seqLen + 1}, ...], got [{string.Join(",", hiddenStates.Shape.ToArray())}].");
 
-        var dX = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
-        var dDelta = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
-        var dB = new Tensor<T>(new[] { batchSize, seqLen, stateDimension });
-        var dC = new Tensor<T>(new[] { batchSize, seqLen, stateDimension });
+        var dX = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, innerDimension });
+        var dDelta = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, innerDimension });
+        var dB = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, stateDimension });
+        var dC = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, stateDimension });
         var dALog = new Tensor<T>(new[] { innerDimension, stateDimension });
         var dD = new Tensor<T>(new[] { innerDimension });
 
@@ -208,7 +209,7 @@ public static class S6Scan<T>
         // consistency between forward and backward computations.
         // First, re-run the forward scan to get consistent states.
         var recomputedStates = new Tensor<T>[seqLen + 1];
-        var h_recomp = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
+        var h_recomp = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
         recomputedStates[0] = h_recomp.Clone();
 
         for (int t = 0; t < seqLen; t++)
@@ -239,7 +240,7 @@ public static class S6Scan<T>
         }
 
         // Running gradient of hidden state: [batch, innerDim, stateDim]
-        var dh = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
+        var dh = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
 
         // Backward scan using recomputed states (per Mamba paper hardware-aware algorithm)
         for (int t = seqLen - 1; t >= 0; t--)
@@ -255,10 +256,10 @@ public static class S6Scan<T>
             var h_prev = recomputedStates[t];
 
             // Explicit per-element gradient computation to avoid Engine 3D tensor issues
-            var dX_t = new Tensor<T>(new[] { batchSize, innerDimension });
-            var d_delta_t = new Tensor<T>(new[] { batchSize, innerDimension });
-            var d_B_t = new Tensor<T>(new[] { batchSize, stateDimension });
-            var d_C_t = new Tensor<T>(new[] { batchSize, stateDimension });
+            var dX_t = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension });
+            var d_delta_t = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension });
+            var d_B_t = TensorAllocator.Rent<T>(new[] { batchSize, stateDimension });
+            var d_C_t = TensorAllocator.Rent<T>(new[] { batchSize, stateDimension });
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -455,7 +456,7 @@ public static class S6Scan<T>
         }
 
         // Step 3: Compute output y_t = sum_n(C_t * h_t) + D * x_t
-        var output = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, innerDimension });
         for (int t = 0; t < seqLen; t++)
         {
             var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -203,8 +203,8 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         int halfDim = fullDim / 2;
 
         // Split input into value (first half) and gate (second half)
-        var values = new Tensor<T>([batchSize, halfDim]);
-        var gates = new Tensor<T>([batchSize, halfDim]);
+        var values = TensorAllocator.Rent<T>([batchSize, halfDim]);
+        var gates = TensorAllocator.Rent<T>([batchSize, halfDim]);
 
         for (int b = 0; b < batchSize; b++)
         {

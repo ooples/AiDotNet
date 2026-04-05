@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -115,7 +115,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _velocity = new Vector<T>(currentSolution.GetParameters().Length);
+        _velocity = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -171,11 +171,11 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         // === Vectorized NAG Lookahead using IEngine (Phase B: US-GPU-015) ===
         // lookahead = params - momentum * velocity
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
         var lookaheadCoefficients = (Vector<T>)Engine.Subtract(parameters, momentumVelocity);
 
-        return currentSolution.WithParameters(lookaheadCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(lookaheadCoefficients);
     }
 
     /// <summary>
@@ -223,10 +223,10 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
         // params = params - velocity
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, velocity);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

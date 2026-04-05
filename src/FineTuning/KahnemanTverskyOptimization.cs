@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -277,8 +278,8 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
                 var loss = -desirableWeight * Sigmoid(beta * (logRatio - klEstimate));
 
                 // Compute and apply gradients to update model parameters
-                var gradients = policyModel.ComputeGradients(input, chosen);
-                policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, chosen);
+                InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
 
                 totalLoss += loss;
                 count++;
@@ -304,8 +305,8 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
 
                 // Compute and apply gradients for undesirable outputs
                 // Weight is already incorporated in the loss computation
-                var gradients = policyModel.ComputeGradients(input, rejected);
-                policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, rejected);
+                InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
 
                 totalLoss += loss;
                 count++;
@@ -351,8 +352,8 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
                     // KTO desirable loss: -weight * sigmoid(beta * (log_ratio - KL))
                     loss = -desirableWeight * Sigmoid(beta * (logRatio - klEstimate));
 
-                    var gradients = policyModel.ComputeGradients(input, output);
-                    policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                    var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, output);
+                    InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
                 }
                 else
                 {
@@ -361,8 +362,8 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
 
                     // Compute and apply gradients for undesirable outputs
                     // Weight is already incorporated in the loss computation
-                    var gradients = policyModel.ComputeGradients(input, output);
-                    policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                    var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, output);
+                    InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
                 }
 
                 totalLoss += loss;

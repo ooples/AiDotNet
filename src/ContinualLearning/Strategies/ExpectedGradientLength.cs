@@ -171,7 +171,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
         // Initialize gradient length accumulator for the new task
-        int numParams = model.ParameterCount;
+        int numParams = InterfaceGuard.Parameterizable(model).ParameterCount;
         _gradientLengthSum = new Vector<T>(numParams);
         for (int i = 0; i < numParams; i++)
         {
@@ -188,7 +188,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
         if (_importance == null || _previousParameters == null)
             return NumOps.Zero;
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != _previousParameters.Length)
             throw new InvalidOperationException(
@@ -241,7 +241,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     /// <inheritdoc/>
     public override void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
         var taskImportance = ComputeTaskImportance();
 
         if (_normalizeImportance)

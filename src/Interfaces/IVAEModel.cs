@@ -35,7 +35,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("VAEModel")]
-public interface IVAEModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface IVAEModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the number of input channels (image channels).

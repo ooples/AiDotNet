@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -512,7 +512,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input3D;
 
         // Transform input capsules using per-capsule weight matrices
-        var transformedInput = new Tensor<T>([batchSize, inputCapsules, _numCapsules, _capsuleDimension]);
+        var transformedInput = TensorAllocator.Rent<T>([batchSize, inputCapsules, _numCapsules, _capsuleDimension]);
         for (int i = 0; i < inputCapsules; i++)
         {
             var inputSlice = input3D.GetSliceAlongDimension(i, 1);
@@ -524,7 +524,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Initialize coupling coefficients
-        var couplingCoefficients = new Tensor<T>([batchSize, inputCapsules, _numCapsules]);
+        var couplingCoefficients = TensorAllocator.Rent<T>([batchSize, inputCapsules, _numCapsules]);
         couplingCoefficients.Fill(NumOps.FromDouble(1.0 / _numCapsules));
 
         // Declare output tensor outside the loop

@@ -37,7 +37,8 @@ namespace AiDotNet.Classification.Linear;
 /// - Often surprisingly effective
 /// </para>
 /// </remarks>
-public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
+public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the linear classifier specific options.
@@ -269,7 +270,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         if (Weights is null)
         {
@@ -291,7 +292,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // When the model is untrained (NumFeatures == 0), infer NumFeatures from the
         // parameter vector. This is required for the optimizer's InitializeRandomSolution
@@ -319,7 +320,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (LinearClassifierBase<T>)Clone();
         newModel.SetParameters(parameters);
@@ -327,7 +328,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Compute gradients for linear classifier
         if (Weights is null)
@@ -357,7 +358,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (Weights is null) return;
 

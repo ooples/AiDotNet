@@ -150,11 +150,11 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         {
             // Clone the meta model for this task
             var taskModel = CloneModel();
-            var initialParams = taskModel.GetParameters();
+            var initialParams = InterfaceGuard.Parameterizable(taskModel).GetParameters();
 
             // Inner loop: Adapt to the task using support set
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
-            taskModel.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
@@ -197,9 +197,9 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Outer loop: Update meta-parameters
-        var currentMetaParams = MetaModel.GetParameters();
+        var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedMetaParams = ApplyGradients(currentMetaParams, accumulatedMetaGradients, _mamlOptions.OuterLearningRate);
-        MetaModel.SetParameters(updatedMetaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSizeT);
@@ -245,7 +245,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        InterfaceGuard.Parameterizable(adaptedModel).SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -258,7 +258,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <returns>The adapted parameters.</returns>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Perform K gradient steps on the support set
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
@@ -268,7 +268,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             // Apply gradients with inner learning rate
             parameters = ApplyGradients(parameters, gradients, _mamlOptions.InnerLearningRate);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
         return parameters;
@@ -315,7 +315,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         // Clone meta model and set initial parameters
         var model = CloneModel();
-        model.SetParameters(initialParams);
+        InterfaceGuard.Parameterizable(model).SetParameters(initialParams);
 
         // Check if we should use full second-order MAML
         bool useSecondOrder = !_mamlOptions.UseFirstOrderApproximation &&
@@ -340,7 +340,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             // FOMAML: First-order approximation
             // Adapt to the task
             var adaptedParams = InnerLoopAdaptation(model, task);
-            model.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(model).SetParameters(adaptedParams);
 
             // Compute gradient w.r.t. adapted parameters on query set
             return ComputeGradients(model, task.QueryInput, task.QueryOutput);

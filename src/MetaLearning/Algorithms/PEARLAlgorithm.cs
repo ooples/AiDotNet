@@ -53,6 +53,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Kate Rakelly, Aurick Zhou, Chelsea Finn, Sergey Levine, Deirdre Quillen")]
 public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly PEARLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _latentDim;
@@ -82,7 +85,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             throw new ArgumentOutOfRangeException(nameof(options), "NumPosteriorSamples must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _latentDim = options.LatentDim;
         _compressedDim = Math.Min(_paramDim, options.EncoderHiddenDim);
 
@@ -106,12 +109,12 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Encode context from support set
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
             var (mu, logVar) = Encode(contextVec);
 
@@ -137,12 +140,12 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 // Gradient adaptation
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
-                    MetaModel.SetParameters(modulatedParams);
+                    ParamModel.SetParameters(modulatedParams);
                     var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                     modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
                 }
 
-                MetaModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(modulatedParams);
                 sampleLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
                 sampleGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
             }
@@ -170,7 +173,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
         var (mu, _) = Encode(contextVec);
 
@@ -185,18 +188,18 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(modulatedParams);
+            ParamModel.SetParameters(modulatedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, modulatedParams);
     }
 
     private Vector<T> ComputeContext(TInput supportInput, TOutput supportOutput, Vector<T> currentParams)
     {
-        MetaModel.SetParameters(currentParams);
+        ParamModel.SetParameters(currentParams);
         var grad = ComputeGradients(MetaModel, supportInput, supportOutput);
         var ctx = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim && d < grad.Length; d++)
@@ -262,7 +265,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private double ComputePEARLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -276,12 +279,12 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(modulatedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
             }
 
-            MetaModel.SetParameters(modulatedParams);
+            ParamModel.SetParameters(modulatedParams);
             double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             double kl = 0;
             for (int i = 0; i < _latentDim; i++)
@@ -289,7 +292,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             totalLoss += loss + _algoOptions.KLWeight * kl;
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

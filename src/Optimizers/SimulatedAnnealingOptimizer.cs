@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 /// <summary>
@@ -467,7 +468,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private IFullModel<T, TInput, TOutput> GenerateNeighborSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Generate random perturbations vectorized using Engine
         var perturbations = new Vector<T>(parameters.Length);
@@ -479,7 +480,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         // Add perturbations to parameters using vectorized Engine operation
         var newCoefficients = (Vector<T>)Engine.Add(parameters, perturbations);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

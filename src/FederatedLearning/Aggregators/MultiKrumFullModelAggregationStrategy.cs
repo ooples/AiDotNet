@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -100,7 +101,7 @@ public sealed class MultiKrumFullModelAggregationStrategy<T, TInput, TOutput> :
             clientWeights,
             useClientWeights: _useClientWeightsForAveraging);
 
-        return reference.WithParameters(aggregatedParameters);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregatedParameters);
     }
 
     public override string GetStrategyName() => "MultiKrum";

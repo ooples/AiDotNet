@@ -230,7 +230,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             // Clone and adapt model with graph context
             var taskModel = CloneModel();
             var adaptedParams = AdaptWithGraphContext(taskModel, task, graphContext);
-            taskModel.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
 
             // Evaluate on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
@@ -272,9 +272,9 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Update meta-model parameters
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedParams = ApplyGradients(currentParams, accumulatedMetaGradients, _gnnOptions.OuterLearningRate);
-        MetaModel.SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update GNN weights using finite differences
         UpdateGNNWeights(taskBatch, totalLoss);
@@ -336,7 +336,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Adapt with graph context
         var adaptedParams = AdaptWithGraphContext(adaptedModel, task, graphContext);
-        adaptedModel.SetParameters(adaptedParams);
+        InterfaceGuard.Parameterizable(adaptedModel).SetParameters(adaptedParams);
 
         return adaptedModel;
     }
@@ -719,7 +719,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </summary>
     private Vector<T> AdaptWithGraphContext(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task, Vector<T> graphContext)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Apply graph context as a modulation to the learning process
         // This is a simplified version - could be more sophisticated
@@ -733,7 +733,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
             // Apply gradients
             parameters = ApplyGradients(parameters, modulatedGradients, _gnnOptions.InnerLearningRate);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
         return parameters;
@@ -792,13 +792,13 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </summary>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         for (int step = 0; step < _gnnOptions.AdaptationSteps; step++)
         {
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
             parameters = ApplyGradients(parameters, gradients, _gnnOptions.InnerLearningRate);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
         return parameters;
@@ -845,7 +845,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         {
             var taskModel = CloneModel();
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
-            taskModel.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
 
             var predictions = taskModel.Predict(task.QueryInput);
             T taskLoss = ComputeLossFromOutput(predictions, task.QueryOutput);

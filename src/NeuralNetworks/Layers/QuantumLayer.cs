@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -207,7 +207,7 @@ public class QuantumLayer<T> : LayerBase<T>
         }
         else if (inputDim < dimension)
         {
-            realState = new Tensor<T>([batchSize, dimension]);
+            realState = TensorAllocator.Rent<T>([batchSize, dimension]);
             Engine.TensorSetSlice(realState, processInput, [0, 0]);
         }
         else

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -335,7 +335,7 @@ public class ABCLayer<T> : LayerBase<T>
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Slot values: [batch, numHeads, numSlots, headDim] - the actual slot content
-        var slotValues = new Tensor<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
+        var slotValues = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
         // Initialize slot values to small random-like state (from slot keys scaled down)
         for (int bi = 0; bi < batchSize; bi++)
             for (int hi = 0; hi < _numHeads; hi++)
@@ -345,7 +345,7 @@ public class ABCLayer<T> : LayerBase<T>
                             _slotKeys[new[] { hi, si, di }], NumOps.FromDouble(0.1));
 
         // Save all slot states for backward pass: [batch, seqLen+1, numHeads, numSlots, headDim]
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
+        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
         for (int bi = 0; bi < batchSize; bi++)
             for (int hi = 0; hi < _numHeads; hi++)
                 for (int si = 0; si < _numSlots; si++)
@@ -353,8 +353,8 @@ public class ABCLayer<T> : LayerBase<T>
                         allStates[new[] { bi, 0, hi, si, di }] = slotValues[new[] { bi, hi, si, di }];
 
         // Cache write and read weights for backward pass
-        var writeWeights = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
-        var readWeights = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
+        var writeWeights = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
+        var readWeights = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -476,11 +476,9 @@ public class ABCLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

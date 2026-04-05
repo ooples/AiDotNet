@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -111,7 +112,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.GetParameters().Length);
+        _inverseHessian = Matrix<T>.CreateIdentity(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
 
         InitializeAdaptiveParameters();
 
@@ -188,9 +189,9 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
 
         var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, stepSize);
-        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
+        var newCoefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -215,7 +216,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
         }
 
         // Vectorized parameter and gradient differences
-        var s = (Vector<T>)Engine.Subtract(newSolution.GetParameters(), currentSolution.GetParameters());
+        var s = (Vector<T>)Engine.Subtract(InterfaceGuard.Parameterizable(newSolution).GetParameters(), InterfaceGuard.Parameterizable(currentSolution).GetParameters());
         var y = (Vector<T>)Engine.Subtract(gradient, _previousGradient);
 
         var sTy = s.DotProduct(y);

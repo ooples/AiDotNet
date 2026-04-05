@@ -54,6 +54,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, et al.")]
 public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly ICMFusionOptions<T, TInput, TOutput> _algoOptions;
 
     private const int MaxCompressedDim = 128;
@@ -85,7 +88,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _latentDim = options.LatentDim;
@@ -116,18 +119,18 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Inner loop: compute task-specific adapted params
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -150,7 +153,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             // Apply fused delta to base params
             var fusedParams = ApplyCompressedDelta(baseParams, fusedDelta);
-            MetaModel.SetParameters(fusedParams);
+            ParamModel.SetParameters(fusedParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
@@ -163,11 +166,11 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Outer loop: update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update VAE params via SPSA
@@ -180,7 +183,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         // Inner loop adaptation
         var adaptedParams = new Vector<T>(_paramDim);
@@ -188,7 +191,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
@@ -200,7 +203,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         var fusedDelta = DecodeLatent(zFused);
         var finalParams = ApplyCompressedDelta(baseParams, fusedDelta);
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
@@ -334,18 +337,18 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
     private double ComputeVAELoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -356,13 +359,13 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             var decoded = DecodeLatent(FuseLatents(z));
             var fusedParams = ApplyCompressedDelta(baseParams, decoded);
 
-            MetaModel.SetParameters(fusedParams);
+            ParamModel.SetParameters(fusedParams);
             double taskLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             double klLoss = ComputeKLDivergence(mu, logVar);
             totalLoss += taskLoss + _algoOptions.KLWeight * klLoss;
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

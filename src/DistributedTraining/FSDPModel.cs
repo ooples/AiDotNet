@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -109,11 +110,11 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
 
         // Gather full parameters for gradient computation (just-in-time gathering)
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
 
         // Compute TRUE gradients using the model's gradient computation
         // This calls the model's backpropagation without updating parameters
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
@@ -124,23 +125,23 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
 
             // Apply the averaged gradients to update full parameters
             // Note: For adaptive optimizers, use FSDPOptimizer which properly handles optimizer state.
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated full parameters
-            var updatedParams = WrappedModel.GetParameters();
+            var updatedParams = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
             // Update local shard from full parameters (invalidates cache)
             // This extracts our portion and "releases" the full parameters from memory
             UpdateLocalShardFromFull(updatedParams);
 
             // Apply updated parameters back to the model for consistency
-            WrappedModel.SetParameters(updatedParams);
+            InterfaceGuard.Parameterizable(WrappedModel).SetParameters(updatedParams);
         }
         else
         {
             // No auto-sync: apply gradients locally without synchronization
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
-            var updatedParams = WrappedModel.GetParameters();
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
+            var updatedParams = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
             UpdateLocalShardFromFull(updatedParams);
@@ -155,7 +156,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     {
         // Gather full parameters for prediction
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
 
         // Use wrapped model for prediction
         return WrappedModel.Predict(input);
@@ -203,7 +204,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters);
         return new FSDPModel<T, TInput, TOutput>(newModel, Config);
     }
 
@@ -339,18 +340,18 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        return WrappedModel.GetActiveFeatureIndices();
+        return InterfaceGuard.FeatureAware(WrappedModel).GetActiveFeatureIndices();
     }
 
     /// <inheritdoc/>
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        WrappedModel.SetActiveFeatureIndices(featureIndices);
+        InterfaceGuard.FeatureAware(WrappedModel).SetActiveFeatureIndices(featureIndices);
     }
 
     /// <inheritdoc/>
     public override bool IsFeatureUsed(int featureIndex)
     {
-        return WrappedModel.IsFeatureUsed(featureIndex);
+        return InterfaceGuard.FeatureAware(WrappedModel).IsFeatureUsed(featureIndex);
     }
 }

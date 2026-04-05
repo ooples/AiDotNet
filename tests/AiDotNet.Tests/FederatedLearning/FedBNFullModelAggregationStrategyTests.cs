@@ -35,7 +35,7 @@ public class FedBNFullModelAggregationStrategyTests
         var aggregator = new FedBNFullModelAggregationStrategy<double, Tensor<double>, Tensor<double>>();
         var aggregatedModel = aggregator.Aggregate(clientModels, clientWeights);
 
-        var aggregatedParameters = aggregatedModel.GetParameters();
+        var aggregatedParameters = ((IParameterizable<double, Tensor<double>, Tensor<double>>)aggregatedModel).GetParameters();
         var bnRanges = GetBatchNormParameterRanges(model1);
 
         for (int i = 0; i < aggregatedParameters.Length; i++)

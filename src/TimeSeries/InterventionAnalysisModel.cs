@@ -348,7 +348,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         try
         {
             OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-            UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+            UpdateModelParameters((result.BestSolution as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty());
         }
         catch
         {

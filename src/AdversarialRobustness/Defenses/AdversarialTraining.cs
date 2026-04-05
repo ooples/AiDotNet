@@ -352,16 +352,16 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
 
         /// <inheritdoc/>
-        public int ParameterCount => _inner.ParameterCount;
+        public int ParameterCount => InterfaceGuard.Parameterizable(_inner).ParameterCount;
 
         /// <inheritdoc/>
-        public bool SupportsParameterInitialization => _inner.SupportsParameterInitialization;
+        public bool SupportsParameterInitialization => InterfaceGuard.Parameterizable(_inner).SupportsParameterInitialization;
 
         /// <inheritdoc/>
-        public Vector<T> SanitizeParameters(Vector<T> parameters) => _inner.SanitizeParameters(parameters);
+        public Vector<T> SanitizeParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SanitizeParameters(parameters);
 
         /// <inheritdoc/>
-        public bool SupportsJitCompilation => _inner.SupportsJitCompilation;
+        public bool SupportsJitCompilation => InterfaceGuard.JitCompilable(_inner).SupportsJitCompilation;
 
         /// <inheritdoc/>
         public TOutput Predict(TInput input)
@@ -422,38 +422,38 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         /// <inheritdoc/>
         public Vector<T> GetParameters()
         {
-            return _inner.GetParameters();
+            return InterfaceGuard.Parameterizable(_inner).GetParameters();
         }
 
         /// <inheritdoc/>
         public void SetParameters(Vector<T> parameters)
         {
-            _inner.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(_inner).SetParameters(parameters);
         }
 
         /// <inheritdoc/>
         public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
-            var innerWithParams = _inner.WithParameters(parameters);
+            var innerWithParams = InterfaceGuard.Parameterizable(_inner).WithParameters(parameters);
             return new PreprocessingFullModel(innerWithParams, _defense);
         }
 
         /// <inheritdoc/>
         public IEnumerable<int> GetActiveFeatureIndices()
         {
-            return _inner.GetActiveFeatureIndices();
+            return InterfaceGuard.FeatureAware(_inner).GetActiveFeatureIndices();
         }
 
         /// <inheritdoc/>
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
         {
-            _inner.SetActiveFeatureIndices(featureIndices);
+            InterfaceGuard.FeatureAware(_inner).SetActiveFeatureIndices(featureIndices);
         }
 
         /// <inheritdoc/>
         public bool IsFeatureUsed(int featureIndex)
         {
-            return _inner.IsFeatureUsed(featureIndex);
+            return InterfaceGuard.FeatureAware(_inner).IsFeatureUsed(featureIndex);
         }
 
         /// <inheritdoc/>
@@ -480,19 +480,19 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
         {
             var preprocessed = _defense.PreprocessInput(input);
-            return _inner.ComputeGradients(preprocessed, target, lossFunction);
+            return InterfaceGuard.GradientComputable(_inner).ComputeGradients(preprocessed, target, lossFunction);
         }
 
         /// <inheritdoc/>
         public void ApplyGradients(Vector<T> gradients, T learningRate)
         {
-            _inner.ApplyGradients(gradients, learningRate);
+            InterfaceGuard.GradientComputable(_inner).ApplyGradients(gradients, learningRate);
         }
 
         /// <inheritdoc/>
         public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         {
-            return _inner.ExportComputationGraph(inputNodes);
+            return InterfaceGuard.JitCompilable(_inner).ExportComputationGraph(inputNodes);
         }
     }
 }

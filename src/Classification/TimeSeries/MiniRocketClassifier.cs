@@ -74,7 +74,8 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ModelPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
-public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
+public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     private readonly MiniRocketOptions<T> _options;
 
@@ -262,19 +263,19 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         return _weights?.Clone() ?? new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         _weights = parameters.Clone();
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new MiniRocketClassifier<T>(_options);
         clone.SetParameters(parameters);
@@ -297,14 +298,14 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Ridge regression is closed-form, gradients not typically used
         return new Vector<T>(GetParameters().Length);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (_weights is null) return;
 

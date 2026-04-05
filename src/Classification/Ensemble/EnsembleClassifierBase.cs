@@ -143,45 +143,6 @@ public abstract class EnsembleClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Ensemble doesn't have traditional parameters
-        // Return feature importances as a representation
-        return FeatureImportances ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
-    {
-        var newModel = Clone();
-        if (newModel is EnsembleClassifierBase<T> ensemble)
-        {
-            ensemble.SetParameters(parameters);
-        }
-        return newModel;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Ensemble doesn't use traditional parameters
-        // This is a no-op for compatibility
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Ensemble methods don't typically use gradient-based optimization
-        return new Vector<T>(NumFeatures);
-    }
-
-    /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Ensemble methods don't typically use gradient-based optimization
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

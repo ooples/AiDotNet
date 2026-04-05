@@ -84,7 +84,21 @@ public abstract class TransferLearningBase<T, TInput, TOutput>
     protected bool RequiresCrossDomainTransfer(IFullModel<T, TInput, TOutput> sourceModel, TInput targetData)
     {
         // Get active features from source model
-        var sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures;
+        if (sourceModel is IFeatureAware featureAware)
+        {
+            sourceFeatures = featureAware.GetActiveFeatureIndices().Count();
+        }
+        else if (sourceModel is IModelShape shapeModel)
+        {
+            var shape = shapeModel.GetInputShape();
+            sourceFeatures = shape.Length > 0 ? shape[^1] : 0;
+        }
+        else
+        {
+            // Cannot determine source features — assume same domain
+            return false;
+        }
 
         // Get target features based on input type
         int targetFeatures = InputHelper<T, TInput>.GetInputSize(targetData);

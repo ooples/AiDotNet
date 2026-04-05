@@ -70,7 +70,7 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
     /// </remarks>
     public override TOutput Predict(TInput input)
     {
-        var originalParams = BaseModel.GetParameters();
+        var originalParams = InterfaceGuard.Parameterizable(BaseModel).GetParameters();
         try
         {
             if (_modulationFactors is not null && _modulationFactors.Length > 0)
@@ -79,17 +79,17 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
                 for (int i = 0; i < _adaptedParams.Length; i++)
                     modulated[i] = NumOps.Multiply(_adaptedParams[i],
                         NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-                BaseModel.SetParameters(modulated);
+                InterfaceGuard.Parameterizable(BaseModel).SetParameters(modulated);
             }
             else
             {
-                BaseModel.SetParameters(_adaptedParams);
+                InterfaceGuard.Parameterizable(BaseModel).SetParameters(_adaptedParams);
             }
             return BaseModel.Predict(input);
         }
         finally
         {
-            BaseModel.SetParameters(originalParams);
+            InterfaceGuard.Parameterizable(BaseModel).SetParameters(originalParams);
         }
     }
 

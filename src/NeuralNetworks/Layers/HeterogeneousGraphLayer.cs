@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -401,7 +401,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         _lastInput = processInput;
         int processNumNodes = processInput.Shape[1];
 
-        var output = new Tensor<T>([batchSize, processNumNodes, _outputFeatures]);
+        var output = TensorAllocator.Rent<T>([batchSize, processNumNodes, _outputFeatures]);
         output.Fill(NumOps.Zero);
 
         // Process each edge type

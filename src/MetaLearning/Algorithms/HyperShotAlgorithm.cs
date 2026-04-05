@@ -81,6 +81,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Marcin Sendera, Marcin Przewiezlikowski, et al.")]
 public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly HyperShotOptions<T, TInput, TOutput> _hyperShotOptions;
 
     /// <summary>Parameters for the kernel hypernetwork.</summary>
@@ -120,11 +123,11 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -145,12 +148,12 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -173,18 +176,18 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = MetaModel.GetParameters();
+                    var currentParams = ParamModel.GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    MetaModel.SetParameters(modulatedParams);
+                    ParamModel.SetParameters(modulatedParams);
                 }
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -249,7 +252,7 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = ParamModel.GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -325,11 +328,11 @@ internal class HyperShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

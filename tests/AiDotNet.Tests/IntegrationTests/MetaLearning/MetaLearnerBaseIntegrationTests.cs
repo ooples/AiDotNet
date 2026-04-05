@@ -353,8 +353,8 @@ public class MetaLearnerBaseIntegrationTests
         var cloned = learner.CallCloneModel();
 
         Assert.NotSame(learner.BaseModel, cloned);
-        var original = learner.BaseModel.GetParameters();
-        var clonedParams = cloned.GetParameters();
+        var original = ((IParameterizable<double, Matrix<double>, Vector<double>>)learner.BaseModel).GetParameters();
+        var clonedParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)cloned).GetParameters();
         Assert.Equal(original.Length, clonedParams.Length);
         for (int i = 0; i < original.Length; i++)
         {

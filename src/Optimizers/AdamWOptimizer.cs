@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -156,7 +156,7 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
         if (_options.UseAMSGrad)
@@ -239,7 +239,7 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>A new solution with updated parameters.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         T oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         T oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
@@ -296,7 +296,7 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
         var updatedParams = (Vector<T>)Engine.Subtract(afterAdamUpdate, scaledWeightDecay);
 
-        return currentSolution.WithParameters(updatedParams);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
     /// <summary>

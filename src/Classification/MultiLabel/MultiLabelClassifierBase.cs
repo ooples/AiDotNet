@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -175,7 +175,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     public virtual IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
         var clone = CreateNewInstance();
-        clone.SetParameters(parameters);
+        ((IParameterizable<T, Matrix<T>, Matrix<T>>)clone).SetParameters(parameters);
         return clone;
     }
 

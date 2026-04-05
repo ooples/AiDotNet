@@ -6,6 +6,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.AutoML
@@ -341,7 +342,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 
             // Act
             var clone = supernet.Clone();
-            var cloneParams = clone.GetParameters();
+            var cloneParams = ((IParameterizable<double, Tensor<double>, Tensor<double>>)clone).GetParameters();
             var originalParams = supernet.GetParameters();
 
             // Modify clone
@@ -349,7 +350,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             ((SuperNet<double>)clone).SetParameters(cloneParams);
 
             // Assert
-            Assert.NotEqual(originalParams[0], clone.GetParameters()[0]);
+            Assert.NotEqual(originalParams[0], ((IParameterizable<double, Tensor<double>, Tensor<double>>)clone).GetParameters()[0]);
         }
     }
 }

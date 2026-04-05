@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -41,7 +42,7 @@ public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(median);
         }
 
-        return reference.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "Median";

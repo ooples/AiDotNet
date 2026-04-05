@@ -22,7 +22,7 @@ internal sealed class FederatedDeterministicDeltaOptimizer : IOptimizer<double, 
     public OptimizationResult<double, Matrix<double>, Vector<double>> Optimize(OptimizationInputData<double, Matrix<double>, Vector<double>> inputData)
     {
         var baseModel = inputData.InitialSolution ?? _model;
-        var p = baseModel.GetParameters();
+        var p = ((IParameterizable<double, Matrix<double>, Vector<double>>)baseModel).GetParameters();
         for (int i = 0; i < p.Length; i++)
         {
             p[i] += Delta;
@@ -30,7 +30,7 @@ internal sealed class FederatedDeterministicDeltaOptimizer : IOptimizer<double, 
 
         return new OptimizationResult<double, Matrix<double>, Vector<double>>
         {
-            BestSolution = baseModel.WithParameters(p),
+            BestSolution = ((IParameterizable<double, Matrix<double>, Vector<double>>)baseModel).WithParameters(p),
             Iterations = _options.MaxIterations
         };
     }

@@ -61,7 +61,8 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
+public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     private IClassifier<T> _baseClassifier;
     private double _confidenceThreshold;
@@ -463,18 +464,18 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// Gets all model parameters as a single vector.
     /// </summary>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
-        return _baseClassifier.GetParameters();
+        return ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).GetParameters();
     }
 
     /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new SelfTrainingClassifier<T>(
-            (IClassifier<T>)_baseClassifier.WithParameters(parameters),
+            (IClassifier<T>)((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).WithParameters(parameters),
             _confidenceThreshold,
             _maxIterations,
             _maxSamplesPerIteration,
@@ -493,25 +494,25 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// Sets the parameters for this model.
     /// </summary>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
-        _baseClassifier.SetParameters(parameters);
+        ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).SetParameters(parameters);
     }
 
     /// <summary>
     /// Computes gradients for the model parameters.
     /// </summary>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return _baseClassifier.ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
+        return ((IGradientComputable<T, Matrix<T>, Vector<T>>)_baseClassifier).ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
     }
 
     /// <summary>
     /// Applies gradients to update the model parameters.
     /// </summary>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _baseClassifier.ApplyGradients(gradients, learningRate);
+        ((IGradientComputable<T, Matrix<T>, Vector<T>>)_baseClassifier).ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>

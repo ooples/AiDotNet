@@ -22,7 +22,8 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// and picks the class with the highest probability.
 /// </para>
 /// </remarks>
-public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
+public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Naive Bayes models compute parameters from class statistics during training.
@@ -256,7 +257,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Return log priors as the base parameters
         if (LogPriors == null)
@@ -267,7 +268,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (NaiveBayesBase<T>)Clone();
         newModel.SetParameters(parameters);
@@ -275,7 +276,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // When the model is untrained (NumClasses == 0), infer NumClasses from the
         // parameter vector. This is required for the optimizer's InitializeRandomSolution
@@ -297,7 +298,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Naive Bayes doesn't typically use gradient-based optimization
         // Return zero gradients for compatibility
@@ -305,7 +306,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Naive Bayes doesn't typically use gradient-based optimization
         // This is a no-op for compatibility

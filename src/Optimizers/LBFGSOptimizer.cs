@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -152,7 +153,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            UpdateLBFGSMemory(currentSolution.GetParameters(), newSolution.GetParameters(), gradient, previousGradient);
+            UpdateLBFGSMemory(InterfaceGuard.Parameterizable(currentSolution).GetParameters(), InterfaceGuard.Parameterizable(newSolution).GetParameters(), gradient, previousGradient);
 
             previousGradient = gradient;
             currentSolution = newSolution;
@@ -261,9 +262,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
-        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
+        var newCoefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Add(scaledDirection);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

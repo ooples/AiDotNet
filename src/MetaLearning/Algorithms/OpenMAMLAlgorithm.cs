@@ -83,6 +83,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Sagar Vaze, Kai Han, Andrea Vedaldi, Andrew Zisserman")]
 public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly OpenMAMLOptions<T, TInput, TOutput> _openMAMLOptions;
 
     /// <inheritdoc/>
@@ -104,17 +107,17 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Inner loop (MAML-style adaptation)
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             for (int step = 0; step < _openMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(MetaModel.GetParameters(), innerGrad, _openMAMLOptions.InnerLearningRate);
-                MetaModel.SetParameters(adapted);
+                var adapted = ApplyGradients(ParamModel.GetParameters(), innerGrad, _openMAMLOptions.InnerLearningRate);
+                ParamModel.SetParameters(adapted);
             }
 
             // Query evaluation with open-set awareness
@@ -164,25 +167,25 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(initParams.Length);
         for (int i = 0; i < initParams.Length; i++)
             adaptedParams[i] = initParams[i];
 
-        MetaModel.SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
 
         for (int step = 0; step < _openMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(MetaModel.GetParameters(), grad, _openMAMLOptions.InnerLearningRate);
-            MetaModel.SetParameters(adaptedParams);
+            adaptedParams = ApplyGradients(ParamModel.GetParameters(), grad, _openMAMLOptions.InnerLearningRate);
+            ParamModel.SetParameters(adaptedParams);
         }
 
         // Extract support features for confidence-based OOD detection
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
 
-        MetaModel.SetParameters(initParams); // Restore base parameters
+        ParamModel.SetParameters(initParams); // Restore base parameters
         return new OpenMAMLModel<T, TInput, TOutput>(
             MetaModel, adaptedParams, _openMAMLOptions.OpenSetThreshold, supportFeatures);
     }
@@ -227,11 +230,11 @@ internal class OpenMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
             var scaled = new Vector<T>(_params.Length);
             for (int i = 0; i < _params.Length; i++)
                 scaled[i] = NumOps.Multiply(_params[i], NumOps.FromDouble(confidenceScale));
-            _model.SetParameters(scaled);
+            InterfaceGuard.Parameterizable(_model).SetParameters(scaled);
         }
         else
         {
-            _model.SetParameters(_params);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_params);
         }
         return _model.Predict(input);
     }

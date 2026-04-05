@@ -375,8 +375,8 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             // Compute and apply gradients scaled by capped advantage
             var cappedAdvantage = Math.Max(-1.0, Math.Min(1.0, exp.Advantage));
             var scaledLearningRate = Options.LearningRate * cappedAdvantage;
-            var gradients = policyModel.ComputeGradients(input, exp.Output);
-            policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
+            var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, exp.Output);
+            InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
 
             // Value loss: MSE between predicted value and observed reward
             var valueLoss = Math.Pow(exp.Value - exp.Reward, 2);
@@ -387,8 +387,8 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             {
                 var valueError = exp.Reward - exp.Value;
                 var cappedValueError = Math.Max(-1.0, Math.Min(1.0, valueError));
-                var valueGradients = _valueModel.ComputeGradients(input, exp.Output);
-                _valueModel.ApplyGradients(valueGradients, NumOps.FromDouble(Options.LearningRate * valueCoeff * cappedValueError));
+                var valueGradients = InterfaceGuard.GradientComputable(_valueModel).ComputeGradients(input, exp.Output);
+                InterfaceGuard.GradientComputable(_valueModel).ApplyGradients(valueGradients, NumOps.FromDouble(Options.LearningRate * valueCoeff * cappedValueError));
             }
 
             // Entropy loss from policy distribution

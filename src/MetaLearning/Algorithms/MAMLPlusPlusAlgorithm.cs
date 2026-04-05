@@ -104,6 +104,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Antreas Antoniou, Harrison Edwards, Amos Storkey")]
 public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MAMLPlusPlusOptions<T, TInput, TOutput> _mamlOptions;
 
     /// <summary>
@@ -204,7 +207,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         // Determine if we should use first-order based on annealing
         bool useFirstOrder = ShouldUseFirstOrder();
@@ -221,7 +224,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 taskParams[i] = initParams[i];
             }
 
-            MetaModel.SetParameters(taskParams);
+            ParamModel.SetParameters(taskParams);
 
             double[] stepWeights = GetMultiStepWeights();
             var innerStepGradients = new List<Vector<T>>();
@@ -248,7 +251,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                     : _mamlOptions.InnerLearningRate;
 
                 taskParams = ApplyGradients(taskParams, gradients, stepLR);
-                MetaModel.SetParameters(taskParams);
+                ParamModel.SetParameters(taskParams);
             }
 
             // Evaluate on query set
@@ -354,7 +357,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         for (int i = 0; i < initParams.Length; i++)
             taskParams[i] = initParams[i];
 
-        MetaModel.SetParameters(taskParams);
+        ParamModel.SetParameters(taskParams);
 
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
         {
@@ -362,11 +365,11 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             grad = ClipGradients(grad);
             double stepLR = _perStepLearningRates[step];
             taskParams = ApplyGradients(taskParams, grad, stepLR);
-            MetaModel.SetParameters(taskParams);
+            ParamModel.SetParameters(taskParams);
         }
 
         var loss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-        MetaModel.SetParameters(initParams); // Restore base parameters
+        ParamModel.SetParameters(initParams); // Restore base parameters
         return loss;
     }
 
@@ -390,14 +393,14 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(initParams.Length);
         for (int i = 0; i < initParams.Length; i++)
         {
             adaptedParams[i] = initParams[i];
         }
 
-        MetaModel.SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
 
         // Inner loop with per-step learning rates
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
@@ -410,10 +413,10 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 : _mamlOptions.InnerLearningRate;
 
             adaptedParams = ApplyGradients(adaptedParams, gradients, stepLR);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
         }
 
-        MetaModel.SetParameters(initParams); // Restore base parameters
+        ParamModel.SetParameters(initParams); // Restore base parameters
         return new MAMLPlusPlusModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -538,7 +541,7 @@ internal class MAMLPlusPlusModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_adaptedParams);
+        InterfaceGuard.Parameterizable(_model).SetParameters(_adaptedParams);
         return _model.Predict(input);
     }
 

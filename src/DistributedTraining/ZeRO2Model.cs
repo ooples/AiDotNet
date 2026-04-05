@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -96,7 +97,7 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
 
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
         // Parameters still replicated (like ZeRO-1)
         ShardStartIndex = 0;
@@ -176,11 +177,11 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         // instead of parameter deltas, enabling proper ZeRO-2 semantics!
 
         // Set full parameters for gradient computation
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Compute TRUE gradients using the model's gradient computation
         // This calls the model's backpropagation without updating parameters
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
@@ -221,8 +222,8 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         {
             // Without gradient synchronization, apply gradients locally
             // This is equivalent to non-distributed training
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
-            LocalShard = WrappedModel.GetParameters();
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
+            LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
     }
 
@@ -274,7 +275,7 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
         return WrappedModel.Predict(input);
     }
 
@@ -295,7 +296,7 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        return new ZeRO2Model<T, TInput, TOutput>(WrappedModel.WithParameters(parameters), Config);
+        return new ZeRO2Model<T, TInput, TOutput>(InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters), Config);
     }
 
     /// <inheritdoc/>

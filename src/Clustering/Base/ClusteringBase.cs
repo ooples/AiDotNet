@@ -19,7 +19,8 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape
+public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.

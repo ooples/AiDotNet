@@ -160,7 +160,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
             return false;
 
         // Basic compatibility check: model must have parameters
-        return model.ParameterCount > 0;
+        return InterfaceGuard.Parameterizable(model).ParameterCount > 0;
     }
 
     /// <inheritdoc/>
@@ -169,7 +169,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
         if (model == null)
             return "Model cannot be null";
 
-        if (model.ParameterCount == 0)
+        if (InterfaceGuard.Parameterizable(model).ParameterCount == 0)
             return "Model must have parameters for continual learning";
 
         return null;

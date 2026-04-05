@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Interfaces;
@@ -144,7 +145,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
     private IFullModel<T, TInput, TOutput> ApplyPruning(IFullModel<T, TInput, TOutput> model)
     {
         // Magnitude-based weight pruning: zero out weights below threshold
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var prunedParams = new T[parameters.Length];
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -177,7 +178,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
         }
 
         // Create new model with pruned parameters
-        return model.WithParameters(new Vector<T>(prunedParams));
+        return InterfaceGuard.Parameterizable(model).WithParameters(new Vector<T>(prunedParams));
     }
 
     private IFullModel<T, TInput, TOutput> ApplyLayerFusion(IFullModel<T, TInput, TOutput> model)

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -130,7 +131,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     /// </summary>
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
 
         // In tensor parallelism, we partition weights within layers
@@ -357,11 +358,11 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
 
         // Gather full parameters before training
         var originalParams = GatherFullParameters();
-        WrappedModel.SetParameters(originalParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(originalParams);
 
         // Compute true gradients using the model's gradient computation
         // This provides accurate gradients before optimizer updates are applied
-        var gradVec = WrappedModel.ComputeGradients(input, expectedOutput);
+        var gradVec = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         // Synchronize gradients across tensor-parallel group
         if (Config.AutoSyncGradients)
@@ -373,10 +374,10 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // Apply averaged gradients to parameters using the configured learning rate
         // In tensor parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
         // For more sophisticated optimization, wrap this model with a gradient-based optimizer
-        WrappedModel.ApplyGradients(gradVec, Config.LearningRate);
+        InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(gradVec, Config.LearningRate);
 
         // Get updated parameters after applying gradients
-        var updatedParams = WrappedModel.GetParameters();
+        var updatedParams = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
         // Extract shard from final parameters
         UpdateLocalShardFromFull(updatedParams);
@@ -388,7 +389,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     {
         // Tensor parallel inference
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
         return WrappedModel.Predict(input);
     }
 
@@ -409,7 +410,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new TensorParallelModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config);
+            InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters), Config);
     }
 
     /// <inheritdoc/>

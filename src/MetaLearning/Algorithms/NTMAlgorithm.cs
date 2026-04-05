@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -542,13 +543,13 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Also update the meta model with the new parameters for consistency
         if (MetaModel != null && parameters.Length > 0)
         {
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             int copyLength = Math.Min(parameters.Length, currentParams.Length);
             for (int i = 0; i < copyLength; i++)
             {
                 currentParams[i] = parameters[i];
             }
-            MetaModel.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(currentParams);
         }
     }
 
