@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -269,7 +269,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             // Tile adjacency matrix for batch
             int adjN = _adjacencyMatrix.Shape[0];
-            adjForBatch = new Tensor<T>([batchSize, adjN, adjN]);
+            adjForBatch = TensorAllocator.Rent<T>([batchSize, adjN, adjN]);
             for (int b = 0; b < batchSize; b++)
             {
                 for (int i = 0; i < adjN; i++)

@@ -53,6 +53,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Malik Boudiaf, Ziko Imtiaz Masud, Jerome Rony, et al.")]
 public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly BayTransProtoOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -68,7 +71,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _logVar = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
             _logVar[d] = NumOps.FromDouble(options.InitialLogVar);
@@ -79,7 +82,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -89,7 +92,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedMean);
+                ParamModel.SetParameters(adaptedMean);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedMean = ApplyGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
             }
@@ -98,7 +101,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int tStep = 0; tStep < _algoOptions.TransductiveSteps; tStep++)
             {
                 // Use query gradients to refine posterior mean
-                MetaModel.SetParameters(adaptedMean);
+                ParamModel.SetParameters(adaptedMean);
                 var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
                 for (int d = 0; d < _paramDim; d++)
                     adaptedMean[d] = NumOps.Subtract(adaptedMean[d],
@@ -110,7 +113,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int s = 0; s < _algoOptions.NumPosteriorSamples; s++)
             {
                 var sampled = SamplePosterior(adaptedMean);
-                MetaModel.SetParameters(sampled);
+                ParamModel.SetParameters(sampled);
                 finalLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
             var ensembleLoss = ComputeMean(finalLosses);
@@ -128,7 +131,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             var totalLoss = NumOps.Add(ensembleLoss, NumOps.FromDouble(_algoOptions.KLWeight * kl / _paramDim));
             losses.Add(totalLoss);
 
-            MetaModel.SetParameters(adaptedMean);
+            ParamModel.SetParameters(adaptedMean);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -142,18 +145,18 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedMean = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedMean);
+            ParamModel.SetParameters(adaptedMean);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedMean = ApplyGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedMean);
     }
 
@@ -171,21 +174,21 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private double ComputeBayTransLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

@@ -82,8 +82,8 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ModelPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
-public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
-{
+public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>{
     private readonly List<RocketKernel> _kernels;
     private readonly RocketOptions<T> _rocketOptions;
     private readonly Random _random;
@@ -473,19 +473,19 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         return _internalWeights?.Clone() ?? new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         _internalWeights = parameters.Clone();
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = new RocketClassifier<T>(_rocketOptions);
         copy._internalWeights = parameters.Clone();
@@ -515,7 +515,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Ridge regression doesn't use gradients in the traditional sense
         // Return zeros for now
@@ -523,7 +523,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (_internalWeights is null) return;
 

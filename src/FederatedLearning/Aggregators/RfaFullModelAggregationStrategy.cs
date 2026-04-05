@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -130,7 +131,7 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(current[i]);
         }
 
-        return reference.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "RFA";

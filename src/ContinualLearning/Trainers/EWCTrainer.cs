@@ -108,6 +108,9 @@ public class EWCTrainerOptions<T>
 [ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://arxiv.org/abs/1612.00796", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
 public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
+    private IGradientComputable<T, TInput, TOutput>? _cachedGradModel;
+    private IGradientComputable<T, TInput, TOutput> GradModel => _cachedGradModel ??= InterfaceGuard.GradientComputable(Model);
+
     [ThreadStatic]
     private static Random? _random;
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
@@ -210,7 +213,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = Model.ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = GradModel.ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -252,7 +255,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, learningRate);
+                GradModel.ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Track losses
@@ -277,7 +280,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        Model.ApplyGradients(adjustedReplayGradients, replayLr);
+                        GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
                 }
@@ -402,7 +405,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = Model.ComputeGradients(
+            var sampleGradients = GradModel.ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

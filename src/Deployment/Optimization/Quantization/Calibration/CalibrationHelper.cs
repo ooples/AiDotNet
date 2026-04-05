@@ -316,7 +316,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         IFullModel<T, TInput, TOutput> model,
         ActivationStatistics<T> stats)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
 
         // Use parameter magnitudes as activation proxies
@@ -348,7 +348,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         IFullModel<T, TInput, TOutput> model,
         ActivationStatistics<T> stats)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
 
         // Initialize global arrays

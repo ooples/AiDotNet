@@ -99,7 +99,7 @@ public abstract class ReinforcementLearningTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
-        var paramsBefore = model.GetParameters();
+        var paramsBefore = ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters();
         var snapshot = new double[paramsBefore.Length];
         for (int i = 0; i < paramsBefore.Length; i++) snapshot[i] = paramsBefore[i];
 
@@ -109,7 +109,7 @@ public abstract class ReinforcementLearningTestBase
         for (int iter = 0; iter < 5; iter++)
             model.Train(state, target);
 
-        var paramsAfter = model.GetParameters();
+        var paramsAfter = ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters();
         bool anyChanged = false;
         for (int i = 0; i < Math.Min(snapshot.Length, paramsAfter.Length); i++)
         {
@@ -151,6 +151,6 @@ public abstract class ReinforcementLearningTestBase
     public void Parameters_ShouldBeNonEmpty()
     {
         var model = CreateModel();
-        Assert.True(model.GetParameters().Length > 0, "RL agent should have parameters.");
+        Assert.True(((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters().Length > 0, "RL agent should have parameters.");
     }
 }

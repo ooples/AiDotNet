@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
@@ -135,7 +136,7 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                savedParameters = inputData.InitialSolution.GetParameters();
+                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
             // Step 1: Optimize locally to compute gradients and get locally-updated model

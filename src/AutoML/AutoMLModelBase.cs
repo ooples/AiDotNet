@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -736,7 +737,7 @@ namespace AiDotNet.AutoML
         if (BestModel == null)
             throw new InvalidOperationException("No best model found.");
 
-        return BestModel.GetParameters();
+        return InterfaceGuard.Parameterizable(BestModel).GetParameters();
     }
 
     /// <summary>
@@ -747,13 +748,13 @@ namespace AiDotNet.AutoML
         if (BestModel == null)
             throw new InvalidOperationException("No best model found.");
 
-        BestModel.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(BestModel).SetParameters(parameters);
     }
 
     /// <summary>
     /// Gets the number of parameters
     /// </summary>
-    public virtual int ParameterCount => BestModel?.ParameterCount ?? 0;
+    public virtual int ParameterCount => InterfaceGuard.TryParameterizable(BestModel)?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -771,7 +772,7 @@ namespace AiDotNet.AutoML
 
         // Create a deep copy and set the new parameters
         var copy = DeepCopy();
-        copy.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
         return copy;
     }
 
@@ -803,7 +804,7 @@ namespace AiDotNet.AutoML
         if (BestModel == null)
             throw new InvalidOperationException("No best model found.");
 
-        return BestModel.GetActiveFeatureIndices();
+        return InterfaceGuard.FeatureAware(BestModel).GetActiveFeatureIndices();
     }
 
     /// <summary>
@@ -814,7 +815,7 @@ namespace AiDotNet.AutoML
         if (BestModel == null)
             throw new InvalidOperationException("No best model found.");
 
-        return BestModel.IsFeatureUsed(featureIndex);
+        return InterfaceGuard.FeatureAware(BestModel).IsFeatureUsed(featureIndex);
     }
 
     /// <summary>
@@ -825,7 +826,7 @@ namespace AiDotNet.AutoML
         if (BestModel == null)
             throw new InvalidOperationException("No best model found.");
 
-        BestModel.SetActiveFeatureIndices(featureIndices);
+        InterfaceGuard.FeatureAware(BestModel).SetActiveFeatureIndices(featureIndices);
     }
 
     #endregion
@@ -1140,7 +1141,7 @@ namespace AiDotNet.AutoML
                 throw new InvalidOperationException(
                     "Cannot compute gradients before AutoML search has found a best model. Call Search() first.");
 
-            return BestModel.ComputeGradients(input, target, lossFunction);
+            return InterfaceGuard.GradientComputable(BestModel).ComputeGradients(input, target, lossFunction);
         }
 
         /// <summary>
@@ -1152,7 +1153,7 @@ namespace AiDotNet.AutoML
                 throw new InvalidOperationException(
                     "Cannot apply gradients before AutoML search has found a best model. Call Search() first.");
 
-            BestModel.ApplyGradients(gradients, learningRate);
+            InterfaceGuard.GradientComputable(BestModel).ApplyGradients(gradients, learningRate);
         }
 
         #endregion
@@ -1184,7 +1185,7 @@ namespace AiDotNet.AutoML
                 if (BestModel is null || BestModel == null)
                     return false;
 
-                return BestModel.SupportsJitCompilation;
+                return InterfaceGuard.JitCompilable(BestModel).SupportsJitCompilation;
             }
         }
 
@@ -1225,12 +1226,12 @@ namespace AiDotNet.AutoML
                     "Cannot export computation graph: No best model has been found yet. " +
                     "Call SearchAsync to find the best model first.");
 
-            if (!BestModel.SupportsJitCompilation)
+            if (!InterfaceGuard.JitCompilable(BestModel).SupportsJitCompilation)
                 throw new NotSupportedException(
                     $"The best model of type {BestModel.GetType().Name} does not support JIT compilation. " +
                     "JIT compilation availability depends on the specific model type found during AutoML search.");
 
-            return BestModel.ExportComputationGraph(inputNodes);
+            return InterfaceGuard.JitCompilable(BestModel).ExportComputationGraph(inputNodes);
         }
 
         #endregion

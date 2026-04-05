@@ -1,7 +1,8 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -309,7 +310,52 @@ public class RWKV7Block<T> : LayerBase<T>
         _normBeta1.Fill(NumOps.Zero);
         _normGamma2.Fill(NumOps.One);
         _normBeta2.Fill(NumOps.Zero);
+
+        // Arena workspace: pre-allocate forward pass buffers for zero-allocation hot path
+        Workspace = new LayerWorkspace<T>(timestepCount: 10, sequenceCount: 12);
+        // TimeMixing timestep buffers
+        Workspace.DeclareTimestep(TsRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsVInput, _modelDimension);
+        Workspace.DeclareTimestep(TsAInput, _modelDimension);
+        Workspace.DeclareTimestep(TsBInput, _modelDimension);
+        Workspace.DeclareTimestep(TsWkvOut, _modelDimension);
+        // ChannelMixing timestep buffers
+        Workspace.DeclareTimestep(TsCmRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKSiLU, _ffnDimension);
+        // TimeMixing sequence buffers
+        Workspace.DeclareSequence(SqAllR, _modelDimension);
+        Workspace.DeclareSequence(SqAllK, _modelDimension);
+        Workspace.DeclareSequence(SqAllV, _modelDimension);
+        Workspace.DeclareSequence(SqAllA, _modelDimension);
+        Workspace.DeclareSequence(SqAllB, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkv, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvPre, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvGated, _modelDimension);
+        // ChannelMixing sequence buffers
+        Workspace.DeclareSequence(SqCmAllRGate, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllVProj, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllSiLU, _ffnDimension);
+        Workspace.DeclareSequence(SqCmAllKProj, _ffnDimension);
     }
+
+    /// <summary>Gets the workspace, throwing if not initialized.</summary>
+    private LayerWorkspace<T> Ws => Workspace
+        ?? throw new InvalidOperationException("RWKV7Block workspace not initialized.");
+
+    // Workspace buffer indices — TimeMixing timestep buffers
+    private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
+    private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5;
+    // Workspace buffer indices — ChannelMixing timestep buffers
+    private const int TsCmRInput = 7, TsCmKInput = 8, TsCmKSiLU = 9;
+    // Workspace buffer indices — TimeMixing sequence buffers
+    private const int SqAllR = 0, SqAllK = 1, SqAllV = 2, SqAllA = 3;
+    private const int SqAllB = 4, SqAllWkv = 5, SqAllWkvPre = 6, SqAllWkvGated = 7;
+    // Workspace buffer indices — ChannelMixing sequence buffers
+    private const int SqCmAllRGate = 8, SqCmAllVProj = 9;
+    // FFN-dimension sequence buffers (separate indices since different shape suffix)
+    private const int SqCmAllSiLU = 10, SqCmAllKProj = 11;
 
     private void InitializeProjection(Tensor<T> tensor)
     {
@@ -335,6 +381,9 @@ public class RWKV7Block<T> : LayerBase<T>
             : input.Reshape(batchSize, seqLen, modelDim);
 
         _lastInput = input3D;
+
+        // Pre-size workspace for this forward pass
+        Ws.BeginForward(batchSize, seqLen);
 
         // Time mixing sub-layer with residual
         var normed1 = ApplyLayerNorm(input3D, _normGamma1, _normBeta1, batchSize, seqLen);
@@ -376,26 +425,26 @@ public class RWKV7Block<T> : LayerBase<T>
         var state = _recurrentState ?? new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var xPrev = _prevToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Cache intermediate values for backward
-        var allR = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allA = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allB = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkv = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkvPreGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkvGated = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        // Cache intermediate values for backward — zero allocation via workspace
+        var allR = Ws.Sequence(SqAllR);
+        var allK = Ws.Sequence(SqAllK);
+        var allV = Ws.Sequence(SqAllV);
+        var allA = Ws.Sequence(SqAllA);
+        var allB = Ws.Sequence(SqAllB);
+        var allWkv = Ws.Sequence(SqAllWkv);
+        var allWkvPreGate = Ws.Sequence(SqAllWkvPre);
+        var allWkvGated = Ws.Sequence(SqAllWkvGated);
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
-            // Token shift: lerp between current and previous token
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var vInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var aInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var bInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            // Token shift: lerp between current and previous token — zero allocation via workspace
+            var rInput = Ws.Timestep(TsRInput);
+            var kInput = Ws.Timestep(TsKInput);
+            var vInput = Ws.Timestep(TsVInput);
+            var aInput = Ws.Timestep(TsAInput);
+            var bInput = Ws.Timestep(TsBInput);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -444,7 +493,7 @@ public class RWKV7Block<T> : LayerBase<T>
             SafeSetSlice(allB, t, bProj, batchSize, _modelDimension);
 
             // WKV-7 kernel per head
-            var wkvOutput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var wkvOutput = Ws.Timestep(TsWkvOut);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -543,19 +592,19 @@ public class RWKV7Block<T> : LayerBase<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = _prevChannelToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Caches for backward pass
-        var allRGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allSiLU = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
-        var allVProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allKProj = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
+        // Caches for backward pass — use workspace for modelDim-shaped buffers
+        var allRGate = Ws.Sequence(SqCmAllRGate);
+        var allSiLU = Ws.Sequence(SqCmAllSiLU);
+        var allVProj = Ws.Sequence(SqCmAllVProj);
+        var allKProj = Ws.Sequence(SqCmAllKProj);
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
 
-            // Token shift
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            // Token shift — zero allocation via workspace
+            var rInput = Ws.Timestep(TsCmRInput);
+            var kInput = Ws.Timestep(TsCmKInput);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
@@ -580,7 +629,7 @@ public class RWKV7Block<T> : LayerBase<T>
             var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, ffnDim]
 
             // SiLU: x * sigmoid(x)
-            var kSiLU = new Tensor<T>(new[] { batchSize, _ffnDimension });
+            var kSiLU = Ws.Timestep(TsCmKSiLU);
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _ffnDimension; d++)
@@ -621,7 +670,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -705,8 +754,8 @@ public class RWKV7Block<T> : LayerBase<T>
             // d(gated)/d(wkv_num) = sigmoid(r)
             // We need wkv_num = gated / sigmoid(r)
 
-            var sigR = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var wkvNum = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var sigR = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var wkvNum = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -736,7 +785,7 @@ public class RWKV7Block<T> : LayerBase<T>
             Tensor<T> x_prev;
             if (t == 0)
             {
-                x_prev = new Tensor<T>(new[] { batchSize, _modelDimension }); // zeros
+                x_prev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension }); // zeros
             }
             else
             {
@@ -757,7 +806,7 @@ public class RWKV7Block<T> : LayerBase<T>
 
             // 6. Receptance weight gradient: dW_r += rInput_t^T @ dR_t
             // Reconstruct rInput from token shift
-            var rInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var rInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -778,7 +827,7 @@ public class RWKV7Block<T> : LayerBase<T>
             // Similarly accumulate K, V, A, B token shift and weight gradients
             // (same pattern as R but through different paths — approximate contribution)
             var dK = Engine.TensorMatMul(dGated, _keyWeights.Transpose(new[] { 1, 0 }));
-            var kInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var kInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _modelDimension; d++)
@@ -813,7 +862,7 @@ public class RWKV7Block<T> : LayerBase<T>
                             NumOps.Multiply(dV[new[] { bi, d }], diff));
                 }
             }
-            var vInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var vInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     vInput_t[new[] { bi, d }] = NumOps.Add(
@@ -833,7 +882,7 @@ public class RWKV7Block<T> : LayerBase<T>
                         _timeMixAGrad[d] = NumOps.Add(_timeMixAGrad[d],
                             NumOps.Multiply(dAInput[new[] { bi, d }], diff));
                 }
-            var aInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var aInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     aInput_t[new[] { bi, d }] = NumOps.Add(
@@ -854,7 +903,7 @@ public class RWKV7Block<T> : LayerBase<T>
                         _timeMixBGrad[d] = NumOps.Add(_timeMixBGrad[d],
                             NumOps.Multiply(dBInput[new[] { bi, d }], diff));
                 }
-            var bInput_t = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var bInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                     bInput_t[new[] { bi, d }] = NumOps.Add(
@@ -874,7 +923,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize)
     {
-        var dInput = new Tensor<T>(input.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -962,7 +1011,7 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input,
         Tensor<T> gamma, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-6);
         T invDim = NumOps.FromDouble(1.0 / _modelDimension);
 

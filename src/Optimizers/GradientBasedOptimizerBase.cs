@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
@@ -317,7 +318,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             throw new ArgumentNullException(nameof(model));
 
         // Delegate to the safe 3-parameter overload
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         return ApplyGradients(parameters, gradients, model);
     }
 
@@ -423,7 +424,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var updatedParameters = UpdateParameters(originalParameters, gradients);
 
         // Create new model instance with updated parameters
-        return model.WithParameters(updatedParameters);
+        return InterfaceGuard.Parameterizable(model).WithParameters(updatedParameters);
     }
 
     /// <summary>
@@ -697,7 +698,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         // Apply regularization to the gradient
-        var parameters = solution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
         var regularizationGradient = Regularization.Regularize(parameters);
         gradient = gradient.Add(regularizationGradient);
 
@@ -858,7 +859,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> model,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
         var hessian = new Matrix<T>(n, n);
         var epsilon = NumOps.FromDouble(1e-5);
@@ -879,7 +880,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 var perturbedParams = parameters.Clone();
                 perturbedParams[i] = NumOps.Add(perturbedParams[i], epsilon);
 
-                var perturbedModel = model.WithParameters(perturbedParams);
+                var perturbedModel = InterfaceGuard.Parameterizable(model).WithParameters(perturbedParams);
 
                 if (perturbedModel is not IGradientComputable<T, TInput, TOutput> perturbedGradientModel)
                 {
@@ -921,7 +922,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> model,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
         var hessian = new Matrix<T>(n, n);
         var epsilon = NumOps.FromDouble(1e-5);
@@ -936,25 +937,25 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 var params_pp = parameters.Clone();
                 params_pp[i] = NumOps.Add(params_pp[i], epsilon);
                 params_pp[j] = NumOps.Add(params_pp[j], epsilon);
-                var model_pp = model.WithParameters(params_pp);
+                var model_pp = InterfaceGuard.Parameterizable(model).WithParameters(params_pp);
                 var loss_pp = CalculateLoss(model_pp, inputData);
 
                 var params_pm = parameters.Clone();
                 params_pm[i] = NumOps.Add(params_pm[i], epsilon);
                 params_pm[j] = NumOps.Subtract(params_pm[j], epsilon);
-                var model_pm = model.WithParameters(params_pm);
+                var model_pm = InterfaceGuard.Parameterizable(model).WithParameters(params_pm);
                 var loss_pm = CalculateLoss(model_pm, inputData);
 
                 var params_mp = parameters.Clone();
                 params_mp[i] = NumOps.Subtract(params_mp[i], epsilon);
                 params_mp[j] = NumOps.Add(params_mp[j], epsilon);
-                var model_mp = model.WithParameters(params_mp);
+                var model_mp = InterfaceGuard.Parameterizable(model).WithParameters(params_mp);
                 var loss_mp = CalculateLoss(model_mp, inputData);
 
                 var params_mm = parameters.Clone();
                 params_mm[i] = NumOps.Subtract(params_mm[i], epsilon);
                 params_mm[j] = NumOps.Subtract(params_mm[j], epsilon);
-                var model_mm = model.WithParameters(params_mm);
+                var model_mm = InterfaceGuard.Parameterizable(model).WithParameters(params_mm);
                 var loss_mm = CalculateLoss(model_mm, inputData);
 
                 // Compute second derivative
@@ -1000,8 +1001,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         while (true)
         {
-            var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(alpha));
-            var newSolution = currentSolution.WithParameters(newCoefficients);
+            var newCoefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Add(direction.Multiply(alpha));
+            var newSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
             var newValue = CalculateLoss(newSolution, inputData);
 
             if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
@@ -1049,7 +1050,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var yBatch = InputHelper<T, TOutput>.GetBatch(yTrain, batchIndices);
 
         // Get the current parameters
-        var parameters = solution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
         var gradient = new Vector<T>(parameters.Length);
 
         // Initialize gradient vector with zeros
@@ -1105,10 +1106,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var newParameters = UpdateParameters(parameters, gradient);
 
-        return currentSolution.WithParameters(newParameters);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newParameters);
     }
 
     /// <summary>

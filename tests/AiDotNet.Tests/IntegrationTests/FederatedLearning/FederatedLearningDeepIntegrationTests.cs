@@ -492,7 +492,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(2.0, resultParams[0], 10);
         Assert.Equal(8.0, resultParams[1], 10);
@@ -516,7 +516,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(5.0, resultParams[0], 10);
         Assert.Equal(7.0, resultParams[1], 10);
@@ -541,7 +541,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(4.0, resultParams[0], 10);
     }
@@ -564,7 +564,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1000000.0 }, { 1, 1.0 }, { 2, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(20.0, resultParams[0], 10);
     }
@@ -591,7 +591,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(3.0, resultParams[0], 10);
     }
@@ -607,7 +607,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(3.14, resultParams[0], 10);
         Assert.Equal(2.72, resultParams[1], 10);
@@ -644,7 +644,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(7.0, resultParams[0], 10);
         Assert.Equal(7.0, resultParams[1], 10);
@@ -677,7 +677,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(3.0, resultParams[0], 10);
     }
@@ -699,7 +699,7 @@ public class FederatedLearningDeepIntegrationTests
         }
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(4.5, resultParams[0], 10);
     }
@@ -721,7 +721,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(3.0, resultParams[0], 10);
     }
@@ -744,7 +744,7 @@ public class FederatedLearningDeepIntegrationTests
         var result1 = strategy.Aggregate(clients, weights1);
         var result2 = strategy.Aggregate(clients, weights2);
 
-        Assert.Equal(result1.GetParameters()[0], result2.GetParameters()[0], 10);
+        Assert.Equal(((IParameterizable<double, Matrix<double>, Vector<double>>)result1).GetParameters()[0], ((IParameterizable<double, Matrix<double>, Vector<double>>)result2).GetParameters()[0], 10);
     }
 
     [Fact]
@@ -765,8 +765,8 @@ public class FederatedLearningDeepIntegrationTests
         };
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
-        var fullResult = fullAvg.Aggregate(clients, weights).GetParameters();
-        var trimResult = trimmed.Aggregate(clients, weights).GetParameters();
+        var fullResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)fullAvg.Aggregate(clients, weights)).GetParameters();
+        var trimResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)trimmed.Aggregate(clients, weights)).GetParameters();
 
         // Full average = 202.0
         Assert.Equal(202.0, fullResult[0], 10);
@@ -794,7 +794,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(30.0, resultParams[0], 10);
         Assert.Equal(30.0, resultParams[1], 10);
@@ -813,7 +813,7 @@ public class FederatedLearningDeepIntegrationTests
         var weights = new Dictionary<int, double> { { 0, 1.0 } };
 
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(3.14, resultParams[0], 10);
     }
@@ -854,7 +854,7 @@ public class FederatedLearningDeepIntegrationTests
 
         // trim=floor(0.4*3)=1, kept=3-2=1 → takes only the middle value: sorted [1,2,3] → 2.0
         var result = strategy.Aggregate(clients, weights);
-        var resultParams = result.GetParameters();
+        var resultParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)result).GetParameters();
 
         Assert.Equal(2.0, resultParams[0], 10);
     }
@@ -935,8 +935,8 @@ public class FederatedLearningDeepIntegrationTests
         var modelWeights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 } };
 
         var fedavgResult = fedavg.Aggregate(fedavgModels, fedavgWeights);
-        var medianResult = median.Aggregate(fullModelClients, modelWeights).GetParameters();
-        var trimmedResult = trimmed.Aggregate(fullModelClients, modelWeights).GetParameters();
+        var medianResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)median.Aggregate(fullModelClients, modelWeights)).GetParameters();
+        var trimmedResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)trimmed.Aggregate(fullModelClients, modelWeights)).GetParameters();
 
         Assert.Equal(5.0, fedavgResult["w"][0], 10);
         Assert.Equal(5.0, medianResult[0], 10);
@@ -964,8 +964,8 @@ public class FederatedLearningDeepIntegrationTests
         };
         var weights = new Dictionary<int, double> { { 0, 1.0 }, { 1, 1.0 }, { 2, 1.0 }, { 3, 1.0 }, { 4, 1.0 } };
 
-        var medianResult = median.Aggregate(clients, weights).GetParameters();
-        var trimmedResult = trimmed.Aggregate(clients, weights).GetParameters();
+        var medianResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)median.Aggregate(clients, weights)).GetParameters();
+        var trimmedResult = ((IParameterizable<double, Matrix<double>, Vector<double>>)trimmed.Aggregate(clients, weights)).GetParameters();
 
         Assert.Equal(30.0, medianResult[0], 10);
         Assert.Equal(30.0, trimmedResult[0], 10);

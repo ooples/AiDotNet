@@ -497,22 +497,6 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// This is useful for optimization algorithms that need to work with all parameters at once.
     /// </para>
     /// </remarks>
-    public abstract Vector<T> GetParameters();
-
-    /// <summary>
-    /// Creates a new instance of the model with specified parameters.
-    /// </summary>
-    /// <param name="parameters">A vector containing all model parameters.</param>
-    /// <returns>A new model instance with the specified parameters.</returns>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
-    public abstract IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    /// <param name="parameters">A vector containing all model parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
-    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Gets the indices of features that are actively used in the model.
@@ -603,31 +587,28 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public virtual int ParameterCount => ExpectedParameterCount;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Returns true if the classifier type supports parameter initialization,
-    /// regardless of whether it has been trained yet (ParameterCount may be 0 before training).
-    /// </remarks>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
-
-    /// <inheritdoc/>
-    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
-
     /// <inheritdoc/>
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
-    /// <inheritdoc/>
-    public abstract Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null);
-
-    /// <inheritdoc/>
-    public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
 
     /// <summary>
-    /// Saves the classifier model to a file.
+    /// Gets the expected number of parameters for this classifier.
+    /// Used by subclasses that implement IParameterizable.
     /// </summary>
-    /// <param name="filePath">The path where the model should be saved.</param>
+    public virtual int ParameterCount => ExpectedParameterCount;
+
+    /// <summary>
+    /// Whether this classifier supports parameter initialization.
+    /// Used by subclasses that implement IParameterizable.
+    /// </summary>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <summary>
+    /// Sanitizes parameters to ensure they satisfy model constraints.
+    /// Used by subclasses that implement IParameterizable.
+    /// </summary>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {

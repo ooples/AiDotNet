@@ -26,7 +26,8 @@ namespace AiDotNet.Models;
 /// only needs to implement its core prediction and training logic.
 /// </para>
 /// </remarks>
-public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.

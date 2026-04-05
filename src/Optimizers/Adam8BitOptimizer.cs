@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -293,7 +293,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         InitializeQuantizedState(parameters.Length);
         _t = 0;
@@ -402,7 +402,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         if (_mQuantized == null && _mFullPrecision == null)
         {
@@ -468,7 +468,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // Apply update: parameters = parameters - update
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
-        return currentSolution.WithParameters(updatedParams);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
     /// <summary>

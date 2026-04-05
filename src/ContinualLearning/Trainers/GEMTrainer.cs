@@ -237,7 +237,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = Model.ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = InterfaceGuard.GradientComputable(Model).ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -285,7 +285,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, learningRate);
+                InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Accumulate gradient for task gradient storage

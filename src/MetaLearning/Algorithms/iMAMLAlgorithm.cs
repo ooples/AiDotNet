@@ -162,11 +162,11 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         {
             // Clone the meta model for this task
             var taskModel = CloneModel();
-            var initialParams = taskModel.GetParameters();
+            var initialParams = InterfaceGuard.Parameterizable(taskModel).GetParameters();
 
             // Inner loop: Adapt to the task using support set
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
-            taskModel.SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
@@ -206,9 +206,9 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Outer loop: Update meta-parameters
-        var currentMetaParams = MetaModel.GetParameters();
+        var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedMetaParams = ApplyGradients(currentMetaParams, accumulatedMetaGradients, _imamlOptions.OuterLearningRate);
-        MetaModel.SetParameters(updatedMetaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSizeT);
@@ -249,7 +249,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         // Perform inner loop adaptation (same as MAML)
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        InterfaceGuard.Parameterizable(adaptedModel).SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -269,7 +269,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </remarks>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Perform K gradient steps on the support set
         for (int step = 0; step < _imamlOptions.AdaptationSteps; step++)
@@ -279,7 +279,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             // Apply gradients with inner learning rate
             parameters = ApplyGradients(parameters, gradients, _imamlOptions.InnerLearningRate);
-            model.SetParameters(parameters);
+            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
         return parameters;
@@ -319,7 +319,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Set model to adapted parameters
-        model.SetParameters(adaptedParams);
+        InterfaceGuard.Parameterizable(model).SetParameters(adaptedParams);
 
         // Compute gradient of query loss with respect to adapted parameters
         var queryGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);
@@ -433,20 +433,20 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         T eps = NumOps.FromDouble(1e-5);
 
         // Get current parameters
-        var theta = model.GetParameters();
+        var theta = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Vectorized Hessian-vector product via finite differences
         // theta + eps*v
         var eDeltaV = (Vector<T>)Engine.Multiply(v, eps);
-        model.SetParameters((Vector<T>)Engine.Add(theta, eDeltaV));
+        InterfaceGuard.Parameterizable(model).SetParameters((Vector<T>)Engine.Add(theta, eDeltaV));
         var gradPlus = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
         // theta - eps*v
-        model.SetParameters((Vector<T>)Engine.Subtract(theta, eDeltaV));
+        InterfaceGuard.Parameterizable(model).SetParameters((Vector<T>)Engine.Subtract(theta, eDeltaV));
         var gradMinus = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
         // Restore original parameters
-        model.SetParameters(theta);
+        InterfaceGuard.Parameterizable(model).SetParameters(theta);
 
         // H * v = (gradPlus - gradMinus) / (2 * eps)
         T twoEps = NumOps.Multiply(NumOps.FromDouble(2.0), eps);

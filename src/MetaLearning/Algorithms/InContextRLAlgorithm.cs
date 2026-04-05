@@ -56,6 +56,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Vincent Micheli, Eloi Alonso, Francois Fleuret")]
 public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly InContextRLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _contextDim;
@@ -79,7 +82,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             throw new ArgumentOutOfRangeException(nameof(options), "ContextEmbeddingDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _contextDim = options.ContextEmbeddingDim;
         _compressedDim = Math.Min(_paramDim, 64);
 
@@ -99,7 +102,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -112,7 +115,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 // Predict and record context
-                MetaModel.SetParameters(currentParams);
+                ParamModel.SetParameters(currentParams);
                 var pred = MetaModel.Predict(task.SupportInput);
                 double stepLoss = NumOps.ToDouble(ComputeLossFromOutput(pred, task.SupportOutput));
 
@@ -139,7 +142,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 }
             }
 
-            MetaModel.SetParameters(currentParams);
+            ParamModel.SetParameters(currentParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Context prediction auxiliary loss
@@ -169,7 +172,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var contextEntries = new List<Vector<T>>();
         var contextLosses = new List<double>();
         var currentParams = new Vector<T>(_paramDim);
@@ -177,7 +180,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(currentParams);
+            ParamModel.SetParameters(currentParams);
             double stepLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             contextEntries.Add(EncodeContextEntry(grad));
@@ -192,7 +195,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 currentParams[d] = NumOps.Add(initParams[d], modulation[d % _compressedDim]);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, currentParams);
     }
 
@@ -248,7 +251,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private double ComputeInContextLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var entries = new List<Vector<T>>();
@@ -257,7 +260,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             for (int d = 0; d < _paramDim; d++) cp[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(cp);
+                ParamModel.SetParameters(cp);
                 double sl = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 entries.Add(EncodeContextEntry(g));
@@ -274,10 +277,10 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 var m = ComputeModulation(cv);
                 for (int d = 0; d < _paramDim; d++) cp[d] = NumOps.Add(initParams[d], m[d % _compressedDim]);
             }
-            MetaModel.SetParameters(cp);
+            ParamModel.SetParameters(cp);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

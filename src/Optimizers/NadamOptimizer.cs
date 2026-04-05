@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -137,7 +137,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
 
@@ -195,7 +195,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized Nadam Update using IEngine (Phase B: US-GPU-015) ===
         T beta1 = NumOps.FromDouble(_options.Beta1);
@@ -239,7 +239,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // params = params - update
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, update);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

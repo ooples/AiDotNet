@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -96,7 +97,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         }
 
         // Use model's parameter count instead of input size for velocity dimensions
-        int dimensions = swarm.Count > 0 ? swarm[0].ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        int dimensions = swarm.Count > 0 ? InterfaceGuard.Parameterizable(swarm[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
 
         // Initialize velocities for each particle
         var velocities = new List<Vector<T>>();
@@ -143,9 +144,9 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             for (int i = 0; i < _psoOptions.SwarmSize; i++)
             {
                 // Get current position and best positions
-                var position = swarm[i].GetParameters();
-                var personalBestVector = personalBests[i].Solution.GetParameters();
-                var globalBestVector = globalBest.Solution.GetParameters();
+                var position = InterfaceGuard.Parameterizable(swarm[i]).GetParameters();
+                var personalBestVector = InterfaceGuard.Parameterizable(personalBests[i].Solution).GetParameters();
+                var globalBestVector = InterfaceGuard.Parameterizable(globalBest.Solution).GetParameters();
                 var velocity = velocities[i];
 
                 // Update velocity and store the new velocity vector
@@ -156,7 +157,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 var newPosition = (Vector<T>)Engine.Add(position, velocities[i]);
 
                 // Update the particle model with new position
-                swarm[i] = swarm[i].WithParameters(newPosition);
+                swarm[i] = InterfaceGuard.Parameterizable(swarm[i]).WithParameters(newPosition);
 
                 // Evaluate the updated particle
                 var stepData = EvaluateSolution(swarm[i], inputData);

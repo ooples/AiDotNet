@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 /// <summary>
@@ -184,7 +185,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         // Use model's parameter count instead of input size for direction dimensions
-        int n = currentSolution.ParameterCount;
+        int n = InterfaceGuard.Parameterizable(currentSolution).ParameterCount;
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -353,11 +354,11 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         // === Vectorized Move in Direction using IEngine (Phase B: US-GPU-015) ===
         // newCoefficients = parameters + step * direction
 
-        var parameters = solution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
         var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
 
-        return solution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(solution).WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -389,8 +390,8 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         // === Vectorized Extrapolation using IEngine (Phase B: US-GPU-015) ===
         // extrapolated = new + (new - old) = 2*new - old
 
-        var parameters = newPoint.GetParameters();
-        var oldParameters = oldPoint.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(newPoint).GetParameters();
+        var oldParameters = InterfaceGuard.Parameterizable(oldPoint).GetParameters();
 
         // Calculate the direction vector: new - old
         var direction = (Vector<T>)Engine.Subtract(parameters, oldParameters);
@@ -398,7 +399,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         var extrapolatedCoefficients = (Vector<T>)Engine.Add(parameters, direction);
 
         // Use the newPoint as a template to create a new model with the extrapolated coefficients
-        return newPoint.WithParameters(extrapolatedCoefficients);
+        return InterfaceGuard.Parameterizable(newPoint).WithParameters(extrapolatedCoefficients);
     }
 
     /// <summary>

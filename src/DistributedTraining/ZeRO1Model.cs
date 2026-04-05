@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -82,7 +83,7 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// </summary>
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
         // In ZeRO-1, parameters are replicated (no sharding at model level)
         // Optimizer state sharding is handled by ZeRO1Optimizer
@@ -119,10 +120,10 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         // The difference is that ZeRO-1 pairs with ZeRO1Optimizer which shards optimizer states.
 
         // Set full parameters for gradient computation
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Compute TRUE gradients using the model's gradient computation
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
@@ -132,18 +133,18 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             // Apply the averaged gradients to update parameters
             // Note: We use a fixed learning rate here. For adaptive optimizers,
             // use ZeRO1Optimizer which properly handles optimizer state sharding.
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
 
             // Get updated parameters back to LocalShard
-            LocalShard = WrappedModel.GetParameters();
-            WrappedModel.SetParameters(LocalShard);
+            LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
+            InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
             // Cache invalidated by SynchronizeGradients
         }
         else
         {
             // Without gradient synchronization, apply gradients locally
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
-            LocalShard = WrappedModel.GetParameters();
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
         // Note: Cache not invalidated if AutoSyncGradients is false,
         // allowing multiple predictions to benefit from cached full parameters
@@ -152,7 +153,7 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
         return WrappedModel.Predict(input);
     }
 
@@ -173,7 +174,7 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters);
         return new ZeRO1Model<T, TInput, TOutput>(newModel, Config);
     }
 

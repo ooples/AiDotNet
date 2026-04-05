@@ -493,7 +493,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
             return new Vector<T>(0);
         }
 
-        return _classifier.GetParameters();
+        return ((IParameterizable<T, Matrix<T>, Vector<T>>)_classifier).GetParameters();
     }
 
     /// <summary>
@@ -525,7 +525,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        _classifier?.SetParameters(parameters);
+        (_classifier as IParameterizable<T, Matrix<T>, Vector<T>>)?.SetParameters(parameters);
     }
 
     /// <summary>
@@ -566,7 +566,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
             classTargets[i] = NumOps.FromDouble(classIdx);
         }
 
-        return _classifier.ComputeGradients(input, classTargets, lossFunction);
+        return ((IGradientComputable<T, Matrix<T>, Vector<T>>)_classifier).ComputeGradients(input, classTargets, lossFunction);
     }
 
     /// <summary>
@@ -581,7 +581,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _classifier?.ApplyGradients(gradients, learningRate);
+        (_classifier as IGradientComputable<T, Matrix<T>, Vector<T>>)?.ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>

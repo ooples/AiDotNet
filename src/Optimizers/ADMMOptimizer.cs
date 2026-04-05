@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -103,7 +104,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         ValidationHelper<T>.ValidateInputData(inputData);
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _z = new Vector<T>(parameters.Length);
         _u = new Vector<T>(parameters.Length);
 
@@ -119,7 +120,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             // ADMM steps - operates on full dataset for linear system solving
             currentSolution = UpdateX(currentSolution, inputData.XTrain, inputData.YTrain);
-            parameters = currentSolution.GetParameters();
+            parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
             UpdateZ(parameters);
             UpdateU(parameters);
 
@@ -177,7 +178,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(leftSide, rightSide, _options.DecompositionType);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -256,7 +257,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         if (_options.UseAdaptiveRho)
         {
-            var primalResidual = currentStepData.Solution.GetParameters().Subtract(_z);
+            var primalResidual = InterfaceGuard.Parameterizable(currentStepData.Solution).GetParameters().Subtract(_z);
             var dualResidual = _z.Subtract(_z.Subtract(_u));
 
             var primalNorm = primalResidual.Norm();

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -240,7 +241,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         // Create a base model with InitializeRandomSolution
         var model = InitializeRandomSolution(xTrain);
         // Parameters should match the model's expected parameter count (features + intercept)
-        int paramCount = model.ParameterCount;
+        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
         var parameters = new Vector<T>(paramCount);
 
         var visited = new bool[dimensions];
@@ -264,7 +265,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         }
 
         // Create a new model with updated parameters
-        return model.WithParameters(parameters);
+        return InterfaceGuard.Parameterizable(model).WithParameters(parameters);
     }
 
     /// <summary>
@@ -355,7 +356,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         for (int k = 0; k < solutions.Count; k++)
         {
             var model = solutions[k];
-            var parameters = model.GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
             var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
 
             // Vectorized absolute value of parameters

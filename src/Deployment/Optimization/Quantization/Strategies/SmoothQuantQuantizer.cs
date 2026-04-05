@@ -107,9 +107,9 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
                 "SmoothQuant requires calibration data to compute smoothing factors. Call Calibrate() first.");
         }
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeWithSmoothQuant(parameters, config);
-        return model.WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -128,7 +128,7 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
         var calibrationHelper = new CalibrationHelper<T, TInput, TOutput>(_config);
         _activationStats = calibrationHelper.CollectActivationStatistics(model, dataList);
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         int n = parameters.Length;
 
         // Extract max absolute activation values from statistics

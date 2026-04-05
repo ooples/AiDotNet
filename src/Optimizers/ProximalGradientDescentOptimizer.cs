@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines;
@@ -274,7 +275,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         // Then apply proximal operator (regularization)
 
         var stepSize = CurrentLearningRate;
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Save pre-update parameters for reverse updates (vectorized copy)
         _previousParameters = new Vector<T>(parameters);
@@ -286,7 +287,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         // Apply proximal operator (regularization)
         newCoefficients = _regularization.Regularize(newCoefficients);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

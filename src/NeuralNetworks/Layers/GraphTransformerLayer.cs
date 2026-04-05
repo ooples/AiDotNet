@@ -1,7 +1,8 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -486,7 +487,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         else
         {
             // Project input to match output dimensions
-            residualInput = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+            residualInput = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
             for (int b = 0; b < batchSize; b++)
             {
                 for (int n = 0; n < numNodes; n++)
@@ -910,7 +911,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Rent attention tensors — all fully overwritten in forward pass
         var headOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
         // Attention weights need zero init (sparse graphs don't fill all entries)
-        _lastAttentionWeights = new Tensor<T>([batchSize, _numHeads, numNodes, numNodes]);
+        _lastAttentionWeights = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
 
         // Q, K, V are fully overwritten per head — safe to rent
         _lastQueries = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
@@ -1138,7 +1139,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </remarks>
     private Tensor<T> ApplyFFNActivation(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             result[i] = _ffnActivation.Activate(input.GetFlat(i));
@@ -1149,7 +1150,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> BackwardFFNWeights2(Tensor<T> hidden, Tensor<T> grad, int batchSize, int numNodes)
     {
         // For each batch: hidden^T @ grad
-        var result = new Tensor<T>([batchSize, _ffnHiddenDim, _outputFeatures]);
+        var result = TensorAllocator.Rent<T>([batchSize, _ffnHiddenDim, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _ffnHiddenDim; i++)
@@ -1198,7 +1199,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardFFNWeights1(Tensor<T> input, Tensor<T> grad, int batchSize, int numNodes)
     {
-        var result = new Tensor<T>([batchSize, _outputFeatures, _ffnHiddenDim]);
+        var result = TensorAllocator.Rent<T>([batchSize, _outputFeatures, _ffnHiddenDim]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _outputFeatures; i++)
@@ -1224,7 +1225,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardOutputWeights(Tensor<T> concatenated, Tensor<T> grad, int batchSize, int numNodes)
     {
-        var result = new Tensor<T>([batchSize, _numHeads * _headDim, _outputFeatures]);
+        var result = TensorAllocator.Rent<T>([batchSize, _numHeads * _headDim, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _numHeads * _headDim; i++)
@@ -1250,13 +1251,13 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardAttention(Tensor<T> gradConcatenated, int batchSize, int numNodes)
     {
-        var gradInput = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
+        var gradInput = TensorAllocator.Rent<T>([batchSize, numNodes, _inputFeatures]);
         gradInput.Fill(NumOps.Zero);
 
         for (int h = 0; h < _numHeads; h++)
         {
             // Extract gradient for this head from concatenated
-            var gradHead = new Tensor<T>([batchSize, numNodes, _headDim]);
+            var gradHead = TensorAllocator.Rent<T>([batchSize, numNodes, _headDim]);
             for (int b = 0; b < batchSize; b++)
             {
                 for (int n = 0; n < numNodes; n++)
@@ -1270,7 +1271,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             // Backward through attention application (attn @ V)
             // dL/dV = attn^T @ gradHead
-            var gradValues = new Tensor<T>([batchSize, numNodes, _headDim]);
+            var gradValues = TensorAllocator.Rent<T>([batchSize, numNodes, _headDim]);
             if (_lastAttentionWeights == null || _lastQueries == null || _lastKeys == null || _lastValues == null)
             {
                 throw new InvalidOperationException("Forward pass incomplete.");
@@ -1323,7 +1324,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Full backward through attention mechanism (Q, K gradients)
             // Attention: output = softmax(Q @ K^T / sqrt(d_k)) @ V
             // dL/d(attn_weights) = gradHead @ V^T
-            var gradAttentionWeights = new Tensor<T>([batchSize, numNodes, numNodes]);
+            var gradAttentionWeights = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes]);
             for (int b = 0; b < batchSize; b++)
             {
                 for (int i = 0; i < numNodes; i++)
@@ -1343,7 +1344,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Backward through softmax: d(softmax)/d(score) = softmax * (delta_ij - softmax)
             // dL/d(score_ij) = sum_k(dL/d(attn_ik) * attn_ik * (delta_jk - attn_ij))
             //                = dL/d(attn_ij) * attn_ij - attn_ij * sum_k(dL/d(attn_ik) * attn_ik)
-            var gradScores = new Tensor<T>([batchSize, numNodes, numNodes]);
+            var gradScores = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes]);
             T scale = NumOps.Sqrt(NumOps.FromDouble(_headDim));
 
             for (int b = 0; b < batchSize; b++)
@@ -1374,8 +1375,8 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Backward through Q @ K^T
             // dL/dQ = gradScores @ K
             // dL/dK = gradScores^T @ Q
-            var gradQueries = new Tensor<T>([batchSize, numNodes, _headDim]);
-            var gradKeys = new Tensor<T>([batchSize, numNodes, _headDim]);
+            var gradQueries = TensorAllocator.Rent<T>([batchSize, numNodes, _headDim]);
+            var gradKeys = TensorAllocator.Rent<T>([batchSize, numNodes, _headDim]);
 
             for (int b = 0; b < batchSize; b++)
             {

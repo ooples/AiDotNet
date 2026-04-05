@@ -39,7 +39,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("SceneClassifier")]
-public interface ISceneClassifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface ISceneClassifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the expected sample rate for input audio.

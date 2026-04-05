@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -120,7 +120,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _t = 0;
 
@@ -232,7 +232,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // theta_t = theta_{t-1} - lr * (sign(c_t) + lambda * theta_{t-1})
         // m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
         var effectiveLearningRate = CurrentLearningRate;
 
@@ -263,7 +263,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var oneMinusBeta2TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta2);
         _m = (Vector<T>)Engine.Add(beta2TimesM, oneMinusBeta2TimesGrad);
 
-        return currentSolution.WithParameters(newParameters);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newParameters);
     }
 
     /// <summary>

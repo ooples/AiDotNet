@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -138,7 +139,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures = InterfaceGuard.FeatureAware(sourceModel).GetActiveFeatureIndices().Count();
 
         // Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -199,7 +200,15 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Step 2: Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+        int sourceFeatures;
+        if (sourceModel is IFeatureAware fa)
+        {
+            sourceFeatures = fa.GetActiveFeatureIndices().Count();
+        }
+        else
+        {
+            sourceFeatures = sourceData.Columns;
+        }
 
         // Step 3: Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -333,7 +342,11 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        return BaseModel.WithParameters(parameters);
+        if (BaseModel is IParameterizable<T, Matrix<T>, Vector<T>> p)
+            return new MappedRandomForestModel<T>(p.WithParameters(parameters), _mapper, _targetFeatures);
+        throw new NotSupportedException(
+            $"The wrapped model ({BaseModel.GetType().Name}) does not support WithParameters. " +
+            "Random forest models learn structure during training and cannot be re-parameterized.");
     }
 
     /// <inheritdoc/>

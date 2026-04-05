@@ -51,6 +51,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Ha, D., Dai, A., & Le, Q. V.")]
 public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly TaskCondHyperNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _numChunks;
@@ -74,7 +77,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             throw new ArgumentOutOfRangeException(nameof(options), "ChunkSize must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _numChunks = (_paramDim + options.ChunkSize - 1) / options.ChunkSize;
 
         int embDim = options.EmbeddingDim;
@@ -94,13 +97,13 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
 
         foreach (var task in taskBatch.Tasks)
         {
             // Compute task embedding from support gradient
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var embedding = CompressVector(supportGrad, embDim);
 
@@ -115,12 +118,12 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             // Fine-tune with standard MAML steps
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Embedding regularization
@@ -143,10 +146,10 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var embedding = CompressVector(supportGrad, embDim);
         var delta = RunHyperNetwork(embedding);
@@ -157,12 +160,12 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -208,11 +211,11 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     private double ComputeHyperLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var emb = CompressVector(sg, embDim);
             var delta = RunHyperNetwork(emb);
@@ -221,14 +224,14 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 ap[d] = NumOps.Add(initParams[d], delta[d]);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(ap);
+                ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
-            MetaModel.SetParameters(ap);
+            ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

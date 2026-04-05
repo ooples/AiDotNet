@@ -590,7 +590,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
         var clone = DeepCopy();
-        clone.SetParameters(parameters);
+        ((IParameterizable<T, Tensor<T>, Tensor<T>>)clone).SetParameters(parameters);
         return clone;
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -78,7 +79,7 @@ public sealed class KrumFullModelAggregationStrategy<T, TInput, TOutput> :
         }
 
         var selectedParameters = clientParameters[bestClientId];
-        return reference.WithParameters(selectedParameters);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(selectedParameters);
     }
 
     public override string GetStrategyName() => "Krum";

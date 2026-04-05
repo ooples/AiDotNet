@@ -227,7 +227,7 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = DeepCopy();
-        clone.SetParameters(parameters);
+        ((IParameterizable<T, Matrix<T>, Vector<T>>)clone).SetParameters(parameters);
         return clone;
     }
 }

@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.OnlineLearning;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.OnlineLearning;
@@ -696,7 +697,7 @@ public class OnlineLearningExtendedIntegrationTests
 
         var params1 = pac.GetParameters();
         var clone = pac.WithParameters(params1);
-        var params2 = clone.GetParameters();
+        var params2 = ((IParameterizable<double, Matrix<double>, Vector<double>>)clone).GetParameters();
 
         Assert.Equal(params1.Length, params2.Length);
         for (int i = 0; i < params1.Length; i++)

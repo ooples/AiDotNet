@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -236,14 +237,14 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // centroid = sum(simplex points excluding worst) / (simplex.Count - 1)
 
         var templateModel = simplex[0];
-        var templateParams = templateModel.GetParameters();
+        var templateParams = InterfaceGuard.Parameterizable(templateModel).GetParameters();
         var centroidCoefficients = new Vector<T>(templateParams.Length);
 
         // Sum all parameters vectorized (exclude worst point: last simplex entry)
         int pointCount = simplex.Count - 1;
         for (int i = 0; i < pointCount; i++)
         {
-            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, simplex[i].GetParameters());
+            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, InterfaceGuard.Parameterizable(simplex[i]).GetParameters());
         }
 
         // Vectorized division by number of points to get the average
@@ -251,7 +252,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, pointCountScalar);
 
         // Create a new model with the centroid parameters using WithParameters
-        return templateModel.WithParameters(centroidCoefficients);
+        return InterfaceGuard.Parameterizable(templateModel).WithParameters(centroidCoefficients);
     }
 
     /// <summary>
@@ -273,15 +274,15 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private IFullModel<T, TInput, TOutput> Reflect(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         // Vectorized: result = centroid + alpha * (centroid - worst)
-        var centroidParams = centroid.GetParameters();
-        var worstParams = worst.GetParameters();
+        var centroidParams = InterfaceGuard.Parameterizable(centroid).GetParameters();
+        var worstParams = InterfaceGuard.Parameterizable(worst).GetParameters();
         var alphaVec = Engine.Fill<T>(centroidParams.Length, _alpha);
 
         var diff = (Vector<T>)Engine.Subtract(centroidParams, worstParams);
         var scaled = (Vector<T>)Engine.Multiply(diff, alphaVec);
         var result = (Vector<T>)Engine.Add(centroidParams, scaled);
 
-        return centroid.WithParameters(result);
+        return InterfaceGuard.Parameterizable(centroid).WithParameters(result);
     }
 
     /// <summary>
@@ -322,15 +323,15 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private IFullModel<T, TInput, TOutput> Contract(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         // Vectorized: result = centroid + beta * (worst - centroid)
-        var centroidParams = centroid.GetParameters();
-        var worstParams = worst.GetParameters();
+        var centroidParams = InterfaceGuard.Parameterizable(centroid).GetParameters();
+        var worstParams = InterfaceGuard.Parameterizable(worst).GetParameters();
         var betaVec = Engine.Fill<T>(centroidParams.Length, _beta);
 
         var diff = (Vector<T>)Engine.Subtract(worstParams, centroidParams);
         var scaled = (Vector<T>)Engine.Multiply(diff, betaVec);
         var result = (Vector<T>)Engine.Add(centroidParams, scaled);
 
-        return centroid.WithParameters(result);
+        return InterfaceGuard.Parameterizable(centroid).WithParameters(result);
     }
 
     /// <summary>
@@ -349,18 +350,18 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private void Shrink(List<IFullModel<T, TInput, TOutput>> simplex)
     {
         var best = simplex[0];
-        var bestParams = best.GetParameters();
+        var bestParams = InterfaceGuard.Parameterizable(best).GetParameters();
         var deltaVec = Engine.Fill<T>(bestParams.Length, _delta);
 
         for (int i = 1; i < simplex.Count; i++)
         {
             // Vectorized: result = best + delta * (simplex[i] - best)
-            var currentParams = simplex[i].GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(simplex[i]).GetParameters();
             var diff = (Vector<T>)Engine.Subtract(currentParams, bestParams);
             var scaled = (Vector<T>)Engine.Multiply(diff, deltaVec);
             var result = (Vector<T>)Engine.Add(bestParams, scaled);
 
-            simplex[i] = best.WithParameters(result);
+            simplex[i] = InterfaceGuard.Parameterizable(best).WithParameters(result);
         }
     }
 
@@ -387,8 +388,8 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // Most Nelder-Mead operations follow pattern: a + factor * (a - b) or a + factor * (b - a)
         // Vectorizing the common pattern while keeping backward compatibility
 
-        var parametersA = a.GetParameters();
-        var parametersB = b.GetParameters();
+        var parametersA = InterfaceGuard.Parameterizable(a).GetParameters();
+        var parametersB = InterfaceGuard.Parameterizable(b).GetParameters();
 
         // Check if this is the common pattern: a + factor * (a - b)
         // Validate across the whole vector to avoid degenerate mis-detections
@@ -412,7 +413,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             var diff = (Vector<T>)Engine.Subtract(parametersA, parametersB);
             var scaled = (Vector<T>)Engine.Multiply(diff, factor);
             var newCoefficients = (Vector<T>)Engine.Add(parametersA, scaled);
-            return a.WithParameters(newCoefficients);
+            return InterfaceGuard.Parameterizable(a).WithParameters(newCoefficients);
         }
 
         // Fall back to element-wise for custom operations
@@ -422,7 +423,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             result[i] = operation(parametersA[i], parametersB[i], factor);
         }
 
-        return a.WithParameters(result);
+        return InterfaceGuard.Parameterizable(a).WithParameters(result);
     }
 
     /// <summary>

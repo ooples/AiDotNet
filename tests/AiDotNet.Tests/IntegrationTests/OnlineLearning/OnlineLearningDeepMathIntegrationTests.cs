@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.OnlineLearning;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.OnlineLearning;
@@ -1063,7 +1064,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var params_ = sgd.GetParameters();
         var newModel = sgd.WithParameters(params_);
 
-        var newParams = newModel.GetParameters();
+        var newParams = ((IParameterizable<double, Matrix<double>, Vector<double>>)newModel).GetParameters();
         Assert.Equal(params_.Length, newParams.Length);
         for (int i = 0; i < params_.Length; i++)
             Assert.Equal(params_[i], newParams[i], Tolerance);

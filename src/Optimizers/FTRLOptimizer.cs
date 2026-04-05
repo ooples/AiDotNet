@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -275,7 +275,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         ValidationHelper<T>.ValidateInputData(inputData);
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -337,7 +337,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Vectorized: gradient operations, sigma calculation, state updates
         // Element-wise: L1 thresholding conditional
 
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Save pre-update parameters for reverse updates (vectorized copy)
         _previousParameters = new Vector<T>(parameters);
@@ -393,7 +393,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             }
         }
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

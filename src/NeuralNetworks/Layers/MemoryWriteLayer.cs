@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -748,7 +748,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int memoryDimension = _queryWeights.Shape[1];
 
         // Create an empty memory tensor and initialize with zeros
-        var emptyMemory = new Tensor<T>([batchSize, memoryDimension]);
+        var emptyMemory = TensorAllocator.Rent<T>([batchSize, memoryDimension]);
         emptyMemory.Fill(NumOps.Zero);
 
         // Call the overloaded Forward method with the empty memory

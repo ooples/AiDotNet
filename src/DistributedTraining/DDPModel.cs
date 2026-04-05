@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -107,7 +108,7 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// </remarks>
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
         // In DDP, each process holds ALL parameters (no actual sharding)
         ShardStartIndex = 0;
@@ -156,11 +157,11 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         // they all end up with identical parameters (DDP's key property).
 
         // Set full parameters for gradient computation
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Compute TRUE gradients using the model's gradient computation
         // This calls the model's backpropagation without updating parameters
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
@@ -170,10 +171,10 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 
             // Apply the averaged gradients to update parameters
             // Note: For adaptive optimizers, use DDPOptimizer which properly handles optimizer state.
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters back to LocalShard
-            LocalShard = WrappedModel.GetParameters();
+            LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
             // Invalidate cache after synchronization since parameters changed
             InvalidateCache();
@@ -182,8 +183,8 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         {
             // Without gradient synchronization, apply gradients locally
             // This is equivalent to non-distributed training
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
-            LocalShard = WrappedModel.GetParameters();
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
+            LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
     }
 
@@ -191,7 +192,7 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     public override TOutput Predict(TInput input)
     {
         // No need to gather - we already have full parameters locally
-        WrappedModel.SetParameters(LocalShard);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Use wrapped model for prediction
         return WrappedModel.Predict(input);
@@ -215,7 +216,7 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters);
         return new DDPModel<T, TInput, TOutput>(newModel, Config);
     }
 

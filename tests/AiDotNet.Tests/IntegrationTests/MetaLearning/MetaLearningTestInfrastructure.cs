@@ -49,8 +49,8 @@ internal sealed class TestMetaLearner : MetaLearnerBase<double, Matrix<double>, 
             losses.Add(loss);
 
             var gradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var updated = ApplyGradients(MetaModel.GetParameters(), gradients, _options.OuterLearningRate);
-            MetaModel.SetParameters(updated);
+            var updated = ApplyGradients(((IParameterizable<double, Matrix<double>, Vector<double>>)MetaModel).GetParameters(), gradients, _options.OuterLearningRate);
+            ((IParameterizable<double, Matrix<double>, Vector<double>>)MetaModel).SetParameters(updated);
         }
 
         return ComputeMean(losses);
@@ -62,10 +62,10 @@ internal sealed class TestMetaLearner : MetaLearnerBase<double, Matrix<double>, 
             throw new ArgumentNullException(nameof(task));
 
         var adaptedModel = CloneModel();
-        var parameters = adaptedModel.GetParameters();
+        var parameters = ((IParameterizable<double, Matrix<double>, Vector<double>>)adaptedModel).GetParameters();
         var gradients = ComputeGradients(adaptedModel, task.SupportInput, task.SupportOutput);
         parameters = ApplyGradients(parameters, gradients, _options.InnerLearningRate);
-        adaptedModel.SetParameters(parameters);
+        ((IParameterizable<double, Matrix<double>, Vector<double>>)adaptedModel).SetParameters(parameters);
         return adaptedModel;
     }
 
@@ -308,7 +308,7 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
         IFullModel<double, Matrix<double>, Vector<double>> model)
     {
         LastComputedGradients = gradients;
-        return model.WithParameters(originalParameters);
+        return ((IParameterizable<double, Matrix<double>, Vector<double>>)model).WithParameters(originalParameters);
     }
 
     public Vector<double> ReverseUpdate(Vector<double> updatedParameters, Vector<double> appliedGradients)

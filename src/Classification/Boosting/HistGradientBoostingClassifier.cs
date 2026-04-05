@@ -745,7 +745,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Trees are complex structures that don't fit neatly into a
     /// parameter vector. This returns a simplified representation for compatibility.</para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // For tree-based models, parameters don't fit the typical vector format
         // Return a placeholder with tree count
@@ -760,7 +760,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Tree-based models are better loaded via serialization
     /// than through a parameter vector. This is a limited implementation.</para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Limited support for tree models - use serialization instead
     }
@@ -774,7 +774,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Creates a new model. For tree models, the parameters
     /// don't fully capture the model state.</para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
             _learningRate, _minSamplesLeaf, _l2Regularization);
@@ -805,7 +805,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Gradient boosting models are trained iteratively, not by
     /// computing a single gradient over all parameters. This returns a placeholder gradient.</para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Tree models don't use gradient-based parameter updates in the traditional sense
         return new Vector<T>(1) { [0] = NumOps.Zero };
@@ -820,7 +820,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Tree models are not updated via gradient descent on parameters.
     /// They're trained by building trees iteratively.</para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree models don't support gradient-based parameter updates
     }

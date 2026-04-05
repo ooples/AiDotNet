@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -95,7 +96,7 @@ public class ZeRO3Model<T, TInput, TOutput> : FSDPModel<T, TInput, TOutput>
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        var newModel = WrappedModel.WithParameters(parameters);
+        var newModel = InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters);
         return new ZeRO3Model<T, TInput, TOutput>(newModel, Config);
     }
 

@@ -57,6 +57,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jonas Rothfuss, Vincent Fortuin, Martin Josifoski, Andreas Krause")]
 public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaPACOHOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Prior mean (meta-learned).</summary>
@@ -83,12 +86,12 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. MetaPACOH requires a model with at least one parameter.");
         _numGroups = Math.Min(Math.Max(options.NumPriorGroups, 1), _paramDim);
 
-        _priorMean = options.MetaModel.GetParameters();
+        _priorMean = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters();
 
         // Initialize per-group log-variances
         _groupLogVars = new Vector<T>(_numGroups);
@@ -122,7 +125,7 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             // Inner loop: MAP estimation with group-specific prior regularization
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(theta);
+                ParamModel.SetParameters(theta);
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Prior gradient with per-group variances
@@ -138,7 +141,7 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             }
 
             adaptedParamsList.Add(theta);
-            MetaModel.SetParameters(theta);
+            ParamModel.SetParameters(theta);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -151,12 +154,12 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         double pacBayesLoss = _algoOptions.KLCoefficient * (totalKL + hyperPriorKL) / numTasks;
 
         // Update prior mean via meta-gradients
-        MetaModel.SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             _priorMean = ApplyGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(_priorMean);
+            ParamModel.SetParameters(_priorMean);
         }
 
         // Update per-group log-variances via SPSA
@@ -174,7 +177,7 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(theta);
+            ParamModel.SetParameters(theta);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int d = 0; d < _paramDim; d++)
@@ -188,7 +191,7 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             }
         }
 
-        MetaModel.SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, theta);
     }
 
@@ -259,7 +262,7 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(theta);
+                ParamModel.SetParameters(theta);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                 {
@@ -272,13 +275,13 @@ public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             }
 
             adapted.Add(theta);
-            MetaModel.SetParameters(theta);
+            ParamModel.SetParameters(theta);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
         double klPenalty = _algoOptions.KLCoefficient * (ComputeHierarchicalKL(adapted) + ComputeHyperPriorKL()) / numTasks;
-        MetaModel.SetParameters(_priorMean);
+        ParamModel.SetParameters(_priorMean);
         return totalLoss / numTasks + klPenalty;
     }
 }

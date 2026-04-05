@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -404,7 +404,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             else
             {
                 // Broadcast: repeat adjacency matrix for each batch item
-                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
+                adjForBatch = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes]);
                 for (int b = 0; b < batchSize; b++)
                 {
                     for (int i = 0; i < numNodes; i++)
@@ -968,7 +968,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _gateBiasGradient.Fill(NumOps.Zero);
 
         var combinedGradient = new Tensor<T>(_lastCombined.Shape.ToArray());
-        var gatesGradient = new Tensor<T>([batchSize, numNodes, 3]);
+        var gatesGradient = TensorAllocator.Rent<T>([batchSize, numNodes, 3]);
 
         // Gradient through element-wise multiplication: gated = combined * gates
         for (int b = 0; b < batchSize; b++)

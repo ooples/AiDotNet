@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -373,8 +373,8 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
 
         // Precompute softmax of level mixing weights per head
         var levelAlpha = new T[_numHeads, _numLevels];
-        var levelOutputs = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numLevels, _headDimension });
-        var levelMixSoftmax = new Tensor<T>(new[] { batchSize, seqLen, _numHeads, _numLevels });
+        var levelOutputs = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels, _headDimension });
+        var levelMixSoftmax = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels });
 
         for (int hi = 0; hi < _numHeads; hi++)
         {
@@ -514,11 +514,9 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

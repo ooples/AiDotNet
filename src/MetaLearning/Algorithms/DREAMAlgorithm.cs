@@ -53,6 +53,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Sarah Bechtle, Artem Molchanov, Yevgen Chebotar, et al.")]
 public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly DREAMOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -75,7 +78,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             throw new ArgumentOutOfRangeException(nameof(options), "ShapingDiscount must be in [0, 1].");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _hiddenDim = options.RewardShaperHiddenDim;
 
         // Shaper MLP: input(3) → hidden → output(1)
@@ -94,7 +97,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -106,7 +109,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             for (int step = 0; step < K; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
 
@@ -132,7 +135,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 shapingPenalty += discountFactor * Math.Abs(1.0 - scale);
             }
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.RewardShapingWeight * shapingPenalty));
 
@@ -151,14 +154,14 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         int K = _algoOptions.AdaptationSteps;
         for (int step = 0; step < K; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
 
@@ -175,7 +178,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * scale * NumOps.ToDouble(grad[d])));
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -211,7 +214,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private double ComputeDREAMLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -221,7 +224,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             int K = _algoOptions.AdaptationSteps;
             for (int step = 0; step < K; step++)
             {
-                MetaModel.SetParameters(adapted);
+                ParamModel.SetParameters(adapted);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
                 double gn = 0;
@@ -231,11 +234,11 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     adapted[d] = NumOps.Subtract(adapted[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * scale * NumOps.ToDouble(grad[d])));
             }
 
-            MetaModel.SetParameters(adapted);
+            ParamModel.SetParameters(adapted);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

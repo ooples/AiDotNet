@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -293,7 +293,7 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
 
         // Step 2: Run selective scan for each active expert per token
         var expertOutputs = new Tensor<T>(new[] { totalTokens, _topK, _modelDimension });
-        var expertStates = new Tensor<T>(new[] { batchSize, _numExperts, seqLen + 1, _stateDimension });
+        var expertStates = TensorAllocator.Rent<T>(new[] { batchSize, _numExperts, seqLen + 1, _stateDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -350,7 +350,7 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         _lastExpertStates = expertStates;
 
         // Step 3: Combine expert outputs weighted by router scores
-        var moeOutput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var moeOutput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         for (int tokenIdx = 0; tokenIdx < totalTokens; tokenIdx++)
         {
             int bi = tokenIdx / seqLen;
@@ -481,11 +481,9 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape.ToArray());
-        ones.Fill(NumOps.One);
-        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
         return Engine.TensorMultiply(sig, onePlusXSig);
     }
 

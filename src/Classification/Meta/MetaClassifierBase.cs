@@ -25,7 +25,8 @@ namespace AiDotNet.Classification.Meta;
 /// They extend the capabilities of base classifiers.
 /// </para>
 /// </remarks>
-public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>
+public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the meta classifier specific options.
@@ -66,7 +67,7 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Meta classifiers typically don't have a simple parameter vector
         return new Vector<T>(0);
@@ -76,27 +77,27 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>
     public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Meta classifiers compute parameters from base classifiers, not direct setting.
         // Accept silently so the optimizer can initialize without crashing.
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return CreateNewInstance();
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Meta classifiers delegate to base estimators
         return new Vector<T>(0);
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // No-op for meta classifiers
     }

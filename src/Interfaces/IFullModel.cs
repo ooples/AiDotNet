@@ -9,27 +9,26 @@ namespace AiDotNet.Interfaces;
 /// <remarks>
 /// <b>For Beginners:</b> This interface combines all the important capabilities that a complete AI model needs.
 ///
-/// Think of IFullModel as a "complete package" for a machine learning model. It combines:
+/// Think of IFullModel as the core contract for a machine learning model. It provides:
 ///
 /// 1. The ability to make predictions (from IModel)
-///    - This is like a calculator that can process your data and give you answers
-///    - For example, predicting house prices based on features like size and location
+///    - Process input data and produce output predictions
 ///
 /// 2. The ability to save and load the model (from IModelSerializer and ICheckpointableModel)
-///    - IModelSerializer: File-based saving/loading for long-term storage
-///    - ICheckpointableModel: Stream-based checkpointing for training resumption and distillation
-///    - This is like being able to save your work in a document and open it later
-///    - It allows you to train a model once and then use it many times without retraining
-///    - It also lets you share your trained model with others
+///    - File-based saving/loading for deployment
+///    - Stream-based checkpointing for training resumption
 ///
-/// 3. The ability to compute gradients explicitly (from IGradientComputable)
-///    - This enables distributed training across multiple GPUs/machines
-///    - Allows manual control over the training process for advanced users
-///    - Supports meta-learning algorithms that need fine-grained gradient control
+/// 3. Feature importance reporting (from IFeatureImportance)
+///    - Understand which features contribute most to predictions
 ///
-/// By implementing this interface, a model class provides everything needed for practical use:
-/// you can train it, use it for predictions, save it to disk, load it back when needed,
-/// checkpoint it during training, and even distribute training across multiple machines for faster learning on large datasets.
+/// Optional capabilities (check with 'is' or InterfaceGuard before using):
+/// - IParameterizable: Get/set model parameters (linear models, neural networks)
+/// - IGradientComputable: Compute and apply gradients (gradient-based optimization)
+/// - IFeatureAware: Feature selection and tracking
+/// - IJitCompilable: Export computation graph for JIT compilation
+///
+/// Not all models support all capabilities. Tree-based and ensemble models
+/// may not implement IParameterizable or IGradientComputable.
 ///
 /// This is particularly useful for production environments where models need to be:
 /// - Trained once (which might take a long time)
@@ -41,16 +40,17 @@ namespace AiDotNet.Interfaces;
 /// - Used in knowledge distillation as teacher or student models
 /// </remarks>
 public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>,
-    IModelSerializer, ICheckpointableModel, IParameterizable<T, TInput, TOutput>, IFeatureAware, IFeatureImportance<T>,
-    ICloneable<IFullModel<T, TInput, TOutput>>, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
+    IModelSerializer, ICheckpointableModel, IFeatureImportance<T>,
+    ICloneable<IFullModel<T, TInput, TOutput>>
 {
     /// <summary>
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This loss function is used when calling <see cref="IGradientComputable{T, TInput, TOutput}.ComputeGradients"/>
-    /// without explicitly providing a loss function. It represents the model's primary training objective.
+    /// This loss function is used when computing gradients (on models that implement
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/>) without explicitly providing one.
+    /// It represents the model's primary training objective.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// The loss function tells the model "what counts as a mistake". For example:

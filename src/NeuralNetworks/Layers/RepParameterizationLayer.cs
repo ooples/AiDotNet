@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -231,12 +231,12 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         }
         else
         {
-            _lastEpsilon = new Tensor<T>([batchSize, latentSize]);
+            _lastEpsilon = TensorAllocator.Rent<T>([batchSize, latentSize]);
             _lastEpsilon.Fill(NumOps.Zero);
         }
 
         // Compute stdDev = exp(logvar * 0.5) using Engine operations
-        var halfTensor = new Tensor<T>([batchSize, latentSize]);
+        var halfTensor = TensorAllocator.Rent<T>([batchSize, latentSize]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
         var stdDev = Engine.TensorExp(scaledLogVar);

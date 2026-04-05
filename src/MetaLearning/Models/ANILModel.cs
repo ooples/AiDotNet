@@ -127,7 +127,7 @@ public class ANILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     public Vector<T> GetParameters()
     {
         // Return combined body + head parameters
-        var bodyParams = _featureExtractor.GetParameters();
+        var bodyParams = InterfaceGuard.Parameterizable(_featureExtractor).GetParameters();
         int totalSize = bodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
         var combined = new Vector<T>(totalSize);
 

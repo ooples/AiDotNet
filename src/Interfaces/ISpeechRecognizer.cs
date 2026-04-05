@@ -35,7 +35,8 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("SpeechRecognizer")]
-public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the sample rate expected by this model.

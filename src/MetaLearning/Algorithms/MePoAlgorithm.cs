@@ -52,6 +52,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Zhenyi Wang, Li Shen, Le Fang, Qiuling Suo, Tiehang Duan, Mingchen Gao")]
 public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MePoOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
     private readonly int _protoDim;
@@ -71,7 +74,7 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new ArgumentOutOfRangeException(nameof(options), "PrototypeDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _protoDim = options.PrototypeDim;
         _memoryBank = new List<Vector<T>>();
     }
@@ -81,12 +84,12 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Compute task prototype from initial support gradient
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
             var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var prototype = CompressToPrototype(initGrad);
 
@@ -99,7 +102,7 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute compressed parameter delta
@@ -125,7 +128,7 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             // Store prototype in memory
             StorePrototype(prototype);
 
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -139,8 +142,8 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(initParams);
+        var initParams = ParamModel.GetParameters();
+        ParamModel.SetParameters(initParams);
         var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var prototype = CompressToPrototype(initGrad);
         var retrieved = RetrievePrototypes(prototype);
@@ -150,7 +153,7 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var paramDelta = CompressParamDelta(adaptedParams, initParams);
 
@@ -169,7 +172,7 @@ public class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         StorePrototype(prototype);
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

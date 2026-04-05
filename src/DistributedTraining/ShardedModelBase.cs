@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -104,7 +105,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     public IShardingConfiguration<T> ShardingConfiguration => Config;
 
     /// <inheritdoc/>
-    public int ParameterCount => WrappedModel.ParameterCount;
+    public int ParameterCount => InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -213,7 +214,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// </remarks>
     protected virtual void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
 
         // Calculate shard size for this process
@@ -342,7 +343,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         UpdateLocalShardFromFull(parameters);
 
         // Update wrapped model
-        WrappedModel.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(parameters);
     }
 
     /// <inheritdoc/>
@@ -452,19 +453,19 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
-        return WrappedModel.GetActiveFeatureIndices();
+        return InterfaceGuard.FeatureAware(WrappedModel).GetActiveFeatureIndices();
     }
 
     /// <inheritdoc/>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        WrappedModel.SetActiveFeatureIndices(featureIndices);
+        InterfaceGuard.FeatureAware(WrappedModel).SetActiveFeatureIndices(featureIndices);
     }
 
     /// <inheritdoc/>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
-        return WrappedModel.IsFeatureUsed(featureIndex);
+        return InterfaceGuard.FeatureAware(WrappedModel).IsFeatureUsed(featureIndex);
     }
 
     /// <inheritdoc/>
@@ -473,13 +474,13 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
     {
-        return WrappedModel.ComputeGradients(input, target, lossFunction);
+        return InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, target, lossFunction);
     }
 
     /// <inheritdoc/>
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        WrappedModel.ApplyGradients(gradients, learningRate);
+        InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(gradients, learningRate);
     }
 
 
@@ -508,7 +509,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             if (WrappedModel is null || WrappedModel == null)
                 return false;
 
-            return WrappedModel.SupportsJitCompilation;
+            return InterfaceGuard.JitCompilable(WrappedModel).SupportsJitCompilation;
         }
     }
 
@@ -546,12 +547,12 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             throw new InvalidOperationException(
                 "Cannot export computation graph: Wrapped model is null.");
 
-        if (!WrappedModel.SupportsJitCompilation)
+        if (!InterfaceGuard.JitCompilable(WrappedModel).SupportsJitCompilation)
             throw new NotSupportedException(
                 $"The wrapped model of type {WrappedModel.GetType().Name} does not support JIT compilation. " +
                 "JIT compilation availability depends on the wrapped model's capabilities.");
 
-        return WrappedModel.ExportComputationGraph(inputNodes);
+        return InterfaceGuard.JitCompilable(WrappedModel).ExportComputationGraph(inputNodes);
     }
 
     #endregion

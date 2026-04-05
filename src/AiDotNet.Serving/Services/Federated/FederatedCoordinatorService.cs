@@ -340,7 +340,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         {
             var model = new AiModelResult<float, Matrix<float>, Vector<float>>();
             model.LoadFromFile(sourcePath);
-            var p = model.GetParameters();
+            var p = ((IParameterizable<float, Matrix<float>, Vector<float>>)model).GetParameters();
             return (p.Length, p.Select(v => (double)v).ToArray());
         }
 
@@ -348,13 +348,13 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         {
             var model = new AiModelResult<decimal, Matrix<decimal>, Vector<decimal>>();
             model.LoadFromFile(sourcePath);
-            var p = model.GetParameters();
+            var p = ((IParameterizable<decimal, Matrix<decimal>, Vector<decimal>>)model).GetParameters();
             return (p.Length, p.Select(v => (double)v).ToArray());
         }
 
         var modelDouble = new AiModelResult<double, Matrix<double>, Vector<double>>();
         modelDouble.LoadFromFile(sourcePath);
-        var pd = modelDouble.GetParameters();
+        var pd = ((IParameterizable<double, Matrix<double>, Vector<double>>)modelDouble).GetParameters();
         return (pd.Length, pd.ToArray());
     }
 
@@ -363,7 +363,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         var globalBaseline = ToVector<T>(state.GlobalParameters);
         var model = new AiModelResult<T, Matrix<T>, Vector<T>>();
         model.LoadFromFile(state.ModelArtifactPath);
-        var globalModel = model.WithParameters(globalBaseline);
+        var globalModel = ((IParameterizable<T, Matrix<T>, Vector<T>>)model).WithParameters(globalBaseline);
 
         var clientModels = new Dictionary<int, IFullModel<T, Matrix<T>, Vector<T>>>();
         var clientWeights = new Dictionary<int, double>();
@@ -372,13 +372,13 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         {
             int clientId = kvp.Key;
             var clientParams = ToVector<T>(kvp.Value);
-            clientModels[clientId] = (IFullModel<T, Matrix<T>, Vector<T>>)globalModel.WithParameters(clientParams);
+            clientModels[clientId] = ((IParameterizable<T, Matrix<T>, Vector<T>>)globalModel).WithParameters(clientParams);
             clientWeights[clientId] = state.PendingClientWeights[clientId];
         }
 
         var aggregator = CreateAggregationStrategy<T>(state.Options);
         var aggregated = aggregator.Aggregate(clientModels, clientWeights);
-        var p = aggregated.GetParameters();
+        var p = ((IParameterizable<T, Matrix<T>, Vector<T>>)aggregated).GetParameters();
         return p.Select(v => Convert.ToDouble(v)).ToArray();
     }
 
@@ -567,7 +567,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
     {
         var model = new AiModelResult<T, Matrix<T>, Vector<T>>();
         model.LoadFromFile(artifactPath);
-        var updated = model.WithParameters(ToVector<T>(globalParameters));
+        var updated = ((IParameterizable<T, Matrix<T>, Vector<T>>)model).WithParameters(ToVector<T>(globalParameters));
         updated.SaveModel(artifactPath);
     }
 }

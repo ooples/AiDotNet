@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -77,7 +78,7 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
             aggregated[i] = NumOps.FromDouble(sum / n);
         }
 
-        return reference.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "WinsorizedMean";

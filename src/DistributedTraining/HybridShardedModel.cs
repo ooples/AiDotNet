@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -217,7 +218,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// </summary>
     protected override void InitializeSharding()
     {
-        var fullParameters = WrappedModel.GetParameters();
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
 
         // Apply pipeline partitioning first (depth-wise)
@@ -300,10 +301,10 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
 
         // Gather full parameters
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
 
         // Compute TRUE gradients using the model's gradient computation
-        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
+        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
@@ -311,10 +312,10 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters
-            var updatedParams = WrappedModel.GetParameters();
+            var updatedParams = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
             UpdateLocalShardFromFull(updatedParams);
@@ -322,8 +323,8 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         else
         {
             // Without gradient synchronization, apply gradients locally
-            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
-            var updatedParams = WrappedModel.GetParameters();
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
+            var updatedParams = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
             UpdateLocalShardFromFull(updatedParams);
@@ -336,7 +337,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     public override TOutput Predict(TInput input)
     {
         var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
         return WrappedModel.Predict(input);
     }
 
@@ -361,7 +362,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new HybridShardedModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config,
+            InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters), Config,
             _pipelineParallelSize, _tensorParallelSize, _dataParallelSize);
     }
 

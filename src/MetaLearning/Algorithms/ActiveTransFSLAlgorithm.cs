@@ -50,6 +50,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Malik Boudiaf, Ziko Imtiaz Masud, Jerome Rony, et al.")]
 public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly ActiveTransFSLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -62,7 +65,7 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         if (options.TransductiveLR < 0)
@@ -79,7 +82,7 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -89,13 +92,13 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             // Inductive loss
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var inductiveLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Phase 2: Active transductive refinement
@@ -104,7 +107,7 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
             for (int rStep = 0; rStep < _algoOptions.TransductiveRefinementSteps; rStep++)
             {
-                MetaModel.SetParameters(transParams);
+                ParamModel.SetParameters(transParams);
                 var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
 
                 // Compute uncertainty per parameter
@@ -131,7 +134,7 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
                 }
             }
 
-            MetaModel.SetParameters(transParams);
+            ParamModel.SetParameters(transParams);
             var transductiveLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Combine inductive and transductive losses using TransductiveWeight
@@ -142,9 +145,9 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
             // Compute combined gradient consistent with the combined loss:
             // grad_meta = (1-w) * grad_inductive + w * grad_transductive
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var inductiveGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-            MetaModel.SetParameters(transParams);
+            ParamModel.SetParameters(transParams);
             var transductiveGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
 
             var combinedGrad = new Vector<T>(_paramDim);
@@ -165,18 +168,18 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        MetaModel.SetParameters(initParams);
+        ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 }

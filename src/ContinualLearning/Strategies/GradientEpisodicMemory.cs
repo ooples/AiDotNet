@@ -371,7 +371,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         // In practice, the trainer should call StoreTaskGradient with actual gradients
         if (_taskGradients.Count <= TaskCount)
         {
-            var zeroGradient = new Vector<T>(model.ParameterCount);
+            var zeroGradient = new Vector<T>(InterfaceGuard.Parameterizable(model).ParameterCount);
             for (int i = 0; i < zeroGradient.Length; i++)
             {
                 zeroGradient[i] = NumOps.Zero;

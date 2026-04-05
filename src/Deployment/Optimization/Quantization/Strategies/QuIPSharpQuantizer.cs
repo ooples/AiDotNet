@@ -90,10 +90,10 @@ public class QuIPSharpQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
 
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeWithQuIPSharp(parameters);
 
-        return model.WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -109,7 +109,7 @@ public class QuIPSharpQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         }
 
         // Compute scale factors from model parameters
-        var parameters = model.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         ComputeScaleFactors(parameters);
 
         IsCalibrated = true;

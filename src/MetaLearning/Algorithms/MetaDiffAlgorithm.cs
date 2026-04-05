@@ -63,6 +63,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Baoquan Zhang, Chuyao Luo, Demin Yu, Xutao Li, Huiwei Lin, Yunming Ye, Bowen Zhang")]
 public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaDiffOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Noise schedule: β_t values.</summary>
@@ -99,7 +102,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be less than 1.0.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _condDim = Math.Max(1, options.TaskConditionDim);
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
@@ -141,11 +144,11 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
 
             // Step 1: Compute "target weights" w_0 via gradient adaptation on support set
             var targetDelta = ComputeTargetDelta(baseParams, task);
@@ -179,7 +182,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             // Also evaluate task performance for meta-gradient on base params
             var denoised = RunDenoisingInference(taskCondition, Math.Min(_algoOptions.SamplingSteps, 5));
             var adaptedParams = ApplyCompressedDelta(baseParams, denoised);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(noiseLoss));
@@ -189,11 +192,11 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Outer loop: update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update denoiser and task encoder via SPSA
@@ -207,7 +210,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         // Compute task conditioning from support set
         var taskCondition = ComputeTaskCondition(task.SupportInput);
@@ -229,7 +232,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(currentParams);
+            ParamModel.SetParameters(currentParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             currentParams = ApplyGradients(currentParams, grad, _algoOptions.InnerLearningRate);
         }
@@ -388,12 +391,12 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
     private double ComputeDiffusionLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(baseParams);
+            ParamModel.SetParameters(baseParams);
             var targetDelta = ComputeTargetDelta(baseParams, task);
             int t = RandomGenerator.Next(_diffusionSteps);
             var noise = SampleGaussianArray(_compressedDim);
@@ -416,7 +419,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             totalLoss += mse / _compressedDim;
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

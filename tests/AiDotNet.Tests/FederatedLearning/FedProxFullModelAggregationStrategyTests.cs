@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Aggregators;
 using AiDotNet.Tests.Helpers;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.FederatedLearning;
@@ -48,7 +49,7 @@ public class FedProxFullModelAggregationStrategyTests
                 [1] = 1.0
             });
 
-        var p = aggregated.GetParameters();
+        var p = ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters();
         Assert.Equal(2.0, p[0], precision: 10);
         Assert.Equal(2.0, p[1], precision: 10);
         Assert.Equal(2.0, p[2], precision: 10);

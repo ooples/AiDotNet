@@ -451,7 +451,7 @@ public abstract class ClusteringModelTestBase
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
-        Assert.True(model.GetParameters().Length > 0,
+        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0,
             "Trained clustering model should have parameters (e.g., centroids).");
     }
 

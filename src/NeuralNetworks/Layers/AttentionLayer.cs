@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -531,7 +531,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Fallback to manual computation for custom activations
             // 2. Compute Attention Scores: Q @ K.T (per-batch, Engine.BatchMatMul has issues)
             var KT = K.Transpose(new[] { 0, 2, 1 });
-            var attentionScores = new Tensor<T>([batchSize, seqLen, seqLen]);
+            var attentionScores = TensorAllocator.Rent<T>([batchSize, seqLen, seqLen]);
             for (int b = 0; b < batchSize; b++)
             {
                 var qB = Q.GetSliceAlongDimension(b, 0);
@@ -549,7 +549,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _lastAttentionWeights = ApplyActivation(attentionScores);
 
             // 5. Output: Weights @ V (per-batch)
-            attentionOutput = new Tensor<T>([batchSize, seqLen, _attentionSize]);
+            attentionOutput = TensorAllocator.Rent<T>([batchSize, seqLen, _attentionSize]);
             for (int b = 0; b < batchSize; b++)
             {
                 var wB = _lastAttentionWeights.GetSliceAlongDimension(b, 0);

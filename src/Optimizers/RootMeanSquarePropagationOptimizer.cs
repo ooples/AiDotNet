@@ -1,4 +1,4 @@
-﻿using AiDotNet.Engines;
+using AiDotNet.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -175,7 +175,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _squaredGradient = new Vector<T>(currentSolution.GetParameters().Length);
+        _squaredGradient = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         _t = 0;
         InitializeAdaptiveParameters();
 
@@ -340,7 +340,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized RMSProp Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
@@ -365,7 +365,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         // Apply update: params = params - update
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
-        return currentSolution.WithParameters(updatedParams);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
     /// <summary>

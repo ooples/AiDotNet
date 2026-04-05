@@ -154,7 +154,7 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     public Vector<T> GetParameters()
     {
         // Return combined encoder + classifier parameters
-        var encoderParams = _featureEncoder.GetParameters();
+        var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
         int classifierSize = _classifierWeights.Rows * _classifierWeights.Columns;
         int totalSize = encoderParams.Length + classifierSize + 1; // +1 for temperature
 

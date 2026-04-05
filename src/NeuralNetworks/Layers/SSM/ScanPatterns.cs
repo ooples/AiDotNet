@@ -61,7 +61,7 @@ public static class ScanPatterns<T>
         int dim = patches.Shape[2];
 
         // Reverse the sequence along the patch dimension
-        var reversed = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var reversed = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
         for (int b = 0; b < batchSize; b++)
         {
             for (int p = 0; p < numPatches; p++)
@@ -134,12 +134,12 @@ public static class ScanPatterns<T>
         var results = new List<Tensor<T>>(4);
 
         // Direction 1: Left-to-right, top-to-bottom (identity - already in raster order)
-        var dir1 = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var dir1 = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
         CopyTensor(patches, dir1);
         results.Add(dir1);
 
         // Direction 2: Right-to-left, bottom-to-top (reverse raster)
-        var dir2 = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var dir2 = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
         for (int b = 0; b < batchSize; b++)
         {
             for (int p = 0; p < numPatches; p++)
@@ -154,7 +154,7 @@ public static class ScanPatterns<T>
         results.Add(dir2);
 
         // Direction 3: Top-to-bottom, left-to-right (column-major)
-        var dir3 = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var dir3 = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
         for (int b = 0; b < batchSize; b++)
         {
             int idx = 0;
@@ -174,7 +174,7 @@ public static class ScanPatterns<T>
         results.Add(dir3);
 
         // Direction 4: Bottom-to-top, right-to-left (reverse column-major)
-        var dir4 = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var dir4 = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
         for (int b = 0; b < batchSize; b++)
         {
             int idx = 0;
@@ -311,12 +311,12 @@ public static class ScanPatterns<T>
         var results = new List<Tensor<T>>(2);
 
         // Spatial scan: patches within each frame in raster order, frames concatenated (identity)
-        var spatialScan = new Tensor<T>(new[] { batchSize, totalPatches, dim });
+        var spatialScan = TensorAllocator.Rent<T>(new[] { batchSize, totalPatches, dim });
         CopyTensor(frames, spatialScan);
         results.Add(spatialScan);
 
         // Temporal scan: for each spatial position, scan across all frames
-        var temporalScan = new Tensor<T>(new[] { batchSize, totalPatches, dim });
+        var temporalScan = TensorAllocator.Rent<T>(new[] { batchSize, totalPatches, dim });
         for (int b = 0; b < batchSize; b++)
         {
             int outIdx = 0;

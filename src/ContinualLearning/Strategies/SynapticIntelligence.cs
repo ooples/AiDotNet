@@ -243,7 +243,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        var paramCount = model.ParameterCount;
+        var paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
 
         // Initialize omega if this is the first task
         if (_omega == null || _omega.Length != paramCount)
@@ -256,7 +256,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         }
 
         // Store parameters at the start of this task
-        _taskStartParameters = CloneVector(model.GetParameters());
+        _taskStartParameters = CloneVector(InterfaceGuard.Parameterizable(model).GetParameters());
 
         // Reset path integral for new task
         _pathIntegral = new Vector<T>(paramCount);
@@ -282,7 +282,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
             return NumOps.Zero;
         }
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != _omega.Length)
         {
@@ -429,7 +429,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
             return;
         }
 
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Compute task-specific importance and consolidate
         // Ω_i = ω_i / (Δθ_i² + ξ)

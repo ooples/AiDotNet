@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -542,13 +543,13 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Also update the meta model with the new parameters for consistency
         if (MetaModel != null && parameters.Length > 0)
         {
-            var currentParams = MetaModel.GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             int copyLength = Math.Min(parameters.Length, currentParams.Length);
             for (int i = 0; i < copyLength; i++)
             {
                 currentParams[i] = parameters[i];
             }
-            MetaModel.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(currentParams);
         }
     }
 
@@ -1411,11 +1412,16 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     private T Sigmoid(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
     }
 
-    private T Tanh(T x) => NumOps.Tanh(x);
+    private T Tanh(T x)
+    {
+        T expX = NumOps.Exp(x);
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
+    }
 
     /// <inheritdoc/>
     public List<Tensor<T>> GenerateReadKeys(Tensor<T> output)
@@ -1785,11 +1791,16 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
 
     private T Sigmoid(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
     }
 
-    private T Tanh(T x) => NumOps.Tanh(x);
+    private T Tanh(T x)
+    {
+        T expX = NumOps.Exp(x);
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
+    }
 
     /// <inheritdoc/>
     public List<Tensor<T>> GenerateReadKeys(Tensor<T> output)
@@ -2060,7 +2071,7 @@ public class NTMReadHead<T>
             double similarity = NumOps.ToDouble(dotProduct) / (keyNormVal * memNormVal);
 
             // Apply softmax-like transformation
-            T expSim = NumOps.Exp(NumOps.FromDouble(similarity));
+            T expSim = NumOps.FromDouble(Math.Exp(similarity));
             weights[i] = expSim;
             sumWeights = NumOps.Add(sumWeights, expSim);
         }
@@ -2143,7 +2154,7 @@ public class NTMWriteHead<T>
             double similarity = NumOps.ToDouble(dotProduct) / (keyNormVal * memNormVal);
 
             // Apply softmax-like transformation
-            T expSim = NumOps.Exp(NumOps.FromDouble(similarity));
+            T expSim = NumOps.FromDouble(Math.Exp(similarity));
             weights[i] = expSim;
             sumWeights = NumOps.Add(sumWeights, expSim);
         }

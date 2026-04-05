@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -556,7 +557,12 @@ public abstract class RegressionModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
-        var parameters = model.GetParameters();
+        if (model is not IParameterizable<double, Matrix<double>, Vector<double>> paramModel)
+        {
+            // Tree/ensemble models don't implement IParameterizable — skip
+            return;
+        }
+        var parameters = paramModel.GetParameters();
         Assert.True(parameters.Length > 0, "Trained model should have learnable parameters.");
     }
 
@@ -572,7 +578,12 @@ public abstract class RegressionModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
-        var activeFeatures = model.GetActiveFeatureIndices().ToList();
+        if (model is not IFeatureAware featureAware)
+        {
+            // Tree/ensemble models don't implement IFeatureAware — skip
+            return;
+        }
+        var activeFeatures = featureAware.GetActiveFeatureIndices().ToList();
 
         Assert.True(activeFeatures.Count > 0, "Trained model should have at least one active feature.");
         foreach (var idx in activeFeatures)

@@ -74,11 +74,11 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
 
@@ -110,7 +110,7 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = MetaModel.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
@@ -254,11 +254,11 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
     {
-        var ip = MetaModel.GetParameters();
+        var ip = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double total = 0;
         foreach (var t in tb.Tasks)
         {
-            MetaModel.SetParameters(ip);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
 
             // Include equivariance regularization so SPSA optimizes encoder params for equivariance
@@ -274,7 +274,7 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
 
             total += queryLoss;
         }
-        MetaModel.SetParameters(ip);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
         return total / Math.Max(tb.Tasks.Length, 1);
     }
 }

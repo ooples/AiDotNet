@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -69,7 +70,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
         {
             // Weighting in Bulyan is not standard; provide as an optional mode by averaging the selected subset.
             var averagedParameters = WeightedAverageOrUnweightedAverage(selectedClientIds, clientParameters, clientWeights, useClientWeights: true);
-            return reference.WithParameters(averagedParameters);
+            return InterfaceGuard.Parameterizable(reference).WithParameters(averagedParameters);
         }
 
         var aggregated = new Vector<T>(parameterCount);
@@ -92,7 +93,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
             aggregated[i] = NumOps.FromDouble(sum / kept);
         }
 
-        return reference.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
     private List<int> SelectMultiKrumCandidates(

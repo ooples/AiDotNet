@@ -56,6 +56,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Ruiyi Zhang, Rushi Shah, Haiwen Hong, et al.")]
 public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly AutoLoRAOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>
@@ -93,7 +96,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             throw new ArgumentOutOfRangeException(nameof(options), "MaxRank must be positive.");
 
         _algoOptions = options;
-        _paramDim = options.MetaModel.GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _numGroups = Math.Max(1, options.NumRankGroups);
         _maxRank = Math.Max(1, options.MaxRank);
         _paramsPerGroup = (_paramDim + _numGroups - 1) / _numGroups;
@@ -117,7 +120,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
 
         // Compute current selection weights via softmax
         var selectionWeights = ComputeSelectionWeights();
@@ -127,7 +130,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             // Inner loop: update rank components on support data
             // Compose adapted params using current selection weights
             var adaptedParams = ComposeAdaptedParams(baseParams, selectionWeights);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -138,7 +141,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
                 // Recompose with updated components
                 adaptedParams = ComposeAdaptedParams(baseParams, selectionWeights);
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
             }
 
             // Evaluate on query set
@@ -153,11 +156,11 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Outer loop: update base params
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update selection logits and rank components via SPSA
@@ -170,14 +173,14 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         var selectionWeights = ComputeSelectionWeights();
 
         // Apply thresholding: only use components with α ≥ threshold (rank determination)
         var thresholdedWeights = ApplyThreshold(selectionWeights);
 
         var adaptedParams = ComposeAdaptedParams(baseParams, thresholdedWeights);
-        MetaModel.SetParameters(adaptedParams);
+        ParamModel.SetParameters(adaptedParams);
 
         // Fine-tune rank components on support set
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -185,10 +188,10 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             UpdateRankComponents(grad, baseParams, thresholdedWeights);
             adaptedParams = ComposeAdaptedParams(baseParams, thresholdedWeights);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
         }
 
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -323,19 +326,19 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
     private double ComputeAutoLoRALoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = MetaModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
         var selectionWeights = ComputeSelectionWeights();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
             var adaptedParams = ComposeAdaptedParams(baseParams, selectionWeights);
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         totalLoss += _algoOptions.RankRegularization * ComputeRankRegularization(selectionWeights);
-        MetaModel.SetParameters(baseParams);
+        ParamModel.SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

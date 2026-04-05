@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -184,7 +184,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
         _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
@@ -248,7 +248,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Initialize state vectors if needed
         if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null || _accumulatedSquaredGradients.Length != parameters.Length)
@@ -260,7 +260,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // Use shared UpdateParameters method to eliminate duplication
         var newCoefficients = UpdateParameters(parameters, gradient);
 
-        return currentSolution.WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

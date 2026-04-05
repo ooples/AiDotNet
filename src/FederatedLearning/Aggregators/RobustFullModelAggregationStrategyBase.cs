@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
 
@@ -24,7 +25,7 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         }
 
         var reference = clientModels.First().Value;
-        var parameters = reference.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(reference).GetParameters();
         if (parameters == null)
         {
             throw new ArgumentException("Client model parameters cannot be null.", nameof(clientModels));
@@ -40,7 +41,7 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         var parameters = new Dictionary<int, Vector<T>>(clientModels.Count);
         foreach (var kvp in clientModels)
         {
-            var p = kvp.Value.GetParameters();
+            var p = InterfaceGuard.Parameterizable(kvp.Value).GetParameters();
             if (p.Length != expectedParameterCount)
             {
                 throw new ArgumentException($"Parameter length mismatch for client {kvp.Key}.", nameof(clientModels));

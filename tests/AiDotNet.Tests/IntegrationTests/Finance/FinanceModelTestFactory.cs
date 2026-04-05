@@ -455,10 +455,10 @@ internal static class FinanceModelTestFactory
 
             if (agent is IFullModel<T, Vector<T>, Vector<T>> fullModel)
             {
-                var parameters = fullModel.GetParameters();
-                Assert.Equal(fullModel.ParameterCount, parameters.Length);
+                var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)fullModel).GetParameters();
+                Assert.Equal(((IParameterizable<T, Vector<T>, Vector<T>>)fullModel).ParameterCount, parameters.Length);
 
-                var withParams = fullModel.WithParameters(parameters);
+                var withParams = ((IParameterizable<T, Vector<T>, Vector<T>>)fullModel).WithParameters(parameters);
                 Assert.NotNull(withParams);
 
                 if (withParams is IDisposable withParamsDisposable)
@@ -520,18 +520,18 @@ internal static class FinanceModelTestFactory
         var featureImportance = model.GetFeatureImportance();
         Assert.NotNull(featureImportance);
 
-        var activeFeatures = model.GetActiveFeatureIndices()?.ToList() ?? new List<int>();
-        model.SetActiveFeatureIndices(activeFeatures.Take(1));
+        var activeFeatures = InterfaceGuard.FeatureAware(model).GetActiveFeatureIndices()?.ToList() ?? new List<int>();
+        InterfaceGuard.FeatureAware(model).SetActiveFeatureIndices(activeFeatures.Take(1));
 
         if (activeFeatures.Count > 0)
         {
-            Assert.True(model.IsFeatureUsed(activeFeatures[0]));
+            Assert.True(InterfaceGuard.FeatureAware(model).IsFeatureUsed(activeFeatures[0]));
         }
 
-        var parameters = model.GetParameters();
-        Assert.Equal(model.ParameterCount, parameters.Length);
+        var parameters = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).GetParameters();
+        Assert.Equal(((IParameterizable<T, Tensor<T>, Tensor<T>>)model).ParameterCount, parameters.Length);
 
-        var withParams = model.WithParameters(parameters);
+        var withParams = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).WithParameters(parameters);
         Assert.NotNull(withParams);
 
         if (withParams is IDisposable disposable)

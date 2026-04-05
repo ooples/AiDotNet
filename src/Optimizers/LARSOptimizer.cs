@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -135,7 +135,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _velocity = new Vector<T>(parameters.Length);
         _t = 0;
 
@@ -218,7 +218,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         Vector<T> gradient,
         double effectiveLr)
     {
-        var parameters = currentSolution.GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Get layer boundaries or treat as single layer
         var layerBoundaries = _options.LayerBoundaries ?? [parameters.Length];
@@ -327,7 +327,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             layerIndex++;
         }
 
-        return currentSolution.WithParameters(parameters);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(parameters);
     }
 
     /// <summary>

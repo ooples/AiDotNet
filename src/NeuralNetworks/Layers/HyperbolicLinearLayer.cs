@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -212,7 +212,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         _lastInput = inputTensor;
 
         // Output tensor: [batchSize, OutputFeatures]
-        var output = new Tensor<T>([batchSize, OutputFeatures]);
+        var output = TensorAllocator.Rent<T>([batchSize, OutputFeatures]);
 
         // For each sample in batch
         for (int b = 0; b < batchSize; b++)

@@ -206,7 +206,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
             // Teacher model memory (approximately same as main model)
             if (_teacherModel != null)
             {
-                return _teacherModel.ParameterCount * GetTypeSize();
+                return InterfaceGuard.Parameterizable(_teacherModel).ParameterCount * GetTypeSize();
             }
             return 0;
         }
@@ -257,7 +257,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
     public override void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
         // Update teacher model with the trained model
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (_teacherModel == null)
         {
@@ -265,7 +265,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         }
         else
         {
-            _teacherModel.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(_teacherModel).SetParameters(currentParams);
         }
 
         // Record metrics

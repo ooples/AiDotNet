@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -62,7 +63,7 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
             aggregated[i] = NumOps.FromDouble(sum / kept);
         }
 
-        return reference.WithParameters(aggregated);
+        return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "TrimmedMean";

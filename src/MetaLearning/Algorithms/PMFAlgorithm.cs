@@ -52,6 +52,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Shell Xu Hu, Da Li, Jan Stuhmer, Minyoung Kim, Timothy M. Hospedales")]
 public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly PMFOptions<T, TInput, TOutput> _pmfOptions;
 
     /// <inheritdoc/>
@@ -84,11 +87,11 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            MetaModel.SetParameters(initParams);
+            ParamModel.SetParameters(initParams);
 
             // Inner loop adaptation
             var taskParams = new Vector<T>(initParams.Length);
@@ -99,7 +102,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             {
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 taskParams = ApplyGradients(taskParams, grad, _pmfOptions.InnerLearningRate);
-                MetaModel.SetParameters(taskParams);
+                ParamModel.SetParameters(taskParams);
             }
 
             // Outer loop loss on query set (at adapted parameters)
@@ -130,7 +133,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = MetaModel.GetParameters();
+        var initParams = ParamModel.GetParameters();
         var adaptedParams = new Vector<T>(initParams.Length);
         for (int i = 0; i < initParams.Length; i++)
             adaptedParams[i] = initParams[i];
@@ -138,7 +141,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Inner-loop adaptation
         for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
         {
-            MetaModel.SetParameters(adaptedParams);
+            ParamModel.SetParameters(adaptedParams);
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.InnerLearningRate);
         }
@@ -148,13 +151,13 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         {
             for (int step = 0; step < _pmfOptions.FineTuningSteps; step++)
             {
-                MetaModel.SetParameters(adaptedParams);
+                ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.FineTuningLearningRate);
             }
         }
 
-        MetaModel.SetParameters(initParams); // Restore base parameters
+        ParamModel.SetParameters(initParams); // Restore base parameters
         return new PMFModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -172,7 +175,7 @@ internal class PMFModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     { _model = model; _params = adaptedParams; }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input) { InterfaceGuard.Parameterizable(_model).SetParameters(_params); return _model.Predict(input); }
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) =>
         throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");

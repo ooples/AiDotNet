@@ -99,6 +99,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
+    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
     private readonly MetaSGDOptions<T, TInput, TOutput> _metaSGDOptions;
 
     /// <inheritdoc/>
@@ -168,7 +171,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Initialize per-parameter optimizer with learned coefficients
-        var numParams = MetaModel.GetParameters().Length;
+        var numParams = ParamModel.GetParameters().Length;
         _optimizer = new PerParameterOptimizer<T, TInput, TOutput>(numParams, _metaSGDOptions, Engine);
 
         // Initialize optimizer with warm-start values if enabled
@@ -324,7 +327,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Get initial parameters
-        var initialParams = MetaModel.GetParameters();
+        var initialParams = ParamModel.GetParameters();
         var currentParams = new Vector<T>(initialParams.Length);
         for (int i = 0; i < initialParams.Length; i++)
         {
@@ -333,7 +336,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Clone model for this episode
         var episodeModel = CloneModel();
-        episodeModel.SetParameters(currentParams);
+        InterfaceGuard.Parameterizable(episodeModel).SetParameters(currentParams);
 
         // Inner loop adaptation with per-parameter updates
         for (int step = 0; step < _metaSGDOptions.InnerSteps; step++)
@@ -354,7 +357,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             }
 
             // Update model parameters
-            episodeModel.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(episodeModel).SetParameters(currentParams);
         }
 
         // Evaluate on query set
@@ -394,7 +397,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         IFullModel<T, TInput, TOutput> model,
         PerParameterOptimizer<T, TInput, TOutput> optimizer)
     {
-        var currentParams = model.GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Inner loop adaptation with learned per-parameter optimizer
         for (int step = 0; step < _metaSGDOptions.AdaptationSteps; step++)
@@ -415,7 +418,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             }
 
             // Update model parameters
-            model.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(model).SetParameters(currentParams);
         }
     }
 
@@ -569,7 +572,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Clone model and run adaptation
         var tempModel = CloneModel();
-        tempModel.SetParameters(initialParams);
+        InterfaceGuard.Parameterizable(tempModel).SetParameters(initialParams);
 
         var currentParams = new Vector<T>(initialParams.Length);
         for (int i = 0; i < initialParams.Length; i++)
@@ -585,7 +588,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             {
                 currentParams[i] = tempOptimizer.UpdateParameter(i, currentParams[i], gradients[i]);
             }
-            tempModel.SetParameters(currentParams);
+            InterfaceGuard.Parameterizable(tempModel).SetParameters(currentParams);
         }
 
         // Compute query loss
@@ -605,7 +608,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// </remarks>
     private void InitializeOptimizer()
     {
-        int numParams = MetaModel.GetParameters().Length;
+        int numParams = ParamModel.GetParameters().Length;
 
         for (int i = 0; i < numParams; i++)
         {
@@ -1145,7 +1148,7 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     /// <returns>The parameter vector.</returns>
     public Vector<T> GetParameters()
     {
-        return _model.GetParameters();
+        return InterfaceGuard.Parameterizable(_model).GetParameters();
     }
 
     /// <summary>
@@ -1154,6 +1157,6 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     /// <param name="parameters">The new parameters.</param>
     public void SetParameters(Vector<T> parameters)
     {
-        _model.SetParameters(parameters);
+        InterfaceGuard.Parameterizable(_model).SetParameters(parameters);
     }
 }
