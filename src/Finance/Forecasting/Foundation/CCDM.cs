@@ -56,7 +56,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Conditional Causal Diffusion Model for Financial Time Series", "https://arxiv.org/abs/2402.06010")]
+[ModelPaper("Diffusion Variational Autoencoder for Tackling Stochasticity in Multi-Step Regression Stock Price Prediction", "https://arxiv.org/abs/2402.06010")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 {
