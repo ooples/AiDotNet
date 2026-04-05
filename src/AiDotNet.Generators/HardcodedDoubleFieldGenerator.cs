@@ -13,7 +13,7 @@ namespace AiDotNet.Generators;
 /// and enable SIMD vectorization.
 /// </summary>
 [Generator]
-public class HardcodedDoubleAnalyzer : IIncrementalGenerator
+public class HardcodedDoubleFieldGenerator : IIncrementalGenerator
 {
     // NOTE: Severity is Info (not Warning) because TreatWarningsAsErrors=True
     // in the main project. Existing codebase has ~2000 known-debt double fields.
@@ -48,17 +48,17 @@ public class HardcodedDoubleAnalyzer : IIncrementalGenerator
         var fieldDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsFieldInGenericClass(node),
             transform: static (ctx, _) => AnalyzeField(ctx))
-            .Where(static result => result is not null);
+            .Where(static result => !result.IsDefault && result.Length > 0);
 
         var collected = fieldDeclarations.Collect();
 
         context.RegisterSourceOutput(collected, static (spc, results) =>
         {
-            foreach (var result in results)
+            foreach (var batch in results)
             {
-                if (result is not null)
+                foreach (var diag in batch)
                 {
-                    spc.ReportDiagnostic(result);
+                    spc.ReportDiagnostic(diag);
                 }
             }
         });
@@ -77,100 +77,79 @@ public class HardcodedDoubleAnalyzer : IIncrementalGenerator
         return false;
     }
 
-    private static Diagnostic? AnalyzeField(GeneratorSyntaxContext ctx)
+    private static ImmutableArray<Diagnostic> AnalyzeField(GeneratorSyntaxContext ctx)
     {
         var fieldSyntax = (FieldDeclarationSyntax)ctx.Node;
 
-        // Skip const fields (mathematical constants are fine as double)
+        // Skip const, static, readonly fields
         foreach (var modifier in fieldSyntax.Modifiers)
         {
-            if (modifier.IsKind(SyntaxKind.ConstKeyword))
-                return null;
-        }
-
-        // Skip static fields (typically shared constants or configuration)
-        foreach (var modifier in fieldSyntax.Modifiers)
-        {
-            if (modifier.IsKind(SyntaxKind.StaticKeyword))
-                return null;
-        }
-
-        // Skip readonly fields — these are typically constructor hyperparameters
-        // that intentionally stay as double (configuration boundary pattern)
-        foreach (var modifier in fieldSyntax.Modifiers)
-        {
-            if (modifier.IsKind(SyntaxKind.ReadOnlyKeyword))
-                return null;
+            if (modifier.IsKind(SyntaxKind.ConstKeyword) ||
+                modifier.IsKind(SyntaxKind.StaticKeyword) ||
+                modifier.IsKind(SyntaxKind.ReadOnlyKeyword))
+                return ImmutableArray<Diagnostic>.Empty;
         }
 
         var variableDeclaration = fieldSyntax.Declaration;
         if (variableDeclaration.Variables.Count == 0)
-            return null;
+            return ImmutableArray<Diagnostic>.Empty;
 
-        var firstVariable = variableDeclaration.Variables[0];
-        var fieldSymbol = ctx.SemanticModel.GetDeclaredSymbol(firstVariable) as IFieldSymbol;
-        if (fieldSymbol is null)
-            return null;
+        // Use first variable to check containing type (same for all variables in declaration)
+        var firstSymbol = ctx.SemanticModel.GetDeclaredSymbol(variableDeclaration.Variables[0]) as IFieldSymbol;
+        if (firstSymbol is null)
+            return ImmutableArray<Diagnostic>.Empty;
 
-        // Verify the containing class has a type parameter named T
-        var containingType = fieldSymbol.ContainingType;
+        var containingType = firstSymbol.ContainingType;
         if (containingType is null || !containingType.IsGenericType)
-            return null;
+            return ImmutableArray<Diagnostic>.Empty;
 
-        bool hasTypeParamT = false;
-        foreach (var tp in containingType.TypeParameters)
-        {
-            if (tp.Name == "T")
-            {
-                hasTypeParamT = true;
-                break;
-            }
-        }
-        if (!hasTypeParamT)
-            return null;
+        // Check if the class has a numeric type parameter (T, TValue, TElement, etc.)
+        // In this codebase, generic numeric classes always have a type parameter
+        // that could represent float/double — any generic class qualifies
+        if (containingType.TypeParameters.Length == 0)
+            return ImmutableArray<Diagnostic>.Empty;
 
-        // Skip fields named with known exclusion patterns
-        string fieldName = fieldSymbol.Name;
-        if (IsExcludedFieldName(fieldName))
-            return null;
-
-        var fieldType = fieldSymbol.Type;
-        var location = firstVariable.Identifier.GetLocation();
         string className = containingType.Name;
+        var builder = ImmutableArray.CreateBuilder<Diagnostic>();
 
-        // Check for double scalar
-        if (fieldType.SpecialType == SpecialType.System_Double)
+        // Check ALL variables in the declaration (handles: double a, b, c;)
+        foreach (var variable in variableDeclaration.Variables)
         {
-            return Diagnostic.Create(DoubleFieldInGenericClass, location, fieldName, className);
-        }
+            var fieldSymbol = ctx.SemanticModel.GetDeclaredSymbol(variable) as IFieldSymbol;
+            if (fieldSymbol is null)
+                continue;
 
-        // Check for double[] (single-dimensional array)
-        if (fieldType is IArrayTypeSymbol arrayType)
-        {
-            if (arrayType.ElementType.SpecialType == SpecialType.System_Double)
+            string fieldName = fieldSymbol.Name;
+            if (IsExcludedFieldName(fieldName))
+                continue;
+
+            var fieldType = fieldSymbol.Type;
+            var location = variable.Identifier.GetLocation();
+
+            if (fieldType.SpecialType == SpecialType.System_Double)
             {
-                if (arrayType.Rank == 1)
+                builder.Add(Diagnostic.Create(DoubleFieldInGenericClass, location, fieldName, className));
+            }
+            else if (fieldType is IArrayTypeSymbol arrayType)
+            {
+                if (arrayType.ElementType.SpecialType == SpecialType.System_Double)
                 {
-                    return Diagnostic.Create(DoubleArrayFieldInGenericClass, location, fieldName, className);
+                    if (arrayType.Rank == 1)
+                        builder.Add(Diagnostic.Create(DoubleArrayFieldInGenericClass, location, fieldName, className));
+                    else if (arrayType.Rank == 2)
+                        builder.Add(Diagnostic.Create(DoubleMatrixFieldInGenericClass, location, fieldName, className, "double[,]"));
                 }
-
-                if (arrayType.Rank == 2)
+                else if (arrayType.Rank == 1 &&
+                    arrayType.ElementType is IArrayTypeSymbol innerArray &&
+                    innerArray.ElementType.SpecialType == SpecialType.System_Double &&
+                    innerArray.Rank == 1)
                 {
-                    return Diagnostic.Create(DoubleMatrixFieldInGenericClass, location, fieldName, className, "double[,]");
+                    builder.Add(Diagnostic.Create(DoubleMatrixFieldInGenericClass, location, fieldName, className, "double[][]"));
                 }
             }
-
-            // Check for double[][] (jagged array)
-            if (arrayType.Rank == 1 &&
-                arrayType.ElementType is IArrayTypeSymbol innerArray &&
-                innerArray.ElementType.SpecialType == SpecialType.System_Double &&
-                innerArray.Rank == 1)
-            {
-                return Diagnostic.Create(DoubleMatrixFieldInGenericClass, location, fieldName, className, "double[][]");
-            }
         }
 
-        return null;
+        return builder.ToImmutable();
     }
 
     /// <summary>

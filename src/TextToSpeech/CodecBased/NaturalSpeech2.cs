@@ -177,11 +177,17 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         int lastDim = c.Shape[^1];
         if (lastDim != hiddenDim)
         {
+            if (lastDim > hiddenDim)
+                throw new ArgumentException(
+                    $"Input feature dimension ({lastDim}) exceeds model hidden dimension ({hiddenDim}). " +
+                    "Provide input with the correct feature size or adjust HiddenDim.",
+                    nameof(input));
+
+            // Zero-pad input to hiddenDim (for inputs smaller than expected, e.g., short text)
             int batch = Math.Max(1, c.Length / lastDim);
             var projected = new Tensor<T>([batch, hiddenDim]);
-            int copyLen = Math.Min(lastDim, hiddenDim);
             for (int b = 0; b < batch; b++)
-                for (int j = 0; j < copyLen; j++)
+                for (int j = 0; j < lastDim; j++)
                     projected[b * hiddenDim + j] = c[b * lastDim + j];
             c = projected;
         }
