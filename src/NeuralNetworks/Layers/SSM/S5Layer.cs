@@ -422,21 +422,17 @@ public class S5Layer<T> : LayerBase<T>
         var output = new Tensor<T>([batchSize, seqLen, _modelDimension]);
         for (int b = 0; b < batchSize; b++)
         {
+            // Pre-allocate reusable vectors outside hot loops
+            var kRow = new Vector<T>(_modelDimension);
+            var uLag = new Vector<T>(_modelDimension);
+
             for (int t = 0; t < seqLen; t++)
             {
-                // Extract input slice u[b, t, :] as vector for SIMD dot products
-                var uSlice = new Vector<T>(_modelDimension);
-                for (int hi = 0; hi < _modelDimension; hi++)
-                    uSlice[hi] = u[b, t, hi];
-
                 for (int ho = 0; ho < _modelDimension; ho++)
                 {
                     T sum = NumOps.Multiply(_dParam[ho], u[b, t, ho]);
                     for (int l = 0; l <= t; l++)
                     {
-                        // Extract kernel row and input slice for SIMD dot product
-                        var kRow = new Vector<T>(_modelDimension);
-                        var uLag = new Vector<T>(_modelDimension);
                         for (int hi = 0; hi < _modelDimension; hi++)
                         {
                             kRow[hi] = _cachedKernel[ho, hi, l];

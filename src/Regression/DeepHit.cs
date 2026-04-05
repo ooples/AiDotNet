@@ -1188,9 +1188,17 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         _options.NumRisks = reader.ReadInt32();
         string activationTypeName = reader.ReadString();
         var activationType = Type.GetType(activationTypeName);
-        _options.Activation = activationType is not null
-            ? (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new ReLUActivation<T>())
-            : new ReLUActivation<T>();
+        if (activationType is not null
+            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
+            && activationType.Namespace is not null
+            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
+        {
+            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new ReLUActivation<T>());
+        }
+        else
+        {
+            _options.Activation = new ReLUActivation<T>();
+        }
         _numFeatures = reader.ReadInt32();
 
         int timeBinLen = reader.ReadInt32();

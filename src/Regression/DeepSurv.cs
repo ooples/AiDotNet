@@ -732,9 +732,17 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         _options.HiddenLayerSize = reader.ReadInt32();
         string activationTypeName = reader.ReadString();
         var activationType = Type.GetType(activationTypeName);
-        _options.Activation = activationType is not null
-            ? (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new SELUActivation<T>())
-            : new SELUActivation<T>();
+        if (activationType is not null
+            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
+            && activationType.Namespace is not null
+            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
+        {
+            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new SELUActivation<T>());
+        }
+        else
+        {
+            _options.Activation = new SELUActivation<T>();
+        }
         _numFeatures = reader.ReadInt32();
 
         int numLayers = reader.ReadInt32();
