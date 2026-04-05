@@ -691,17 +691,17 @@ internal class MambaBlock<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_convWeightsGradient!.ToArray()),
-            new Vector<T>(_convBiasGradient!.ToArray()),
-            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_aLogGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            new Vector<T>(_inputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient.ToArray()),
+            new Vector<T>(_convWeightsGradient.ToArray()),
+            new Vector<T>(_convBiasGradient.ToArray()),
+            new Vector<T>(_xProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient.ToArray()),
+            new Vector<T>(_aLogGradient.ToArray()),
+            new Vector<T>(_dParamGradient.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()

@@ -639,13 +639,13 @@ public class HedgehogLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_featureMapW1Gradient!.ToArray()),
-            new Vector<T>(_featureMapB1Gradient!.ToArray()),
-            new Vector<T>(_featureMapW2Gradient!.ToArray()),
-            new Vector<T>(_featureMapB2Gradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_featureMapW1Gradient.ToArray()),
+            new Vector<T>(_featureMapB1Gradient.ToArray()),
+            new Vector<T>(_featureMapW2Gradient.ToArray()),
+            new Vector<T>(_featureMapB2Gradient.ToArray()),
             new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
             new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
             new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),

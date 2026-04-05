@@ -647,16 +647,16 @@ public class LonghornLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_queryBiasGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_keyBiasGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()),
-            new Vector<T>(_alphaWeightsGradient!.ToArray()),
-            new Vector<T>(_alphaBiasGradient!.ToArray()),
-            new Vector<T>(_groupNormGammaGradient!.ToArray()),
-            new Vector<T>(_groupNormBetaGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_queryBiasGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_keyBiasGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_valueBiasGradient.ToArray()),
+            new Vector<T>(_alphaWeightsGradient.ToArray()),
+            new Vector<T>(_alphaBiasGradient.ToArray()),
+            new Vector<T>(_groupNormGammaGradient.ToArray()),
+            new Vector<T>(_groupNormBetaGradient.ToArray()),
             new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
             new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }

@@ -988,18 +988,18 @@ public class S5Layer<T> : LayerBase<T>
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_aRealGradient!.ToArray()),
-            new Vector<T>(_aImagGradient!.ToArray()),
-            new Vector<T>(_bRealGradient!.ToArray()),
-            new Vector<T>(_bImagGradient!.ToArray()),
-            new Vector<T>(_cRealGradient!.ToArray()),
-            new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_aRealGradient.ToArray()),
+            new Vector<T>(_aImagGradient.ToArray()),
+            new Vector<T>(_bRealGradient.ToArray()),
+            new Vector<T>(_bImagGradient.ToArray()),
+            new Vector<T>(_cRealGradient.ToArray()),
+            new Vector<T>(_cImagGradient.ToArray()),
+            new Vector<T>(_dParamGradient.ToArray()),
             _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient.ToArray()) : new Vector<T>(_logDelta.Length),
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            new Vector<T>(_inputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()

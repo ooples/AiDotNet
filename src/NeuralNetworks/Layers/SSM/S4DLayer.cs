@@ -1169,13 +1169,13 @@ public class S4DLayer<T> : LayerBase<T>
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_aRealGradient!.ToArray()),
-            new Vector<T>(_aImagGradient!.ToArray()),
-            new Vector<T>(_bRealGradient!.ToArray()),
-            new Vector<T>(_bImagGradient!.ToArray()),
-            new Vector<T>(_cRealGradient!.ToArray()),
-            new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_aRealGradient.ToArray()),
+            new Vector<T>(_aImagGradient.ToArray()),
+            new Vector<T>(_bRealGradient.ToArray()),
+            new Vector<T>(_bImagGradient.ToArray()),
+            new Vector<T>(_cRealGradient.ToArray()),
+            new Vector<T>(_cImagGradient.ToArray()),
+            new Vector<T>(_dParamGradient.ToArray()),
             _inputProjectionWeightsGradient != null ? new Vector<T>(_inputProjectionWeightsGradient.ToArray()) : new Vector<T>(_inputProjectionWeights.Length),
             _inputProjectionBiasGradient != null ? new Vector<T>(_inputProjectionBiasGradient.ToArray()) : new Vector<T>(_inputProjectionBias.Length),
             _outputProjectionWeightsGradient != null ? new Vector<T>(_outputProjectionWeightsGradient.ToArray()) : new Vector<T>(_outputProjectionWeights.Length),

@@ -605,7 +605,7 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         var alpha = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            alpha[i] = _y![i];
+            alpha[i] = _y[i];
         }
 
         // Solve for weights

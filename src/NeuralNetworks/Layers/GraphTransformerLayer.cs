@@ -1651,7 +1651,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         writer.Write(hasBias);
         if (hasBias)
         {
-            writer.Write(_structuralBias!.Shape.Length);
+            writer.Write(_structuralBias.Shape.Length);
             foreach (var dim in _structuralBias.Shape.ToArray()) writer.Write(dim);
             for (int i = 0; i < _structuralBias.Length; i++)
                 writer.Write(NumOps.ToDouble(_structuralBias[i]));

@@ -469,16 +469,16 @@ public class MinLSTMLayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
-            new Vector<T>(_inputGateBiasGradient!.ToArray()),
-            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
-            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            new Vector<T>(_inputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient.ToArray()),
+            new Vector<T>(_inputGateWeightsGradient.ToArray()),
+            new Vector<T>(_inputGateBiasGradient.ToArray()),
+            new Vector<T>(_cellCandidateWeightsGradient.ToArray()),
+            new Vector<T>(_cellCandidateBiasGradient.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()

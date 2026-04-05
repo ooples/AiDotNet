@@ -247,7 +247,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             InitializeFeatureStats(_root, NumFeatures);
             for (int f = 0; f < NumFeatures; f++)
             {
-                var stats = _root.FeatureStatistics![f];
+                var stats = _root.FeatureStatistics[f];
                 stats.Min = savedRanges[f].Min;
                 stats.Max = savedRanges[f].Max;
                 stats.RangeFrozen = true;

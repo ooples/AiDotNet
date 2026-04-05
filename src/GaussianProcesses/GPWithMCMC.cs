@@ -590,7 +590,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
     {
-        int n = _X!.Rows;
+        int n = _X.Rows;
         var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -621,7 +621,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private Vector<T> ComputeCrossCovariance(Vector<T> x, double lengthscale, double outputVar)
     {
-        int n = _X!.Rows;
+        int n = _X.Rows;
         var kstar = new Vector<T>(n);
 
         // Scale kernel output by MCMC-sampled output variance.

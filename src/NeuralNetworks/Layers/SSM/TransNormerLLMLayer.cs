@@ -598,12 +598,12 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_queryNormScaleGradient!.ToArray()),
-            new Vector<T>(_keyNormScaleGradient!.ToArray()),
-            new Vector<T>(_gammasGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_queryNormScaleGradient.ToArray()),
+            new Vector<T>(_keyNormScaleGradient.ToArray()),
+            new Vector<T>(_gammasGradient.ToArray()),
             new Vector<T>(_outputNormScaleGradient?.ToArray() ?? new T[_outputNormScale.Length]),
             new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
             new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),

@@ -504,7 +504,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         writer.Write(hasU);
         if (hasU)
         {
-            writer.Write(_u!.Length);
+            writer.Write(_u.Length);
             for (int i = 0; i < _u.Length; i++)
                 writer.Write(NumOps.ToDouble(_u[i]));
         }
@@ -512,7 +512,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         writer.Write(hasV);
         if (hasV)
         {
-            writer.Write(_v!.Length);
+            writer.Write(_v.Length);
             for (int i = 0; i < _v.Length; i++)
                 writer.Write(NumOps.ToDouble(_v[i]));
         }
