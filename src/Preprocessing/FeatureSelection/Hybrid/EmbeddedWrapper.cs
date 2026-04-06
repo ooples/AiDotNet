@@ -204,7 +204,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 selected.Add(bestFeature);
                 available.Remove(bestFeature);
                 currentScore = bestScore;
-                _wrapperScores![bestFeature] = bestScore;
+                if (_wrapperScores != null) _wrapperScores[bestFeature] = bestScore;
             }
             else
             {
@@ -233,7 +233,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         foreach (int j in subset)
         {
             double corr = ComputeCorrelation(data, target, j, n, yMean);
-            double importance = _embeddedImportance![j];
+            double importance = _embeddedImportance != null ? _embeddedImportance[j] : 0;
             score += corr * 0.5 + importance * 0.5;
         }
 

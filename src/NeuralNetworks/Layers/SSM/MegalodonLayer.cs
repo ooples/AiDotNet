@@ -1053,21 +1053,21 @@ public partial class MegalodonLayer<T> : LayerBase<T>
     {
         if (_emaAlphaRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_emaAlphaRealGradient!.ToArray()),
-            new Vector<T>(_emaAlphaImagGradient!.ToArray()),
-            new Vector<T>(_emaInputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaInputBiasGradient!.ToArray()),
-            new Vector<T>(_emaOutputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaOutputBiasGradient!.ToArray()),
-            new Vector<T>(_tsNormGammaGradient!.ToArray()),
-            new Vector<T>(_tsNormBetaGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            new Vector<T>(_emaAlphaRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_emaAlphaImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_emaInputWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_emaInputBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_emaOutputWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_emaOutputBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_tsNormGammaGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_tsNormBetaGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_gateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_gateBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
     }
 
     public override void ClearGradients()
