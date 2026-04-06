@@ -745,32 +745,13 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     private Matrix<T> ApplySoftmax(Matrix<T> logits)
     {
         var result = new Matrix<T>(logits.Rows, logits.Columns);
-
         for (int i = 0; i < logits.Rows; i++)
         {
-            // Find max for numerical stability
-            double maxVal = double.MinValue;
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                maxVal = Math.Max(maxVal, NumOps.ToDouble(logits[i, j]));
-            }
-
-            // Compute exp and sum
-            T expSum = NumOps.Zero;
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                double expVal = Math.Exp(NumOps.ToDouble(logits[i, j]) - maxVal);
-                result[i, j] = NumOps.FromDouble(expVal);
-                expSum = NumOps.Add(expSum, result[i, j]);
-            }
-
-            // Normalize
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                result[i, j] = NumOps.Divide(result[i, j], expSum);
-            }
+            var row = new Vector<T>(logits.Columns);
+            for (int j = 0; j < logits.Columns; j++) row[j] = logits[i, j];
+            var probs = Softmax(row);
+            for (int j = 0; j < logits.Columns; j++) result[i, j] = probs[j];
         }
-
         return result;
     }
 

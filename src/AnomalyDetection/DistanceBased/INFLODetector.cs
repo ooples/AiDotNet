@@ -48,7 +48,7 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
-    private double[]? _localDensities;
+    private Vector<T>? _localDensities;
     private List<int>[]? _knnLists;
     private List<int>[]? _rknnLists;
     private HashSet<int>[]? _influenceSpaces;
@@ -164,28 +164,30 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
             }
 
             // Compute local density for this point using its k-nearest neighbors
-            double localDensity = ComputeLocalDensityForPoint(X, i, knn);
+            T localDensity = ComputeLocalDensityForPoint(X, i, knn);
 
             // Compute average local density of influence space
-            double avgInfluenceDensity = 0;
+            T avgInfluenceDensity = NumOps.Zero;
             int validCount = 0;
             foreach (int neighborIdx in influenceSpace)
             {
                 if (neighborIdx < localDensities.Length)
                 {
-                    avgInfluenceDensity += localDensities[neighborIdx];
+                    avgInfluenceDensity = NumOps.Add(avgInfluenceDensity, localDensities[neighborIdx]);
                     validCount++;
                 }
             }
 
             if (validCount > 0)
             {
-                avgInfluenceDensity /= validCount;
+                avgInfluenceDensity = NumOps.Divide(avgInfluenceDensity, NumOps.FromDouble(validCount));
             }
 
             // INFLO = average influence density / local density
-            double inflo = localDensity > 0 ? avgInfluenceDensity / localDensity : 1.0;
-            scores[i] = NumOps.FromDouble(inflo);
+            T inflo = NumOps.GreaterThan(localDensity, NumOps.Zero)
+                ? NumOps.Divide(avgInfluenceDensity, localDensity)
+                : NumOps.One;
+            scores[i] = inflo;
         }
 
         return scores;
@@ -203,34 +205,26 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
             _rknnLists[i] = new List<int>();
         }
 
-        // Compute distance matrix and build kNN lists
-        var distances = new List<(int Index, double Distance)>[n];
+        // Compute distances and build kNN lists using vectorized ops
+        var distances = new List<(int Index, T Distance)>[n];
 
         for (int i = 0; i < n; i++)
         {
-            distances[i] = new List<(int, double)>();
-            var pointI = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                pointI[j] = X[i, j];
-            }
+            distances[i] = new List<(int, T)>();
+            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             for (int j = 0; j < n; j++)
             {
                 if (i == j) continue;
 
-                var pointJ = new Vector<T>(X.Columns);
-                for (int k = 0; k < X.Columns; k++)
-                {
-                    pointJ[k] = X[j, k];
-                }
-
-                double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(pointI, pointJ));
+                var pointJ = new Vector<T>(X.GetRowReadOnlySpan(j).ToArray());
+                var diff = Engine.Subtract(pointI, pointJ);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
                 distances[i].Add((j, dist));
             }
 
             // Sort and take k nearest
-            distances[i].Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            distances[i].Sort((a, b) => NumOps.Compare(a.Distance, b.Distance));
             _knnLists[i] = distances[i].Take(_k).Select(x => x.Index).ToList();
         }
 
@@ -244,9 +238,9 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double[] ComputeLocalDensities(Matrix<T> X)
+    private Vector<T> ComputeLocalDensities(Matrix<T> X)
     {
-        var densities = new double[X.Rows];
+        var densities = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
@@ -256,38 +250,33 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         return densities;
     }
 
-    private double ComputeLocalDensityForPoint(Matrix<T> X, int pointIdx, List<int> neighbors)
+    private T ComputeLocalDensityForPoint(Matrix<T> X, int pointIdx, List<int> neighbors)
     {
-        if (neighbors.Count == 0) return 0;
+        if (neighbors.Count == 0) return NumOps.Zero;
 
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
-        // Local density = 1 / (average distance to k-nearest neighbors)
         var trainingData = _trainingData;
         if (trainingData == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        double avgDist = 0;
+        // Local density = 1 / (average distance to k-nearest neighbors)
+        T avgDist = NumOps.Zero;
         foreach (int neighborIdx in neighbors)
         {
-            var neighbor = new Vector<T>(trainingData.Columns);
-            for (int j = 0; j < trainingData.Columns; j++)
-            {
-                neighbor[j] = trainingData[neighborIdx, j];
-            }
-
-            avgDist += NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, neighbor));
+            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
+            var diff = Engine.Subtract(point, neighbor);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+            avgDist = NumOps.Add(avgDist, dist);
         }
 
-        avgDist /= neighbors.Count;
+        avgDist = NumOps.Divide(avgDist, NumOps.FromDouble(neighbors.Count));
 
-        return avgDist > 0 ? 1.0 / avgDist : double.MaxValue;
+        return NumOps.GreaterThan(avgDist, NumOps.Zero)
+            ? NumOps.Divide(NumOps.One, avgDist)
+            : NumOps.MaxValue;
     }
 
     private List<int> GetKNearestNeighbors(Matrix<T> X, int pointIdx)

@@ -73,7 +73,9 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// that large deviations from the average are normal for this data.
     /// </para>
     /// </remarks>
+
     private T _dispersion;
+
 
     /// <summary>
     /// The configuration options for the negative binomial regression model.
@@ -117,11 +119,14 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
-    private double _yShift;
+
+    private T _yShift;
+
 
     public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _yShift = NumOps.Zero;
         _options = options ?? new NegativeBinomialRegressionOptions<T>();
         _dispersion = NumOps.One;
     }
@@ -161,7 +166,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
 
         // Shift y to be positive (NB requires positive targets)
         // Use a local copy to avoid modifying the caller's vector
-        _yShift = 0.0;
+        _yShift = NumOps.Zero;
         double minY = double.MaxValue;
         for (int i = 0; i < y.Length; i++)
         {
@@ -170,10 +175,10 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         }
         if (minY <= 0)
         {
-            _yShift = Math.Abs(minY) + 1.0;
+            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
             var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
-                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + NumOps.ToDouble(_yShift));
             y = yShifted;
         }
 
@@ -310,10 +315,10 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         var predictions = X.Multiply(Coefficients).Add(Intercept);
 
         // Subtract shift if data was shifted during training
-        if (_yShift > 0)
+        if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
             for (int i = 0; i < predictions.Length; i++)
-                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+                predictions[i] = NumOps.Subtract(predictions[i], _yShift);
         }
         return predictions;
     }

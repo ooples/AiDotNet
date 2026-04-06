@@ -103,36 +103,27 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        // Check if X is the same as training data (for self-exclusion)
         bool isSameAsTraining = ReferenceEquals(X, _trainingData);
-
         var scores = new Vector<T>(X.Rows);
 
         for (int p = 0; p < X.Rows; p++)
         {
-            // Get query point
-            var pointP = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                pointP[j] = NumOps.ToDouble(X[p, j]);
-            }
+            var pointP = new Vector<T>(X.GetRowReadOnlySpan(p).ToArray());
 
-            // Find k-nearest neighbors (pass index for self-exclusion when scoring training data)
             int queryIndex = isSameAsTraining ? p : -1;
             var neighbors = GetKNearestNeighbors(pointP, queryIndex);
 
-            // Compute ABOF using only neighbors
-            double abof = ComputeABOF(pointP, neighbors);
+            T abof = ComputeABOF(pointP, neighbors);
 
-            // ABOF is inversely related to outlierness
-            double score = abof > 0 ? 1.0 / abof : double.MaxValue;
-            scores[p] = NumOps.FromDouble(score);
+            scores[p] = NumOps.GreaterThan(abof, NumOps.Zero)
+                ? NumOps.Divide(NumOps.One, abof)
+                : NumOps.MaxValue;
         }
 
         return scores;
     }
 
-    private List<(int Index, double[] Point, double Distance)> GetKNearestNeighbors(double[] queryPoint, int queryIndex = -1)
+    private List<(int Index, Vector<T> Point, T Distance)> GetKNearestNeighbors(Vector<T> queryPoint, int queryIndex = -1)
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -140,115 +131,95 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        int d = trainingData.Columns;
-        var distances = new List<(int Index, double[] Point, double Distance)>();
+        var distances = new List<(int Index, Vector<T> Point, T Distance)>();
 
         for (int i = 0; i < trainingData.Rows; i++)
         {
-            // Skip self by index when queryIndex is provided (scoring training data)
-            if (i == queryIndex)
-            {
-                continue;
-            }
+            if (i == queryIndex) continue;
 
-            var point = new double[d];
-            double dist = 0;
+            var point = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
 
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = NumOps.ToDouble(trainingData[i, j]);
-                double diff = point[j] - queryPoint[j];
-                dist += diff * diff;
-            }
+            // Euclidean distance via IEngine: sqrt(dot(diff, diff))
+            var diff = Engine.Subtract(point, queryPoint);
+            T distSq = Engine.DotProduct(diff, diff);
+            T dist = NumOps.Sqrt(distSq);
 
-            dist = Math.Sqrt(dist);
-
-            // Only add neighbors with non-zero distance (zero distance = duplicate point)
-            // Zero-distance neighbors cause divide-by-zero in ComputeABOF
-            if (dist > 0)
+            // Skip zero-distance duplicates
+            if (NumOps.GreaterThan(dist, NumOps.Zero))
             {
                 distances.Add((i, point, dist));
             }
         }
 
         return distances
-            .OrderBy(x => x.Distance)
+            .OrderBy(x => NumOps.ToDouble(x.Distance))
             .Take(_k)
             .ToList();
     }
 
-    private double ComputeABOF(double[] point, List<(int Index, double[] Point, double Distance)> neighbors)
+    private T ComputeABOF(Vector<T> point, List<(int Index, Vector<T> Point, T Distance)> neighbors)
     {
-        if (neighbors.Count < 2) return double.MaxValue;
+        if (neighbors.Count < 2) return NumOps.MaxValue;
 
-        int d = point.Length;
-        var weightedAngles = new List<double>();
-        var weights = new List<double>();
+        T epsilon = NumOps.FromDouble(1e-10);
+        var weightedAngles = new List<T>();
+        var weights = new List<T>();
 
-        // Compute angles between all pairs of neighbors
         for (int i = 0; i < neighbors.Count; i++)
         {
             var pointA = neighbors[i].Point;
-            double distA = neighbors[i].Distance;
+            T distA = neighbors[i].Distance;
 
-            // Vector PA = A - P
-            var pa = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                pa[j] = pointA[j] - point[j];
-            }
+            // PA = A - P via IEngine
+            var pa = Engine.Subtract(pointA, point);
 
             for (int k = i + 1; k < neighbors.Count; k++)
             {
                 var pointB = neighbors[k].Point;
-                double distB = neighbors[k].Distance;
+                T distB = neighbors[k].Distance;
 
-                // Vector PB = B - P
-                var pb = new double[d];
-                for (int j = 0; j < d; j++)
-                {
-                    pb[j] = pointB[j] - point[j];
-                }
+                // PB = B - P via IEngine
+                var pb = Engine.Subtract(pointB, point);
 
-                // Compute angle using dot product
-                double dot = 0;
-                for (int j = 0; j < d; j++)
-                {
-                    dot += pa[j] * pb[j];
-                }
+                // cos(angle) = (PA · PB) / (|PA| * |PB|) via vectorized dot product
+                T dot = Engine.DotProduct(pa, pb);
+                T cosAngle = NumOps.Divide(dot, NumOps.Multiply(distA, distB));
 
-                double cosAngle = dot / (distA * distB);
-                cosAngle = Math.Max(-1, Math.Min(1, cosAngle));
+                T negOne = NumOps.FromDouble(-1.0);
+                if (NumOps.LessThan(cosAngle, negOne)) cosAngle = negOne;
+                if (NumOps.GreaterThan(cosAngle, NumOps.One)) cosAngle = NumOps.One;
 
-                // Weight by inverse of product of distances squared
-                double weight = 1.0 / (distA * distA * distB * distB);
+                // Weight = 1 / (distA² * distB²)
+                T distASq = NumOps.Multiply(distA, distA);
+                T distBSq = NumOps.Multiply(distB, distB);
+                T weight = NumOps.Divide(NumOps.One, NumOps.Multiply(distASq, distBSq));
 
-                weightedAngles.Add(cosAngle * weight);
+                weightedAngles.Add(NumOps.Multiply(cosAngle, weight));
                 weights.Add(weight);
             }
         }
 
-        if (weights.Count == 0) return double.MaxValue;
+        if (weights.Count == 0) return NumOps.MaxValue;
 
-        // Compute weighted variance
-        // Formula: mean = Σ(w_i * v_i) / Σ(w_i)
-        //          variance = Σ(w_i * (v_i - mean)²) / Σ(w_i)
-        double sumWeights = weights.Sum();
-        if (sumWeights < 1e-10) return double.MaxValue;
+        // Weighted variance
+        T sumWeights = NumOps.Zero;
+        T sumWeightedAngles = NumOps.Zero;
+        foreach (var w in weights) sumWeights = NumOps.Add(sumWeights, w);
+        foreach (var wa in weightedAngles) sumWeightedAngles = NumOps.Add(sumWeightedAngles, wa);
 
-        // weightedAngles[i] = cosAngle_i * weight_i, so weighted mean is correct
-        double mean = weightedAngles.Sum() / sumWeights;
+        if (NumOps.LessThan(sumWeights, epsilon)) return NumOps.MaxValue;
 
-        double variance = 0;
+        T mean = NumOps.Divide(sumWeightedAngles, sumWeights);
+
+        T variance = NumOps.Zero;
         for (int i = 0; i < weightedAngles.Count; i++)
         {
-            // Extract the original angle from the weighted angle
-            double angle = weightedAngles[i] / weights[i];
-            double diff = angle - mean;
-            variance += weights[i] * diff * diff;
+            T angle = NumOps.Divide(weightedAngles[i], weights[i]);
+            T diff = NumOps.Subtract(angle, mean);
+            variance = NumOps.Add(variance,
+                NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
         }
-        variance /= sumWeights;
 
-        return variance;
+        return NumOps.Divide(variance, sumWeights);
     }
 }

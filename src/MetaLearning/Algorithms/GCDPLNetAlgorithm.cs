@@ -203,7 +203,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             double message = 0;
             for (int g2 = 0; g2 < _numNodes; g2++) message += scores[g2] * NumOps.ToDouble(features[g2]);
 
-            updated[g] = NumOps.FromDouble(Math.Tanh(fg + _algoOptions.MessageWeight * message));
+            updated[g] = ScalarTanh(NumOps.FromDouble(fg + _algoOptions.MessageWeight * message));
         }
         return updated;
     }

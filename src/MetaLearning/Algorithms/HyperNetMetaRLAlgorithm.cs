@@ -183,15 +183,15 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
     private Vector<T> ComputeTaskEmbedding(Vector<T> grad)
     {
-        var emb = new Vector<T>(_embDim);
+        var preAct = new Vector<T>(_embDim);
         for (int e = 0; e < _embDim; e++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_encoderParams[e * _compressedDim + d]);
-            emb[e] = NumOps.FromDouble(Math.Tanh(sum));
+                sum = NumOps.Add(sum, NumOps.Multiply(grad[d], _encoderParams[e * _compressedDim + d]));
+            preAct[e] = sum;
         }
-        return emb;
+        return VectorTanh(preAct);
     }
 
     private Vector<T> HyperNetForward(Vector<T> embedding)

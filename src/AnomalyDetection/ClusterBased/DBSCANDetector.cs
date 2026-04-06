@@ -7,37 +7,35 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AnomalyDetection.ClusterBased;
 
 /// <summary>
-/// Detects anomalies using DBSCAN clustering.
+/// Detects anomalies using DBSCAN (Density-Based Spatial Clustering of Applications with Noise).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> DBSCAN (Density-Based Spatial Clustering of Applications with Noise)
-/// groups together points that are closely packed and marks points in low-density regions
-/// as noise (anomalies). Unlike k-means, DBSCAN can find arbitrarily shaped clusters.
+/// <b>For Beginners:</b> DBSCAN groups together points that are closely packed and
+/// marks points in low-density regions as outliers (noise).
 /// </para>
 /// <para>
 /// The algorithm works by:
-/// 1. Define a neighborhood radius (epsilon) and minimum points (minPts)
-/// 2. A core point has at least minPts within epsilon distance
-/// 3. Points reachable from core points form clusters
-/// 4. Points not reachable from any core point are noise (anomalies)
+/// 1. For each point, find all neighbors within epsilon distance
+/// 2. If a point has at least minPts neighbors, it's a core point
+/// 3. Expand clusters from core points
+/// 4. Points not belonging to any cluster are noise (anomalies)
 /// </para>
 /// <para>
 /// <b>When to use:</b>
-/// - When clusters have irregular shapes
-/// - When you don't know the number of clusters
-/// - When anomalies are expected to be in low-density regions
+/// - When anomalies are in low-density regions
+/// - When clusters have arbitrary shapes
+/// - No need to specify number of clusters in advance
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
-/// - Epsilon: Estimated from k-distance graph (auto by default)
-/// - MinPts: 2 * dimensions (typical heuristic)
+/// - Epsilon: estimated from data (k-distance method)
+/// - MinPts: 2 * dimensions
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// <para>
-/// Reference: Ester, M., et al. (1996). "A Density-Based Algorithm for Discovering Clusters
-/// in Large Spatial Databases with Noise." KDD.
+/// Reference: Ester, M., et al. (1996). "A Density-Based Algorithm for Discovering Clusters." KDD.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -50,7 +48,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double? _epsilon;
     private readonly int? _minPts;
-    private double _fittedEpsilon;
+    private T _fittedEpsilon;
     private int _fittedMinPts;
     private int[]? _clusterLabels;
     private Matrix<T>? _trainingData;
@@ -58,7 +56,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
     /// <summary>
     /// Gets the epsilon (neighborhood radius) parameter.
     /// </summary>
-    public double Epsilon => _fittedEpsilon;
+    public T Epsilon => _fittedEpsilon;
 
     /// <summary>
     /// Gets the minimum points parameter.
@@ -68,12 +66,8 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
     /// <summary>
     /// Creates a new DBSCAN anomaly detector.
     /// </summary>
-    /// <param name="epsilon">
-    /// Neighborhood radius. If null, estimated automatically from the data.
-    /// </param>
-    /// <param name="minPts">
-    /// Minimum number of points to form a dense region. If null, uses 2 * dimensions.
-    /// </param>
+    /// <param name="epsilon">Neighborhood radius. If null, estimated automatically from the data.</param>
+    /// <param name="minPts">Minimum number of points to form a dense region. If null, uses 2 * dimensions.</param>
     /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
     /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
     public DBSCANDetector(double? epsilon = null, int? minPts = null, double contamination = 0.1, int randomSeed = 42)
@@ -93,6 +87,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
         _epsilon = epsilon;
         _minPts = minPts;
+        _fittedEpsilon = NumOps.Zero;
     }
 
     /// <inheritdoc/>
@@ -104,7 +99,9 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
         // Estimate parameters if not provided
         _fittedMinPts = _minPts ?? Math.Max(2, 2 * X.Columns);
-        _fittedEpsilon = _epsilon ?? EstimateEpsilon(X);
+        _fittedEpsilon = _epsilon.HasValue
+            ? NumOps.FromDouble(_epsilon.Value)
+            : EstimateEpsilon(X);
 
         // Run DBSCAN clustering
         _clusterLabels = RunDBSCAN(X);
@@ -131,30 +128,28 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            // Count neighbors within epsilon
             int neighborCount = CountNeighborsInRadius(X, i);
 
-            // Score based on density (fewer neighbors = higher anomaly score)
-            // Core points (neighborCount >= minPts) get low scores
-            // Border and noise points get higher scores
-            double score;
+            // Score based on density — all in T
+            T score;
             if (neighborCount >= _fittedMinPts)
             {
-                // Core point - low anomaly score
-                score = 1.0 / (neighborCount + 1);
+                // Core point — low anomaly score
+                score = NumOps.Divide(NumOps.One, NumOps.FromDouble(neighborCount + 1));
             }
             else if (neighborCount > 0)
             {
-                // Border point - medium anomaly score
-                score = 1.0 - (neighborCount / (double)_fittedMinPts);
+                // Border point — medium anomaly score
+                score = NumOps.Subtract(NumOps.One,
+                    NumOps.Divide(NumOps.FromDouble(neighborCount), NumOps.FromDouble(_fittedMinPts)));
             }
             else
             {
-                // Noise point - high anomaly score
-                score = 1.0;
+                // Noise point — high anomaly score
+                score = NumOps.One;
             }
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
@@ -179,7 +174,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
             if (neighbors.Count < _fittedMinPts)
             {
-                labels[i] = 0; // Noise (label 0 = noise)
+                labels[i] = 0; // Noise
             }
             else
             {
@@ -201,12 +196,12 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
         {
             int current = queue.Dequeue();
 
-            if (labels[current] == 0) // Was noise, now border point
+            if (labels[current] == 0)
             {
                 labels[current] = clusterId;
             }
 
-            if (labels[current] != -1) continue; // Already processed
+            if (labels[current] != -1) continue;
 
             labels[current] = clusterId;
 
@@ -216,7 +211,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
             {
                 foreach (int neighbor in currentNeighbors)
                 {
-                    if (labels[neighbor] <= 0) // Unvisited or noise
+                    if (labels[neighbor] <= 0)
                     {
                         queue.Enqueue(neighbor);
                     }
@@ -225,45 +220,40 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double EstimateEpsilon(Matrix<T> X)
+    private T EstimateEpsilon(Matrix<T> X)
     {
         // K-distance method: find the elbow in sorted k-distances
         int k = _fittedMinPts;
-        var kDistances = new List<double>();
+        var kDistances = new List<T>();
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var distances = new List<double>();
-            var pointI = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                pointI[j] = X[i, j];
-            }
+            var distances = new List<T>();
+            // Extract row as Vector for vectorized distance computation
+            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             for (int j = 0; j < X.Rows; j++)
             {
                 if (i == j) continue;
 
-                var pointJ = new Vector<T>(X.Columns);
-                for (int c = 0; c < X.Columns; c++)
-                {
-                    pointJ[c] = X[j, c];
-                }
+                var pointJ = new Vector<T>(X.GetRowReadOnlySpan(j).ToArray());
 
-                distances.Add(NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(pointI, pointJ)));
+                // Vectorized Euclidean distance via Engine
+                var diff = Engine.Subtract(pointI, pointJ);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                distances.Add(dist);
             }
 
-            distances.Sort();
+            distances.Sort((a, b) => NumOps.Compare(a, b));
             if (distances.Count >= k)
             {
                 kDistances.Add(distances[k - 1]);
             }
         }
 
-        kDistances.Sort();
+        kDistances.Sort((a, b) => NumOps.Compare(a, b));
 
-        // Use the knee/elbow point or a percentile
-        // Simple heuristic: use the 90th percentile k-distance
+        // Use the 90th percentile k-distance as epsilon estimate
         int elbowIdx = (int)(kDistances.Count * 0.9);
         return kDistances[Math.Min(elbowIdx, kDistances.Count - 1)];
     }
@@ -271,11 +261,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
     private List<int> GetNeighborsInRadius(Matrix<T> X, int pointIdx)
     {
         var neighbors = new List<int>();
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -285,14 +271,13 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < trainingData.Rows; i++)
         {
-            var refPoint = new Vector<T>(trainingData.Columns);
-            for (int j = 0; j < trainingData.Columns; j++)
-            {
-                refPoint[j] = trainingData[i, j];
-            }
+            var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
 
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint));
-            if (dist <= _fittedEpsilon)
+            // Vectorized distance via Engine
+            var diff = Engine.Subtract(point, refPoint);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+
+            if (!NumOps.GreaterThan(dist, _fittedEpsilon))
             {
                 neighbors.Add(i);
             }

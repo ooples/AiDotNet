@@ -85,17 +85,23 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the location parameter.
     /// </summary>
+
     private T _locationIntercept;
+
 
     /// <summary>
     /// Intercept for the scale parameter.
     /// </summary>
+
     private T _scaleIntercept;
+
 
     /// <summary>
     /// Intercept for the shape parameter.
     /// </summary>
+
     private T _shapeIntercept;
+
 
     /// <summary>
     /// Number of features.
@@ -128,6 +134,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public GAMLSSRegression(GAMLSSOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.Zero;
         _options = options ?? new GAMLSSOptions();
         _locationIntercept = NumOps.Zero;
         _scaleIntercept = NumOps.One;
@@ -137,27 +145,28 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
     /// <inheritdoc/>
     /// <summary>Y standardization for scale-invariant training.</summary>
-    private double _yMean;
-    private double _yStd = 1.0;
+
+    private T _yMean;
+
+
+    private T _yStd;
+
 
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Standardize y for scale-invariant training
-        double yMean = 0;
-        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
-        yMean /= n;
-        double yVar = 0;
-        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
-        double yStd = Math.Sqrt(yVar / n);
-        if (yStd < 1e-10) yStd = 1.0;
-        _yMean = yMean;
-        _yStd = yStd;
-        var yStandardized = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        // Standardize y for scale-invariant training (SIMD-accelerated via Engine)
+        T yMeanT = Engine.Mean(y);
+        var centered = (Vector<T>)Engine.Subtract(y, Vector<T>.CreateDefault(n, yMeanT));
+        T yVarT = Engine.DotProduct(centered, centered);
+        T yStdT = NumOps.Sqrt(NumOps.Divide(yVarT, NumOps.FromDouble(n)));
+        T epsT = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(yStdT, epsT)) yStdT = NumOps.One;
+        _yMean = yMeanT;
+        _yStd = yStdT;
+        var yStandardized = (Vector<T>)Engine.Divide(centered, Vector<T>.CreateDefault(n, yStdT));
         y = yStandardized;
 
         // Initialize parameters
@@ -227,10 +236,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // Denormalize: prediction = standardized_mean * yStd + yMean
             double mean = NumOps.ToDouble(distributions[i].Mean);
-            double pred = mean * _yStd + _yMean;
+            double pred = mean * NumOps.ToDouble(_yStd) + NumOps.ToDouble(_yMean);
             // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
             if (double.IsNaN(pred) || double.IsInfinity(pred))
-                pred = _yMean;
+                pred = NumOps.ToDouble(_yMean);
             predictions[i] = NumOps.FromDouble(pred);
         }
 
@@ -320,7 +329,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         _locationIntercept = mean;
         // Log link for scale: log(sqrt(variance))
-        _scaleIntercept = NumOps.FromDouble(Math.Log(Math.Sqrt(NumOps.ToDouble(variance))));
+        _scaleIntercept = NumOps.Log(NumOps.Sqrt(variance));
 
         // Initialize coefficients to zero
         if (_options.LocationModelType != GAMLSSModelType.Constant)
@@ -353,7 +362,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             for (int i = 0; i < n; i++)
             {
                 double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = Math.Exp(NumOps.ToDouble(etaScale[i]));
+                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
                 double yi = NumOps.ToDouble(y[i]);
 
                 // For normal distribution: weight = 1/sigma^2, z = y
@@ -428,8 +437,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             for (int i = 0; i < n; i++)
             {
                 double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = Math.Exp(NumOps.ToDouble(etaScale[i]));
-                double nu = Math.Exp(NumOps.ToDouble(etaShape[i]));  // degrees of freedom
+                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
+                double nu = NumOps.ToDouble(NumOps.Exp(etaShape[i]));  // degrees of freedom
                 double yi = NumOps.ToDouble(y[i]);
 
                 // Simplified: constant weight, linear update
@@ -562,8 +571,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < y.Length; i++)
         {
             T location = etaLocation[i];
-            T scale = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(etaScale[i])));
-            T shape = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(etaShape[i])));
+            T scale = NumOps.Exp(etaScale[i]);
+            T shape = NumOps.Exp(etaShape[i]);
 
             var dist = CreateDistribution(location, scale, shape);
             T logPdf = dist.LogPdf(y[i]);
@@ -742,8 +751,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.ShapeModelType);
 
         // Y standardization
-        writer.Write(_yMean);
-        writer.Write(_yStd);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
 
         // State
         writer.Write(_numFeatures);
@@ -789,8 +798,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
 
         // Y standardization
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
 
         // State
         _numFeatures = reader.ReadInt32();

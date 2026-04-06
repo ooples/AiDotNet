@@ -135,26 +135,27 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected Vector<T> EncodeContextPair(Vector<T> features, Vector<T> labelFeatures)
     {
-        var result = new Vector<T>(RepresentationDim);
+        var preActivation = new Vector<T>(RepresentationDim);
         int inputDim = features.Length + labelFeatures.Length;
 
         for (int i = 0; i < RepresentationDim; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < features.Length && j < RepresentationDim; j++)
             {
                 int paramIdx = (i * inputDim + j) % EncoderParams.Length;
-                sum += NumOps.ToDouble(features[j]) * NumOps.ToDouble(EncoderParams[paramIdx]);
+                sum = NumOps.Add(sum, NumOps.Multiply(features[j], EncoderParams[paramIdx]));
             }
             for (int j = 0; j < labelFeatures.Length && j < RepresentationDim; j++)
             {
                 int paramIdx = (i * inputDim + features.Length + j) % EncoderParams.Length;
-                sum += NumOps.ToDouble(labelFeatures[j]) * NumOps.ToDouble(EncoderParams[paramIdx]);
+                sum = NumOps.Add(sum, NumOps.Multiply(labelFeatures[j], EncoderParams[paramIdx]));
             }
-            result[i] = NumOps.FromDouble(Math.Tanh(sum));
+            preActivation[i] = sum;
         }
 
-        return result;
+        // SIMD tanh on entire vector at once
+        return VectorTanh(preActivation);
     }
 
     /// <summary>

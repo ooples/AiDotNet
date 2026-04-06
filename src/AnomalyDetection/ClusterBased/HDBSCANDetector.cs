@@ -7,28 +7,27 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AnomalyDetection.ClusterBased;
 
 /// <summary>
-/// Detects anomalies using HDBSCAN (Hierarchical Density-Based Spatial Clustering).
+/// Detects anomalies using HDBSCAN (Hierarchical DBSCAN).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> HDBSCAN improves on DBSCAN by automatically finding clusters of varying
-/// densities. It builds a hierarchy of clusters and extracts the most stable ones. Points that
-/// don't belong to any stable cluster are considered anomalies.
+/// <b>For Beginners:</b> HDBSCAN is an improved version of DBSCAN that automatically
+/// finds clusters of varying densities without requiring an epsilon parameter.
 /// </para>
 /// <para>
 /// The algorithm works by:
-/// 1. Compute core distances for all points
-/// 2. Build mutual reachability graph
-/// 3. Construct minimum spanning tree
-/// 4. Build cluster hierarchy and extract stable clusters
-/// 5. Points not in any cluster (noise) are anomalies
+/// 1. Compute core distances for each point
+/// 2. Build a mutual reachability graph
+/// 3. Construct a minimum spanning tree
+/// 4. Extract a cluster hierarchy
+/// 5. Points not in any cluster are anomalies
 /// </para>
 /// <para>
 /// <b>When to use:</b>
-/// - Clusters of varying densities
-/// - Unknown number of clusters
-/// - When DBSCAN's fixed epsilon is too restrictive
+/// - When clusters have varying densities
+/// - When you don't want to tune epsilon
+/// - Complex data structures with hierarchical cluster patterns
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
@@ -37,8 +36,7 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// <para>
-/// Reference: Campello, R.J.G.B., et al. (2013). "Density-Based Clustering Based on
-/// Hierarchical Density Estimates." PAKDD.
+/// Reference: Campello, R., et al. (2013). "Density-Based Clustering Based on Hierarchical Density Estimates." PAKDD.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -52,10 +50,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _minClusterSize;
     private readonly int _minSamples;
-    private double[][]? _trainingData;
+    private Matrix<T>? _trainingData;
     private int[]? _labels;
-    private double[]? _outlierScores;
-    private double _maxCoreDistance;
+    private T[]? _outlierScores;
+    private T _maxCoreDistance;
     private int _nFeatures;
 
     /// <summary>
@@ -72,13 +70,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
     /// Creates a new HDBSCAN anomaly detector.
     /// </summary>
     /// <param name="minClusterSize">Minimum size of clusters. Default is 5.</param>
-    /// <param name="minSamples">
-    /// Minimum samples for a point to be a core point. Default is 5.
-    /// </param>
+    /// <param name="minSamples">Minimum number of samples for core points. Default is 5.</param>
     /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
     /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
-    public HDBSCANDetector(int minClusterSize = 5, int minSamples = 5,
-        double contamination = 0.1, int randomSeed = 42)
+    public HDBSCANDetector(int minClusterSize = 5, int minSamples = 5, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
         if (minClusterSize < 2)
@@ -95,6 +90,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 
         _minClusterSize = minClusterSize;
         _minSamples = minSamples;
+        _maxCoreDistance = NumOps.One;
     }
 
     /// <inheritdoc/>
@@ -102,22 +98,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int n = X.Rows;
-        int d = X.Columns;
-        _nFeatures = d;
+        _nFeatures = X.Columns;
+        _trainingData = X;
 
-        // Convert to double array
-        _trainingData = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            _trainingData[i] = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                _trainingData[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
-        // Run simplified HDBSCAN
+        // Run simplified HDBSCAN directly on Matrix<T>
         RunHDBSCAN();
 
         // Calculate scores for training data to set threshold
@@ -135,7 +119,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Training data not initialized.");
         }
 
-        int n = trainingData.Length;
+        int n = trainingData.Rows;
 
         // Step 1: Compute core distances
         var coreDistances = ComputeCoreDistances();
@@ -144,13 +128,13 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         var mutualReach = ComputeMutualReachability(coreDistances);
 
         // Step 3: Build minimum spanning tree using Prim's algorithm
-        var mst = BuildMST(mutualReach);
+        var mst = BuildMST(mutualReach, n);
 
         // Step 4: Build cluster hierarchy and extract clusters
-        ExtractClusters(mst, coreDistances);
+        ExtractClusters(mst, coreDistances, n);
     }
 
-    private double[] ComputeCoreDistances()
+    private T[] ComputeCoreDistances()
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -158,20 +142,23 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Training data not initialized.");
         }
 
-        int n = trainingData.Length;
-        var coreDistances = new double[n];
+        int n = trainingData.Rows;
+        var coreDistances = new T[n];
 
         for (int i = 0; i < n; i++)
         {
-            // Find k-th nearest neighbor distance
-            var distances = new double[n];
+            var pointI = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+
+            // Compute distances to all points using vectorized ops
+            var distances = new T[n];
             for (int j = 0; j < n; j++)
             {
-                distances[j] = EuclideanDistance(trainingData[i], trainingData[j]);
+                var pointJ = new Vector<T>(trainingData.GetRowReadOnlySpan(j).ToArray());
+                var diff = Engine.Subtract(pointI, pointJ);
+                distances[j] = NumOps.Sqrt(Engine.DotProduct(diff, diff));
             }
 
-            Array.Sort(distances);
-            // Core distance is distance to _minSamples-th neighbor (0-indexed, skip self)
+            Array.Sort(distances, (a, b) => NumOps.Compare(a, b));
             int k = Math.Min(_minSamples, n - 1);
             coreDistances[i] = distances[k];
         }
@@ -179,7 +166,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         return coreDistances;
     }
 
-    private double[,] ComputeMutualReachability(double[] coreDistances)
+    private T[,] ComputeMutualReachability(T[] coreDistances)
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -187,22 +174,30 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Training data not initialized.");
         }
 
-        int n = trainingData.Length;
-        var mutualReach = new double[n, n];
+        int n = trainingData.Rows;
+        var mutualReach = new T[n, n];
 
         for (int i = 0; i < n; i++)
         {
+            var pointI = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+
             for (int j = i; j < n; j++)
             {
                 if (i == j)
                 {
-                    mutualReach[i, j] = 0;
+                    mutualReach[i, j] = NumOps.Zero;
                     continue;
                 }
 
-                double dist = EuclideanDistance(trainingData[i], trainingData[j]);
+                var pointJ = new Vector<T>(trainingData.GetRowReadOnlySpan(j).ToArray());
+                var diff = Engine.Subtract(pointI, pointJ);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+
                 // Mutual reachability = max(core_i, core_j, dist)
-                double mr = Math.Max(coreDistances[i], Math.Max(coreDistances[j], dist));
+                T mr = dist;
+                if (NumOps.GreaterThan(coreDistances[i], mr)) mr = coreDistances[i];
+                if (NumOps.GreaterThan(coreDistances[j], mr)) mr = coreDistances[j];
+
                 mutualReach[i, j] = mr;
                 mutualReach[j, i] = mr;
             }
@@ -211,35 +206,27 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         return mutualReach;
     }
 
-    private (int from, int to, double weight)[] BuildMST(double[,] distances)
+    private (int from, int to, T weight)[] BuildMST(T[,] distances, int n)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Training data not initialized.");
-        }
-
-        int n = trainingData.Length;
-        var mst = new List<(int from, int to, double weight)>();
+        var mst = new List<(int from, int to, T weight)>();
         var inMST = new bool[n];
-        var minEdge = new double[n];
+        var minEdge = new T[n];
         var minEdgeFrom = new int[n];
 
         for (int i = 0; i < n; i++)
         {
-            minEdge[i] = double.MaxValue;
+            minEdge[i] = NumOps.MaxValue;
         }
 
-        minEdge[0] = 0;
+        minEdge[0] = NumOps.Zero;
 
         for (int count = 0; count < n; count++)
         {
-            // Find minimum edge
             int u = -1;
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             for (int i = 0; i < n; i++)
             {
-                if (!inMST[i] && minEdge[i] < minDist)
+                if (!inMST[i] && NumOps.LessThan(minEdge[i], minDist))
                 {
                     minDist = minEdge[i];
                     u = i;
@@ -254,10 +241,9 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
                 mst.Add((minEdgeFrom[u], u, minEdge[u]));
             }
 
-            // Update adjacent vertices
             for (int v = 0; v < n; v++)
             {
-                if (!inMST[v] && distances[u, v] < minEdge[v])
+                if (!inMST[v] && NumOps.LessThan(distances[u, v], minEdge[v]))
                 {
                     minEdge[v] = distances[u, v];
                     minEdgeFrom[v] = u;
@@ -268,17 +254,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         return mst.ToArray();
     }
 
-    private void ExtractClusters((int from, int to, double weight)[] mst, double[] coreDistances)
+    private void ExtractClusters((int from, int to, T weight)[] mst, T[] coreDistances, int n)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Training data not initialized.");
-        }
-
-        int n = trainingData.Length;
         _labels = new int[n];
-        _outlierScores = new double[n];
+        _outlierScores = new T[n];
 
         for (int i = 0; i < n; i++)
         {
@@ -286,9 +265,8 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Sort MST edges by weight (descending) for hierarchical processing
-        var sortedEdges = mst.OrderByDescending(e => e.weight).ToArray();
+        var sortedEdges = mst.OrderByDescending(e => NumOps.ToDouble(e.weight)).ToArray();
 
-        // Use Union-Find for clustering
         var parent = new int[n];
         var rank = new int[n];
         var clusterSize = new int[n];
@@ -298,18 +276,15 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             clusterSize[i] = 1;
         }
 
-        // Build clusters by removing long edges
-        // Ensure at least 1 edge is taken to avoid empty sequence from Take(0)
         int takeCount = Math.Max(1, (int)(sortedEdges.Length * _contamination));
-        double cutoff = sortedEdges.Length > 0
+        T cutoff = sortedEdges.Length > 0
             ? sortedEdges.Take(takeCount).Last().weight
-            : double.MaxValue;
+            : NumOps.MaxValue;
 
-        // Process edges in ascending order to build clusters
-        var ascendingEdges = mst.OrderBy(e => e.weight).ToArray();
+        var ascendingEdges = mst.OrderBy(e => NumOps.ToDouble(e.weight)).ToArray();
         foreach (var edge in ascendingEdges)
         {
-            if (edge.weight > cutoff) continue;
+            if (NumOps.GreaterThan(edge.weight, cutoff)) continue;
 
             int root1 = Find(parent, edge.from);
             int root2 = Find(parent, edge.to);
@@ -320,7 +295,6 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        // Assign cluster labels
         var rootToLabel = new Dictionary<int, int>();
         int nextLabel = 0;
 
@@ -335,25 +309,27 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
                 }
                 _labels[i] = rootToLabel[root];
             }
-            // Else remains -1 (noise)
         }
 
-        // Store max core distance for proper normalization when scoring new data
-        _maxCoreDistance = coreDistances.Max();
-        if (_maxCoreDistance < 1e-10) _maxCoreDistance = 1.0;
+        // Store max core distance for normalization
+        _maxCoreDistance = coreDistances[0];
+        for (int i = 1; i < coreDistances.Length; i++)
+        {
+            if (NumOps.GreaterThan(coreDistances[i], _maxCoreDistance))
+                _maxCoreDistance = coreDistances[i];
+        }
+        T epsilon = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(_maxCoreDistance, epsilon)) _maxCoreDistance = NumOps.One;
 
-        // Compute outlier scores based on core distances and cluster membership
         for (int i = 0; i < n; i++)
         {
             if (_labels[i] == -1)
             {
-                // Noise points get high outlier score
-                _outlierScores[i] = 1.0;
+                _outlierScores[i] = NumOps.One;
             }
             else
             {
-                // Cluster members: score based on core distance relative to cluster
-                _outlierScores[i] = coreDistances[i] / _maxCoreDistance;
+                _outlierScores[i] = NumOps.Divide(coreDistances[i], _maxCoreDistance);
             }
         }
     }
@@ -419,54 +395,40 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
-            // For new points, compute distance to nearest training point
-            // and use mutual reachability concept
-            double minDist = double.MaxValue;
+            // Find nearest training point via vectorized distance
+            T minDist = NumOps.MaxValue;
             int nearestIdx = 0;
 
-            for (int t = 0; t < trainingData.Length; t++)
+            for (int t = 0; t < trainingData.Rows; t++)
             {
-                double dist = EuclideanDistance(point, trainingData[t]);
-                if (dist < minDist)
+                var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(t).ToArray());
+                var diff = Engine.Subtract(point, trainPoint);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestIdx = t;
                 }
             }
 
-            // Score based on distance and whether nearest neighbor is noise
-            double score;
+            T score;
             if (labels[nearestIdx] == -1)
             {
-                // Nearest neighbor is noise - high score
-                score = 1.0;
+                score = NumOps.One;
             }
             else
             {
-                // Score based on distance normalized by max core distance from training
-                score = minDist / _maxCoreDistance;
+                score = NumOps.Divide(minDist, _maxCoreDistance);
             }
 
-            scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));
+            // Clamp to [0, 1]
+            if (NumOps.GreaterThan(score, NumOps.One)) score = NumOps.One;
+            scores[i] = score;
         }
 
         return scores;
-    }
-
-    private static double EuclideanDistance(double[] a, double[] b)
-    {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
     }
 }

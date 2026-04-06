@@ -66,8 +66,8 @@ public class Denclue<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private T[][]? _attractors;
     private T[]? _attractorDensities;
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
 
     /// <summary>
     /// Initializes a new DENCLUE instance.
@@ -122,25 +122,27 @@ public class Denclue<T> : ClusteringBase<T>
         NumFeatures = d;
 
         // Normalize features for scale-invariant density estimation
-        _featureMeans = new double[d];
-        _featureStds = new double[d];
+        var meansD = new double[d];
+        var stdsD = new double[d];
         var xNorm = new Matrix<T>(n, d);
         for (int j = 0; j < d; j++)
         {
             double sum = 0, varSum = 0;
             for (int i = 0; i < n; i++)
                 sum += NumOps.ToDouble(x[i, j]);
-            _featureMeans[j] = sum / n;
+            meansD[j] = sum / n;
             for (int i = 0; i < n; i++)
             {
-                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                double diff = NumOps.ToDouble(x[i, j]) - meansD[j];
                 varSum += diff * diff;
             }
-            _featureStds[j] = Math.Sqrt(varSum / n);
-            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0;
+            stdsD[j] = Math.Sqrt(varSum / n);
+            if (stdsD[j] < 1e-10) stdsD[j] = 1.0;
             for (int i = 0; i < n; i++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - meansD[j]) / stdsD[j]);
         }
+        _featureMeans = new Vector<T>(meansD.Select(v => NumOps.FromDouble(v)));
+        _featureStds = new Vector<T>(stdsD.Select(v => NumOps.FromDouble(v)));
         x = xNorm;
 
         T minDensity = NumOps.FromDouble(_options.MinDensity);
@@ -414,7 +416,7 @@ public class Denclue<T> : ClusteringBase<T>
             for (int i = 0; i < x.Rows; i++)
                 for (int j = 0; j < x.Columns; j++)
                     xNorm[i, j] = NumOps.FromDouble(
-                        (NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                        (NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_featureMeans[j])) / NumOps.ToDouble(_featureStds[j]));
             x = xNorm;
         }
 
@@ -460,8 +462,8 @@ public class Denclue<T> : ClusteringBase<T>
         var clone = (Denclue<T>)CreateNewInstance();
         clone._attractors = _attractors?.Select(a => (T[])a.Clone()).ToArray();
         clone._attractorDensities = _attractorDensities?.ToArray();
-        clone._featureMeans = _featureMeans?.ToArray();
-        clone._featureStds = _featureStds?.ToArray();
+        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
+        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
         clone.NumClusters = NumClusters;
         clone.NumFeatures = NumFeatures;
         clone.IsTrained = IsTrained;

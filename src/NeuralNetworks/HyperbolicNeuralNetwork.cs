@@ -65,7 +65,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The curvature of the hyperbolic space (must be negative).
     /// </summary>
-    private double _curvature;
+    private T _curvature;
 
     /// <summary>
     /// Initializes a new instance of the HyperbolicNeuralNetwork class.
@@ -109,7 +109,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Curvature must be negative for hyperbolic space.", nameof(curvature));
         }
 
-        _curvature = curvature;
+        _curvature = NumOps.FromDouble(curvature);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Note: LossFunction is inherited from NeuralNetworkBase and set in base constructor call
@@ -138,18 +138,18 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
 
             if (hiddenSizes.Length == 0)
             {
-                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, outputFeatures, _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, outputFeatures, NumOps.ToDouble(_curvature)));
             }
             else
             {
-                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], NumOps.ToDouble(_curvature)));
 
                 for (int i = 0; i < hiddenSizes.Length - 1; i++)
                 {
-                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], _curvature));
+                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_curvature)));
                 }
 
-                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, _curvature));
+                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_curvature)));
             }
         }
     }
@@ -278,7 +278,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "HyperbolicNeuralNetwork" },
-                { "Curvature", _curvature },
+                { "Curvature", NumOps.ToDouble(_curvature) },
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
@@ -296,7 +296,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_curvature);
+        writer.Write(NumOps.ToDouble(_curvature));
         writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
         writer.Write(LossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
     }
@@ -317,7 +317,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
                 "Curvature must be negative for hyperbolic space. The serialized data may be corrupted.");
         }
 
-        _curvature = deserializedCurvature;
+        _curvature = NumOps.FromDouble(deserializedCurvature);
 
         // Read type names for forward compatibility and validation
         string optimizerType = reader.ReadString();
@@ -337,7 +337,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new HyperbolicNeuralNetwork<T>(
             Architecture,
-            _curvature,
+            NumOps.ToDouble(_curvature),
             _optimizer,
             LossFunction,
             Convert.ToDouble(MaxGradNorm));

@@ -67,7 +67,9 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// <summary>
     /// Shift applied to y to make it positive (0 if y was already positive).
     /// </summary>
-    private double _yShift;
+
+    private T _yShift;
+
 
     /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.
@@ -88,6 +90,7 @@ public class PoissonRegression<T> : RegressionBase<T>
     public PoissonRegression(PoissonRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _yShift = NumOps.Zero;
         _options = options ?? new PoissonRegressionOptions<T>();
     }
 
@@ -123,7 +126,7 @@ public class PoissonRegression<T> : RegressionBase<T>
 
         // Poisson requires positive targets. Shift if needed and store the shift
         // so we can adjust predictions back.
-        _yShift = 0.0;
+        _yShift = NumOps.Zero;
         double minY = double.MaxValue;
         for (int i = 0; i < y.Length; i++)
         {
@@ -132,10 +135,10 @@ public class PoissonRegression<T> : RegressionBase<T>
         }
         if (minY <= 0)
         {
-            _yShift = Math.Abs(minY) + 1.0;
+            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
             var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
-                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + NumOps.ToDouble(_yShift));
             y = yShifted;
         }
 
@@ -328,10 +331,10 @@ public class PoissonRegression<T> : RegressionBase<T>
         var predictions = PredictMean(xWithIntercept, coefficientsWithIntercept);
 
         // Undo the y-shift applied during training
-        if (_yShift > 0)
+        if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
             for (int i = 0; i < predictions.Length; i++)
-                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+                predictions[i] = NumOps.Subtract(predictions[i], _yShift);
         }
 
         return predictions;

@@ -82,7 +82,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// making it sensitive to patterns that stretch over longer time periods.
     /// </para>
     /// </remarks>
-    private double _tau;
+
+    private T _tau;
+
 
     /// <summary>
     /// Refractory period in time steps during which the neuron cannot fire again after spiking.
@@ -103,13 +105,17 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// a maximum firing rate similar to biological neurons.
     /// </para>
     /// </remarks>
-    private double _refractoryPeriod;
+
+    private T _refractoryPeriod;
+
 
     /// <summary>
     /// Firing threshold for spike generation. Default 0.5 (calibrated for
     /// typical [0,1] input magnitudes through Dense-like weight transforms).
     /// </summary>
-    private double _threshold = 0.5;
+
+    private T _threshold;
+
 
     // Cached tensors for hot-loop operations (avoid per-call allocation)
     private Tensor<T>? _cachedOnes;
@@ -338,7 +344,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// helps determine what type of firing pattern the neuron exhibits.
     /// </para>
     /// </remarks>
-    private double _a = 0.02;
+
+    private T _a;
+
 
     /// <summary>
     /// Sensitivity of recovery variable to membrane potential in Izhikevich model.
@@ -355,7 +363,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// excitability and responsiveness to input.
     /// </para>
     /// </remarks>
-    private double _b = 0.2;
+
+    private T _b;
+
 
     /// <summary>
     /// After-spike reset value of membrane potential in Izhikevich model.
@@ -372,7 +382,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// to reach threshold again.
     /// </para>
     /// </remarks>
-    private double _c = -65.0;
+
+    private T _c;
+
 
     /// <summary>
     /// After-spike reset of recovery variable in Izhikevich model.
@@ -389,7 +401,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// creating different patterns of activity like bursting or chattering.
     /// </para>
     /// </remarks>
-    private double _d = 8.0;
+
+    private T _d;
+
 
     /// <summary>
     /// Adaptation variable for Adaptive Exponential neuron model.
@@ -427,7 +441,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// membrane potential just before a real neuron fires.
     /// </para>
     /// </remarks>
-    private double _deltaT = 2.0;
+
+    private T _deltaT;
+
 
     /// <summary>
     /// Threshold potential in Adaptive Exponential model.
@@ -444,7 +460,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// membrane potential that typically leads to a spike.
     /// </para>
     /// </remarks>
-    private double _vT = -50.0;
+
+    private T _vT;
+
 
     /// <summary>
     /// Adaptation time constant in Adaptive Exponential model.
@@ -461,7 +479,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// take time to recover their full responsiveness after periods of high activity.
     /// </para>
     /// </remarks>
-    private double _tauw = 30.0;
+
+    private T _tauw;
+
 
     /// <summary>
     /// Subthreshold adaptation in Adaptive Exponential model.
@@ -479,7 +499,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// that don't cause firing.
     /// </para>
     /// </remarks>
-    private double _a_adex = 4.0;
+
+    private T _a_adex;
+
 
     /// <summary>
     /// Spike-triggered adaptation in Adaptive Exponential model.
@@ -496,7 +518,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// that real neurons experience after firing.
     /// </para>
     /// </remarks>
-    private double _b_adex = 80.5;
+
+    private T _b_adex;
+
 
     /// <summary>
     /// Potassium activation gating variable for Hodgkin-Huxley model.
@@ -638,13 +662,16 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// for the specified neuron type, with appropriate default values.
     /// </para>
     /// </remarks>
+#pragma warning disable CS8618 // T fields initialized via NumOps.FromDouble in constructor body
     public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
         double tau = 10.0, double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
+#pragma warning restore CS8618
         _neuronType = neuronType;
-        _tau = tau;
-        _refractoryPeriod = refractoryPeriod;
+        _tau = NumOps.FromDouble(tau);
+        _refractoryPeriod = NumOps.FromDouble(refractoryPeriod);
+        _threshold = NumOps.FromDouble(0.5);
 
         // Initialize weights with small random values as Tensor<T>
         // CreateRandom gives [0,1], scale to [-0.1, 0.1]
@@ -672,20 +699,20 @@ public partial class SpikingLayer<T> : LayerBase<T>
         // Initialize model-specific variables based on neuron type
         if (neuronType == SpikingNeuronType.Izhikevich)
         {
-            _a = 0.02;  // Time scale of recovery variable
-            _b = 0.2;   // Sensitivity of recovery variable
-            _c = -65.0; // After-spike reset value of membrane potential
-            _d = 8.0;   // After-spike reset of recovery variable
+            _a = NumOps.FromDouble(0.02);  // Time scale of recovery variable
+            _b = NumOps.FromDouble(0.2);   // Sensitivity of recovery variable
+            _c = NumOps.FromDouble(-65.0); // After-spike reset value of membrane potential
+            _d = NumOps.FromDouble(8.0);   // After-spike reset of recovery variable
             _recoveryVariable = new Tensor<T>([outputSize]);
             _recoveryVariable.Fill(NumOps.Zero);
         }
         else if (neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            _deltaT = 2.0;  // Sharpness of exponential
-            _vT = -50.0;    // Threshold potential
-            _tauw = 30.0;   // Adaptation time constant
-            _a_adex = 4.0;  // Subthreshold adaptation
-            _b_adex = 0.5;  // Spike-triggered adaptation
+            _deltaT = NumOps.FromDouble(2.0);  // Sharpness of exponential
+            _vT = NumOps.FromDouble(-50.0);    // Threshold potential
+            _tauw = NumOps.FromDouble(30.0);   // Adaptation time constant
+            _a_adex = NumOps.FromDouble(4.0);  // Subthreshold adaptation
+            _b_adex = NumOps.FromDouble(0.5);  // Spike-triggered adaptation
             _adaptationVariable = new Tensor<T>([outputSize]);
             _adaptationVariable.Fill(NumOps.Zero);
         }
@@ -953,7 +980,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     private Tensor<T> UpdateLeakyIntegrateAndFire(Tensor<T> current)
     {
         // Decay membrane potential using Engine operations
-        T decayFactor = NumOps.FromDouble(1.0 - 1.0 / _tau);
+        T decayFactor = NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.One, _tau));
         _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
 
         // Cache ones/zeros tensors to avoid per-call allocation (hot loop)
@@ -977,14 +1004,14 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
         // Generate spikes: where membrane potential >= threshold
         // Threshold calibrated for typical input magnitudes from Dense layers
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.Subtract(_threshold, NumOps.FromDouble(0.0001)));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
-        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, _refractoryPeriod);
         _refractoryCountdown = Engine.TensorAdd(
             Engine.TensorMultiply(_refractoryCountdown, resetMask),
             refractorySet);
@@ -1039,14 +1066,14 @@ public partial class SpikingLayer<T> : LayerBase<T>
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes where membrane potential >= 1.0
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.Subtract(_threshold, NumOps.FromDouble(0.0001)));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
-        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, _refractoryPeriod);
         _refractoryCountdown = Engine.TensorAdd(
             Engine.TensorMultiply(_refractoryCountdown, resetMask),
             refractorySet);
@@ -1089,6 +1116,10 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
         // Izhikevich model - complex biophysical dynamics require element-wise computation
         // These equations are inherently non-vectorizable due to their coupled nonlinear nature
+        double aD = NumOps.ToDouble(_a);
+        double bD = NumOps.ToDouble(_b);
+        double cD = NumOps.ToDouble(_c);
+        double dD = NumOps.ToDouble(_d);
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             double v = Convert.ToDouble(_membranePotential[i]);
@@ -1097,7 +1128,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
             // Update membrane potential and recovery variable
             double dv = 0.04 * v * v + 5 * v + 140 - u + I;
-            double du = _a * (_b * v - u);
+            double du = aD * (bD * v - u);
 
             v += dv;
             u += du;
@@ -1106,8 +1137,8 @@ public partial class SpikingLayer<T> : LayerBase<T>
             if (v >= 30)
             {
                 _spikes[i] = NumOps.One;
-                v = _c;
-                u += _d;
+                v = cD;
+                u += dD;
             }
             else
             {
@@ -1156,12 +1187,12 @@ public partial class SpikingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Adaptation variable not initialized for AdEx model");
 
         // Vectorized Adaptive Exponential Integrate-and-Fire model using IEngine
-        T vT = NumOps.FromDouble(_vT);
-        T deltaT = NumOps.FromDouble(_deltaT);
-        T tau = NumOps.FromDouble(_tau);
-        T tauw = NumOps.FromDouble(_tauw);
-        T aAdex = NumOps.FromDouble(_a_adex);
-        T bAdex = NumOps.FromDouble(_b_adex);
+        T vT = _vT;
+        T deltaT = _deltaT;
+        T tau = _tau;
+        T tauw = _tauw;
+        T aAdex = _a_adex;
+        T bAdex = _b_adex;
         T one = NumOps.One;
         T zero = NumOps.Zero;
         T resetV = NumOps.FromDouble(-70.0);
@@ -1606,8 +1637,8 @@ public partial class SpikingLayer<T> : LayerBase<T>
     {
         // Write neuron type and parameters
         writer.Write((int)_neuronType);
-        writer.Write(_tau);
-        writer.Write(_refractoryPeriod);
+        writer.Write(NumOps.ToDouble(_tau));
+        writer.Write(NumOps.ToDouble(_refractoryPeriod));
 
         // Write weights and biases from tensors
         int inputSize = _weights.Shape[0];
@@ -1628,18 +1659,18 @@ public partial class SpikingLayer<T> : LayerBase<T>
         // Write model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {
-            writer.Write(_a);
-            writer.Write(_b);
-            writer.Write(_c);
-            writer.Write(_d);
+            writer.Write(NumOps.ToDouble(_a));
+            writer.Write(NumOps.ToDouble(_b));
+            writer.Write(NumOps.ToDouble(_c));
+            writer.Write(NumOps.ToDouble(_d));
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            writer.Write(_deltaT);
-            writer.Write(_vT);
-            writer.Write(_tauw);
-            writer.Write(_a_adex);
-            writer.Write(_b_adex);
+            writer.Write(NumOps.ToDouble(_deltaT));
+            writer.Write(NumOps.ToDouble(_vT));
+            writer.Write(NumOps.ToDouble(_tauw));
+            writer.Write(NumOps.ToDouble(_a_adex));
+            writer.Write(NumOps.ToDouble(_b_adex));
         }
     }
 
@@ -1668,8 +1699,8 @@ public partial class SpikingLayer<T> : LayerBase<T>
     {
         // Read neuron type and parameters
         _neuronType = (SpikingNeuronType)reader.ReadInt32();
-        _tau = reader.ReadDouble();
-        _refractoryPeriod = reader.ReadDouble();
+        _tau = NumOps.FromDouble(reader.ReadDouble());
+        _refractoryPeriod = NumOps.FromDouble(reader.ReadDouble());
 
         // Read weights and biases into tensors
         int inputSize = _weights.Shape[0];
@@ -1690,10 +1721,10 @@ public partial class SpikingLayer<T> : LayerBase<T>
         // Read model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {
-            _a = reader.ReadDouble();
-            _b = reader.ReadDouble();
-            _c = reader.ReadDouble();
-            _d = reader.ReadDouble();
+            _a = NumOps.FromDouble(reader.ReadDouble());
+            _b = NumOps.FromDouble(reader.ReadDouble());
+            _c = NumOps.FromDouble(reader.ReadDouble());
+            _d = NumOps.FromDouble(reader.ReadDouble());
 
             // Initialize recovery variable if needed
             if (_recoveryVariable == null)
@@ -1704,11 +1735,11 @@ public partial class SpikingLayer<T> : LayerBase<T>
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            _deltaT = reader.ReadDouble();
-            _vT = reader.ReadDouble();
-            _tauw = reader.ReadDouble();
-            _a_adex = reader.ReadDouble();
-            _b_adex = reader.ReadDouble();
+            _deltaT = NumOps.FromDouble(reader.ReadDouble());
+            _vT = NumOps.FromDouble(reader.ReadDouble());
+            _tauw = NumOps.FromDouble(reader.ReadDouble());
+            _a_adex = NumOps.FromDouble(reader.ReadDouble());
+            _b_adex = NumOps.FromDouble(reader.ReadDouble());
 
             // Initialize adaptation variable if needed
             if (_adaptationVariable == null)

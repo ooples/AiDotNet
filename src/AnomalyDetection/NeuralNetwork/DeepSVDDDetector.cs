@@ -179,9 +179,10 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -283,36 +284,26 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b1[j];
-            { var wCol_0 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_0[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_0)); }
-            // ReLU: convert to double at activation boundary
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
-        }
+        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
+        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var h1Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
+            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
+        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
-        // Layer 2
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b2[j];
-            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
-            // ReLU: convert to double at activation boundary
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
-        }
+        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
+        var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
+        var h2Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
+            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
+        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
-        // Output layer (no activation - linear)
-        var output = new Vector<T>(_outputDim);
-        for (int j = 0; j < _outputDim; j++)
-        {
-            T sum = b3[j];
-            { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = w3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_2)); }
-            output[j] = sum;
-        }
+        // Output layer (linear, no activation)  (SIMD)
+        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var outPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
+            Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
+        var output = outPre.Reshape(_outputDim).ToVector();
 
         return output;
     }
@@ -332,31 +323,26 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b1[j];
-            { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
-        }
+        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
+        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var h1Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
+            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
+        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = b2[j];
-            { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
-        }
+        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
+        var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
+        var h2Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
+            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
+        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
-        var output = new Vector<T>(_outputDim);
-        for (int j = 0; j < _outputDim; j++)
-        {
-            T sum = b3[j];
-            { var wCol_5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_5[ii] = w3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_5)); }
-            output[j] = sum;
-        }
+        // Output layer (linear)  (SIMD)
+        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var outPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
+            Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
+        var output = outPre.Reshape(_outputDim).ToVector();
 
         return (h1, h2, output);
     }
@@ -525,7 +511,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private static double ReLU(double x) => Math.Max(0, x);
+    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)

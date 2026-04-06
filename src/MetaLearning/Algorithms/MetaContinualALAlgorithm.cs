@@ -64,10 +64,10 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private readonly int _paramDim;
 
     /// <summary>Running mean of per-parameter gradient magnitudes.</summary>
-    private double[] _uncertaintyMean;
+    private Vector<T> _uncertaintyMean;
 
     /// <summary>Running variance of per-parameter gradient magnitudes.</summary>
-    private double[] _uncertaintyVar;
+    private Vector<T> _uncertaintyVar;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaContinualAL;
@@ -81,9 +81,9 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
-        _uncertaintyMean = new double[_paramDim];
-        _uncertaintyVar = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++) _uncertaintyVar[d] = 1.0;
+        _uncertaintyMean = new Vector<T>(_paramDim);
+        _uncertaintyVar = new Vector<T>(_paramDim);
+        for (int d = 0; d < _paramDim; d++) _uncertaintyVar[d] = NumOps.One;
     }
 
     /// <inheritdoc/>
@@ -112,15 +112,17 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
                 double decay = _algoOptions.UncertaintyDecay;
                 for (int d = 0; d < _paramDim; d++)
                 {
-                    double diff = uncertainty[d] - _uncertaintyMean[d];
-                    _uncertaintyMean[d] = decay * _uncertaintyMean[d] + (1.0 - decay) * uncertainty[d];
-                    _uncertaintyVar[d] = decay * _uncertaintyVar[d] + (1.0 - decay) * diff * diff;
+                    double meanD = NumOps.ToDouble(_uncertaintyMean[d]);
+                    double varD = NumOps.ToDouble(_uncertaintyVar[d]);
+                    double diff = uncertainty[d] - meanD;
+                    _uncertaintyMean[d] = NumOps.FromDouble(decay * meanD + (1.0 - decay) * uncertainty[d]);
+                    _uncertaintyVar[d] = NumOps.FromDouble(decay * varD + (1.0 - decay) * diff * diff);
                 }
 
                 // Compute z-scores and find threshold for acquisition mask
                 var zScores = new double[_paramDim];
                 for (int d = 0; d < _paramDim; d++)
-                    zScores[d] = (uncertainty[d] - _uncertaintyMean[d]) / (Math.Sqrt(_uncertaintyVar[d]) + 1e-10);
+                    zScores[d] = (uncertainty[d] - NumOps.ToDouble(_uncertaintyMean[d])) / (NumOps.ToDouble(NumOps.Sqrt(_uncertaintyVar[d])) + 1e-10);
 
                 // Find threshold: top-f fraction gets full learning rate
                 var sorted = new double[_paramDim];
@@ -140,7 +142,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
                     // Exploration bonus: noise proportional to uncertainty
                     double noise = 0;
                     if (_algoOptions.ExplorationBonus > 0)
-                        noise = _algoOptions.ExplorationBonus * Math.Sqrt(_uncertaintyVar[d]) * SampleNormal();
+                        noise = _algoOptions.ExplorationBonus * NumOps.ToDouble(NumOps.Sqrt(_uncertaintyVar[d])) * SampleNormal();
 
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * mask * (gradVal + noise)));
@@ -177,7 +179,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
             var zScores = new double[_paramDim];
             for (int d = 0; d < _paramDim; d++)
-                zScores[d] = (uncertainty[d] - _uncertaintyMean[d]) / (Math.Sqrt(_uncertaintyVar[d]) + 1e-10);
+                zScores[d] = (uncertainty[d] - NumOps.ToDouble(_uncertaintyMean[d])) / (NumOps.ToDouble(NumOps.Sqrt(_uncertaintyVar[d])) + 1e-10);
 
             var sorted = new double[_paramDim];
             Array.Copy(zScores, sorted, _paramDim);

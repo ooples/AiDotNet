@@ -640,35 +640,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new NotSupportedException($"Cannot compute entropy for type {typeof(TOutput).Name}");
         }
 
-        // Apply softmax with numerical stability
-        var expValues = new T[logits.Length];
-        T sumExp = NumOps.Zero;
-
-        // Find max for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-            {
-                maxLogit = logits[i];
-            }
-        }
-
-        // Compute exp(x - max) for stability
-        for (int i = 0; i < logits.Length; i++)
-        {
-            T shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
-        }
-
-        // Normalize to probabilities
-        var probabilities = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            probabilities[i] = NumOps.Divide(expValues[i], sumExp);
-        }
-
-        return probabilities;
+        // SIMD softmax via Engine
+        return Softmax(logits);
     }
 }

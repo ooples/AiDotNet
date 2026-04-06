@@ -152,7 +152,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// everything - it helps you focus on what really matters.
     /// </para>
     /// </remarks>
-    private double _sparsityThreshold { get; set; }
+    private T _sparsityThreshold { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HTMNetwork{T}"/> class with the specified architecture and parameters.
@@ -222,7 +222,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         _inputSize = inputShape[0];
         _columnCount = columnCount;
         _cellsPerColumn = cellsPerColumn;
-        _sparsityThreshold = sparsityThreshold;
+        _sparsityThreshold = NumOps.FromDouble(sparsityThreshold);
 
         InitializeLayers();
     }
@@ -261,7 +261,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, _sparsityThreshold));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, NumOps.ToDouble(_sparsityThreshold)));
         }
     }
 
@@ -693,7 +693,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 { "InputSize", _inputSize },
                 { "ColumnCount", _columnCount },
                 { "CellsPerColumn", _cellsPerColumn },
-                { "SparsityThreshold", _sparsityThreshold },
+                { "SparsityThreshold", NumOps.ToDouble(_sparsityThreshold) },
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", GetParameterCount() }
             },
@@ -710,7 +710,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Write HTM-specific parameters
         writer.Write(_columnCount);
         writer.Write(_cellsPerColumn);
-        writer.Write(_sparsityThreshold);
+        writer.Write(NumOps.ToDouble(_sparsityThreshold));
 
         // Serialize any additional HTM state
 
@@ -756,7 +756,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Read HTM-specific parameters
         _columnCount = reader.ReadInt32();
         _cellsPerColumn = reader.ReadInt32();
-        _sparsityThreshold = reader.ReadDouble();
+        _sparsityThreshold = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize additional HTM state
 
@@ -822,6 +822,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             this.Architecture,
             _columnCount,
             _cellsPerColumn,
-            _sparsityThreshold);
+            NumOps.ToDouble(_sparsityThreshold));
     }
 }

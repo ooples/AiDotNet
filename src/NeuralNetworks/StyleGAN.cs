@@ -185,7 +185,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Probability of style mixing during training.
     /// </summary>
-    private double _styleMixingProbability;
+    private T _styleMixingProbability;
 
     private ILossFunction<T> _lossFunction;
 
@@ -289,7 +289,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
         _enableStyleMixing = enableStyleMixing;
-        _styleMixingProbability = styleMixingProbability;
+        _styleMixingProbability = NumOps.FromDouble(styleMixingProbability);
         _initialLearningRate = initialLearningRate;
 
         // Initialize MappingNetwork optimizer state
@@ -350,7 +350,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var styles = MappingNetwork.Predict(latentCodes);
 
         // Apply style mixing if enabled
-        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability)
+        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < NumOps.ToDouble(_styleMixingProbability))
         {
             var latentCodes2 = GenerateRandomLatentCodes(batchSize);
             var styles2 = MappingNetwork.Predict(latentCodes2);
@@ -870,7 +870,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         writer.Write(_latentSize);
         writer.Write(_intermediateLatentSize);
         writer.Write(_enableStyleMixing);
-        writer.Write(_styleMixingProbability);
+        writer.Write(NumOps.ToDouble(_styleMixingProbability));
 
         var mappingBytes = MappingNetwork.Serialize();
         writer.Write(mappingBytes.Length);
@@ -904,7 +904,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _latentSize = reader.ReadInt32();
         _intermediateLatentSize = reader.ReadInt32();
         _enableStyleMixing = reader.ReadBoolean();
-        _styleMixingProbability = reader.ReadDouble();
+        _styleMixingProbability = NumOps.FromDouble(reader.ReadDouble());
 
         int mappingLength = reader.ReadInt32();
         MappingNetwork.Deserialize(reader.ReadBytes(mappingLength));
@@ -938,7 +938,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             _lossFunction,
             _initialLearningRate,
             _enableStyleMixing,
-            _styleMixingProbability);
+            NumOps.ToDouble(_styleMixingProbability));
     }
 
     /// <summary>

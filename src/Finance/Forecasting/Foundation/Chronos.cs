@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -17,7 +17,7 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Chronos foundation model for time series forecasting using tokenization.
@@ -185,8 +185,12 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
     private double _temperature;
     private FoundationModelSize _modelSize;
-    private T _lastTokenMin = default;
-    private T _lastTokenRange = default;
+
+    private T _lastTokenMin;
+
+
+    private T _lastTokenRange;
+
     private bool _hasTokenScale;
 
     #endregion
@@ -267,6 +271,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
+        _lastTokenMin = NumOps.Zero;
+        _lastTokenRange = NumOps.Zero;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -321,6 +327,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         options ??= new ChronosFinanceOptions<T>();
         _options = options;
         Options = _options;
+        _lastTokenMin = NumOps.Zero;
+        _lastTokenRange = NumOps.Zero;
         ValidateOptions(options);
 
         _useNativeMode = true;

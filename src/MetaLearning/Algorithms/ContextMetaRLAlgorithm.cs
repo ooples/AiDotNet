@@ -192,15 +192,15 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private Vector<T> EncodeGradient(Vector<T> grad)
     {
-        var encoded = new Vector<T>(_contextDim);
+        var preAct = new Vector<T>(_contextDim);
         for (int c = 0; c < _contextDim; c++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_encoderParams[c * _compressedDim + d]);
-            encoded[c] = NumOps.FromDouble(Math.Tanh(sum));
+                sum = NumOps.Add(sum, NumOps.Multiply(grad[d], _encoderParams[c * _compressedDim + d]));
+            preAct[c] = sum;
         }
-        return encoded;
+        return VectorTanh(preAct);
     }
 
     /// <summary>
