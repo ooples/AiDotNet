@@ -221,14 +221,14 @@ public class WorkspaceCodeGenerator
     private Expression EmitInto<T>(ParameterExpression engine, string methodName,
         ParameterExpression dest, Expression a, Expression b)
     {
-        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{methodName} not found");
+        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException(nameof(IEngine), methodName);
         return Expression.Call(engine, method, dest, a, b);
     }
 
     private Expression EmitActivationInto<T>(ParameterExpression engine, string methodName,
         ParameterExpression dest, Expression input)
     {
-        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{methodName} not found");
+        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException(nameof(IEngine), methodName);
         return Expression.Call(engine, method, dest, input);
     }
 
@@ -343,7 +343,7 @@ public class WorkspaceCodeGenerator
         ParameterExpression dest, Expression[] inputs)
     {
         // Fallback: call the allocating IEngine method and copy result to workspace slot
-        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException($"IEngine.{methodName} not found");
+        var method = typeof(IEngine).GetMethod(methodName)?.MakeGenericMethod(typeof(T)) ?? throw new MissingMethodException(nameof(IEngine), methodName);
         var resultVar = Expression.Variable(typeof(Tensor<T>), "alloc_temp");
         var callExpr = Expression.Call(engine, method, inputs);
         // TODO: copy result.Data.Span to dest.Data.Span

@@ -722,19 +722,21 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <summary>
-    /// Not supported — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// Returns an empty vector — Hoeffding trees learn structure during training, not flat parameter vectors.
     /// </summary>
     public Vector<T> GetParameters()
-        => throw new NotSupportedException("Hoeffding trees do not support flat parameter access.");
+        => new Vector<T>(0);
 
     /// <summary>
-    /// Not supported — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// No-op — Hoeffding trees learn structure during training, not flat parameter vectors.
     /// </summary>
     public void SetParameters(Vector<T> parameters)
-        => throw new NotSupportedException("Hoeffding trees do not support flat parameter setting.");
+    {
+        // Tree-based model — structure cannot be set from flat parameters
+    }
 
     /// <summary>
-    /// Creates a fresh instance — tree structure cannot be reconstructed from flat parameters.
+    /// Returns a fresh instance — tree structure cannot be reconstructed from flat parameters.
     /// </summary>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
         => new HoeffdingTreeClassifier<T>(_options);
