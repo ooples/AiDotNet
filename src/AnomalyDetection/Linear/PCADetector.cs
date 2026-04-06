@@ -52,8 +52,11 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
     private readonly double _varianceThreshold;
     private int _fittedComponents;
     private Vector<T>? _mean;
+    private Vector<T> FittedMean => _mean ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
     private Matrix<T>? _components;
+    private Matrix<T> FittedComponents => _components ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
     private Vector<T>? _explainedVariance;
+    private Vector<T> FittedExplainedVariance => _explainedVariance ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
 
     /// <summary>
     /// Gets the number of components used.
@@ -181,21 +184,21 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
         {
             // Center the point
             for (int j = 0; j < d; j++)
-                centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
+                centered[j] = NumOps.Subtract(X[i, j], FittedMean[j]);
 
             // Project onto components
             for (int c = 0; c < _fittedComponents; c++)
             {
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], FittedComponents[c, j]));
                 projected[c] = dot;
             }
 
             // Reconstruct from projection
             for (int j = 0; j < d; j++)
             {
-                for (int c = 0; c < _fittedComponents; c++) compCol[c] = _components![c, j];
+                for (int c = 0; c < _fittedComponents; c++) compCol[c] = FittedComponents[c, j];
                 reconstructed[j] = Engine.DotProduct(projected, compCol);
             }
 
@@ -214,7 +217,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             T eigenFloor = NumOps.FromDouble(EigenvalueFloor);
             for (int c = 0; c < _fittedComponents; c++)
             {
-                T eigenvalue = _explainedVariance![c];
+                T eigenvalue = FittedExplainedVariance[c];
                 if (NumOps.GreaterThan(eigenvalue, eigenFloor))
                 {
                     T proj = projected[c];

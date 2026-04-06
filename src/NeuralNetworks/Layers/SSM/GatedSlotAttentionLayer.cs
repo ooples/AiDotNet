@@ -530,12 +530,12 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_initialSlotsGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_forgetGateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_forgetGateBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_initialSlotsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_inputGateWeightsGradient?.ToArray() ?? new T[_inputGateWeights.Length]),
             new Vector<T>(_inputGateBiasGradient?.ToArray() ?? new T[_inputGateBias.Length]),
             new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),

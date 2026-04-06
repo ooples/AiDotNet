@@ -369,11 +369,11 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_gateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_gateBiasGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
             new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
     }

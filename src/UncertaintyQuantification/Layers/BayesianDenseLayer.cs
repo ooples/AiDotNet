@@ -281,8 +281,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             for (int i = 0; i < _outputSize; i++)
             {
                 var wRow = new Vector<T>(_inputSize);
-                for (int j = 0; j < _inputSize; j++) wRow[j] = _sampledWeights![i, j];
-                outputVector[outputOffset + i] = NumOps.Add(_sampledBias![i], Engine.DotProduct(wRow, inputSlice));
+                if (_sampledWeights != null)
+                    for (int j = 0; j < _inputSize; j++) wRow[j] = _sampledWeights[i, j];
+                outputVector[outputOffset + i] = NumOps.Add(_sampledBias != null ? _sampledBias[i] : NumOps.Zero, Engine.DotProduct(wRow, inputSlice));
             }
         }
 

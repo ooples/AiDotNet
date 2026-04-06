@@ -68,6 +68,7 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// Training target values.
     /// </summary>
     private Vector<T>? _y;
+    private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
     /// Prior covariance matrix.
@@ -336,9 +337,10 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     private double UpdateSite(int i)
     {
-        if (_posteriorMean is null || _posteriorCov is null ||
-            _sitePrecisions is null || _siteNaturalMeans is null || _y is null || _weights is null)
+        if (_posteriorMean == null || _posteriorCov == null ||
+            _sitePrecisions == null || _siteNaturalMeans == null || _y == null || _weights == null)
             return 0;
+        var y = _y;
 
         // Cavity distribution (posterior without site i)
         double postPrecision = 1.0 / Math.Max(_numOps.ToDouble(_posteriorCov[i, i]), 1e-10);
@@ -355,7 +357,7 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         double cavityMean = (postPrecision * postMean - siteNaturalMean) / cavityPrecision;
 
         // Compute tilted distribution moments via numerical integration
-        double yi = _numOps.ToDouble(_y[i]);
+        double yi = _numOps.ToDouble(y[i]);
         var (tiltedMean, tiltedVar, logZ) = ComputeTiltedMoments(
             yi, cavityMean, 1.0 / cavityPrecision);
 
@@ -515,13 +517,14 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     private double ComputeLogMarginalLikelihood()
     {
         // Simplified approximation for convergence monitoring
-        if (_posteriorMean is null || _y is null || _posteriorCov is null) return 0;
+        if (_posteriorMean is null || _posteriorCov is null) return 0;
+        var y = FittedY;
 
         double logZ = 0;
-        int n = _y.Length;
+        int n = y.Length;
         for (int i = 0; i < n; i++)
         {
-            double yi = _numOps.ToDouble(_y[i]);
+            double yi = _numOps.ToDouble(y[i]);
             double mi = _numOps.ToDouble(_posteriorMean[i]);
             double vi = _numOps.ToDouble(_posteriorCov[i, i]);
             logZ += StudentTLogPdf(yi - mi, _nu, Math.Sqrt(vi + _scale * _scale));
@@ -605,7 +608,7 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         var alpha = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            alpha[i] = _y![i];
+            alpha[i] = FittedY[i];
         }
 
         // Solve for weights

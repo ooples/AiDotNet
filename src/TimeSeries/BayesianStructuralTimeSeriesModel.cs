@@ -1698,8 +1698,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         ModelParameters = new Vector<T>(2 + regLen); // level + trend + regression coefficients
         ModelParameters[0] = _level;
         ModelParameters[1] = _trend;
-        for (int i = 0; i < regLen; i++)
-            ModelParameters[2 + i] = _regression![i];
+        if (_regression != null)
+        {
+            for (int i = 0; i < regLen; i++)
+                ModelParameters[2 + i] = _regression[i];
+        }
     }
 
     /// <summary>

@@ -124,8 +124,8 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     {
         if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _linear1WeightsGradient.ToVector(), _linear1BiasGradient!.ToVector(),
-            _linear2WeightsGradient!.ToVector(), _linear2BiasGradient!.ToVector());
+            _linear1WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear1BiasGradient?.ToVector() ?? new Vector<T>(0),
+            _linear2WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear2BiasGradient?.ToVector() ?? new Vector<T>(0));
     }
 
     public override void ClearGradients()
