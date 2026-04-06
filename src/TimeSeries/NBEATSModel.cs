@@ -270,10 +270,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < n; i++)
             {
-                if (i < trainN && trainN > 0)
-                    predictions[i] = _trainingSeries[i];
-                else
-                    predictions[i] = PredictSingle(input.GetRow(i));
+                predictions[i] = PredictSingle(input.GetRow(i));
             }
             return predictions;
         }
@@ -286,34 +283,26 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
+            // Always produce a model prediction — never return stored training data
+            int seriesLen = series.Count;
+            if (seriesLen >= _options.LookbackWindow)
             {
-                // In-sample: return stored training value
-                predictions[i] = _trainingSeries[i];
+                var lookback = new Vector<T>(_options.LookbackWindow);
+                int start = seriesLen - _options.LookbackWindow;
+                for (int j = 0; j < _options.LookbackWindow; j++)
+                    lookback[j] = series[start + j];
+                predictions[i] = PredictSingle(lookback);
             }
             else
             {
-                // Out-of-sample: build lookback from the running series
-                int seriesLen = series.Count;
-                if (seriesLen >= _options.LookbackWindow)
-                {
-                    var lookback = new Vector<T>(_options.LookbackWindow);
-                    int start = seriesLen - _options.LookbackWindow;
-                    for (int j = 0; j < _options.LookbackWindow; j++)
-                        lookback[j] = series[start + j];
-                    predictions[i] = PredictSingle(lookback);
-                }
-                else
-                {
-                    // Not enough history: pad with zeros
-                    var lookback = new Vector<T>(_options.LookbackWindow);
-                    int offset = _options.LookbackWindow - seriesLen;
-                    for (int j = 0; j < seriesLen; j++)
-                        lookback[offset + j] = series[j];
-                    predictions[i] = PredictSingle(lookback);
-                }
-                series.Add(predictions[i]);
+                // Not enough history: pad with zeros
+                var lookback = new Vector<T>(_options.LookbackWindow);
+                int offset = _options.LookbackWindow - seriesLen;
+                for (int j = 0; j < seriesLen; j++)
+                    lookback[offset + j] = series[j];
+                predictions[i] = PredictSingle(lookback);
             }
+            series.Add(predictions[i]);
         }
 
         return predictions;
