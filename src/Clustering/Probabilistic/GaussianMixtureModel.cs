@@ -238,7 +238,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 if (NumOps.GreaterThan(FittedResponsibilities[i, c], maxResp))
                 {
-                    maxResp = _responsibilities[i, c];
+                    maxResp = FittedResponsibilities[i, c];
                     bestCluster = c;
                 }
             }
@@ -639,7 +639,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             FittedWeights[c] = NumOps.Divide(nk[c], nT);
             if (!_options.AllowLowWeights && NumOps.LessThan(FittedWeights[c], minWeight))
             {
-                _weights[c] = minWeight;
+                FittedWeights[c] = minWeight;
             }
         }
 
@@ -651,7 +651,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
         for (int c = 0; c < k; c++)
         {
-            FittedWeights[c] = NumOps.Divide(_weights[c], sumWeights);
+            FittedWeights[c] = NumOps.Divide(FittedWeights[c], sumWeights);
         }
 
         // Update means

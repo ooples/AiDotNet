@@ -502,7 +502,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         // Serialize power iteration vectors for deterministic deserialization
         bool hasU = _u != null;
         writer.Write(hasU);
-        if (hasU)
+        if (hasU && _u != null)
         {
             writer.Write(_u.Length);
             for (int i = 0; i < _u.Length; i++)
@@ -510,7 +510,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         }
         bool hasV = _v != null;
         writer.Write(hasV);
-        if (hasV)
+        if (hasV && _v != null)
         {
             writer.Write(_v.Length);
             for (int i = 0; i < _v.Length; i++)
