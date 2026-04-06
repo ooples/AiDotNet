@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -62,7 +62,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TimeMAE: Self-Supervised Representations of Time Series with Decoupled Masked Autoencoders", "https://arxiv.org/abs/2303.00320")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

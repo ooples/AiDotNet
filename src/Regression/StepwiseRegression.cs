@@ -56,6 +56,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Applied Linear Statistical Models", "https://doi.org/10.1080/00401706.1997.10485117")]
 public class StepwiseRegression<T> : RegressionBase<T>
 {
     /// <summary>

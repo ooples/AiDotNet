@@ -34,6 +34,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
+[ModelPaper("LayoutLMv3: Pre-training for Document AI", "https://arxiv.org/abs/2204.08387")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {

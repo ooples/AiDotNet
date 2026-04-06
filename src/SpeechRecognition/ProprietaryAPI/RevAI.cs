@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Rev AI", "https://www.rev.com/api")]
 public class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RevAIOptions _options; public override ModelOptions GetOptions() => _options;

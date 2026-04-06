@@ -56,6 +56,7 @@ namespace AiDotNet.CausalInference;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Metalearners for Estimating Heterogeneous Treatment Effects Using Machine Learning", "https://doi.org/10.1073/pnas.1804597116")]
 public class TLearner<T> : CausalModelBase<T>
 {
     /// <summary>

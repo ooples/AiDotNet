@@ -21,6 +21,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
+    [ModelPaper("A Wavelet Tour of Signal Processing", "https://doi.org/10.1016/B978-0-12-374370-1.X0001-8")]
 public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     /// <summary>

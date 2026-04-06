@@ -61,6 +61,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FactorFormer: Factor-guided Transformer for Stock Return Prediction", "https://arxiv.org/abs/2206.06516")]
 public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

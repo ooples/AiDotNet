@@ -71,6 +71,7 @@ namespace AiDotNet.Classification.SVM;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("A Training Algorithm for Optimal Margin Classifiers", "https://doi.org/10.1145/130385.130401")]
 public class LinearSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>

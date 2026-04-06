@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WhisperSpeech: Text-to-Speech via Whisper", "https://github.com/collabora/WhisperSpeech")]
 public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly WhisperSpeechOptions _options; public override ModelOptions GetOptions() => _options;

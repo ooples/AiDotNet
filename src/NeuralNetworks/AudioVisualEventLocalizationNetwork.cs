@@ -61,6 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Audio-Visual Event Localization in Unconstrained Videos", "https://arxiv.org/abs/1803.08842")]
 public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAudioVisualEventLocalizationModel<T>
 {
     private readonly AudioVisualEventLocalizationOptions _options;

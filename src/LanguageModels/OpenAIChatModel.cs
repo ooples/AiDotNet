@@ -58,6 +58,7 @@ namespace AiDotNet.LanguageModels;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Language Models are Few-Shot Learners", "https://arxiv.org/abs/2005.14165", Year = 2020, Authors = "Tom Brown et al.")]
 public class OpenAIChatModel<T> : ChatModelBase<T>
 {
     private readonly string _apiKey;

@@ -63,6 +63,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public class TemporalVAE<T> : VAEModelBase<T>
 {
     /// <summary>

@@ -38,6 +38,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Tempogram Toolbox: MATLAB Implementations for Tempo and Pulse Analysis", "https://doi.org/10.5281/zenodo.1416010")]
 public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
     #region Fields

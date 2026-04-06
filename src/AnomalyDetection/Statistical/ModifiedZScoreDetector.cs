@@ -37,6 +37,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Alternatives to the Median Absolute Deviation", "https://doi.org/10.1080/01621459.1993.10476408")]
 public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>

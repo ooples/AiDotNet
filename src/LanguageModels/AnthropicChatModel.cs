@@ -63,6 +63,7 @@ namespace AiDotNet.LanguageModels;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Constitutional AI: Harmlessness from AI Feedback", "https://arxiv.org/abs/2212.08073")]
 public class AnthropicChatModel<T> : ChatModelBase<T>
 {
     private readonly string _apiKey;

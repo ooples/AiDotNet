@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Nari Labs Dia", "https://github.com/nari-labs/dia")]
 public class Dia<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly DiaOptions _options; public override ModelOptions GetOptions() => _options;

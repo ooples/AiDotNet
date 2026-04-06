@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -61,7 +61,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Sundial: A Family of Highly Capable Time Series Foundation Models", "https://arxiv.org/abs/2502.00816")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Sundial<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

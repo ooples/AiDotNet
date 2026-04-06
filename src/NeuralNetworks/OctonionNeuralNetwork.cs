@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Octonion Networks", "https://arxiv.org/abs/1903.08478", Year = 2019, Authors = "Jiasong Wu et al.")]
 public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly OctonionNeuralNetworkOptions _options;

@@ -26,6 +26,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
+    [ModelPaper("Analysis of Time Series Structure: SSA and Related Techniques", "https://doi.org/10.1201/9781420035841")]
 public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _windowSize;

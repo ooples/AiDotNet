@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -63,7 +63,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VisionTS: Visual Masked Autoencoders as Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2408.17253")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

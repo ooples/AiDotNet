@@ -41,6 +41,7 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Some Methods for Classification and Analysis of Multivariate Observations", "https://doi.org/10.1007/978-3-540-74958-5_28")]
 public class KMeansDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

@@ -49,6 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Why Neurons Have Thousands of Synapses, a Theory of Sequence Memory in Neocortex", "https://doi.org/10.3389/fncir.2016.00023")]
 public class HTMNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HTMNetworkOptions _options;

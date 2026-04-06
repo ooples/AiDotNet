@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Understanding and Simplifying One-Shot Architecture Search", "https://arxiv.org/abs/1810.03522")]
     public class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private readonly SearchSpaceBase<T> _searchSpace;

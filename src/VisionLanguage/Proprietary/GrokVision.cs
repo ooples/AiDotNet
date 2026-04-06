@@ -54,6 +54,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Grok", "https://x.ai/grok")]
 public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly GrokVisionOptions _options; public override ModelOptions GetOptions() => _options;

@@ -41,6 +41,7 @@ namespace AiDotNet.CausalDiscovery;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("Review of Causal Discovery Methods Based on Graphical Models", "https://doi.org/10.3389/fgene.2019.00524")]
 public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly ICausalDiscoveryAlgorithm<T> _algorithm;

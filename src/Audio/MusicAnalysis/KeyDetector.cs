@@ -40,6 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("A Robust Method for Key Estimation in Music", "https://doi.org/10.1109/TASLP.2014.2316141")]
 public class KeyDetector<T> : MusicAnalysisBase<T>
 {
     private readonly ChromaExtractor<T> _chromaExtractor;

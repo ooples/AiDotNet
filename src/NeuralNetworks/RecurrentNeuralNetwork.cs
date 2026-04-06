@@ -32,6 +32,8 @@ namespace AiDotNet.NeuralNetworks;
 /// Common applications include text generation, translation, speech recognition, and stock price prediction - 
 /// all tasks where what happened before affects how you interpret what's happening now.
 /// </para>
+/// <para><b>Reference:</b> Elman, J.L. (1990). "Finding structure in time." Cognitive Science, 14(2), 179-211.
+/// https://doi.org/10.1016/0364-0213(90)90002-E</para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -50,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Long-Term Dependencies with Gradient Descent is Difficult", "https://doi.org/10.1109/72.279181")]
 public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;

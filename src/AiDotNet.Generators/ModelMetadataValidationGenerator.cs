@@ -32,7 +32,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         category: "AiDotNet.ModelMetadata",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, and ModelInput.");
+        description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, ModelInput, and ModelPaper.");
 
     // NOTE: AIDN010/011/012 temporarily set to Warning while XML docs are being
     // added across ~5000 model classes. Will be restored to Error once complete.
@@ -192,7 +192,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             if (exemptAttr is not null && HasAttribute(modelClass.GetAttributes(), exemptAttr))
                 continue;
 
-            ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr);
+            ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr, paperAttr);
             ValidatePaperUrls(context, modelClass, paperAttr);
             ValidateXmlDocumentation(context, modelClass);
         }
@@ -205,7 +205,8 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         INamedTypeSymbol categoryAttr,
         INamedTypeSymbol taskAttr,
         INamedTypeSymbol complexityAttr,
-        INamedTypeSymbol inputAttr)
+        INamedTypeSymbol inputAttr,
+        INamedTypeSymbol? paperAttr)
     {
         var attributes = modelClass.GetAttributes();
         var className = modelClass.Name;
@@ -239,6 +240,12 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 MissingAttribute, location, className, "ModelInput"));
+        }
+
+        if (paperAttr is null || !HasAttribute(attributes, paperAttr))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                MissingAttribute, location, className, "ModelPaper"));
         }
     }
 

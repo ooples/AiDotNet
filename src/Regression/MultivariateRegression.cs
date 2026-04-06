@@ -50,6 +50,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Applied Multivariate Statistical Analysis", "https://doi.org/10.1007/978-3-662-45171-7")]
 public class MultivariateRegression<T> : RegressionBase<T>
 {
     /// <summary>

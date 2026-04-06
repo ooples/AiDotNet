@@ -83,6 +83,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree")]
 public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
     /// <summary>

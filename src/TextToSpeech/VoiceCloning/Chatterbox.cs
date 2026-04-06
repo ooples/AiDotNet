@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Chatterbox: Open-Source Voice Cloning", "https://github.com/resemble-ai/Chatterbox")]
 public class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ChatterboxOptions _options; public override ModelOptions GetOptions() => _options;

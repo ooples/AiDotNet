@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Microsoft Azure Speech-to-Text", "https://azure.microsoft.com/en-us/products/ai-services/speech-to-text")]
 public class AzureSpeechSTT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AzureSpeechSTTOptions _options; public override ModelOptions GetOptions() => _options;

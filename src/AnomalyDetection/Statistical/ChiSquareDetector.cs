@@ -38,6 +38,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Contributions to the Mathematical Theory of Evolution", "https://doi.org/10.1098/rsta.1900.0009")]
 public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

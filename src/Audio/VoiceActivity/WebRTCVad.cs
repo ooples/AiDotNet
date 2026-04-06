@@ -38,6 +38,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WebRTC Voice Activity Detector", "https://webrtc.googlesource.com/src/+/refs/heads/main/common_audio/vad/")]
 public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     #region Fields
