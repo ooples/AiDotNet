@@ -22,6 +22,8 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
     {
+        if (inverseTemperature <= 0 || double.IsNaN(inverseTemperature) || double.IsInfinity(inverseTemperature))
+            throw new ArgumentOutOfRangeException(nameof(inverseTemperature), inverseTemperature, "Must be a finite positive value.");
         _dimension = dimension;
         _capacity = capacity;
         _inverseTemperature = inverseTemperature;

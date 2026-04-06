@@ -394,7 +394,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        // Reset layer state and set eval mode for deterministic inference
+        // Reset all state for deterministic inference
+        _metaState = new Vector<T>(_hiddenDim);
         foreach (var layer in Layers)
         {
             layer.ResetState();
@@ -475,15 +476,16 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            // Consolidate memory even on failure — accumulated state should be preserved
+            // Restore eval mode first so consolidation runs in eval state
+            SetTrainingMode(false);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
+
+            // Consolidate memory periodically — safe in eval mode
             if (_adaptationStep % 100 == 0)
             {
                 ConsolidateMemory();
             }
-
-            SetTrainingMode(false);
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
         }
     }
 

@@ -601,6 +601,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
         var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
         _weights = Engine.TensorAdd(_weights, weightDelta);
+        _weightsTCache = null;
     }
 
 
@@ -796,6 +797,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
         {
             _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            _weightsTCache = null;
             _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
             _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
             return;
