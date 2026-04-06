@@ -112,9 +112,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             if (string.IsNullOrWhiteSpace(text))
                 return CreateZeroVector();
 
-            // If model file is unavailable, use deterministic fallback (e.g., unit tests)
+            // Throw on missing model — consistent with PyTorch behavior.
             if (!EnsureModelLoaded())
-                return GenerateFallbackEmbedding(text);
+                throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
 
             // 1. Tokenize (model is guaranteed loaded at this point)
             var tokenizationResult = Tokenizer.Encode(text, new AiDotNet.Tokenization.Models.EncodingOptions

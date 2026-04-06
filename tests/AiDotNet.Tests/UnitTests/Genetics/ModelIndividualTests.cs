@@ -20,7 +20,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
     /// </summary>
     public class ModelIndividualTests
     {
-        private class MockModel : IFullModel<double, double[], double[]>
+        private class MockModel : IFullModel<double, double[], double[]>,
+            IParameterizable<double, double[], double[]>, IFeatureAware
         {
             private Vector<double> _parameters;
             private readonly int _parameterCount;

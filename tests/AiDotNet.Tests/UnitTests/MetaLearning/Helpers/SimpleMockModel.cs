@@ -13,6 +13,7 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 /// Implements ICloneable to support meta-learning model cloning.
 /// </summary>
 public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
+    IParameterizable<double, Tensor<double>, Tensor<double>>,
     ISecondOrderGradientComputable<double, Tensor<double>, Tensor<double>>,
     ICloneable
 {

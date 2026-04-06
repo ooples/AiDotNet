@@ -118,15 +118,8 @@ public class AdvancedAlgebraLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void OctonionLinearLayer_SupportsJitCompilation_IsTrue()
-    {
-        // Arrange
-        var layer = new OctonionLinearLayer<double>(4, 2);
-
-        // Assert - OctonionMatMul is fully integrated in JIT compiler
-        Assert.True(layer.SupportsJitCompilation);
-    }
+    // JIT compilation tests removed — JIT moved to Tensors engine level (Lazy Graph Compiler v0.28.0).
+    // Per-layer SupportsJitCompilation will be removed in a dedicated PR.
 
     #endregion
 
@@ -187,8 +180,9 @@ public class AdvancedAlgebraLayerTests
         int paramCount = layer.ParameterCount;
 
         // Assert
-        // Weights: 5 * 10 = 50, Biases: 5 * 10 = 50, Total: 100
-        Assert.Equal(100, paramCount);
+        // Weights: 5 * 10 = 50, Scalar biases: 5, Total: 55
+        // (Biases changed from [OutputFeatures, InputFeatures] to [OutputFeatures] — scalar bias per output)
+        Assert.Equal(55, paramCount);
     }
 
     [Fact]
@@ -329,15 +323,7 @@ public class AdvancedAlgebraLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void SparseLinearLayer_SupportsJitCompilation_IsTrue()
-    {
-        // Arrange
-        var layer = new SparseLinearLayer<double>(100, 50);
-
-        // Assert - SparseLinearLayer converts to dense and uses MatMul/Add which are JIT-supported
-        Assert.True(layer.SupportsJitCompilation);
-    }
+    // SparseLinearLayer JIT test removed — JIT moved to Tensors engine level (v0.28.0).
 
     #endregion
 
@@ -480,15 +466,7 @@ public class AdvancedAlgebraLayerTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void InstanceNormalizationLayer_SupportsJitCompilation_IsTrue()
-    {
-        // Arrange
-        var layer = new InstanceNormalizationLayer<double>(64);
-
-        // Assert - InstanceNorm uses GroupNorm with numGroups=numChannels, which is JIT-supported
-        Assert.True(layer.SupportsJitCompilation);
-    }
+    // InstanceNormalizationLayer JIT test removed — JIT moved to Tensors engine level (v0.28.0).
 
 
     [Fact]

@@ -155,10 +155,14 @@ public class LicenseKeyTests
     // ────────── LicenseValidator (offline mode) ──────────
 
     [Fact]
-    public void LicenseValidator_NullServerUrl_ReturnsActive()
+    public void LicenseValidator_ExplicitOffline_ReturnsActive()
     {
-        // Use a valid aidn.{id}.{signature} format key for offline validation
-        var license = new AiDotNetLicenseKey("aidn.test123.abc456");
+        // Use empty ServerUrl for explicit offline-only mode.
+        // Null ServerUrl now means "use DefaultServerUrl" (online validation).
+        var license = new AiDotNetLicenseKey("aidn.test123.abc456")
+        {
+            ServerUrl = ""  // Explicit offline mode
+        };
         var validator = new LicenseValidator(license);
 
         var result = validator.Validate();
@@ -167,9 +171,12 @@ public class LicenseKeyTests
     }
 
     [Fact]
-    public void LicenseValidator_NullServerUrl_SetsOfflineMessage()
+    public void LicenseValidator_ExplicitOffline_SetsOfflineMessage()
     {
-        var license = new AiDotNetLicenseKey("aidn.test123.abc456");
+        var license = new AiDotNetLicenseKey("aidn.test123.abc456")
+        {
+            ServerUrl = ""  // Explicit offline mode
+        };
         var validator = new LicenseValidator(license);
 
         var result = validator.Validate();

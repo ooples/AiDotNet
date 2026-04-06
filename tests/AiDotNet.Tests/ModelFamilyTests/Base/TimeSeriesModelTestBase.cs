@@ -379,7 +379,14 @@ public abstract class TimeSeriesModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);
-        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained model should have parameters.");
+
+        // Not all time series models implement IParameterizable (e.g., STLDecomposition,
+        // InterventionAnalysis are parameter-free). Per Liskov substitution, only check
+        // models that expose parameters via IParameterizable.
+        if (model is IParameterizable<double, Matrix<double>, Vector<double>> parameterizable)
+        {
+            Assert.True(parameterizable.GetParameters().Length > 0, "Trained parameterizable model should have parameters.");
+        }
     }
 
     // =====================================================
