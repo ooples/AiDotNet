@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -703,17 +703,17 @@ internal partial class MambaBlock<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_convWeightsGradient!.ToArray()),
-            new Vector<T>(_convBiasGradient!.ToArray()),
-            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_aLogGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_convWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_convBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_xProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_dtProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_dtProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_aLogGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_dParamGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
     }
 
     public override void ClearGradients()

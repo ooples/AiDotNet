@@ -551,12 +551,12 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     {
         if (_routerWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_routerWeightsGradient!.ToArray()),
-            new Vector<T>(_routerBiasGradient!.ToArray()),
-            new Vector<T>(_expertAGradient!.ToArray()),
-            new Vector<T>(_expertBGradient!.ToArray()),
-            new Vector<T>(_expertCGradient!.ToArray()),
-            new Vector<T>(_expertDGradient!.ToArray()),
+            new Vector<T>(_routerWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_routerBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_expertAGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_expertBGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_expertCGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_expertDGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
             new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
             new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),

@@ -41,11 +41,13 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// Training input data.
     /// </summary>
     private Matrix<T>? _X;
+    private Matrix<T> FittedX => _X ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
     /// Training output data.
     /// </summary>
     private Vector<T>? _y;
+    private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -443,7 +445,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         double outputVar = Math.Exp(logParams[1]);
         double noiseVar = Math.Exp(logParams[2]);
 
-        int n = _X.Rows;
+        int n = FittedX.Rows;
 
         // Build kernel matrix
         var K = BuildKernelMatrix(lengthscale, outputVar, noiseVar);
@@ -590,15 +592,15 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
     {
-        int n = _X!.Rows;
+        int n = FittedX.Rows;
         var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
-            var xi = GetRow(_X, i);
+            var xi = GetRow(FittedX, i);
             for (int j = i; j < n; j++)
             {
-                var xj = GetRow(_X, j);
+                var xj = GetRow(FittedX, j);
 
                 // Scale kernel output by MCMC-sampled outputVar.
                 // The base kernel provides correlation structure; outputVar scales magnitude.
@@ -621,7 +623,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private Vector<T> ComputeCrossCovariance(Vector<T> x, double lengthscale, double outputVar)
     {
-        int n = _X!.Rows;
+        int n = FittedX.Rows;
         var kstar = new Vector<T>(n);
 
         // Scale kernel output by MCMC-sampled output variance.
@@ -629,7 +631,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         T scale = _numOps.FromDouble(outputVar);
         for (int i = 0; i < n; i++)
         {
-            var xi = GetRow(_X, i);
+            var xi = GetRow(FittedX, i);
             kstar[i] = _numOps.Multiply(_kernel.Calculate(x, xi), scale);
         }
 

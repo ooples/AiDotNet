@@ -715,13 +715,13 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
     {
         if (_nuGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_nuGradient!.ToArray()),
-            new Vector<T>(_thetaGradient!.ToArray()),
-            new Vector<T>(_bRealGradient!.ToArray()),
-            new Vector<T>(_bImagGradient!.ToArray()),
-            new Vector<T>(_cRealGradient!.ToArray()),
-            new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_nuGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_thetaGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_bRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_bImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_cRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_cImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_dParamGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? new T[_inputProjectionWeights.Length]),
             new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? new T[_inputProjectionBias.Length]),
             new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),

@@ -1530,15 +1530,15 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length);
-        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length);
-        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length);
-        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length);
-        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length);
-        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient.ToArray()) : new Vector<T>(_ffnWeights1.Length);
-        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient.ToArray()) : new Vector<T>(_ffnWeights2.Length);
-        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient.ToArray()) : new Vector<T>(_ffnBias1.Length);
-        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient.ToArray()) : new Vector<T>(_ffnBias2.Length);
+        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_queryWeights.Length);
+        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_keyWeights.Length);
+        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_valueWeights.Length);
+        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputWeights.Length);
+        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputBias.Length);
+        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnWeights1.Length);
+        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnWeights2.Length);
+        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnBias1.Length);
+        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnBias2.Length);
         var gLn1Scale = new Vector<T>(_layerNorm1Scale.Length);
         var gLn1Bias = new Vector<T>(_layerNorm1Bias.Length);
         var gLn2Scale = new Vector<T>(_layerNorm2Scale.Length);
@@ -1652,10 +1652,11 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         writer.Write(hasBias);
         if (hasBias)
         {
-            writer.Write(_structuralBias!.Shape.Length);
-            foreach (var dim in _structuralBias.Shape.ToArray()) writer.Write(dim);
-            for (int i = 0; i < _structuralBias.Length; i++)
-                writer.Write(NumOps.ToDouble(_structuralBias[i]));
+            var bias = _structuralBias ?? throw new InvalidOperationException("Structural bias is null during serialization.");
+            writer.Write(bias.Shape.Length);
+            foreach (var dim in bias.Shape.ToArray()) writer.Write(dim);
+            for (int i = 0; i < bias.Length; i++)
+                writer.Write(NumOps.ToDouble(bias[i]));
         }
     }
 
