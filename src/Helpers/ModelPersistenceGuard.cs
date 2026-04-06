@@ -112,13 +112,39 @@ internal static class ModelPersistenceGuard
     private static readonly object _validatorLock = new();
 
     /// <summary>
+    /// Thread-static license key set by AiModelBuilder during BuildAsync.
+    /// Allows EnforceCore to use the builder's configured license key
+    /// without requiring it in the environment variable or file.
+    /// </summary>
+    [ThreadStatic]
+    private static AiDotNet.Models.AiDotNetLicenseKey? _activeBuilderLicenseKey;
+
+    /// <summary>
+    /// Sets the active builder license key for the current thread.
+    /// Called by AiModelBuilder at the start of BuildAsync.
+    /// </summary>
+    internal static IDisposable SetActiveLicenseKey(AiDotNet.Models.AiDotNetLicenseKey? key)
+    {
+        _activeBuilderLicenseKey = key;
+        return new ActiveLicenseKeyScope();
+    }
+
+    private sealed class ActiveLicenseKeyScope : IDisposable
+    {
+        public void Dispose() => _activeBuilderLicenseKey = null;
+    }
+
+    /// <summary>
     /// Shared enforcement logic: checks for a license key first (with server validation),
     /// then falls back to trial operation counting. Emits anonymous telemetry events if enabled.
     /// </summary>
     private static void EnforceCore()
     {
-        // Check if a license key is available (via env var or file)
-        string? resolvedKey = LicenseKeyResolver.Resolve(null);
+        // Check if a license key is available:
+        // 1. Builder's configured key (thread-static, set during BuildAsync)
+        // 2. Environment variable (AIDOTNET_LICENSE_KEY)
+        // 3. File (~/.aidotnet-license)
+        string? resolvedKey = LicenseKeyResolver.Resolve(_activeBuilderLicenseKey);
         if (resolvedKey is not null && resolvedKey.Trim().Length > 0)
         {
             string licenseKey = resolvedKey.Trim();

@@ -70,11 +70,21 @@ internal sealed class LicenseValidator
     /// <returns>A <see cref="LicenseValidationResult"/> describing the current key status.</returns>
     public LicenseValidationResult Validate()
     {
-        // Offline mode: when no server URL is configured (null) or explicitly empty.
-        // Null means the user hasn't configured a license server, so we validate
-        // offline and return Active for well-formed keys.
-        if (_licenseKey.ServerUrl is null || _licenseKey.ServerUrl.Trim().Length == 0)
+        // Determine validation strategy based on key format and server configuration:
+        // - ServerUrl explicitly "" → offline-only (premium keys with HMAC signatures)
+        // - ServerUrl null → use DefaultServerUrl for online validation
+        // - ServerUrl set → use custom URL for online validation
+        //
+        // Key format determines offline eligibility:
+        // - aidn.{id}.{sig} → signed key, eligible for offline HMAC validation (premium)
+        // - AIDN-*-{hex}    → server-validated key, requires online validation (community/CI)
+
+        bool explicitOfflineOnly = _licenseKey.ServerUrl is not null
+            && _licenseKey.ServerUrl.Trim().Length == 0;
+
+        if (explicitOfflineOnly)
         {
+            // Explicit offline mode — only signed keys (aidn.{id}.{sig}) are accepted
             var offlineResult = ValidateOffline();
             lock (_cacheLock)
             {
@@ -228,32 +238,54 @@ internal sealed class LicenseValidator
     /// where id is at least 1 character and signature is at least 1 character,
     /// and both parts contain only alphanumeric characters.
     /// </summary>
-    internal static bool ValidateKeyFormat(string key)
+    /// <summary>
+    /// Returns true if the key is in signed offline format: aidn.{id}.{signature}
+    /// These keys can be validated offline via HMAC (premium/enterprise only).
+    /// </summary>
+    internal static bool IsSignedKeyFormat(string key)
     {
         var parts = key.Split('.');
         if (parts.Length != 3 || parts[0] != "aidn" || parts[1].Length == 0 || parts[2].Length == 0)
-        {
             return false;
-        }
 
-        // Verify both id and signature contain only alphanumeric characters
         for (int i = 0; i < parts[1].Length; i++)
-        {
-            if (!char.IsLetterOrDigit(parts[1][i]))
-            {
-                return false;
-            }
-        }
-
+            if (!char.IsLetterOrDigit(parts[1][i])) return false;
         for (int i = 0; i < parts[2].Length; i++)
+            if (!char.IsLetterOrDigit(parts[2][i])) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns true if the key is in server-validated format: AIDN-{segments}-{hex}
+    /// These keys require online validation against the license server.
+    /// </summary>
+    internal static bool IsServerValidatedKeyFormat(string key)
+    {
+        var parts = key.Split('-');
+        if (parts.Length < 4 || !parts[0].Equals("AIDN", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Last segment must be at least 8 hex characters
+        string lastPart = parts[^1];
+        if (lastPart.Length < 8) return false;
+
+        for (int i = 0; i < lastPart.Length; i++)
         {
-            if (!char.IsLetterOrDigit(parts[2][i]))
-            {
+            char c = lastPart[i];
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
                 return false;
-            }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Validates key format — accepts either signed (offline) or server-validated (online) format.
+    /// </summary>
+    internal static bool ValidateKeyFormat(string key)
+    {
+        return IsSignedKeyFormat(key) || IsServerValidatedKeyFormat(key);
     }
 
     /// <summary>

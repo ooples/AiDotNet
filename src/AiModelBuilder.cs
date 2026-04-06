@@ -1169,6 +1169,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Propagate the builder's license key to ModelPersistenceGuard so it can
+        // validate during serialize/deserialize operations within BuildAsync.
+        using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
+
         AiModelResult<T, TInput, TOutput> result;
 
         // RL TRAINING PATH - check if RL options are configured with an environment
