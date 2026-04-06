@@ -63,6 +63,8 @@ jobs:
         run: npx astro build
         env:
           VERCEL: '1'
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Verify build output
         run: |
