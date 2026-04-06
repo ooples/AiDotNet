@@ -672,6 +672,9 @@ internal class DGPLayer<T>
         // For exact DSVI (Salimbeni & Deisenroth 2017), should incorporate the variational
         // covariance S: σ²_q = σ²_p + Kxu Kuu^{-1} (S - Kuu) Kuu^{-1} Kux.
         // Current implementation is a valid approximation when S ≈ Kuu.
+        // Pre-compute Cholesky of Kuu once — reused for all n variance solves + d output solves
+        var kuuCholesky = new CholeskyDecomposition<T>(Kuu);
+
         var posteriorVar = new double[n];
         for (int i = 0; i < n; i++)
         {
@@ -684,7 +687,7 @@ internal class DGPLayer<T>
             for (int j = 0; j < m_points; j++)
                 kxu_i[j] = Kxu[i, j];
 
-            var solved = MatrixSolutionHelper.SolveLinearSystem(Kuu, kxu_i, MatrixDecompositionType.Cholesky);
+            var solved = MatrixSolutionHelper.SolveLinearSystem(kxu_i, kuuCholesky);
             double quadForm = 0;
             for (int j = 0; j < m_points; j++)
                 quadForm += _numOps.ToDouble(kxu_i[j]) * _numOps.ToDouble(solved[j]);
@@ -698,7 +701,7 @@ internal class DGPLayer<T>
             for (int j = 0; j < m_points; j++)
                 m_d[j] = _variationalMean[j, d];
 
-            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(Kuu, m_d, MatrixDecompositionType.Cholesky);
+            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(m_d, kuuCholesky);
 
             // Predict: mean_d = Kxu * alpha_d + sqrt(var) * noise
             for (int i = 0; i < n; i++)
