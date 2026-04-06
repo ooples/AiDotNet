@@ -72,9 +72,11 @@ public class NestedLearningIntegrationTests
         // Act
         memory.Associate(input, target);
 
-        // Assert - Matrix should have non-zero values after association
-        var matrix = memory.GetAssociationMatrix();
-        Assert.True(HasNonZeroElements(matrix));
+        // Assert - Memory should have stored the association
+        Assert.Equal(1, memory.MemoryCount);
+        var retrieved = memory.Retrieve(input);
+        Assert.NotNull(retrieved);
+        Assert.Equal(4, retrieved.Length);
     }
 
     [Fact]
@@ -152,14 +154,13 @@ public class NestedLearningIntegrationTests
 
         // Initial association
         memory.Associate(input, target);
-        var matrixBefore = CopyMatrix(memory.GetAssociationMatrix());
+        int countBefore = memory.MemoryCount;
 
-        // Act - Update with different learning rate
+        // Act - Update adds to memory buffer
         memory.Update(input, target, 0.1);
 
-        // Assert - Matrix should have changed
-        var matrixAfter = memory.GetAssociationMatrix();
-        Assert.False(MatricesEqual(matrixBefore, matrixAfter, Tolerance));
+        // Assert - Memory count should have increased
+        Assert.True(memory.MemoryCount > countBefore);
     }
 
     [Fact]

@@ -114,6 +114,22 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
     }
 
     /// <summary>
+    /// Computes the Hebbian association matrix from stored memories: W = Σ target_i * input_i^T.
+    /// This is a read-only view for diagnostics/testing — Retrieve uses softmax attention.
+    /// </summary>
+    public Matrix<T> GetAssociationMatrix()
+    {
+        var matrix = new Matrix<T>(_dimension, _dimension);
+        foreach (var (input, target) in _memories)
+        {
+            for (int i = 0; i < _dimension; i++)
+                for (int j = 0; j < _dimension; j++)
+                    matrix[i, j] = _numOps.Add(matrix[i, j], _numOps.Multiply(target[i], input[j]));
+        }
+        return matrix;
+    }
+
+    /// <summary>
     /// Gets the number of stored memories.
     /// </summary>
     public int MemoryCount => _memories.Count;
