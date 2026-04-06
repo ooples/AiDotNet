@@ -476,10 +476,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            // Restore eval mode first so consolidation runs in eval state
+            // Restore eval mode — set both network and layer flags
+            // NeuralNetworkBase.SetTrainingMode does not propagate to layers
             SetTrainingMode(false);
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
+            if (Layers != null)
+            {
+                foreach (var layer in Layers)
+                    layer.SetTrainingMode(false);
+            }
 
             // Consolidate memory periodically — safe in eval mode
             if (_adaptationStep % 100 == 0)

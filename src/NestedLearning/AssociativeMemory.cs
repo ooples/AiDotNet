@@ -22,6 +22,8 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
     {
+        if (capacity < 1)
+            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be at least 1.");
         if (inverseTemperature <= 0 || double.IsNaN(inverseTemperature) || double.IsInfinity(inverseTemperature))
             throw new ArgumentOutOfRangeException(nameof(inverseTemperature), inverseTemperature, "Must be a finite positive value.");
         _dimension = dimension;
@@ -52,7 +54,7 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
     public Vector<T> Retrieve(Vector<T> query)
     {
         if (query.Length != _dimension)
-            throw new ArgumentException("Query must match memory dimension");
+            throw new ArgumentException($"Query length {query.Length} must match memory dimension {_dimension}.", nameof(query));
 
         // Modern continuous Hopfield retrieval per Ramsauer et al. 2021:
         // Scores keys (Input) against query, returns weighted sum of values (Target).
@@ -105,7 +107,10 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
         if (input.Length != _dimension || target.Length != _dimension)
             throw new ArgumentException("Input and target must match memory dimension");
 
+        // Update both the association matrix and the memory buffer
+        // so changes are reflected in both Retrieve paths
         UpdateAssociationMatrix(input, target, learningRate);
+        Associate(input, target);
     }
 
     private void UpdateAssociationMatrix(Vector<T> input, Vector<T> target, T learningRate)

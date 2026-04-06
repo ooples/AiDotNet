@@ -45,6 +45,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> _weights;
 
+    /// <summary>Cached W^T — invalidated when weights change.</summary>
+    private Tensor<T>? _weightsTCache;
+
     /// <summary>
     /// Bias values as points on the Poincare ball.
     /// Shape: [OutputFeatures, InputFeatures] - each row is a bias point.
@@ -222,8 +225,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 
         // Step 1: Linear projection Mx = x @ W^T  [batch, outputFeatures * inputFeatures -> batch, outputFeatures]
         // _weights is [outputFeatures, inputFeatures], transpose for matmul
-        var weightsT = Engine.TensorTranspose(_weights);
-        var mx = Engine.TensorMatMul(inputTensor, weightsT); // [batch, outputFeatures]
+        _weightsTCache ??= Engine.TensorTranspose(_weights);
+        var mx = Engine.TensorMatMul(inputTensor, _weightsTCache); // [batch, outputFeatures]
 
         // Step 2: Compute ||x|| per sample (L2 norm of input rows)
         var xSq = Engine.TensorMultiply(inputTensor, inputTensor); // [batch, inputFeatures]
@@ -622,6 +625,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 _biases[o, i] = parameters[idx++];
             }
         }
+
+        _weightsTCache = null;
     }
 
     /// <inheritdoc/>
