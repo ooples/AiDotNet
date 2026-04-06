@@ -69,7 +69,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     private readonly int _maxSequenceLength;
     private readonly int _numTransformerLayers;
     private readonly Random _random;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
     // Modality-specific encoders
@@ -140,7 +140,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,
         int maxSequenceLength = DEFAULT_MAX_SEQ_LEN,
         int numTransformerLayers = DEFAULT_NUM_LAYERS,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null,
         UnifiedMultimodalNetworkOptions? options = null)
@@ -193,8 +193,8 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateUnifiedMultimodalLayers(
-                _embeddingDimension, _numTransformerLayers));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedMultimodalLayers(
+                Architecture, _embeddingDimension, _numTransformerLayers));
         }
 
         // Distribute layers to internal fields
@@ -917,17 +917,22 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         };
 
         var embedding = Encode(multimodalInput);
-        return Tensor<T>.FromVector(embedding);
+        var embeddingTensor = Tensor<T>.FromVector(embedding);
+        return _classificationHead.Forward(embeddingTensor);
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

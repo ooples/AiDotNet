@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 16, 16", TestConstructorArgs = "16, 2, 4")]
-public class SwinTransformerBlockLayer<T> : LayerBase<T>
+public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _dim;
     private readonly int _numHeads;

@@ -1190,6 +1190,11 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Set bias using Tensor.FromVector
         var biasParams = parameters.SubVector(index, biasSize);
         _bias = Tensor<T>.FromVector(biasParams);
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+
     }
 
     /// <summary>

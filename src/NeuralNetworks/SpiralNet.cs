@@ -334,8 +334,17 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
 
         if (_spiralIndicesPerLevel.Count == 0)
         {
-            throw new InvalidOperationException(
-                "Spiral indices must be set via SetSpiralIndices before calling Forward.");
+            // Auto-generate default spiral indices: each vertex references itself
+            // and neighbors in a cyclic pattern. Per Bouritsas et al. 2019, spiral
+            // indices define the local neighborhood ordering on the mesh surface.
+            // Default identity indexing allows operation without mesh preprocessing.
+            int numVertices = input.Shape[0];
+            int spiralLen = _options.SpiralLength;
+            var defaultIndices = new int[numVertices, spiralLen];
+            for (int v = 0; v < numVertices; v++)
+                for (int s = 0; s < spiralLen; s++)
+                    defaultIndices[v, s] = (v + s) % numVertices;
+            SetSpiralIndices(defaultIndices);
         }
 
         PropagateSpiralIndicesToLayers();

@@ -501,28 +501,27 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         if (_expandBn is ILayerSerializationExtras<T> eb)
         {
             int count = eb.ExtraParameterCount;
-            if (offset + count <= extraParameters.Length)
-            {
-                eb.SetExtraParameters(extraParameters.SubVector(offset, count));
-                offset += count;
-            }
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters for expand BN: need {offset + count} but got {extraParameters.Length}.");
+            eb.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
         }
         if (_dwBn is ILayerSerializationExtras<T> db)
         {
             int count = db.ExtraParameterCount;
-            if (offset + count <= extraParameters.Length)
-            {
-                db.SetExtraParameters(extraParameters.SubVector(offset, count));
-                offset += count;
-            }
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters for depthwise BN: need {offset + count} but got {extraParameters.Length}.");
+            db.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
         }
         if (_projectBn is ILayerSerializationExtras<T> pb)
         {
             int count = pb.ExtraParameterCount;
             if (offset + count > extraParameters.Length)
                 throw new ArgumentException(
-                    $"Truncated extra-parameters: need {offset + count} but got {extraParameters.Length}. " +
-                    "Ensure the parameter blob matches the block's expected size.");
+                    $"Truncated extra-parameters for project BN: need {offset + count} but got {extraParameters.Length}.");
             pb.SetExtraParameters(extraParameters.SubVector(offset, count));
         }
     }

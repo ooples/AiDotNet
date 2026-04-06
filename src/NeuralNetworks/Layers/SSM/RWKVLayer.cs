@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class RWKVLayer<T> : LayerBase<T>
+public partial class RWKVLayer<T> : LayerBase<T>
 {
     // Configuration
     private readonly int _modelDimension;
@@ -586,6 +586,18 @@ public class RWKVLayer<T> : LayerBase<T>
         _normBeta1 = Engine.TensorAdd(_normBeta1, Engine.TensorMultiplyScalar(_normBeta1Gradient, negLR));
         _normGamma2 = Engine.TensorAdd(_normGamma2, Engine.TensorMultiplyScalar(_normGamma2Gradient, negLR));
         _normBeta2 = Engine.TensorAdd(_normBeta2, Engine.TensorMultiplyScalar(_normBeta2Gradient, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_receptanceWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_decayWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_decayBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_channelKeyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelValueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelReceptanceWeights, PersistentTensorRole.Weights);
+
     }
 
     /// <inheritdoc />

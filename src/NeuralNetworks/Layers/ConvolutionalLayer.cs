@@ -825,14 +825,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             if (_isInitialized) return;
 
-            // Allocate kernels — RentUninitialized since InitializeWeights overwrites all elements
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
             _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
 
-            // Initialize weights
+            // Allocate kernels and biases with proper shapes before initializing weights.
+            // The lazy path sets _kernels to [0,0,0,0], so we must resize here.
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            _biases = new Tensor<T>([OutputDepth]);
+
+            // Initialize weights (fills _kernels and _biases with He-uniform values)
             InitializeWeights();
 
             // Register trainable parameters with the engine for GPU persistence
@@ -845,23 +847,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth * KernelSize * KernelSize + OutputDepth)));
-
-        for (int i = 0; i < OutputDepth; i++)
-        {
-            for (int j = 0; j < InputDepth; j++)
-            {
-                for (int k = 0; k < KernelSize; k++)
-                {
-                    for (int l = 0; l < KernelSize; l++)
-                    {
-                        _kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(_random.NextDouble() * 2 - 1));
-                    }
-                }
-            }
-
-            _biases[i] = NumOps.Zero;
-        }
+        // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
+        // per He et al. 2015 "Delving Deep into Rectifiers".
+        // For uniform distribution: Var(W) = bound^2/3, so bound = sqrt(3 * 2/fanIn) = sqrt(6/fanIn)
+        int fanIn = InputDepth * KernelSize * KernelSize;
+        double bound = Math.Sqrt(6.0 / fanIn);
+        var kernelShape = _kernels.Shape.ToArray();
+        var initData = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
+        // Copy into existing tensor to avoid orphaning pre-allocated buffer
+        initData.Data.Span.CopyTo(_kernels.Data.Span);
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -1232,9 +1227,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // CPU Update using Engine tensor ops
-            _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
-            _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+            // CPU SGD using in-place ops to preserve tensor identity (cached references like _biasReshaped4D)
+            var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
+            Engine.TensorSubtractInPlace(_kernels, scaledKernelGrad);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
         }
 
         // Notify engine that parameters have changed (for GPU cache invalidation if needed)

@@ -1192,26 +1192,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-        try
-        {
-            var visualFeatures = ExtractVisualFeatures(input);
-            var projectedFeatures = ProjectToLanguageSpace(visualFeatures);
-
-            LastLoss = LossFunction.CalculateLoss(projectedFeatures.ToVector(), expectedOutput.ToVector());
-            var lossGradient = LossFunction.CalculateDerivative(projectedFeatures.ToVector(), expectedOutput.ToVector());
-            var gradient = Tensor<T>.FromVector(lossGradient);
-
-            // Propagate gradients through the network
-
-            // Use optimizer to update all layer parameters based on their gradients
-            // (not just setting current params back unchanged)
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <inheritdoc/>

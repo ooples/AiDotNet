@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
-public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The collection of expert networks.
@@ -156,6 +156,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Tracks which experts were active during the most recent forward pass,
+    /// so that only those experts have their parameters updated.
+    /// </summary>
+    private HashSet<int> _activeExpertsDuringBackward = [];
 
     /// <summary>
     /// Cached routing weights from the most recent forward pass.
@@ -461,6 +467,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _topK = topK;
         _useAuxiliaryLoss = useLoadBalancing;
         _auxiliaryLossWeight = loadBalancingWeight ?? NumOps.FromDouble(0.01); // Default to 0.01
+
+        // Register router and experts as sublayers so the tape-based autodiff
+        // system can recursively discover their parameters via GetSubLayers().
+        RegisterSubLayer(_router);
+        foreach (var expert in _experts)
+        {
+            RegisterSubLayer(expert);
+        }
     }
 
     /// <summary>
@@ -568,6 +582,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 4: Get outputs from all experts (or only top-K if sparse)
         _lastExpertOutputs = new List<Tensor<T>>();
+        _activeExpertsDuringBackward = [];
 
         if (_topK > 0)
         {
@@ -588,6 +603,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 if (isActive)
                 {
                     _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                    _activeExpertsDuringBackward.Add(i);
                 }
                 else
                 {
@@ -602,6 +618,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             for (int i = 0; i < _experts.Count; i++)
             {
                 _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                _activeExpertsDuringBackward.Add(i);
             }
         }
 
@@ -664,10 +681,13 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _router.UpdateParameters(learningRate);
         }
 
-        // Update all expert parameters
-        foreach (var expert in _experts.Where(e => e.SupportsTraining))
+        // Update only experts that were active during the last forward/backward pass
+        for (int i = 0; i < _experts.Count; i++)
         {
-            expert.UpdateParameters(learningRate);
+            if (_experts[i].SupportsTraining && _activeExpertsDuringBackward.Contains(i))
+            {
+                _experts[i].UpdateParameters(learningRate);
+            }
         }
     }
 

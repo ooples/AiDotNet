@@ -1359,6 +1359,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
     }
 
+    /// <summary>
+    /// Gets the current learning rate as the generic type T.
+    /// Useful for models that need to pass the optimizer's LR to per-layer updates.
+    /// </summary>
+    internal T GetCurrentLearningRateAsT()
+    {
+        return NumOps.FromDouble(_currentLearningRate);
+    }
+
     /// <inheritdoc />
     public abstract void Step(TapeStepContext<T> context);
 

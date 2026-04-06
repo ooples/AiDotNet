@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// This metadata tells the layer what types exist and how they connect.
 /// </para>
 /// </remarks>
-public class HeterogeneousGraphMetadata
+public partial class HeterogeneousGraphMetadata
 {
     /// <summary>
     /// Names of node types (e.g., ["user", "item", "category"]).
@@ -96,7 +96,7 @@ public class HeterogeneousGraphMetadata
     TestInputShape = "1, 4, 8",
     TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphMetadata { NodeTypes = new[] { \"A\" }, EdgeTypes = new[] { \"e\" }, NodeTypeFeatures = new System.Collections.Generic.Dictionary<string, int> { [\"A\"] = 8 }, EdgeTypeSchema = new System.Collections.Generic.Dictionary<string, (string, string)> { [\"e\"] = (\"A\", \"A\") } }, 4",
     TestSetupCode = "var t = (AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphLayer<double>)layer; var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; } t.SetAdjacencyMatrices(new System.Collections.Generic.Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> { [\"e\"] = adj }); t.SetNodeTypeMap(new System.Collections.Generic.Dictionary<int, string> { [0] = \"A\", [1] = \"A\", [2] = \"A\", [3] = \"A\" });")]
-public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly HeterogeneousGraphMetadata _metadata;
     private readonly int _outputFeatures;

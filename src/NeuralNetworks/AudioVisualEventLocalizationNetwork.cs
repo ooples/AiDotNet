@@ -85,7 +85,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     private readonly int _numEncoderLayers;
     private readonly IReadOnlyList<string> _supportedCategories;
     private readonly Random _random;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
     // Audio encoder
@@ -146,7 +146,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         double temporalResolution = DEFAULT_TEMPORAL_RESOLUTION,
         int numEncoderLayers = 6,
         IEnumerable<string>? eventCategories = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null,
         AudioVisualEventLocalizationOptions? options = null)
@@ -1341,7 +1341,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

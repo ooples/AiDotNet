@@ -78,7 +78,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class RetNetLayer<T> : LayerBase<T>
+public partial class RetNetLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -616,6 +616,20 @@ public class RetNetLayer<T> : LayerBase<T>
             if (gVal <= 0.0) _gammas[h] = NumOps.FromDouble(1e-6);
             else if (gVal >= 1.0) _gammas[h] = NumOps.FromDouble(1.0 - 1e-6);
         }
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_queryBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_groupNormBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

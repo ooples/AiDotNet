@@ -54,6 +54,13 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </remarks>
     public int InputChannels { get; private set; }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumNeighbors"] = NumNeighbors.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Gets the number of output feature channels per edge.
     /// </summary>

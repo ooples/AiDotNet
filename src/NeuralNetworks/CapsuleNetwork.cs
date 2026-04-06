@@ -242,6 +242,16 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Tape-tracked forward pass that also captures output for reconstruction loss.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var output = base.ForwardForTraining(input);
+        _lastCapsuleOutputs = output;
+        return output;
+    }
+
+    /// <summary>
     /// Computes the auxiliary loss for the CapsuleNetwork, which is the reconstruction regularization.
     /// </summary>
     /// <returns>The reconstruction loss value.</returns>
@@ -410,41 +420,28 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Store input for reconstruction loss
+        // Store input for reconstruction loss (output captured in ForwardForTraining)
         _lastInput = input;
 
-        // Forward pass
-        var prediction = Predict(input);
-        _lastCapsuleOutputs = prediction;
-
-        // Calculate margin loss (primary loss)
-        var marginLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        _lastMarginLoss = marginLoss;
-
-        // Calculate auxiliary loss (reconstruction) if enabled
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
+        SetTrainingMode(true);
+        try
         {
-            var reconstructionLoss = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(reconstructionLoss, AuxiliaryLossWeight);
-        }
+            TrainWithTape(input, expectedOutput);
 
-        // Total loss combines margin loss and reconstruction loss
-        var totalLoss = NumOps.Add(marginLoss, auxiliaryLoss);
-        LastLoss = totalLoss;
-
-        // Backward pass — accumulates gradients in each layer
-
-        // Update parameters using per-layer gradient descent
-        const double defaultLearningRate = 0.001;
-        T lr = NumOps.FromDouble(defaultLearningRate);
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
+            // Incorporate auxiliary reconstruction loss into diagnostics.
+            // TrainWithTape already set LastLoss to the margin loss; capture it
+            // then add the weighted reconstruction loss so diagnostics reflect both.
+            T marginLoss = LastLoss ?? NumOps.Zero;
+            _lastMarginLoss = marginLoss;
+            T auxLoss = ComputeAuxiliaryLoss();
+            if (UseAuxiliaryLoss)
             {
-                layer.UpdateParameters(lr);
-                layer.ClearGradients();
+                LastLoss = NumOps.Add(marginLoss, NumOps.Multiply(AuxiliaryLossWeight, auxLoss));
             }
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 

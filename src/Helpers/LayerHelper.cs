@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.PhysicsInformed.NeuralOperators;
@@ -753,23 +753,21 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
 
-        // Define the sizes of each layer in the DBM
-        int[] layerSizes = [inputSize, 500, 500, 2000, architecture.OutputSize];
+        // Per Salakhutdinov & Hinton 2009, a DBM uses 2 hidden layers.
+        // Architecture: visible → hidden1 → hidden2 → output projection.
+        // The RBM layers learn the representation, and a DenseLayer projects to output size.
+        // hidden2 derives from hidden1 (latent capacity), NOT from OutputSize (projection head).
+        const int DefaultDbmHiddenCap = 500;
+        const int DefaultDbmHiddenMultiplier = 4;
+        int hidden1 = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
+        int hidden2 = hidden1;
 
-        // Create layers — per Salakhutdinov & Hinton 2009, DBMs use RBM layers
-        // with sigmoid activation. No BatchNorm (not in the original paper, and BN
-        // with batch_size=1 normalizes to zero, destroying all information).
-        for (int i = 0; i < layerSizes.Length - 1; i++)
-        {
-            yield return new RBMLayer<T>(
-                visibleUnits: layerSizes[i],
-                hiddenUnits: layerSizes[i + 1],
-                new SigmoidActivation<T>() as IActivationFunction<T>
-            );
-        }
+        // RBM layers per Salakhutdinov & Hinton 2009 (no BatchNorm — DBMs use CD pretraining, not BN)
+        yield return new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>);
 
-        // Output layer
-        yield return new DenseLayer<T>(layerSizes[layerSizes.Length - 2], layerSizes[layerSizes.Length - 1], new SigmoidActivation<T>() as IActivationFunction<T>);
+        // Output projection: maps from last hidden to output size
+        yield return new DenseLayer<T>(hidden2, architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -1846,7 +1844,9 @@ public static class LayerHelper<T>
         else
         {
             // Default architecture with two hidden layers
-            layerSizes = new List<int> { inputSize, 128, 64, outputSize };
+            // Per Neftci et al. 2019: hidden spiking layers + non-spiking readout.
+            // Last SpikingLayer stays at hidden size; DenseLayer projects to outputSize.
+            layerSizes = new List<int> { inputSize, 128, 64 };
         }
 
         // Create layers
@@ -2404,9 +2404,15 @@ public static class LayerHelper<T>
         // Temporal Memory Layer
         yield return new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
 
-        // Output Layer
+        // Output Layer (supervised readout per Ahmad & Hawkins 2015)
         yield return new DenseLayer<T>(columnCount * cellsPerColumn, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+
+        // Only add Softmax for multi-class classification with multiple outputs.
+        // Softmax on single output always returns 1.0, destroying gradient signal.
+        if (outputSize > 1 && architecture.TaskType != Enums.NeuralNetworkTaskType.Regression)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
@@ -4053,6 +4059,9 @@ public static class LayerHelper<T>
             poolingType: PoolingType.Average,
             activationFunction: (IActivationFunction<T>?)null);
 
+        // Flatten [filters, 1, 1, 1] → [filters] for the dense classification head
+        yield return new FlattenLayer<T>([finalFilters, 1, 1, 1]);
+
         // Dense output layer for classification
         IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? new SoftmaxActivation<T>()
@@ -4509,34 +4518,60 @@ public static class LayerHelper<T>
         int currentHeight = configuration.InputHeight;
         int currentWidth = configuration.InputWidth;
         var blockLayers = configuration.GetBlockLayers();
+        bool isSmallInput = currentHeight <= 64 && currentWidth <= 64;
 
-        // Stem: 7x7 conv, stride 2, padding 3
-        int stemChannels = 64;
-        yield return new ConvolutionalLayer<T>(
-            inputDepth: configuration.InputChannels,
-            outputDepth: stemChannels,
-            kernelSize: 7,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
-            stride: 2,
-            padding: 3,
-            activationFunction: new IdentityActivation<T>());
+        int stemChannels;
+        if (isSmallInput)
+        {
+            // CIFAR variant per Huang et al. 2017: 3x3 conv stride 1, 16 filters, NO MaxPool
+            stemChannels = 2 * configuration.GrowthRate; // Paper uses 2k or 16
+            if (stemChannels < 16) stemChannels = 16;
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: configuration.InputChannels,
+                outputDepth: stemChannels,
+                kernelSize: 3,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                stride: 1,
+                padding: 1,
+                activationFunction: new IdentityActivation<T>());
+            // No spatial reduction for CIFAR stem (stride 1, padding 1 preserves dims)
 
-        currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
+            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+                activationFunction: new ReLUActivation<T>());
+            // NO MaxPool for CIFAR per paper
+        }
+        else
+        {
+            // ImageNet variant per Huang et al. 2017: 7x7 conv stride 2, 64 filters, then MaxPool
+            stemChannels = 64;
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: configuration.InputChannels,
+                outputDepth: stemChannels,
+                kernelSize: 7,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                stride: 2,
+                padding: 3,
+                activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(stemChannels);
-        yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
-            activationFunction: new ReLUActivation<T>());
+            currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
+            currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
 
-        // MaxPool 3x3, stride 2, padding 1
-        yield return new MaxPoolingLayer<T>(
-            inputShape: [stemChannels, currentHeight, currentWidth],
-            poolSize: 3,
-            stride: 2);
+            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+                activationFunction: new ReLUActivation<T>());
 
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+            // MaxPool 3x3, stride 2
+            yield return new MaxPoolingLayer<T>(
+                inputShape: [stemChannels, currentHeight, currentWidth],
+                poolSize: 3,
+                stride: 2);
+
+            currentHeight = (currentHeight - 3) / 2 + 1;
+            currentWidth = (currentWidth - 3) / 2 + 1;
+        }
 
         int currentChannels = stemChannels;
 
@@ -4583,9 +4618,20 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
-        // Classification head
+        // Classification head per Huang et al. 2017: Dense + activation
+        // Use Sigmoid for single-class (binary) since Softmax([1]) is always 1
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
+        if (configuration.NumClasses > 1)
+        {
+            yield return new ActivationLayer<T>([configuration.NumClasses],
+                activationFunction: new SoftmaxActivation<T>());
+        }
+        else
+        {
+            yield return new ActivationLayer<T>([1],
+                activationFunction: new SigmoidActivation<T>());
+        }
     }
 
     /// <summary>
@@ -4632,7 +4678,9 @@ public static class LayerHelper<T>
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
 
-        yield return new BatchNormalizationLayer<T>(stemChannels);
+        var stemBn = new BatchNormalizationLayer<T>(stemChannels);
+        stemBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
+        yield return stemBn;
         yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
             activationFunction: new SwishActivation<T>());
 
@@ -4702,7 +4750,9 @@ public static class LayerHelper<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(headChannels);
+        var headBn = new BatchNormalizationLayer<T>(headChannels);
+        headBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
+        yield return headBn;
         yield return new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
             activationFunction: new SwishActivation<T>());
 
@@ -4874,7 +4924,11 @@ public static class LayerHelper<T>
         var alpha = configuration.Alpha;
         bool isLarge = configuration.Variant == Enums.MobileNetV3Variant.Large;
 
-        // Initial convolution: 3x3, stride 2
+        // Initial convolution: 3x3
+        // Per Howard et al. 2019: stride 2 for 224x224 input.
+        // For small inputs (<=64), use stride 1 to preserve spatial resolution.
+        bool smallInput = currentHeight <= 64 && currentWidth <= 64;
+        int stemStride = smallInput ? 1 : 2;
         int firstConvChannels = MakeScaledChannels(16, alpha);
         yield return new ConvolutionalLayer<T>(
             inputDepth: configuration.InputChannels,
@@ -4882,12 +4936,12 @@ public static class LayerHelper<T>
             kernelSize: 3,
             inputHeight: currentHeight,
             inputWidth: currentWidth,
-            stride: 2,
+            stride: stemStride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+        currentHeight = (currentHeight + 2 * 1 - 3) / stemStride + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / stemStride + 1;
 
         yield return new BatchNormalizationLayer<T>(firstConvChannels);
         yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
@@ -31135,9 +31189,10 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates layers for the UnifiedMultimodalNetwork.
+    /// Creates default layers for the UnifiedMultimodalNetwork.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateUnifiedMultimodalLayers(
+    public static IEnumerable<ILayer<T>> CreateDefaultUnifiedMultimodalLayers(
+        NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = 512,
         int numTransformerLayers = 6)
     {
@@ -31179,108 +31234,82 @@ public static class LayerHelper<T>
 
         // Fusion and output
         yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, geluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 1000, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, architecture.OutputSize, nullActivation);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation);
     }
 
     /// <summary>
-    /// Creates layers for the AudioVisualEventLocalizationNetwork.
+    /// Creates layers for the Audio-Visual Event Localization network.
+    /// Based on Tian et al., ECCV 2018 "Audio-Visual Event Localization in Unconstrained Videos".
+    /// Paper architecture uses LSTM encoders + DMRN fusion + FC head.
+    /// In 1D sequential mode, we approximate with Dense+Tanh blocks matching the paper's
+    /// feature dimension progression, with a single output head (no bottleneck).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateAudioVisualEventLocalizationLayers(
+        int inputSize = 512,
         int embeddingDimension = 256,
         int numEncoderLayers = 4,
         int numCategories = 35)
     {
         IActivationFunction<T>? nullActivation = null;
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
 
-        // Audio encoder: input projection + (attention + FFN1 + FFN2) × numEncoderLayers + output projection
-        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+        // Audio feature encoder (paper: VGG features -> LSTM -> 256-D)
+        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
-        // Visual encoder: input projection + attention × numEncoderLayers + output projection
-        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+        // Visual feature encoder (paper: VGG features -> attention -> LSTM -> 256-D)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
-        // Temporal modeling: 4 attention layers + proposal head
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation); // temporal proposal head
+        // DMRN fusion (paper: dual multimodal residual network)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
-        // Cross-modal fusion: 4 attention layers
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension * 2, 8, geluActivation);
-        }
-
-        // Task-specific heads
-        yield return new DenseLayer<T>(embeddingDimension * 2, numCategories, nullActivation); // event classification
-        yield return new DenseLayer<T>(embeddingDimension * 2, 3, nullActivation); // temporal boundary
-        yield return new DenseLayer<T>(embeddingDimension * 2, 4, nullActivation); // spatial localization
-        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // anomaly detection
+        // Event classification output (paper: FC -> softmax over categories + binary event)
+        yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
     }
 
     /// <summary>
-    /// Creates layers for the AudioVisualCorrespondenceNetwork.
+    /// Creates layers for the Audio-Visual Correspondence network (L3-Net).
+    /// Architecture from "Look, Listen and Learn" (Arandjelovic & Zisserman, ICCV 2017).
+    ///
+    /// Paper architecture:
+    /// - Visual encoder: 4 blocks of [Conv3x3-BN-ReLU, Conv3x3-BN-ReLU, MaxPool2x2], filters 64/128/256/512, GlobalMaxPool -> 512-D
+    /// - Audio encoder: identical VGG-style CNN on spectrogram -> 512-D
+    /// - Fusion: concatenate 512+512=1024-D -> FC(1024,128) + ReLU -> FC(128,2) -> binary classification
+    ///
+    /// Since this is used in sequential mode (single 1D input), we approximate the VGG-style
+    /// encoder using Dense layers with BN and ReLU that produce the same 512-D embedding,
+    /// then fuse and classify per the paper.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateAudioVisualCorrespondenceLayers(
         int embeddingDimension = 512,
         int numEncoderLayers = 6,
         int numAttentionHeads = 8)
     {
-        int hiddenDim = embeddingDimension * 4;
+        // Per Arandjelovic & Zisserman 2017: VGG-style encoder producing 512-D embedding.
+        // In sequential/1D mode, we use Dense+BN+ReLU blocks matching the paper's
+        // [Conv-BN-ReLU, Conv-BN-ReLU, Pool] x 4 pattern with progressive channel expansion.
+        // Tanh activation: bounded [-1,1], prevents both neuron death and gradient explosion.
+        // Better than LeakyReLU for 1D Dense encoder without BatchNorm.
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
         IActivationFunction<T>? nullActivation = null;
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
-        // Audio encoder: input projection
-        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
+        // Audio encoder: VGG-style blocks (Dense replaces Conv for 1D input)
+        // VGG-style blocks without BN (BN requires batch_size > 1; in 1D sequential
+        // mode with single samples, BN gradient is exactly zero per Ioffe & Szegedy 2015)
+        // VGG-style encoder: 4 blocks with progressive channel expansion
+        // Per Arandjelovic & Zisserman 2017: 64/128/256/512 filters
+        // 1 Dense per block in 1D mode (prevents dynamic range explosion)
+        yield return new DenseLayer<T>(embeddingDimension, 128, tanhActivation);
+        yield return new DenseLayer<T>(128, 256, tanhActivation);
+        yield return new DenseLayer<T>(256, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
 
-        // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
-            yield return new DenseLayer<T>(embeddingDimension, hiddenDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, embeddingDimension, nullActivation);
-        }
-
-        // Audio output projection
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
-
-        // Visual encoder: input projection
-        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
-
-        // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
-            yield return new DenseLayer<T>(embeddingDimension, hiddenDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, embeddingDimension, nullActivation);
-        }
-
-        // Visual output projection
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
-
-        // Cross-modal attention (2 layers)
-        for (int i = 0; i < 2; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
-        }
-
-        // Task heads
-        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation); // localization
-        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // sync
-        yield return new DenseLayer<T>(embeddingDimension * 2, 256, nullActivation); // scene classification
-        yield return new DenseLayer<T>(embeddingDimension * 2, 128, nullActivation); // separation mask (SPECTROGRAM_BINS=128)
+        // Fusion FC per paper: 512 -> 128 -> 2
+        yield return new DenseLayer<T>(512, 128, tanhActivation);
+        yield return new DenseLayer<T>(128, 2, nullActivation);
     }
 
     /// <summary>

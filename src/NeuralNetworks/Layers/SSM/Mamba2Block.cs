@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
-public class Mamba2Block<T> : LayerBase<T>
+public partial class Mamba2Block<T> : LayerBase<T>
 {
     // Configuration
     private readonly int _modelDimension;
@@ -902,6 +902,19 @@ public class Mamba2Block<T> : LayerBase<T>
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
         _normGamma = Engine.TensorAdd(_normGamma, Engine.TensorMultiplyScalar(_normGammaGradient!, negLR));
         _normBeta = Engine.TensorAdd(_normBeta, Engine.TensorMultiplyScalar(_normBetaGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />
