@@ -225,8 +225,11 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 
         // Step 1: Linear projection Mx = x @ W^T  [batch, outputFeatures * inputFeatures -> batch, outputFeatures]
         // _weights is [outputFeatures, inputFeatures], transpose for matmul
-        _weightsTCache ??= Engine.TensorTranspose(_weights);
-        var mx = Engine.TensorMatMul(inputTensor, _weightsTCache); // [batch, outputFeatures]
+        // Cache transpose only during inference — tape-based training updates weights in-place
+        var weightsT = IsTrainingMode
+            ? Engine.TensorTranspose(_weights)
+            : (_weightsTCache ??= Engine.TensorTranspose(_weights));
+        var mx = Engine.TensorMatMul(inputTensor, weightsT); // [batch, outputFeatures]
 
         // Step 2: Compute ||x|| per sample (L2 norm of input rows)
         var xSq = Engine.TensorMultiply(inputTensor, inputTensor); // [batch, inputFeatures]
@@ -246,7 +249,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var onePlusX = Engine.TensorAddScalar(clamped, NumOps.One);
         var oneMinusX = Engine.ScalarMinusTensor(NumOps.One, clamped);
         var atanhVal = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(onePlusX, oneMinusX)), NumOps.FromDouble(0.5)); // [batch, 1]
-        var ratio = Engine.TensorDivide(atanhVal, Engine.TensorAddScalar(sqrtCxNorm, eps)); // [batch, 1]
+        var ratio = Engine.TensorDivide(atanhVal, Engine.TensorAddScalar(clamped, eps)); // [batch, 1]
 
         // Step 5: tanh(||Mx|| * ratio) / (√c·||Mx||)
         var mxTimesRatio = Engine.TensorMultiply(mxNorm, ratio); // [batch, 1]
@@ -259,20 +262,16 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var resultInBall = Engine.TensorBroadcastMultiply(scale, mx);
 
         // Step 7: Add scalar bias per output — _biases is [outputFeatures]
+        // Per Ganea et al. 2018, the Möbius matmul output is a point in the Poincaré ball.
+        // Output the ball coordinates directly (not distance-from-origin, which would be scalar).
         var bias2D = _biases.Reshape([1, OutputFeatures]);
-        var withBias = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
+        var output = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
 
-        // Step 8: Poincaré distance from origin = (2/√|c|) * arctanh(√|c| * ||p||)
-        // Distance is non-negative by definition
-        var absP = Engine.TensorAbs(withBias); // [batch, outputFeatures]
-        var sqrtCp = Engine.TensorMultiplyScalar(absP, sqrtC);
-        var clampedP = Engine.TensorClamp(sqrtCp, NumOps.Zero, NumOps.FromDouble(0.9999));
-        // atanh via ln: 0.5 * ln((1+x)/(1-x))
-        var onePlusP = Engine.TensorAddScalar(clampedP, NumOps.One);
-        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clampedP);
-        var atanhP = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(onePlusP, oneMinusP)), NumOps.FromDouble(0.5));
-        T twoOverSqrtC = NumOps.Divide(NumOps.FromDouble(2.0), sqrtC);
-        var output = Engine.TensorMultiplyScalar(atanhP, twoOverSqrtC); // [batch, outputFeatures]
+        // Clamp to stay inside the ball: ||x|| < 1/√c
+        var outputNormSq = Engine.ReduceSum(Engine.TensorMultiply(output, output), new[] { 1 }, keepDims: true);
+        T maxNormSq = NumOps.FromDouble(0.99 / NumOps.ToDouble(c));
+        output = Engine.TensorClamp(output, NumOps.Negate(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(maxNormSq)))),
+            NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(maxNormSq))));
 
         _lastOutput = output;
 
@@ -617,7 +616,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             idx += OutputFeatures * InputFeatures;
         }
 
-        // Biases gradients: also [OutputFeatures, InputFeatures] in hyperbolic space
+        // Biases gradients: [OutputFeatures] — scalar bias per output
         if (_biasesGradient != null)
         {
             for (int o = 0; o < OutputFeatures; o++)

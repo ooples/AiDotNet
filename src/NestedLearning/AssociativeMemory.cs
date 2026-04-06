@@ -81,15 +81,20 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         for (int m = 0; m < _memories.Count; m++)
             scores[m] /= (sumExp + 1e-10);
 
-        // Weighted sum of values via Engine tensor ops
-        var resultTensor = new Tensor<T>([_dimension]);
-        for (int m = 0; m < _memories.Count; m++)
+        // Batched weighted sum: weights^T @ values via single matmul
+        // Stack values into [M, D] and weights into [1, M], compute [1, D] = [1, M] @ [M, D]
+        int M = _memories.Count;
+        var values = new Tensor<T>([M, _dimension]);
+        var weights = new Tensor<T>([1, M]);
+        for (int m = 0; m < M; m++)
         {
-            var valueTensor = Tensor<T>.FromVector(_memories[m].Target);
-            var weighted = Engine.TensorMultiplyScalar(valueTensor, NumOps.FromDouble(scores[m]));
-            resultTensor = Engine.TensorAdd(resultTensor, weighted);
+            weights[0, m] = NumOps.FromDouble(scores[m]);
+            var target = _memories[m].Target;
+            for (int d = 0; d < _dimension; d++)
+                values[m, d] = target[d];
         }
-        return resultTensor.ToVector();
+        var resultTensor = Engine.TensorMatMul(weights, values); // [1, D]
+        return resultTensor.Reshape([_dimension]).ToVector();
     }
 
     public void Update(Vector<T> input, Vector<T> target, T learningRate)
@@ -103,9 +108,8 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         if (lr < 0 || lr > 1 || double.IsNaN(lr) || double.IsInfinity(lr))
             throw new ArgumentOutOfRangeException(nameof(learningRate), lr, "Learning rate must be in [0, 1].");
 
-        // If a matching key already exists, blend its target (accumulate learning signal)
+        // If a matching key already exists (cosine similarity > 0.99), blend its target
         // instead of appending a duplicate that splits softmax attention
-        var inputTensor = Tensor<T>.FromVector(input);
         T inputNormSq = Engine.DotProduct(input, input);
         double inputNorm = Math.Sqrt(NumOps.ToDouble(inputNormSq));
 

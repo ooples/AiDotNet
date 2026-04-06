@@ -160,9 +160,12 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         {
             current = ApplySelfModification(current, _metaState);
 
-            // Store current state in associative memory (backprop as memory)
-            var inputVec = current.ToVector();
-            _associativeMemory.Associate(inputVec, inputVec); // Self-association
+            // Only mutate memory during training — inference must be deterministic
+            if (IsTrainingMode)
+            {
+                var inputVec = current.ToVector();
+                _associativeMemory.Associate(inputVec, inputVec);
+            }
         }
 
         // Process through sequential CMS chains (Equation 30 from paper)
@@ -193,16 +196,18 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             current = recurrentLayer.Forward(current);
         }
 
-        // Update meta-state through self-referential process
-        UpdateMetaStateSelfReferential(current);
+        // Only mutate meta-state during training
+        if (IsTrainingMode)
+        {
+            UpdateMetaStateSelfReferential(current);
+            _adaptationStep++;
+        }
 
         // Apply output layer if present
         if (_outputLayer != null)
         {
             current = _outputLayer.Forward(current);
         }
-
-        _adaptationStep++;
 
         return current;
     }
