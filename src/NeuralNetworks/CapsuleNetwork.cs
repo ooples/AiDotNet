@@ -427,6 +427,17 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         try
         {
             TrainWithTape(input, expectedOutput);
+
+            // Incorporate auxiliary reconstruction loss into diagnostics.
+            // TrainWithTape already set LastLoss to the margin loss; capture it
+            // then add the weighted reconstruction loss so diagnostics reflect both.
+            T marginLoss = LastLoss ?? NumOps.Zero;
+            _lastMarginLoss = marginLoss;
+            T auxLoss = ComputeAuxiliaryLoss();
+            if (UseAuxiliaryLoss)
+            {
+                LastLoss = NumOps.Add(marginLoss, NumOps.Multiply(AuxiliaryLossWeight, auxLoss));
+            }
         }
         finally
         {
