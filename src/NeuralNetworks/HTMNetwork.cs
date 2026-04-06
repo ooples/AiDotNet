@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -152,7 +152,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// everything - it helps you focus on what really matters.
     /// </para>
     /// </remarks>
-    private double _sparsityThreshold { get; set; }
+    private T _sparsityThreshold { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HTMNetwork{T}"/> class with the specified architecture and parameters.
@@ -222,7 +222,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         _inputSize = inputShape[0];
         _columnCount = columnCount;
         _cellsPerColumn = cellsPerColumn;
-        _sparsityThreshold = sparsityThreshold;
+        _sparsityThreshold = NumOps.FromDouble(sparsityThreshold);
 
         InitializeLayers();
     }
@@ -261,7 +261,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, _sparsityThreshold));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, NumOps.ToDouble(_sparsityThreshold)));
         }
     }
 
@@ -487,35 +487,27 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor containing the network's prediction.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Ensure the input is a vector or can be converted to one
-        Vector<T> inputVector;
-        if (input.Rank == 1)
+        // Per Ahmad & Hawkins 2015: HTM + supervised readout.
+        // Forward through full layer chain: SP -> TM -> Dense -> (optional Softmax)
+        // Set eval mode on all layers for inference
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        try
         {
-            inputVector = input.ToVector();
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+                current = layer.Forward(current);
+            return current;
         }
-        else if (input.Rank == 2 && input.Shape[0] == 1)
+        finally
         {
-            // Handle single-row batch
-            inputVector = new Vector<T>(input.Shape[1]);
-            for (int i = 0; i < input.Shape[1]; i++)
-            {
-                inputVector[i] = input[0, i];
-            }
+            // Restore eval mode after prediction (Train sets training mode when needed)
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
         }
-        else
-        {
-            throw new ArgumentException("Input tensor must be a vector or a single-row batch.");
-        }
-
-        // Use the vector prediction method
-        var predictionVector = Predict(inputVector);
-
-        // Convert back to tensor
-        return Tensor<T>.FromVector(predictionVector);
     }
 
     /// <summary>
@@ -590,6 +582,29 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         if (processedInputs > 0)
         {
             LastLoss = NumOps.Divide(totalAnomalyScore, NumOps.FromDouble(processedInputs));
+        }
+
+        // Supervised readout training per Ahmad & Hawkins 2015:
+        // After Hebbian SP/TM learning, update the Dense readout layer via backprop.
+        // SP and TM layers are frozen (Hebbian-only), only readout layers train.
+        SetTrainingMode(true);
+        // Keep SP and TM layers frozen (Hebbian-only), train only readout layers
+        for (int li = 0; li < Layers.Count; li++)
+        {
+            if (li < 2) // SP and TM are layers 0-1
+                Layers[li].SetTrainingMode(false);
+            else
+                Layers[li].SetTrainingMode(true);
+        }
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
         }
     }
 
@@ -693,7 +708,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 { "InputSize", _inputSize },
                 { "ColumnCount", _columnCount },
                 { "CellsPerColumn", _cellsPerColumn },
-                { "SparsityThreshold", _sparsityThreshold },
+                { "SparsityThreshold", NumOps.ToDouble(_sparsityThreshold) },
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", GetParameterCount() }
             },
@@ -710,7 +725,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Write HTM-specific parameters
         writer.Write(_columnCount);
         writer.Write(_cellsPerColumn);
-        writer.Write(_sparsityThreshold);
+        writer.Write(NumOps.ToDouble(_sparsityThreshold));
 
         // Serialize any additional HTM state
 
@@ -756,7 +771,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Read HTM-specific parameters
         _columnCount = reader.ReadInt32();
         _cellsPerColumn = reader.ReadInt32();
-        _sparsityThreshold = reader.ReadDouble();
+        _sparsityThreshold = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize additional HTM state
 
@@ -822,6 +837,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             this.Architecture,
             _columnCount,
             _cellsPerColumn,
-            _sparsityThreshold);
+            NumOps.ToDouble(_sparsityThreshold));
     }
 }

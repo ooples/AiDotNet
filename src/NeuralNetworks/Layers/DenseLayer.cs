@@ -1160,8 +1160,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+            // In-place update to preserve tensor identity (cached references, tape tracking)
+            var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
+            Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
 
             // Notify engine that weights/biases have changed (for GPU cache invalidation)
             Engine.InvalidatePersistentTensor(_weights);

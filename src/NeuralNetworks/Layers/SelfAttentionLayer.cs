@@ -112,6 +112,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -123,6 +124,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// is being extracted from each position.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _valueWeights;
 
     /// <summary>

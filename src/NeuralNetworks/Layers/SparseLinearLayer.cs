@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
-public class SparseLinearLayer<T> : LayerBase<T>
+public partial class SparseLinearLayer<T> : LayerBase<T>
 {
     private readonly ISparseEngine _engine;
     private readonly INumericOperations<T> _numOps;

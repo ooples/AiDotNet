@@ -51,8 +51,6 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;
-    private double[]? _meanAmplitudes;
-    private double[]? _stdAmplitudes;
 
     /// <summary>
     /// Gets the window size for spectrum smoothing.
@@ -101,10 +99,6 @@ public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Compute baseline statistics from training data
-        var saliency = ComputeSaliencyMap(values);
-        _meanAmplitudes = new[] { saliency.Average() };
-        _stdAmplitudes = new[] { Math.Sqrt(saliency.Select(s => Math.Pow(s - _meanAmplitudes[0], 2)).Average()) };
-
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);

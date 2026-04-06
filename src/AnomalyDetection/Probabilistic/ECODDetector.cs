@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelPaper("ECOD: Unsupervised Outlier Detection Using Empirical Cumulative Distribution Functions", "https://doi.org/10.1109/TKDE.2022.3159580", Year = 2022, Authors = "Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, George H. Chen")]
 public class ECODDetector<T> : AnomalyDetectorBase<T>
 {
-    private double[][]? _sortedFeatureValues;
+    private Vector<T>[]? _sortedFeatureValues;
     private int _nFeatures;
     private int _nTrainingSamples;
 
@@ -70,16 +70,17 @@ public class ECODDetector<T> : AnomalyDetectorBase<T>
         _nTrainingSamples = X.Rows;
 
         // Store sorted values for each feature to compute empirical CDF
-        _sortedFeatureValues = new double[_nFeatures][];
+        _sortedFeatureValues = new Vector<T>[_nFeatures];
 
         for (int j = 0; j < _nFeatures; j++)
         {
-            var featureValues = new double[X.Rows];
+            var featureValues = new T[X.Rows];
             for (int i = 0; i < X.Rows; i++)
             {
-                featureValues[i] = NumOps.ToDouble(X[i, j]);
+                featureValues[i] = X[i, j];
             }
-            _sortedFeatureValues[j] = featureValues.OrderBy(v => v).ToArray();
+            Array.Sort(featureValues, (a, b) => NumOps.Compare(a, b));
+            _sortedFeatureValues[j] = new Vector<T>(featureValues);
         }
 
         // Calculate scores for training data to set threshold
@@ -102,50 +103,53 @@ public class ECODDetector<T> : AnomalyDetectorBase<T>
 
         var scores = new Vector<T>(X.Rows);
 
+        T eps = NumOps.FromDouble(1e-10);
+        var sortedVals = _sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized.");
+
         for (int i = 0; i < X.Rows; i++)
         {
-            double combinedScore = 0;
+            T combinedScore = NumOps.Zero;
 
             for (int j = 0; j < _nFeatures; j++)
             {
-                double value = NumOps.ToDouble(X[i, j]);
+                T value = X[i, j];
 
                 // Compute empirical CDF: F(x) = proportion of values <= x
-                double leftCdf = ComputeECDF(value, (_sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized."))[j]);
-                double rightCdf = 1.0 - leftCdf;
+                T leftCdf = ComputeECDF(value, sortedVals[j]);
+                T rightCdf = NumOps.Subtract(NumOps.One, leftCdf);
 
                 // Use the minimum of left and right tail probabilities
-                double tailProb = Math.Min(leftCdf, rightCdf);
+                T tailProb = NumOps.LessThan(leftCdf, rightCdf) ? leftCdf : rightCdf;
 
                 // Avoid log(0) by clamping
-                tailProb = Math.Max(tailProb, 1e-10);
+                if (NumOps.LessThan(tailProb, eps)) tailProb = eps;
 
                 // Negative log probability (higher = more anomalous)
-                combinedScore += -Math.Log(tailProb);
+                combinedScore = NumOps.Subtract(combinedScore, NumOps.Log(tailProb));
             }
 
-            scores[i] = NumOps.FromDouble(combinedScore);
+            scores[i] = combinedScore;
         }
 
         return scores;
     }
 
-    private double ComputeECDF(double value, double[] sortedValues)
+    private T ComputeECDF(T value, Vector<T> sortedValues)
     {
-        // Binary search to find the rank
+        // Linear search for count of values <= value (sorted array)
         int left = 0;
         int right = sortedValues.Length - 1;
 
         while (left <= right)
         {
             int mid = (left + right) / 2;
-            if (sortedValues[mid] <= value)
+            if (!NumOps.GreaterThan(sortedValues[mid], value))
                 left = mid + 1;
             else
                 right = mid - 1;
         }
 
         // CDF = (number of values <= x) / n
-        return (double)left / sortedValues.Length;
+        return NumOps.FromDouble((double)left / sortedValues.Length);
     }
 }

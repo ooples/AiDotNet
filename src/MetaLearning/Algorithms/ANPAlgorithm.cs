@@ -155,18 +155,18 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
     private (Vector<T> mean, Vector<T> logvar) ComputeLatent(Vector<T> representation)
     {
         int latentDim = _anpOptions.LatentDim;
-        var mean = new Vector<T>(latentDim);
+        var meanPre = new Vector<T>(latentDim);
         var logvar = new Vector<T>(latentDim);
 
         for (int i = 0; i < latentDim; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
             {
                 int pIdx = (i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sum += NumOps.ToDouble(representation[j]) * NumOps.ToDouble(_latentEncoderParams[pIdx]);
+                sum = NumOps.Add(sum, NumOps.Multiply(representation[j], _latentEncoderParams[pIdx]));
             }
-            mean[i] = NumOps.FromDouble(Math.Tanh(sum));
+            meanPre[i] = sum;
 
             double sumVar = 0;
             for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
@@ -176,6 +176,9 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             }
             logvar[i] = NumOps.FromDouble(Math.Max(-4, Math.Min(2, sumVar)));
         }
+
+        // SIMD tanh on entire mean vector
+        var mean = VectorTanh(meanPre);
         return (mean, logvar);
     }
 

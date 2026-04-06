@@ -133,7 +133,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// Controls the importance of cycle consistency. Typical value: 10.0.
     /// Higher values enforce stronger cycle consistency.
     /// </remarks>
-    private double _cycleConsistencyLambda;
+    private T _cycleConsistencyLambda;
 
     /// <summary>
     /// Coefficient for identity loss.
@@ -141,7 +141,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// Encourages G and F to preserve color composition. Typical value: 0.5 * cycleConsistencyLambda.
     /// </remarks>
-    private double _identityLambda;
+    private T _identityLambda;
 
     /// <summary>
     /// Generator A→B.
@@ -299,8 +299,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(identityLambda), identityLambda, "Identity lambda must be non-negative.");
         }
 
-        _cycleConsistencyLambda = cycleConsistencyLambda;
-        _identityLambda = identityLambda;
+        _cycleConsistencyLambda = NumOps.FromDouble(cycleConsistencyLambda);
+        _identityLambda = NumOps.FromDouble(identityLambda);
 
         GeneratorAtoB = CreateNetworkForInputType(generatorAtoB, inputType);
         GeneratorBtoA = CreateNetworkForInputType(generatorBtoA, inputType);
@@ -436,8 +436,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         GeneratorBtoA.Train(realB, realA);
 
         // Total generator loss
-        T cycleCoeff = NumOps.FromDouble(_cycleConsistencyLambda);
-        T idCoeff = NumOps.FromDouble(_identityLambda);
+        T cycleCoeff = _cycleConsistencyLambda;
+        T idCoeff = _identityLambda;
 
         T generatorLoss = NumOps.Add(advLoss,
             NumOps.Add(
@@ -772,8 +772,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
                 { "GeneratorBtoA_Parameters", GeneratorBtoA.GetParameterCount() },
                 { "DiscriminatorA_Parameters", DiscriminatorA.GetParameterCount() },
                 { "DiscriminatorB_Parameters", DiscriminatorB.GetParameterCount() },
-                { "CycleConsistencyLambda", _cycleConsistencyLambda },
-                { "IdentityLambda", _identityLambda }
+                { "CycleConsistencyLambda", NumOps.ToDouble(_cycleConsistencyLambda) },
+                { "IdentityLambda", NumOps.ToDouble(_identityLambda) }
             },
             ModelData = this.Serialize()
         };
@@ -795,8 +795,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         // Serialize CycleGAN-specific hyperparameters
-        writer.Write(_cycleConsistencyLambda);
-        writer.Write(_identityLambda);
+        writer.Write(NumOps.ToDouble(_cycleConsistencyLambda));
+        writer.Write(NumOps.ToDouble(_identityLambda));
 
         // Serialize all four networks
         var genAtoB = GeneratorAtoB.Serialize();
@@ -832,8 +832,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         // Deserialize CycleGAN-specific hyperparameters
-        _cycleConsistencyLambda = reader.ReadDouble();
-        _identityLambda = reader.ReadDouble();
+        _cycleConsistencyLambda = NumOps.FromDouble(reader.ReadDouble());
+        _identityLambda = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize all four networks
         int genAtoB_Length = reader.ReadInt32();
@@ -878,8 +878,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             discriminatorAOptimizer: null,
             discriminatorBOptimizer: null,
             _lossFunction,
-            _cycleConsistencyLambda,
-            _identityLambda);
+            NumOps.ToDouble(_cycleConsistencyLambda),
+            NumOps.ToDouble(_identityLambda));
     }
 
     /// <summary>

@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
-public class QuantumLayer<T> : LayerBase<T>
+public partial class QuantumLayer<T> : LayerBase<T>
 {
     private readonly int _numQubits;
     private Tensor<Complex<T>> _quantumCircuit;

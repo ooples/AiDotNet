@@ -12,6 +12,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
@@ -338,6 +339,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         LossFunction = lossFunction;
         _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
+    }
+
+    /// <summary>
+    /// Enables deterministic CPU inference by setting MKL to single-threaded.
+    /// Call from model constructors that need bitwise-identical forward passes.
+    /// Note: This sets a process-global BLAS flag. Consider calling it once at
+    /// application startup rather than from individual model constructors if
+    /// multiple models coexist.
+    /// </summary>
+    public static void EnableDeterministicMode()
+    {
+        BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
@@ -2490,6 +2503,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Forward + loss under tape — uses the buffer-backed view tensors
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
+
+        // Align output shape to target: squeeze leading batch dim when batch=1
+        // (ForwardForTraining may add a batch dim that the target doesn't have)
+        if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+        {
+            output = output.Reshape(expected._shape);
+        }
+        else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+        {
+            expected = expected.Reshape(output._shape);
+        }
+
         var lossTensor = loss.ComputeTapeLoss(output, expected);
 
         // Compute gradients
@@ -2616,22 +2641,62 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Replace layer parameter tensors with views into the contiguous buffer.
         // This makes the buffer the single source of truth — in-place updates by
         // first-order optimizers automatically reflect in the flat vector, and vice versa.
+        // Must recurse into sublayers to match CollectRecursive's walk order.
+        // Build a map from original parameter tensor → buffer view tensor,
+        // using the same deduplication order as CollectRecursive (by tensor reference).
         var views = buffer.CreateAllViews();
-        int viewIdx = 0;
-        foreach (var layer in Layers)
+        var paramToView = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < trainableParams.Count; i++)
+            paramToView[trainableParams[i]] = views[i];
+
+        // Replace each layer's parameters with their buffer-backed views.
+        var seenLayers = new HashSet<ILayer<T>>();
+        ReplaceParametersFromMap(Layers, paramToView, seenLayers);
+
+        _parameterBuffer = buffer;
+        return buffer;
+    }
+
+    /// <summary>
+    /// Recursively replaces trainable parameter tensors with buffer-backed views
+    /// using a pre-built parameter→view map. This avoids walk-order sensitivity
+    /// by looking up each layer's parameters in the map by reference identity.
+    /// </summary>
+    private static void ReplaceParametersFromMap(
+        IEnumerable<ILayer<T>> layers,
+        Dictionary<Tensor<T>, Tensor<T>> paramToView,
+        HashSet<ILayer<T>> seenLayers)
+    {
+        foreach (var layer in layers)
         {
+            if (!seenLayers.Add(layer)) continue;
+
             if (layer is ITrainableLayer<T> trainable)
             {
                 var layerParams = trainable.GetTrainableParameters();
                 var layerViews = new Tensor<T>[layerParams.Count];
+                bool anyReplaced = false;
                 for (int i = 0; i < layerParams.Count; i++)
-                    layerViews[i] = views[viewIdx++];
-                trainable.SetTrainableParameters(layerViews);
+                {
+                    if (paramToView.TryGetValue(layerParams[i], out var view))
+                    {
+                        layerViews[i] = view;
+                        anyReplaced = true;
+                    }
+                    else
+                    {
+                        layerViews[i] = layerParams[i]; // Keep original if not in buffer
+                    }
+                }
+                if (anyReplaced)
+                    trainable.SetTrainableParameters(layerViews);
             }
-        }
 
-        _parameterBuffer = buffer;
-        return buffer;
+            var subLayers = layer.GetSubLayers();
+            if (subLayers.Count > 0)
+                ReplaceParametersFromMap(subLayers, paramToView, seenLayers);
+        }
     }
 
     /// <summary>

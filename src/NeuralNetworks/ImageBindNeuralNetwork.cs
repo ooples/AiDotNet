@@ -1529,23 +1529,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-
-        var embedding = GetImageEmbedding(input);
-        var embeddingTensor = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            embeddingTensor[0, i] = embedding[i];
-        }
-
-        LastLoss = LossFunction.CalculateLoss(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var lossGradient = LossFunction.CalculateDerivative(embeddingTensor.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        var currentParams = GetParameters();
-        UpdateParameters(currentParams);
-
-        SetTrainingMode(false);
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <inheritdoc/>

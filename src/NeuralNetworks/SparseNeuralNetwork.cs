@@ -70,7 +70,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The sparsity level (fraction of weights that are zero).
     /// </summary>
-    private double _sparsity;
+    private T _sparsity;
 
     /// <summary>
     /// Initializes a new instance of the SparseNeuralNetwork class.
@@ -115,7 +115,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));
         }
 
-        _sparsity = sparsity;
+        _sparsity = NumOps.FromDouble(sparsity);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
@@ -145,19 +145,19 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
                 // Per Mocanu et al. (2018), sparse networks need hidden layers for
                 // sparse-to-sparse connectivity. Single-layer sparse → dead ReLU neurons.
                 int hiddenSize = Math.Max(32, (inputFeatures + outputFeatures) / 2);
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, _sparsity));
-                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, _sparsity));
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, NumOps.ToDouble(_sparsity)));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, NumOps.ToDouble(_sparsity)));
             }
             else
             {
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSizes[0], _sparsity));
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSizes[0], NumOps.ToDouble(_sparsity)));
 
                 for (int i = 0; i < hiddenSizes.Length - 1; i++)
                 {
-                    Layers.Add(new SparseLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], _sparsity));
+                    Layers.Add(new SparseLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_sparsity)));
                 }
 
-                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, _sparsity));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_sparsity)));
             }
         }
     }
@@ -245,29 +245,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
-        var prediction = Forward(input);
-
-        var primaryLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        T auxiliaryLoss = NumOps.Zero;
-        foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
-        {
-            var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-            var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-            auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-        }
-
-        LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-
-
-        _optimizer.UpdateParameters(Layers);
-
-        IsTrainingMode = false;
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <summary>
@@ -281,7 +259,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "SparseNeuralNetwork" },
-                { "Sparsity", _sparsity },
+                { "Sparsity", NumOps.ToDouble(_sparsity) },
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
@@ -299,7 +277,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_sparsity);
+        writer.Write(NumOps.ToDouble(_sparsity));
         writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
         writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
     }
@@ -309,7 +287,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _sparsity = reader.ReadDouble();
+        _sparsity = NumOps.FromDouble(reader.ReadDouble());
 
         // Read type names for forward compatibility and validation
         string optimizerType = reader.ReadString();
@@ -329,7 +307,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new SparseNeuralNetwork<T>(
             Architecture,
-            _sparsity,
+            NumOps.ToDouble(_sparsity),
             _optimizer,
             _lossFunction,
             Convert.ToDouble(MaxGradNorm));

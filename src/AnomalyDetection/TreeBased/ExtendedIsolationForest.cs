@@ -53,6 +53,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _extensionLevel;
     private List<ExtendedIsolationTree>? _trees;
     private int _nFeatures;
+    private int _trainingSampleSize;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -111,37 +112,36 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     public override void Fit(Matrix<T> X)
     {
         ValidateInput(X);
+        if (X.Rows < 2)
+            throw new ArgumentException("At least 2 samples are required for isolation forest.", nameof(X));
 
         _nFeatures = X.Columns;
         int effectiveExtension = _extensionLevel == -1 ? _nFeatures - 1 : Math.Min(_extensionLevel, _nFeatures - 1);
 
         int nSamples = Math.Min(_maxSamples, X.Rows);
+        _trainingSampleSize = nSamples;
         int maxDepth = (int)Math.Ceiling(Math.Log(nSamples, 2));
 
         _trees = new List<ExtendedIsolationTree>();
 
-        // Convert data to double array for tree building
-        var data = new double[X.Rows][];
-        for (int i = 0; i < X.Rows; i++)
-        {
-            data[i] = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
-        // Build trees
+        // Build trees using Matrix<T> directly
         for (int t = 0; t < _numTrees; t++)
         {
             var random = RandomHelper.CreateSeededRandom(_randomSeed + t);
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
-            var sampleData = sampleIndices.Select(i => data[i]).ToArray();
+            var sampleData = new Matrix<T>(sampleIndices.Length, X.Columns);
+            for (int si = 0; si < sampleIndices.Length; si++)
+            {
+                for (int j = 0; j < X.Columns; j++)
+                {
+                    sampleData[si, j] = X[sampleIndices[si], j];
+                }
+            }
 
             // Build tree
-            var tree = new ExtendedIsolationTree(effectiveExtension, random);
+            var tree = new ExtendedIsolationTree(effectiveExtension, random, NumOps);
             tree.Build(sampleData, 0, maxDepth);
             _trees.Add(tree);
         }
@@ -178,30 +178,35 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int nSamples = Math.Min(_maxSamples, X.Rows);
+        int nSamples = _trainingSampleSize;
 
-        // Expected path length for BST
-        double c = nSamples > 2
+        // Expected path length for BST (must use training subsample size, not test size)
+        T c = NumOps.FromDouble(nSamples > 2
             ? 2 * (Math.Log(nSamples - 1) + 0.5772156649) - (2.0 * (nSamples - 1) / nSamples)
-            : nSamples == 2 ? 1 : 0;
+            : nSamples == 2 ? 1 : 0);
+
+        T two = NumOps.FromDouble(2);
+        T half = NumOps.FromDouble(0.5);
+        T nTreesT = NumOps.FromDouble(trees.Count);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Average path length across all trees
-            double avgPathLength = trees.Average(tree => tree.PathLength(point, 0));
+            T avgPathLength = NumOps.Zero;
+            foreach (var tree in trees)
+            {
+                avgPathLength = NumOps.Add(avgPathLength, tree.PathLength(point, 0));
+            }
+            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
 
             // Anomaly score: s = 2^(-avgPathLength/c)
-            // Higher is more anomalous (we want this)
-            double score = c > 0 ? Math.Pow(2, -avgPathLength / c) : 0.5;
+            T score = NumOps.GreaterThan(c, NumOps.Zero)
+                ? NumOps.Power(two, NumOps.Negate(NumOps.Divide(avgPathLength, c)))
+                : half;
 
-            // Invert to match our convention (higher = more anomalous)
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
@@ -224,45 +229,49 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     {
         private readonly int _extensionLevel;
         private readonly Random _random;
-        private double[]? _normal;
-        private double _intercept;
+        private readonly INumericOperations<T> _numOps;
+        private Vector<T>? _normal;
+
+        private T _intercept;
+
         private ExtendedIsolationTree? _left;
         private ExtendedIsolationTree? _right;
         private int _size;
         private bool _isLeaf;
 
-        public ExtendedIsolationTree(int extensionLevel, Random random)
+        public ExtendedIsolationTree(int extensionLevel, Random random, INumericOperations<T> numOps)
         {
             _extensionLevel = extensionLevel;
             _random = random;
+            _numOps = numOps;
+            _intercept = numOps.Zero;
             _isLeaf = true;
         }
 
-        public void Build(double[][] data, int currentDepth, int maxDepth)
+        public void Build(Matrix<T> data, int currentDepth, int maxDepth)
         {
-            _size = data.Length;
+            _size = data.Rows;
 
-            if (currentDepth >= maxDepth || data.Length <= 1)
+            if (currentDepth >= maxDepth || data.Rows <= 1)
             {
                 _isLeaf = true;
                 return;
             }
 
-            int nFeatures = data[0].Length;
+            int nFeatures = data.Columns;
 
             // Generate random hyperplane normal
-            _normal = new double[nFeatures];
+            _normal = new Vector<T>(nFeatures);
 
             if (_extensionLevel == 0)
             {
                 // Axis-parallel (standard IF)
                 int splitDim = _random.Next(nFeatures);
-                _normal[splitDim] = 1;
+                _normal[splitDim] = _numOps.One;
             }
             else
             {
                 // Extended: random direction
-                // Pick extensionLevel + 1 random dimensions
                 var dims = Enumerable.Range(0, nFeatures)
                     .OrderBy(_ => _random.NextDouble())
                     .Take(Math.Min(_extensionLevel + 1, nFeatures))
@@ -270,70 +279,96 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
                 foreach (int d in dims)
                 {
-                    // Random Gaussian component
+                    // Random Gaussian component (Box-Muller at Random.NextDouble boundary)
                     double u1 = 1.0 - _random.NextDouble();
                     double u2 = 1.0 - _random.NextDouble();
-                    _normal[d] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    _normal[d] = _numOps.FromDouble(z);
                 }
 
-                // Normalize
-                double norm = Math.Sqrt(_normal.Sum(n => n * n));
-                if (norm > 1e-10)
+                // Normalize using Engine-style manual dot product
+                T normSq = _numOps.Zero;
+                for (int i = 0; i < nFeatures; i++)
+                {
+                    normSq = _numOps.Add(normSq, _numOps.Multiply(_normal[i], _normal[i]));
+                }
+                T norm = _numOps.Sqrt(normSq);
+                T eps = _numOps.FromDouble(1e-10);
+                if (_numOps.GreaterThan(norm, eps))
                 {
                     for (int i = 0; i < nFeatures; i++)
                     {
-                        _normal[i] /= norm;
+                        _normal[i] = _numOps.Divide(_normal[i], norm);
                     }
                 }
             }
 
             // Compute projections
-            var projections = data.Select(p => DotProduct(p, _normal)).ToArray();
+            var projections = new Vector<T>(data.Rows);
+            for (int i = 0; i < data.Rows; i++)
+            {
+                T proj = _numOps.Zero;
+                for (int j = 0; j < nFeatures; j++)
+                {
+                    proj = _numOps.Add(proj, _numOps.Multiply(data[i, j], _normal[j]));
+                }
+                projections[i] = proj;
+            }
 
             // Random intercept between min and max projection
-            double minProj = projections.Min();
-            double maxProj = projections.Max();
+            T minProj = projections[0];
+            T maxProj = projections[0];
+            for (int i = 1; i < data.Rows; i++)
+            {
+                if (_numOps.LessThan(projections[i], minProj)) minProj = projections[i];
+                if (_numOps.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
+            }
 
-            if (Math.Abs(maxProj - minProj) < 1e-10)
+            T range = _numOps.Subtract(maxProj, minProj);
+            T eps2 = _numOps.FromDouble(1e-10);
+            if (NumericOpsLessThanAbs(range, eps2))
             {
                 _isLeaf = true;
                 return;
             }
 
-            _intercept = minProj + _random.NextDouble() * (maxProj - minProj);
+            _intercept = _numOps.Add(minProj, _numOps.Multiply(_numOps.FromDouble(_random.NextDouble()), range));
 
             // Split data
-            var leftData = new List<double[]>();
-            var rightData = new List<double[]>();
+            var leftIndices = new List<int>();
+            var rightIndices = new List<int>();
 
-            for (int i = 0; i < data.Length; i++)
+            for (int i = 0; i < data.Rows; i++)
             {
-                if (projections[i] < _intercept)
-                    leftData.Add(data[i]);
+                if (_numOps.LessThan(projections[i], _intercept))
+                    leftIndices.Add(i);
                 else
-                    rightData.Add(data[i]);
+                    rightIndices.Add(i);
             }
 
-            if (leftData.Count == 0 || rightData.Count == 0)
+            if (leftIndices.Count == 0 || rightIndices.Count == 0)
             {
                 _isLeaf = true;
                 return;
             }
 
-            _isLeaf = false;
-            _left = new ExtendedIsolationTree(_extensionLevel, _random);
-            _right = new ExtendedIsolationTree(_extensionLevel, _random);
+            // Extract submatrices
+            var leftData = ExtractRows(data, leftIndices);
+            var rightData = ExtractRows(data, rightIndices);
 
-            _left.Build(leftData.ToArray(), currentDepth + 1, maxDepth);
-            _right.Build(rightData.ToArray(), currentDepth + 1, maxDepth);
+            _isLeaf = false;
+            _left = new ExtendedIsolationTree(_extensionLevel, _random, _numOps);
+            _right = new ExtendedIsolationTree(_extensionLevel, _random, _numOps);
+
+            _left.Build(leftData, currentDepth + 1, maxDepth);
+            _right.Build(rightData, currentDepth + 1, maxDepth);
         }
 
-        public double PathLength(double[] point, int currentDepth)
+        public T PathLength(Vector<T> point, int currentDepth)
         {
             if (_isLeaf)
             {
-                // Approximate remaining path length for unbuilt tree
-                return currentDepth + EstimateC(_size);
+                return _numOps.FromDouble(currentDepth + EstimateC(_size));
             }
 
             var normal = _normal;
@@ -342,25 +377,37 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
             if (normal == null || left == null || right == null)
             {
-                return currentDepth + EstimateC(_size);
+                return _numOps.FromDouble(currentDepth + EstimateC(_size));
             }
 
-            double projection = DotProduct(point, normal);
+            T projection = _numOps.Zero;
+            for (int i = 0; i < point.Length; i++)
+            {
+                projection = _numOps.Add(projection, _numOps.Multiply(point[i], normal[i]));
+            }
 
-            if (projection < _intercept)
+            if (_numOps.LessThan(projection, _intercept))
                 return left.PathLength(point, currentDepth + 1);
             else
                 return right.PathLength(point, currentDepth + 1);
         }
 
-        private static double DotProduct(double[] a, double[] b)
+        private bool NumericOpsLessThanAbs(T value, T threshold)
         {
-            double sum = 0;
-            for (int i = 0; i < a.Length; i++)
+            return _numOps.LessThan(_numOps.Abs(value), threshold);
+        }
+
+        private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
+        {
+            var result = new Matrix<T>(indices.Count, data.Columns);
+            for (int i = 0; i < indices.Count; i++)
             {
-                sum += a[i] * b[i];
+                for (int j = 0; j < data.Columns; j++)
+                {
+                    result[i, j] = data[indices[i], j];
+                }
             }
-            return sum;
+            return result;
         }
 
         private static double EstimateC(int n)

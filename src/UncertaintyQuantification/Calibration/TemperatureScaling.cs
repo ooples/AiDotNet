@@ -1,6 +1,6 @@
 namespace AiDotNet.UncertaintyQuantification.Calibration;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Implements temperature scaling for probability calibration.
@@ -31,7 +31,9 @@ namespace AiDotNet.UncertaintyQuantification.Calibration;
 public class TemperatureScaling<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private T _temperature = default;
+
+    private T _temperature;
+
 
     /// <summary>
     /// Gets or sets the temperature parameter.
@@ -58,6 +60,7 @@ public class TemperatureScaling<T>
     public TemperatureScaling(double initialTemperature = 1.0)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _temperature = _numOps.Zero;
         if (initialTemperature <= 0)
             throw new ArgumentOutOfRangeException(nameof(initialTemperature), "Initial temperature must be positive.");
 

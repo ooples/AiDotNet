@@ -133,18 +133,12 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 var queryFeatures = ConvertToVector(queryPred);
                 if (queryFeatures != null && queryFeatures.Length > 0)
                 {
-                    // Entropy regularization: penalize low-entropy (overconfident) predictions
-                    // Encourages model to be uncertain when appropriate
-                    double maxVal = double.MinValue;
-                    for (int i = 0; i < queryFeatures.Length; i++)
-                        maxVal = Math.Max(maxVal, NumOps.ToDouble(queryFeatures[i]));
-                    double sumExp = 0;
-                    for (int i = 0; i < queryFeatures.Length; i++)
-                        sumExp += Math.Exp(NumOps.ToDouble(queryFeatures[i]) - maxVal);
+                    // Entropy regularization via Engine.Softmax (SIMD)
+                    var probs = Softmax(queryFeatures);
                     double entropy = 0;
-                    for (int i = 0; i < queryFeatures.Length; i++)
+                    for (int i = 0; i < probs.Length; i++)
                     {
-                        double p = Math.Exp(NumOps.ToDouble(queryFeatures[i]) - maxVal) / Math.Max(sumExp, 1e-10);
+                        double p = NumOps.ToDouble(probs[i]);
                         if (p > 1e-10)
                             entropy -= p * Math.Log(p);
                     }

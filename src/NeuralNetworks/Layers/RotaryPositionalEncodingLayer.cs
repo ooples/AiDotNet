@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
+internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
 {
     private int _maxSequenceLength;
     private readonly int _headDimension;

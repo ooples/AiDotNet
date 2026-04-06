@@ -201,15 +201,15 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
     private Vector<T> EncodeContextEntry(Vector<T> grad)
     {
-        var entry = new Vector<T>(_contextDim);
+        var preAct = new Vector<T>(_contextDim);
         for (int c = 0; c < _contextDim; c++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_contextEncoderParams[c * _compressedDim + d]);
-            entry[c] = NumOps.FromDouble(Math.Tanh(sum));
+                sum = NumOps.Add(sum, NumOps.Multiply(grad[d], _contextEncoderParams[c * _compressedDim + d]));
+            preAct[c] = sum;
         }
-        return entry;
+        return VectorTanh(preAct);
     }
 
     private Vector<T> AggregateContext(List<Vector<T>> entries, List<double> entryLosses)

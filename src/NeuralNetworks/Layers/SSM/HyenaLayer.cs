@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class HyenaLayer<T> : LayerBase<T>
+public partial class HyenaLayer<T> : LayerBase<T>
 {
     private readonly int _sequenceLength;
     private readonly int _modelDimension;
@@ -531,6 +531,11 @@ public class HyenaLayer<T> : LayerBase<T>
         _outputProjectionBias = Engine.TensorAdd(
             _outputProjectionBias,
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

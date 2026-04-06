@@ -1,8 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for DeepSurv survival analysis model.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// DeepSurv extends the Cox Proportional Hazards model using a deep neural network
@@ -16,17 +20,12 @@ namespace AiDotNet.Models.Options;
 /// - How long until a customer cancels their subscription?
 /// - How long until a patient experiences disease recurrence?
 ///
-/// What makes survival analysis special is that some observations are "censored" -
-/// meaning the event hasn't happened yet when the study ends. For example, if you're
-/// studying customer churn and a customer is still subscribed when the study ends,
-/// you know they survived at least that long, but you don't know when (or if) they'll churn.
-///
 /// DeepSurv uses a neural network to learn complex patterns in your data while properly
 /// handling this censoring. It outputs a "risk score" - higher values mean higher risk
 /// of the event happening sooner.
 /// </para>
 /// </remarks>
-public class DeepSurvOptions
+public class DeepSurvOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of hidden layers.
@@ -71,10 +70,10 @@ public class DeepSurvOptions
     public double L2Regularization { get; set; } = 0.001;
 
     /// <summary>
-    /// Gets or sets the activation function type.
+    /// Gets or sets the activation function for hidden layers.
     /// </summary>
     /// <value>Default is SELU.</value>
-    public DeepSurvActivation Activation { get; set; } = DeepSurvActivation.SELU;
+    public IActivationFunction<T> Activation { get; set; } = new SELUActivation<T>();
 
     /// <summary>
     /// Gets or sets whether to use batch normalization.
@@ -92,35 +91,4 @@ public class DeepSurvOptions
     /// </summary>
     /// <value>Default is 10. Set to null to disable early stopping.</value>
     public int? EarlyStoppingPatience { get; set; } = 10;
-}
-
-/// <summary>
-/// Activation functions for DeepSurv.
-/// </summary>
-public enum DeepSurvActivation
-{
-    /// <summary>
-    /// Rectified Linear Unit: max(0, x).
-    /// </summary>
-    ReLU,
-
-    /// <summary>
-    /// Scaled Exponential Linear Unit - self-normalizing.
-    /// </summary>
-    SELU,
-
-    /// <summary>
-    /// Exponential Linear Unit.
-    /// </summary>
-    ELU,
-
-    /// <summary>
-    /// Hyperbolic tangent.
-    /// </summary>
-    Tanh,
-
-    /// <summary>
-    /// Leaky ReLU with small negative slope.
-    /// </summary>
-    LeakyReLU
 }

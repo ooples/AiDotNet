@@ -61,10 +61,10 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private readonly int _paramDim;
 
     /// <summary>Running mean of gradients across tasks (EMA).</summary>
-    private double[] _gradMean;
+    private Vector<T> _gradMean;
 
     /// <summary>Running variance of gradients across tasks (EMA).</summary>
-    private double[] _gradVar;
+    private Vector<T> _gradVar;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MOCA;
@@ -82,9 +82,9 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new ArgumentOutOfRangeException(nameof(options), "AugmentationStrength must be non-negative.");
         if (options.NumAugmentedTasks < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "NumAugmentedTasks must be non-negative.");
-        _gradMean = new double[_paramDim];
-        _gradVar = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++) _gradVar[d] = 1.0;
+        _gradMean = new Vector<T>(_paramDim);
+        _gradVar = new Vector<T>(_paramDim);
+        for (int d = 0; d < _paramDim; d++) _gradVar[d] = NumOps.One;
     }
 
     /// <inheritdoc/>
@@ -119,9 +119,11 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 for (int d = 0; d < _paramDim; d++)
                 {
                     double gVal = NumOps.ToDouble(lastGrad[d]);
-                    double diff = gVal - _gradMean[d];
-                    _gradMean[d] = momentum * _gradMean[d] + (1.0 - momentum) * gVal;
-                    _gradVar[d] = momentum * _gradVar[d] + (1.0 - momentum) * diff * diff;
+                    double meanD = NumOps.ToDouble(_gradMean[d]);
+                    double varD = NumOps.ToDouble(_gradVar[d]);
+                    double diff = gVal - meanD;
+                    _gradMean[d] = NumOps.FromDouble(momentum * meanD + (1.0 - momentum) * gVal);
+                    _gradVar[d] = NumOps.FromDouble(momentum * varD + (1.0 - momentum) * diff * diff);
                 }
             }
 
@@ -226,7 +228,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         for (int d = 0; d < _paramDim; d++)
         {
             double perturbation = _algoOptions.AugmentationStrength
-                                * Math.Sqrt(_gradVar[d] + 1e-10)
+                                * NumOps.ToDouble(NumOps.Sqrt(NumOps.Add(_gradVar[d], NumOps.FromDouble(1e-10))))
                                 * noise[d] / noiseNorm;
             augGrad[d] = NumOps.Add(grad[d], NumOps.FromDouble(perturbation));
         }

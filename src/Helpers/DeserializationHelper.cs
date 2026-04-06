@@ -108,6 +108,60 @@ public static class DeserializationHelper
         {
             instance = CreateDenseLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.ReconstructionLayer<>))
+        {
+            // ReconstructionLayer(int inputDim, int hidden1Dim, int hidden2Dim, int outputDim, ...)
+            // Two constructor overloads: scalar (IActivationFunction) vs vector (IVectorActivationFunction)
+            int inputDim = inputShape[^1];
+            int outputDim = outputShape[^1];
+            int hidden1 = TryGetInt(additionalParams, "Hidden1Dim") ?? 512;
+            int hidden2 = TryGetInt(additionalParams, "Hidden2Dim") ?? 1024;
+            bool useVector = additionalParams != null
+                && additionalParams.TryGetValue("UseVectorActivation", out var uvVal)
+                && bool.TryParse(uvVal as string, out var uv) && uv;
+
+            var vectorActivationType = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
+            var scalarActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var targetActivationType = useVector ? vectorActivationType : scalarActivationType;
+
+            var ctor = type.GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length >= 4 &&
+                    c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)) &&
+                    (c.GetParameters().Length < 5 || c.GetParameters()[4].ParameterType == targetActivationType));
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+            var args = new object?[ctor.GetParameters().Length];
+            args[0] = inputDim;
+            args[1] = hidden1;
+            args[2] = hidden2;
+            args[3] = outputDim;
+            for (int pi = 4; pi < args.Length; pi++)
+                args[pi] = ctor.GetParameters()[pi].HasDefaultValue ? ctor.GetParameters()[pi].DefaultValue : null;
+            instance = ctor.Invoke(args);
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.GlobalPoolingLayer<>))
+        {
+            // GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>?)
+            var poolingTypeStr = additionalParams != null && additionalParams.TryGetValue("PoolingType", out var ptVal)
+                ? ptVal as string : null;
+            var poolingType = !string.IsNullOrEmpty(poolingTypeStr) && Enum.TryParse<Enums.PoolingType>(poolingTypeStr, out var pt)
+                ? pt : Enums.PoolingType.Average;
+
+            // Restore activation from metadata
+            object? activation = TryRestoreActivation<T>(additionalParams);
+
+            var ctor = type.GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+                    c.GetParameters()[0].ParameterType == typeof(int[]) &&
+                    c.GetParameters()[1].ParameterType == typeof(Enums.PoolingType));
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find GlobalPoolingLayer constructor.");
+            var args = new object?[ctor.GetParameters().Length];
+            args[0] = inputShape;
+            args[1] = poolingType;
+            if (args.Length > 2) args[2] = activation;
+            instance = ctor.Invoke(args);
+        }
         else if (genericDef == typeof(InputLayer<>))
         {
             // InputLayer(int inputSize)
@@ -454,7 +508,34 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, null });
+            var activation = TryRestoreActivation<T>(additionalParams);
+            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, activation });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MeshPoolLayer<>))
+        {
+            // MeshPoolLayer(int inputChannels, int targetEdges, int numNeighbors)
+            int inputChannels = inputShape[^1];
+            int targetEdges = TryGetInt(additionalParams, "TargetEdges") ?? inputChannels;
+            int numNeighbors = TryGetInt(additionalParams, "NumNeighbors") ?? 4;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find MeshPoolLayer constructor.");
+            instance = ctor.Invoke(new object[] { inputChannels, targetEdges, numNeighbors });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MeshEdgeConvLayer<>))
+        {
+            // MeshEdgeConvLayer(int inputChannels, int outputChannels, int numNeighbors, IActivationFunction?)
+            int inputChannels = inputShape[^1];
+            int outputChannels = outputShape[^1];
+            int numNeighbors = TryGetInt(additionalParams, "NumNeighbors") ?? 4;
+            var activation = TryRestoreActivation<T>(additionalParams);
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find MeshEdgeConvLayer constructor.");
+            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, numNeighbors, activation });
         }
         else if (genericDef == typeof(PrimaryCapsuleLayer<>))
         {
@@ -1211,6 +1292,28 @@ public static class DeserializationHelper
         }
 
         return original;
+    }
+
+    /// <summary>
+    /// Tries to restore an activation function from serialized metadata.
+    /// </summary>
+    private static object? TryRestoreActivation<T>(Dictionary<string, object>? additionalParams)
+    {
+        if (additionalParams == null) return null;
+
+        string? typeName = null;
+        if (additionalParams.TryGetValue("ScalarActivationType", out var atVal))
+            typeName = atVal as string;
+
+        if (string.IsNullOrEmpty(typeName)) return null;
+
+        var activationType = Type.GetType(typeName);
+        if (activationType == null) return null;
+
+        if (activationType.IsGenericTypeDefinition)
+            activationType = activationType.MakeGenericType(typeof(T));
+
+        return Activator.CreateInstance(activationType);
     }
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)

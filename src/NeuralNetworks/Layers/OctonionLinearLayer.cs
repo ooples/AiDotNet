@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
-public class OctonionLinearLayer<T> : LayerBase<T>
+public partial class OctonionLinearLayer<T> : LayerBase<T>
 {
 
     /// <summary>

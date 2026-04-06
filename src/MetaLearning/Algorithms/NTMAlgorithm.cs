@@ -1412,14 +1412,15 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     private T Sigmoid(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
     }
 
     private T Tanh(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(Math.Tanh(val));
+        T expX = NumOps.Exp(x);
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
     }
 
     /// <inheritdoc/>
@@ -1790,14 +1791,15 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
 
     private T Sigmoid(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
     }
 
     private T Tanh(T x)
     {
-        double val = NumOps.ToDouble(x);
-        return NumOps.FromDouble(Math.Tanh(val));
+        T expX = NumOps.Exp(x);
+        T expNegX = NumOps.Exp(NumOps.Negate(x));
+        return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
     }
 
     /// <inheritdoc/>

@@ -1645,31 +1645,4 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         _bias2Gradient = null;
     }
 
-    /// <summary>
-    /// Element-wise multiply with broadcasting: smaller tensor broadcasts across larger.
-    /// </summary>
-    private Tensor<T> BroadcastElementwiseMultiply(Tensor<T> a, Tensor<T> b)
-    {
-        if (a.Length == b.Length) return Engine.TensorMultiply(a, b);
-
-        // Ensure a is the larger tensor
-        var large = a.Length >= b.Length ? a : b;
-        var small = a.Length >= b.Length ? b : a;
-
-        // Ensure contiguous before accessing raw data
-        large = large.IsContiguous ? large : large.Contiguous();
-        small = small.IsContiguous ? small : small.Contiguous();
-
-        var result = new Tensor<T>(large.Shape.ToArray());
-        var largeSpan = large.Data.Span;
-        var smallSpan = small.Data.Span;
-        var resultSpan = result.Data.Span;
-
-        // Broadcast: small repeats across large
-        for (int i = 0; i < large.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(largeSpan[i], smallSpan[i % small.Length]);
-        }
-        return result;
-    }
 }

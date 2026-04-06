@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
-internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
+internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -48,13 +48,18 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private readonly int _headsPerGroup;
 
     // Q projection: [embDim, numHeads * headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _queryWeights;
     // K projection: [embDim, numKVHeads * headDim] (smaller!)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _keyWeights;
     // V projection: [embDim, numKVHeads * headDim] (smaller!)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _valueWeights;
     // Output projection: [numHeads * headDim, embDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _outputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _outputBias;
 
     // Positional encoding

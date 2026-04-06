@@ -43,7 +43,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>
-    private double _timeStep { get; set; }
+    private T _timeStep { get; set; }
 
     /// <summary>
     /// Gets or sets the number of time steps to simulate when processing input.
@@ -208,7 +208,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new SpikingNeuralNetworkOptions();
         Options = _options;
 
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
         _vectorActivation = vectorActivation ?? new BinarySpikingActivation<T>();
         _scalarActivation = null;
@@ -237,7 +237,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new SpikingNeuralNetworkOptions();
         Options = _options;
 
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
         _scalarActivation = scalarActivation ?? new BinarySpikingActivation<T>();
         _vectorActivation = null;
@@ -416,25 +416,46 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // and letting SpikingLayers accumulate membrane potential and generate spikes.
         // The output layer's spike rates over time form the final prediction.
 
-        List<Vector<T>> outputSpikeTrain = new List<Vector<T>>(_simulationSteps);
+        // Per Neftci et al. 2019: hidden spiking layers produce spikes over T time steps.
+        // The non-spiking readout (last DenseLayer) processes accumulated spike rates.
+        // Separate spiking layers from the readout layer.
+        int readoutIdx = -1;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is not Layers.SpikingLayer<T>) { readoutIdx = i; break; }
+        }
+
+        // Accumulate spiking layer outputs over time
+        int spikingOutputSize = readoutIdx >= 0
+            ? Layers[readoutIdx].GetInputShape()[0]
+            : Layers[^1].GetOutputShape()[0];
+        var accumSpikes = new T[spikingOutputSize];
 
         for (int step = 0; step < _simulationSteps; step++)
         {
-            // Forward through all layers — each SpikingLayer handles its own LIF
             Tensor<T> current = input;
-            for (int i = 0; i < Layers.Count; i++)
-            {
+            int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
+            for (int i = 0; i < lastSpikingIdx; i++)
                 current = Layers[i].Forward(current);
-            }
 
-            // Store output spikes from last layer
-            outputSpikeTrain.Add(current.ToVector());
+            var vec = current.ToVector();
+            for (int i = 0; i < Math.Min(spikingOutputSize, vec.Length); i++)
+                accumSpikes[i] = NumOps.Add(accumSpikes[i], vec[i]);
         }
 
-        // Aggregate spike train to final output (average spike rate)
-        Vector<T> finalOutput = AggregateSpikeTrainToOutput(outputSpikeTrain);
+        // Average spike rate
+        for (int i = 0; i < spikingOutputSize; i++)
+            accumSpikes[i] = NumOps.Divide(accumSpikes[i], NumOps.FromDouble(_simulationSteps));
 
-        return Tensor<T>.FromVector(finalOutput);
+        // Pass spike rates through non-spiking readout
+        var spikeRateTensor = Tensor<T>.FromVector(new Vector<T>(accumSpikes));
+        if (readoutIdx >= 0)
+        {
+            for (int i = readoutIdx; i < Layers.Count; i++)
+                spikeRateTensor = Layers[i].Forward(spikeRateTensor);
+        }
+
+        return spikeRateTensor;
     }
 
     /// <summary>
@@ -589,11 +610,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void ApplySTDPLearning(List<List<Vector<T>>> layerSpikeHistory, Vector<T> outputError)
     {
-        // Learning rate for weight updates
-        T learningRate = NumOps.FromDouble(0.01);
-
-        // STDP time constants (in time steps)
-        int stdpWindow = 20; // How many time steps to consider for STDP
+        // Learning rate and STDP window from configurable options
+        T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
+        int stdpWindow = _options.StdpWindow;
 
         // Process layers in reverse order (output to input)
         for (int layerIndex = Layers.Count - 1; layerIndex > 0; layerIndex--)
@@ -849,9 +868,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "TimeStep", _timeStep },
+                { "TimeStep", NumOps.ToDouble(_timeStep) },
                 { "SimulationSteps", _simulationSteps },
-                { "TotalSimulationTime", _timeStep * _simulationSteps },
+                { "TotalSimulationTime", NumOps.ToDouble(_timeStep) * _simulationSteps },
                 { "MembraneDecay", Convert.ToDouble(_membraneDecay) },
                 { "RefractoryPeriod", _refractoryPeriod },
                 { "TotalNeurons", totalNeurons },
@@ -895,7 +914,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         // Write temporal parameters
-        writer.Write(_timeStep);
+        writer.Write(NumOps.ToDouble(_timeStep));
         writer.Write(_simulationSteps);
 
         // Write neuron model parameters
@@ -976,7 +995,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         // Read temporal parameters
-        _timeStep = reader.ReadDouble();
+        _timeStep = NumOps.FromDouble(reader.ReadDouble());
         _simulationSteps = reader.ReadInt32();
 
         // Read neuron model parameters
@@ -1144,7 +1163,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Set parameters
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
     }
 
@@ -1232,7 +1251,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the vector activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _vectorActivation,
                 LossFunction);
@@ -1242,7 +1261,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the scalar activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _scalarActivation,
                 LossFunction);

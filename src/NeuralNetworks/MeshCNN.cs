@@ -484,6 +484,10 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         writer.Write(_options.FullyConnectedSizes.Length);
         foreach (var fc in _options.FullyConnectedSizes)
             writer.Write(fc);
+
+        // Per-mesh adjacency is NOT model state — write empty marker for backward compat
+        writer.Write(0);
+        writer.Write(0);
     }
 
     /// <summary>
@@ -514,6 +518,22 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         _options.FullyConnectedSizes = new int[fcLen];
         for (int i = 0; i < fcLen; i++)
             _options.FullyConnectedSizes[i] = reader.ReadInt32();
+
+        // Skip adjacency data from older serialized models (per-mesh adjacency is NOT model state)
+        // Callers must call SetEdgeAdjacency() for each new mesh sample
+        _currentEdgeAdjacency = null;
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int adjRows = reader.ReadInt32();
+            int adjCols = reader.ReadInt32();
+            if (adjRows > 0 && adjCols > 0)
+            {
+                // Skip the adjacency data but don't restore it
+                for (int r = 0; r < adjRows; r++)
+                    for (int c = 0; c < adjCols; c++)
+                        reader.ReadInt32();
+            }
+        }
     }
 
     /// <summary>

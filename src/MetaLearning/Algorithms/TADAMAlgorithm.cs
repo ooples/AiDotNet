@@ -820,35 +820,13 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
         for (int q = 0; q < numQueries; q++)
         {
-            // Find max for numerical stability
-            T maxNegDist = NumOps.Negate(distances[q, 0]);
-            for (int c = 1; c < numClasses; c++)
-            {
-                T negDist = NumOps.Negate(distances[q, c]);
-                if (NumOps.GreaterThan(negDist, maxNegDist))
-                {
-                    maxNegDist = negDist;
-                }
-            }
-
-            // Compute exp and sum
-            var expValues = new T[numClasses];
-            T sumExp = NumOps.Zero;
-
+            // logits = -distances / temperature, then softmax (SIMD via Engine)
+            var logits = new Vector<T>(numClasses);
             for (int c = 0; c < numClasses; c++)
-            {
-                T negDist = NumOps.Negate(distances[q, c]);
-                T shifted = NumOps.Subtract(negDist, maxNegDist);
-                T scaled = NumOps.Divide(shifted, _temperature);
-                expValues[c] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(scaled)));
-                sumExp = NumOps.Add(sumExp, expValues[c]);
-            }
-
-            // Normalize
+                logits[c] = NumOps.Divide(NumOps.Negate(distances[q, c]), _temperature);
+            var probs = Softmax(logits);
             for (int c = 0; c < numClasses; c++)
-            {
-                probabilities[q, c] = NumOps.Divide(expValues[c], sumExp);
-            }
+                probabilities[q, c] = probs[c];
         }
 
         return probabilities;

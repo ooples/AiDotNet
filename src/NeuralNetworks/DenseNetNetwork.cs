@@ -248,6 +248,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        SetTrainingMode(false);
         return Forward(input);
     }
 

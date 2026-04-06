@@ -634,23 +634,15 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private Vector<T> ApplyEncoderTransform(Vector<T> input)
     {
-        var output = new Vector<T>(input.Length);
-
-        // Simple linear transformation with encoder weights
+        // Element-wise multiply with cyclic weights, then SIMD tanh
+        var preActivation = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
         {
-            T sum = input[i];
-
-            // Apply learned weights (simplified)
             int weightIdx = i % _encoderWeights.Length;
-            sum = NumOps.Multiply(sum, _encoderWeights[weightIdx]);
-
-            // Apply activation (tanh)
-            double val = NumOps.ToDouble(sum);
-            output[i] = NumOps.FromDouble(Math.Tanh(val));
+            preActivation[i] = NumOps.Multiply(input[i], _encoderWeights[weightIdx]);
         }
 
-        return output;
+        return VectorTanh(preActivation);
     }
 
     /// <summary>
