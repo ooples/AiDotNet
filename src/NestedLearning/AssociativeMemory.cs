@@ -50,10 +50,52 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
         if (query.Length != _dimension)
             throw new ArgumentException("Query must match memory dimension");
 
-        // Retrieve using association matrix (similar to attention mechanism)
+        // Modern continuous Hopfield retrieval per Ramsauer et al. 2021:
+        // new_state = softmax(β * stored_patterns^T @ query) @ stored_patterns
+        // Falls back to association matrix when no memories are stored.
+        if (_memories.Count > 0)
+        {
+            T beta = _numOps.FromDouble(8.0); // Inverse temperature (sharpens attention)
+            var scores = new double[_memories.Count];
+            double maxScore = double.NegativeInfinity;
+
+            // Compute similarity scores: β * <pattern_i, query>
+            for (int m = 0; m < _memories.Count; m++)
+            {
+                double dot = 0;
+                var pattern = _memories[m].Input;
+                for (int d = 0; d < _dimension; d++)
+                    dot += _numOps.ToDouble(_numOps.Multiply(pattern[d], query[d]));
+                scores[m] = _numOps.ToDouble(beta) * dot;
+                if (scores[m] > maxScore) maxScore = scores[m];
+            }
+
+            // Softmax (numerically stable)
+            double sumExp = 0;
+            for (int m = 0; m < _memories.Count; m++)
+            {
+                scores[m] = Math.Exp(scores[m] - maxScore);
+                sumExp += scores[m];
+            }
+            for (int m = 0; m < _memories.Count; m++)
+                scores[m] /= (sumExp + 1e-10);
+
+            // Weighted sum of stored targets
+            var result = new Vector<T>(_dimension);
+            for (int m = 0; m < _memories.Count; m++)
+            {
+                T weight = _numOps.FromDouble(scores[m]);
+                var target = _memories[m].Target;
+                for (int d = 0; d < _dimension; d++)
+                    result[d] = _numOps.Add(result[d], _numOps.Multiply(weight, target[d]));
+            }
+            return result;
+        }
+
+        // Fallback: association matrix retrieval when no memory buffer entries
         var retrieved = _associationMatrix.Multiply(query);
 
-        // Also check for exact or near matches in memory buffer
+        // Check for exact or near matches in memory buffer
         T bestSimilarity = _numOps.FromDouble(double.NegativeInfinity);
         Vector<T>? bestMatch = null;
 

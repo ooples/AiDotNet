@@ -394,9 +394,12 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        // Reset layer state for deterministic inference
+        // Reset layer state and set eval mode for deterministic inference
         foreach (var layer in Layers)
+        {
             layer.ResetState();
+            layer.SetTrainingMode(false);
+        }
 
         return Forward(input);
     }
@@ -466,15 +469,22 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        // Periodically consolidate memory
-        if (_adaptationStep % 100 == 0)
+        try
         {
-            ConsolidateMemory();
-        }
+            TrainWithTape(input, expectedOutput, _optimizer);
 
-        SetTrainingMode(false);
+            // Periodically consolidate memory
+            if (_adaptationStep % 100 == 0)
+            {
+                ConsolidateMemory();
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
+        }
     }
 
     /// <summary>
