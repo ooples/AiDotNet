@@ -238,11 +238,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var sqrtCxNorm = Engine.TensorMultiplyScalar(xNorm, sqrtC); // [batch, 1]
         // Clamp to (-1+eps, 1-eps) for arctanh stability
         var clamped = Engine.TensorClamp(sqrtCxNorm, NumOps.FromDouble(-0.9999), NumOps.FromDouble(0.9999));
-        // atanh(x) = 0.5 * ln((1+x)/(1-x))
-        var onesTensor = new Tensor<T>(clamped.Shape.ToArray());
-        onesTensor.Fill(NumOps.One);
-        var onePlusX = Engine.TensorAdd(onesTensor, clamped);
-        var oneMinusX = Engine.TensorSubtract(onesTensor, clamped);
+        // atanh(x) = 0.5 * ln((1+x)/(1-x)) — zero allocation via TensorAddScalar
+        var onePlusX = Engine.TensorAddScalar(clamped, NumOps.One);
+        var oneMinusX = Engine.ScalarMinusTensor(NumOps.One, clamped);
         var atanhVal = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(onePlusX, oneMinusX)), NumOps.FromDouble(0.5)); // [batch, 1]
         var ratio = Engine.TensorDivide(atanhVal, Engine.TensorAddScalar(sqrtCxNorm, eps)); // [batch, 1]
 
@@ -253,58 +251,31 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var scale = Engine.TensorDivide(tanhFactor, Engine.TensorAddScalar(sqrtCmxNorm, eps)); // [batch, 1]
 
         // Step 6: Result in Poincaré ball = scale * Mx  [batch, outputFeatures]
-        // scale is [batch,1], mx is [batch, outputFeatures]
-        var resultInBall = new Tensor<T>([batchSize, OutputFeatures]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            T s = scale[b, 0];
-            for (int o = 0; o < OutputFeatures; o++)
-                resultInBall[b, o] = NumOps.Multiply(s, mx[b, o]);
-        }
+        // Broadcast scale [batch,1] across mx [batch, outputFeatures] via Engine
+        var resultInBall = Engine.TensorBroadcastMultiply(scale, mx);
 
-        // Step 7: Add bias via Möbius addition approximation (small bias regime):
-        // For small biases, exp_0(b) ≈ b and mobius_add(x, b) ≈ x + (1-c||x||²) * b
-        // This is differentiable and avoids per-element Poincaré ops
-        var biasFlat = _biases.Reshape([OutputFeatures, InputFeatures]);
-        // Compute bias norms and project to output space
-        var biasSumSq = new Tensor<T>([1, OutputFeatures]);
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            T sumSq = NumOps.Zero;
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                T bv = _biases[o, i];
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(bv, bv));
-            }
-            biasSumSq[0, o] = NumOps.Sqrt(NumOps.Add(sumSq, eps));
-        }
+        // Step 7: Add bias via Möbius addition approximation (small bias regime).
+        // Compute bias norms per output: ||b_o|| = sqrt(sum_i(b[o,i]²))
+        // Then add to result: p = resultInBall + biasNorm (broadcast across batch)
+        var biasSq = Engine.TensorMultiply(_biases, _biases); // [outputFeatures, inputFeatures]
+        var biasNormSq = Engine.ReduceSum(biasSq, new[] { 1 }, keepDims: false); // [outputFeatures]
+        var biasNorm = Engine.TensorSqrt(Engine.TensorAddScalar(biasNormSq, eps)); // [outputFeatures]
+        var biasNorm2D = biasNorm.Reshape([1, OutputFeatures]);
+        var withBias = Engine.TensorBroadcastAdd(resultInBall, biasNorm2D); // [batch, outputFeatures]
 
-        // Output = Poincaré distance from origin = (2/√c) * arctanh(√c·||resultInBall + bias_correction||)
-        // Simplified: for output features, distance from origin = (2/√c) * arctanh(√c * ||p||)
-        var output = new Tensor<T>([batchSize, OutputFeatures]);
+        // Step 8: Poincaré distance from origin = (2/√c) * arctanh(√c * |p|)
+        // All via Engine tensor ops — zero per-element loops
+        var absP = Engine.TensorAbs(withBias); // [batch, outputFeatures]
+        var sqrtCp = Engine.TensorMultiplyScalar(absP, sqrtC);
+        var clampedP = Engine.TensorClamp(sqrtCp, NumOps.Zero, NumOps.FromDouble(0.9999));
+        // atanh via ln: 0.5 * ln((1+x)/(1-x))
+        var onePlusP = Engine.TensorAddScalar(clampedP, NumOps.One);
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clampedP);
+        var atanhP = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(onePlusP, oneMinusP)), NumOps.FromDouble(0.5));
         T twoOverSqrtC = NumOps.Divide(NumOps.FromDouble(2.0), sqrtC);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                // Point norm in ball (resultInBall[b,o] is 1D scalar per output)
-                T p = resultInBall[b, o];
-                // Add bias contribution
-                p = NumOps.Add(p, biasSumSq[0, o]);
-                // Distance from origin: (2/√c) * arctanh(√c * |p|)
-                T absp = NumOps.Abs(p);
-                T sqrtCp = NumOps.Multiply(sqrtC, absp);
-                // Clamp for arctanh
-                if (NumOps.GreaterThan(sqrtCp, NumOps.FromDouble(0.9999)))
-                    sqrtCp = NumOps.FromDouble(0.9999);
-                // atanh(x) = 0.5 * ln((1+x)/(1-x))
-                T atanhSqrtCp = NumOps.Multiply(NumOps.FromDouble(0.5),
-                    NumOps.Log(NumOps.Divide(NumOps.Add(NumOps.One, sqrtCp), NumOps.Subtract(NumOps.One, sqrtCp))));
-                T dist = NumOps.Multiply(twoOverSqrtC, atanhSqrtCp);
-                // Preserve sign
-                output[b, o] = NumOps.GreaterThan(p, NumOps.Zero) ? dist : NumOps.Negate(dist);
-            }
-        }
+        var dist = Engine.TensorMultiplyScalar(atanhP, twoOverSqrtC);
+        // Preserve sign: output = sign(withBias) * dist
+        var output = Engine.TensorMultiply(Engine.TensorSign(withBias), dist); // [batch, outputFeatures]
 
         _lastOutput = output;
 
