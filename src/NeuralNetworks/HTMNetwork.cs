@@ -491,7 +491,8 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
 
         // Per Ahmad & Hawkins 2015: HTM + supervised readout.
         // Forward through full layer chain: SP -> TM -> Dense -> (optional Softmax)
-        // Set eval mode on all layers for inference
+        // Capture prior training-mode state so Predict is side-effect free
+        var priorModes = Layers.Select(l => l.IsTrainingMode).ToArray();
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
         try
@@ -503,9 +504,8 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            // Restore eval mode after prediction (Train sets training mode when needed)
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
+            for (int i = 0; i < Layers.Count; i++)
+                Layers[i].SetTrainingMode(priorModes[i]);
         }
     }
 

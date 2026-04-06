@@ -433,9 +433,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             // then add the weighted reconstruction loss so diagnostics reflect both.
             T marginLoss = LastLoss ?? NumOps.Zero;
             _lastMarginLoss = marginLoss;
-            T auxLoss = ComputeAuxiliaryLoss();
             if (UseAuxiliaryLoss)
             {
+                T auxLoss = ComputeAuxiliaryLoss();
                 LastLoss = NumOps.Add(marginLoss, NumOps.Multiply(AuxiliaryLossWeight, auxLoss));
             }
         }
