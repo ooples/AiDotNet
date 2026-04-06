@@ -494,10 +494,11 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Forward through full layer chain: SP -> TM -> Dense -> (optional Softmax)
         // Capture prior training-mode state so Predict is side-effect free
         var priorModes = Layers.Select(l => l.IsTrainingMode).ToArray();
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
         try
         {
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
+
             Tensor<T> current = input;
             foreach (var layer in Layers)
                 current = layer.Forward(current);
@@ -505,7 +506,8 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            for (int i = 0; i < Layers.Count; i++)
+            int restoreCount = Math.Min(Layers.Count, priorModes.Length);
+            for (int i = 0; i < restoreCount; i++)
                 Layers[i].SetTrainingMode(priorModes[i]);
         }
     }
