@@ -337,10 +337,10 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     private double UpdateSite(int i)
     {
-        if (_posteriorMean is null || _posteriorCov is null ||
-            _sitePrecisions is null || _siteNaturalMeans is null || _weights is null)
+        if (_posteriorMean == null || _posteriorCov == null ||
+            _sitePrecisions == null || _siteNaturalMeans == null || _y == null || _weights == null)
             return 0;
-        var y = FittedY;
+        var y = _y;
 
         // Cavity distribution (posterior without site i)
         double postPrecision = 1.0 / Math.Max(_numOps.ToDouble(_posteriorCov[i, i]), 1e-10);
