@@ -492,22 +492,15 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
 
         // Per Ahmad & Hawkins 2015: HTM + supervised readout.
         // Forward through full layer chain: SP -> TM -> Dense -> (optional Softmax)
-        // Set eval mode on all layers for inference
+        // Ensure eval mode for deterministic inference. Train() explicitly sets
+        // training mode when needed, so no restore is required here.
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
-        try
-        {
-            Tensor<T> current = input;
-            foreach (var layer in Layers)
-                current = layer.Forward(current);
-            return current;
-        }
-        finally
-        {
-            // Restore eval mode after prediction (Train sets training mode when needed)
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
-        }
+
+        Tensor<T> current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
 
     /// <summary>
