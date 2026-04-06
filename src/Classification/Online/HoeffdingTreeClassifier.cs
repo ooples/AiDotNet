@@ -201,6 +201,11 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// </summary>
     public void PartialFit(Matrix<T> features, Vector<T> labels)
     {
+        if (features.Rows != labels.Length)
+            throw new ArgumentException(
+                $"Feature rows ({features.Rows}) must match label count ({labels.Length}).",
+                nameof(labels));
+
         for (int i = 0; i < features.Rows; i++)
         {
             var sample = new Vector<T>(features.Columns);
@@ -245,9 +250,10 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             // Re-initialize with saved ranges and freeze them so bin assignment is
             // consistent for ALL samples in pass 2 (no range drift).
             InitializeFeatureStats(_root, NumFeatures);
+            var featureStats = _root.FeatureStatistics ?? throw new InvalidOperationException("Feature statistics not initialized.");
             for (int f = 0; f < NumFeatures; f++)
             {
-                var stats = _root.FeatureStatistics![f];
+                var stats = featureStats[f];
                 stats.Min = savedRanges[f].Min;
                 stats.Max = savedRanges[f].Max;
                 stats.RangeFrozen = true;
@@ -715,27 +721,25 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         leaf.FeatureStatistics = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Returns an empty vector — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// </summary>
     public Vector<T> GetParameters()
-    {
-        // Tree structure is complex - return empty for now
-        return new Vector<T>(0);
-    }
+        => new Vector<T>(0);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// No-op — Hoeffding trees learn structure during training, not flat parameter vectors.
+    /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
-        // Tree is structural, cannot set from flat parameters
+        // Tree-based model — structure cannot be set from flat parameters
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Returns a fresh instance — tree structure cannot be reconstructed from flat parameters.
+    /// </summary>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
-    {
-        // Return a cold instance to avoid inconsistent state and shared mutable references.
-        // Tree structure cannot be set from flat parameters - deep cloning would be needed
-        // to properly copy the tree, which is non-trivial.
-        return new HoeffdingTreeClassifier<T>(_options);
-    }
+        => new HoeffdingTreeClassifier<T>(_options);
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -851,7 +855,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 var featureDict = new Dictionary<string, object?>
                 {
                     ["Min"] = kvp.Value.Min,
-                    ["Max"] = kvp.Value.Max
+                    ["Max"] = kvp.Value.Max,
+                    ["RangeFrozen"] = kvp.Value.RangeFrozen
                 };
 
                 if (kvp.Value.BinsByClass is not null)
@@ -910,7 +915,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                     var stats = new FeatureStats
                     {
                         Min = featureObj["Min"]?.ToObject<double>() ?? double.MaxValue,
-                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue
+                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue,
+                        RangeFrozen = featureObj["RangeFrozen"]?.ToObject<bool>() ?? false
                     };
 
                     if (featureObj["BinsByClass"] is JObject binsObj)

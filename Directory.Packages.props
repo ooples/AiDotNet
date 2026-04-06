@@ -6,9 +6,9 @@
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.28.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.19.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.19.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.19.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.28.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.28.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.28.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
@@ -51,7 +51,7 @@
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.4" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
-    <PackageVersion Include="StackExchange.Redis" Version="2.12.8" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     <!-- Code analysis (default version; source generators may override) -->

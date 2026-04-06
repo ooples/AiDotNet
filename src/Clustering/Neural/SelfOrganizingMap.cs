@@ -68,6 +68,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private T[,][]? _weights;
+    private T[,][] FittedWeights => _weights ?? throw new InvalidOperationException("SOM not fitted. Call Fit() or FitPredict() first.");
     private int[]? _neuronLabels;
 
     /// <summary>
@@ -328,7 +329,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                     // This neuron was never a BMU winner — assign it to the nearest cluster center
                     int nr = ni / width;
                     int nc = ni % width;
-                    T[] neuronWeights = _weights![nr, nc];
+                    T[] neuronWeights = FittedWeights[nr, nc];
                     int bestCluster = 0;
                     T bestDist = NumOps.MaxValue;
                     for (int ci = 0; ci < ClusterCenters.Rows; ci++)
@@ -365,7 +366,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < _options.GridWidth; c++)
             {
-                var weightVec = new Vector<T>(_weights![r, c]);
+                var weightVec = new Vector<T>(FittedWeights[r, c]);
                 var diff = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
@@ -439,7 +440,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = _weights![r, c];
+                neuronWeights[r * width + c] = FittedWeights[r, c];
             }
         }
 
@@ -597,7 +598,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         T distSq = NumOps.Zero;
                         for (int j = 0; j < d; j++)
                         {
-                            T diff = NumOps.Subtract(_weights![r, c][j], _weights[nr, nc][j]);
+                            T diff = NumOps.Subtract(FittedWeights[r, c][j], FittedWeights[nr, nc][j]);
                             distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
                         }
 
