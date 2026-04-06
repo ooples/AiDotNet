@@ -9,14 +9,13 @@ namespace AiDotNet.NestedLearning;
 /// enabling deeper computational depth in learning components.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
-public class ContextFlow<T> : IContextFlow<T>
+public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
 {
     private readonly int _numLevels;
     private readonly int _contextDimension;
     private readonly Vector<T>[] _contextStates;
     private readonly Matrix<T>[] _transformationMatrices;
     private Matrix<T>[] _compressionMatrices;
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     public ContextFlow(int contextDimension, int numLevels = 3)
     {
@@ -44,19 +43,19 @@ public class ContextFlow<T> : IContextFlow<T>
             _compressionMatrices[i] = new Matrix<T>(_contextDimension, _contextDimension);
 
             double scale = Math.Sqrt(2.0 / _contextDimension);
-            T scaleFactor = _numOps.FromDouble(scale);
+            T scaleFactor = NumOps.FromDouble(scale);
 
             for (int row = 0; row < _contextDimension; row++)
             {
                 for (int col = 0; col < _contextDimension; col++)
                 {
                     double randVal = (random.NextDouble() - 0.5) * 2.0;
-                    _transformationMatrices[i][row, col] = _numOps.Multiply(
-                        _numOps.FromDouble(randVal), scaleFactor);
+                    _transformationMatrices[i][row, col] = NumOps.Multiply(
+                        NumOps.FromDouble(randVal), scaleFactor);
 
                     randVal = (random.NextDouble() - 0.5) * 2.0;
-                    _compressionMatrices[i][row, col] = _numOps.Multiply(
-                        _numOps.FromDouble(randVal), scaleFactor);
+                    _compressionMatrices[i][row, col] = NumOps.Multiply(
+                        NumOps.FromDouble(randVal), scaleFactor);
                 }
             }
         }
@@ -71,17 +70,17 @@ public class ContextFlow<T> : IContextFlow<T>
         var transformed = _transformationMatrices[currentLevel].Multiply(input);
 
         // Update context state with exponential moving average (momentum-like)
-        T momentum = _numOps.FromDouble(0.9);
-        T oneMinusMomentum = _numOps.Subtract(_numOps.One, momentum);
+        T momentum = NumOps.FromDouble(0.9);
+        T oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
 
         var currentContext = _contextStates[currentLevel];
         var newContext = new Vector<T>(_contextDimension);
 
         for (int i = 0; i < _contextDimension; i++)
         {
-            T momentumTerm = _numOps.Multiply(currentContext[i], momentum);
-            T updateTerm = _numOps.Multiply(transformed[i], oneMinusMomentum);
-            newContext[i] = _numOps.Add(momentumTerm, updateTerm);
+            T momentumTerm = NumOps.Multiply(currentContext[i], momentum);
+            T updateTerm = NumOps.Multiply(transformed[i], oneMinusMomentum);
+            newContext[i] = NumOps.Add(momentumTerm, updateTerm);
         }
 
         _contextStates[currentLevel] = newContext;
@@ -118,7 +117,7 @@ public class ContextFlow<T> : IContextFlow<T>
             {
                 for (int col = 0; col < _contextDimension; col++)
                 {
-                    T grad = _numOps.Multiply(gradVector[row], contextVector[col]);
+                    T grad = NumOps.Multiply(gradVector[row], contextVector[col]);
                     matrixGrad[row, col] = grad;
                 }
             }

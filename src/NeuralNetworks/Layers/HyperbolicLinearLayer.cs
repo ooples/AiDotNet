@@ -99,7 +99,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override int ParameterCount =>
-        (OutputFeatures * InputFeatures) + (OutputFeatures * InputFeatures);
+        (OutputFeatures * InputFeatures) + OutputFeatures;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -139,7 +139,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         _curvature = NumOps.FromDouble(curvature);
 
         _weights = new Tensor<T>([outputFeatures, inputFeatures]);
-        _biases = new Tensor<T>([outputFeatures, inputFeatures]);
+        _biases = new Tensor<T>([outputFeatures]);
 
         InitializeParameters();
 
@@ -162,9 +162,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             {
                 // Initialize weights in tangent space (small values)
                 _weights[o, i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale * 0.1);
-                // Initialize biases close to origin (small values for Poincare ball)
-                _biases[o, i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * 0.01);
             }
+            // Scalar bias per output — shifts the Poincaré distance
+            _biases[o] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * 0.01);
         }
     }
 
@@ -258,12 +258,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         // Broadcast scale [batch,1] across mx [batch, outputFeatures] via Engine
         var resultInBall = Engine.TensorBroadcastMultiply(scale, mx);
 
-        // Step 7: Add bias — mean of bias vector per output as scalar shift.
-        // _biases is [outputFeatures, inputFeatures]; reduce to [outputFeatures] via mean
-        var biasSum = Engine.ReduceSum(_biases, new[] { 1 }, keepDims: false); // [outputFeatures]
-        var biasMean = Engine.TensorMultiplyScalar(biasSum, NumOps.FromDouble(1.0 / InputFeatures));
-        var biasMean2D = biasMean.Reshape([1, OutputFeatures]);
-        var withBias = Engine.TensorBroadcastAdd(resultInBall, biasMean2D); // [batch, outputFeatures]
+        // Step 7: Add scalar bias per output — _biases is [outputFeatures]
+        var bias2D = _biases.Reshape([1, OutputFeatures]);
+        var withBias = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
 
         // Step 8: Poincaré distance from origin = (2/√|c|) * arctanh(√|c| * ||p||)
         // Distance is non-negative by definition
@@ -515,13 +512,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 
         var transformed = Engine.MobiusAdd(projectedInput, weightPoint, _curvature);
 
-        var biasVec = new Vector<T>(InputFeatures);
-        for (int i = 0; i < InputFeatures; i++)
-            biasVec[i] = _biases[o, i];
-        var biasProjected = Engine.PoincareExpMap(CreateOriginVector(InputFeatures), biasVec, _curvature);
-        var withBias = Engine.MobiusAdd(transformed, biasProjected, _curvature);
-
-        return Engine.PoincareDistance(origin, withBias, _curvature);
+        var dist = Engine.PoincareDistance(origin, transformed, _curvature);
+        // Add scalar bias
+        return NumOps.Add(dist, _biases[o]);
     }
 
     public override void UpdateParameters(T learningRate)
@@ -543,24 +536,11 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 _weights[o, i] = NumOps.Subtract(_weights[o, i], scaledGrad);
             }
 
-            // Update biases using Riemannian gradient descent
-            // Build the full tangent vector from all bias gradients at once
-            var biasPoint = new Vector<T>(InputFeatures);
-            var tangentVec = new Vector<T>(InputFeatures);
-            for (int j = 0; j < InputFeatures; j++)
+            // Update scalar bias with Euclidean gradient descent
+            if (_biasesGradient != null && o < _biasesGradient.Length)
             {
-                biasPoint[j] = _biases[o, j];
-                tangentVec[j] = NumOps.Negate(NumOps.Multiply(learningRate, _biasesGradient[o, j]));
-            }
-
-            // Project bias to valid region and apply exponential map update once per output
-            var projectedBias = Engine.PoincareProject(biasPoint, _curvature, epsilon);
-            var updatedBias = Engine.PoincareExpMap(projectedBias, tangentVec, _curvature);
-            updatedBias = Engine.PoincareProject(updatedBias, _curvature, epsilon);
-
-            for (int j = 0; j < InputFeatures; j++)
-            {
-                _biases[o, j] = updatedBias[j];
+                var grad = _biasesGradient[o];
+                _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, grad));
             }
         }
     }
@@ -583,13 +563,10 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             }
         }
 
-        // Flatten biases
+        // Flatten biases (scalar per output)
         for (int o = 0; o < OutputFeatures; o++)
         {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                paramArray[idx++] = _biases[o, i];
-            }
+            paramArray[idx++] = _biases[o];
         }
 
         return new Vector<T>(paramArray);
@@ -617,13 +594,10 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             }
         }
 
-        // Restore biases
+        // Restore biases (scalar per output)
         for (int o = 0; o < OutputFeatures; o++)
         {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                _biases[o, i] = parameters[idx++];
-            }
+            _biases[o] = parameters[idx++];
         }
 
         _weightsTCache = null;

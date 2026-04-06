@@ -1,5 +1,4 @@
 
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -11,13 +10,12 @@ namespace AiDotNet.NestedLearning;
 /// attention mechanisms (query → key-value) as associative memory.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
-public class AssociativeMemory<T> : IAssociativeMemory<T>
+public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
 {
     private readonly int _capacity;
     private readonly int _dimension;
     private readonly double _inverseTemperature;
     private readonly List<(Vector<T> Input, Vector<T> Target)> _memories;
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
     {
@@ -66,7 +64,7 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
                 double dot = 0;
                 var key = _memories[m].Input;
                 for (int d = 0; d < _dimension; d++)
-                    dot += _numOps.ToDouble(_numOps.Multiply(key[d], query[d]));
+                    dot += NumOps.ToDouble(NumOps.Multiply(key[d], query[d]));
                 scores[m] = _inverseTemperature * dot;
                 if (scores[m] > maxScore) maxScore = scores[m];
             }
@@ -85,10 +83,10 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
             var result = new Vector<T>(_dimension);
             for (int m = 0; m < _memories.Count; m++)
             {
-                T weight = _numOps.FromDouble(scores[m]);
+                T weight = NumOps.FromDouble(scores[m]);
                 var value = _memories[m].Target;
                 for (int d = 0; d < _dimension; d++)
-                    result[d] = _numOps.Add(result[d], _numOps.Multiply(weight, value[d]));
+                    result[d] = NumOps.Add(result[d], NumOps.Multiply(weight, value[d]));
             }
             return result;
         }
@@ -102,8 +100,12 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
         if (input.Length != _dimension || target.Length != _dimension)
             throw new ArgumentException("Input and target must match memory dimension");
 
-        // Store in memory buffer — Retrieve uses softmax attention over stored memories
-        Associate(input, target);
+        // Scale target by learning rate before storing — allows gradual memory updates.
+        // learningRate=1.0 stores the full target; smaller values blend toward zero.
+        var targetTensor = Tensor<T>.FromVector(target);
+        var scaledTensor = Engine.TensorMultiplyScalar(targetTensor, learningRate);
+
+        Associate(input, scaledTensor.ToVector());
     }
 
     public int Capacity => _capacity;
@@ -124,7 +126,7 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
         {
             for (int i = 0; i < _dimension; i++)
                 for (int j = 0; j < _dimension; j++)
-                    matrix[i, j] = _numOps.Add(matrix[i, j], _numOps.Multiply(target[i], input[j]));
+                    matrix[i, j] = NumOps.Add(matrix[i, j], NumOps.Multiply(target[i], input[j]));
         }
         return matrix;
     }
