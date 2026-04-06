@@ -3,7 +3,7 @@ using AiDotNet.Helpers;
 namespace AiDotNet.NestedLearning;
 
 /// <summary>
-/// Base class for nested learning components providing shared infrastructure.
+/// Internal base class for nested learning components providing Engine and NumOps.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 public abstract class NestedLearningBase<T>

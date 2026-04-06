@@ -72,11 +72,12 @@ public class NestedLearningIntegrationTests
         // Act
         memory.Associate(input, target);
 
-        // Assert - Memory should have stored the association
+        // Assert - Retrieving with the same input should return the target
         Assert.Equal(1, memory.MemoryCount);
         var retrieved = memory.Retrieve(input);
-        Assert.NotNull(retrieved);
         Assert.Equal(4, retrieved.Length);
+        for (int i = 0; i < 4; i++)
+            Assert.Equal(target[i], retrieved[i], Tolerance);
     }
 
     [Fact]
@@ -154,13 +155,21 @@ public class NestedLearningIntegrationTests
 
         // Initial association
         memory.Associate(input, target);
-        int countBefore = memory.MemoryCount;
+        var retrievedBefore = memory.Retrieve(input);
 
-        // Act - Update adds to memory buffer
-        memory.Update(input, target, 0.1);
+        // Act - Update with a different target should change recall
+        var newTarget = CreateRandomVector(4, 99);
+        memory.Update(input, newTarget, 1.0);
 
-        // Assert - Memory count should have increased
-        Assert.True(memory.MemoryCount > countBefore);
+        // Assert - Retrieval should now reflect the updated target
+        var retrievedAfter = memory.Retrieve(input);
+        bool changed = false;
+        for (int i = 0; i < 4; i++)
+        {
+            if (Math.Abs(retrievedBefore[i] - retrievedAfter[i]) > Tolerance)
+                changed = true;
+        }
+        Assert.True(changed, "Update should change retrieval result");
     }
 
     [Fact]
