@@ -45,7 +45,7 @@ namespace AiDotNet.AutoML;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Auto-WEKA: Combined Selection and Hyperparameter Optimization of Classification Algorithms", "https://doi.org/10.1007/s10994-012-5309-x")]
+[ModelPaper("Ensemble Methods in Machine Learning", "https://doi.org/10.1007/3-540-45014-9_1")]
 public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 {
 
