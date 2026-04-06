@@ -61,7 +61,9 @@ public class XMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double _bic;
+
+    private T _bic;
+
 
     /// <summary>
     /// Initializes a new XMeans instance.
@@ -70,13 +72,14 @@ public class XMeans<T> : ClusteringBase<T>
     public XMeans(XMeansOptions<T>? options = null)
         : base(options ?? new XMeansOptions<T>())
     {
+        _bic = NumOps.Zero;
         _options = options ?? new XMeansOptions<T>();
     }
 
     /// <summary>
     /// Gets the final BIC value.
     /// </summary>
-    public double BIC => _bic;
+    public T BIC => _bic;
 
     /// <inheritdoc />
 
@@ -170,7 +173,7 @@ public class XMeans<T> : ClusteringBase<T>
                 }
 
                 // Compute BIC for parent cluster
-                double parentBIC = ComputeClusterBIC(subMatrix, d);
+                T parentBIC = ComputeClusterBIC(subMatrix, d);
 
                 // Try splitting with K=2
                 var subKMeans = new KMeans<T>(new KMeansOptions<T>
@@ -186,9 +189,9 @@ public class XMeans<T> : ClusteringBase<T>
                 var subCenters = subKMeans.ClusterCenters ?? new Matrix<T>(2, d);
 
                 // Compute BIC for children
-                double childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
+                T childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
 
-                if (childBIC < parentBIC && newCenters.Count + 1 < _options.MaxClusters)
+                if (NumOps.LessThan(childBIC, parentBIC) && newCenters.Count + 1 < _options.MaxClusters)
                 {
                     // Accept split
                     for (int sc = 0; sc < 2; sc++)
@@ -262,32 +265,42 @@ public class XMeans<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double ComputeClusterBIC(Matrix<T> clusterData, int d)
+    private T ComputeClusterBIC(Matrix<T> clusterData, int d)
     {
         int n = clusterData.Rows;
-        if (n == 0) return 0;
+        if (n == 0) return NumOps.Zero;
 
         // Compute variance
-        double variance = ComputeVariance(clusterData, n, d);
+        T variance = ComputeVariance(clusterData, n, d);
 
         // Log-likelihood for single Gaussian
-        double logL = -n / 2.0 * (d * Math.Log(2 * Math.PI) + d * Math.Log(variance + 1e-10) + d);
+        T eps = NumOps.FromDouble(1e-10);
+        T logVariance = NumOps.Log(NumOps.Add(variance, eps));
+        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        T nT = NumOps.FromDouble(n);
+        T dT = NumOps.FromDouble(d);
+        T logL = NumOps.Negate(NumOps.Multiply(NumOps.Divide(nT, NumOps.FromDouble(2)),
+            NumOps.Add(NumOps.Add(NumOps.Multiply(dT, log2Pi), NumOps.Multiply(dT, logVariance)), dT)));
 
         // Number of parameters: d (mean) + 1 (variance)
-        int numParams = d + 1;
+        T numParams = NumOps.FromDouble(d + 1);
 
         return _options.Criterion == InformationCriterion.BIC
-            ? -2 * logL + numParams * Math.Log(n)
-            : -2 * logL + 2 * numParams;
+            ? NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), logL), NumOps.Multiply(numParams, NumOps.Log(nT)))
+            : NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), logL), NumOps.Multiply(NumOps.FromDouble(2), numParams));
     }
 
-    private double ComputeSplitBIC(Matrix<T> data, Vector<T> labels, Matrix<T> centers, int d)
+    private T ComputeSplitBIC(Matrix<T> data, Vector<T> labels, Matrix<T> centers, int d)
     {
         int n = data.Rows;
-        if (n == 0) return 0;
+        if (n == 0) return NumOps.Zero;
 
-        double totalLogL = 0;
+        T totalLogL = NumOps.Zero;
         int totalParams = 0;
+        T eps = NumOps.FromDouble(1e-10);
+        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        T dT = NumOps.FromDouble(d);
+        T halfNeg = NumOps.FromDouble(-0.5);
 
         for (int c = 0; c < 2; c++)
         {
@@ -311,21 +324,29 @@ public class XMeans<T> : ClusteringBase<T>
                 }
             }
 
-            double variance = ComputeVariance(clusterData, clusterPoints.Count, d);
-            double logL = -clusterPoints.Count / 2.0 * (d * Math.Log(2 * Math.PI) + d * Math.Log(variance + 1e-10) + d);
-            totalLogL += logL;
+            T variance = ComputeVariance(clusterData, clusterPoints.Count, d);
+            T nC = NumOps.FromDouble(clusterPoints.Count);
+            T logL = NumOps.Multiply(NumOps.Multiply(halfNeg, nC),
+                NumOps.Add(NumOps.Add(NumOps.Multiply(dT, log2Pi), NumOps.Multiply(dT, NumOps.Log(NumOps.Add(variance, eps)))), dT));
+            totalLogL = NumOps.Add(totalLogL, logL);
             totalParams += d + 1;
         }
 
+        T nT = NumOps.FromDouble(n);
+        T totalParamsT = NumOps.FromDouble(totalParams);
         return _options.Criterion == InformationCriterion.BIC
-            ? -2 * totalLogL + totalParams * Math.Log(n)
-            : -2 * totalLogL + 2 * totalParams;
+            ? NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(totalParamsT, NumOps.Log(nT)))
+            : NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(NumOps.FromDouble(2), totalParamsT));
     }
 
-    private double ComputeTotalBIC(Matrix<T> data, Vector<T> labels, Matrix<T> centers, int n, int d, int k)
+    private T ComputeTotalBIC(Matrix<T> data, Vector<T> labels, Matrix<T> centers, int n, int d, int k)
     {
-        double totalLogL = 0;
+        T totalLogL = NumOps.Zero;
         int totalParams = k * (d + 1);
+        T eps = NumOps.FromDouble(1e-10);
+        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        T dT = NumOps.FromDouble(d);
+        T halfNeg = NumOps.FromDouble(-0.5);
 
         for (int c = 0; c < k; c++)
         {
@@ -349,46 +370,51 @@ public class XMeans<T> : ClusteringBase<T>
                 }
             }
 
-            double variance = ComputeVariance(clusterData, clusterPoints.Count, d);
-            double logL = -clusterPoints.Count / 2.0 * (d * Math.Log(2 * Math.PI) + d * Math.Log(variance + 1e-10) + d);
-            totalLogL += logL;
+            T variance = ComputeVariance(clusterData, clusterPoints.Count, d);
+            T nC = NumOps.FromDouble(clusterPoints.Count);
+            T logL = NumOps.Multiply(NumOps.Multiply(halfNeg, nC),
+                NumOps.Add(NumOps.Add(NumOps.Multiply(dT, log2Pi), NumOps.Multiply(dT, NumOps.Log(NumOps.Add(variance, eps)))), dT));
+            totalLogL = NumOps.Add(totalLogL, logL);
         }
 
+        T nT = NumOps.FromDouble(n);
+        T totalParamsT = NumOps.FromDouble(totalParams);
         return _options.Criterion == InformationCriterion.BIC
-            ? -2 * totalLogL + totalParams * Math.Log(n)
-            : -2 * totalLogL + 2 * totalParams;
+            ? NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(totalParamsT, NumOps.Log(nT)))
+            : NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(NumOps.FromDouble(2), totalParamsT));
     }
 
-    private double ComputeVariance(Matrix<T> data, int n, int d)
+    private T ComputeVariance(Matrix<T> data, int n, int d)
     {
-        if (n <= 1) return 1e-10;
+        if (n <= 1) return NumOps.FromDouble(1e-10);
 
         // Compute mean
-        var mean = new double[d];
+        var mean = new Vector<T>(d);
+        T nT = NumOps.FromDouble(n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                mean[j] += NumOps.ToDouble(data[i, j]);
+                mean[j] = NumOps.Add(mean[j], data[i, j]);
             }
         }
         for (int j = 0; j < d; j++)
         {
-            mean[j] /= n;
+            mean[j] = NumOps.Divide(mean[j], nT);
         }
 
         // Compute variance
-        double variance = 0;
+        T variance = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                double diff = NumOps.ToDouble(data[i, j]) - mean[j];
-                variance += diff * diff;
+                T diff = NumOps.Subtract(data[i, j], mean[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
         }
 
-        return variance / (n * d);
+        return NumOps.Divide(variance, NumOps.FromDouble(n * d));
     }
 
     /// <inheritdoc />

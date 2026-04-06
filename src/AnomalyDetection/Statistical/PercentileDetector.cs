@@ -44,9 +44,9 @@ public class PercentileDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _lowPercentile;
     private readonly double _highPercentile;
-    private double[]? _lowThresholds;
-    private double[]? _highThresholds;
-    private double[]? _ranges;
+    private Vector<T>? _lowThresholds;
+    private Vector<T>? _highThresholds;
+    private Vector<T>? _ranges;
 
     /// <summary>
     /// Gets the low percentile threshold.
@@ -99,25 +99,26 @@ public class PercentileDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int d = X.Columns;
 
-        _lowThresholds = new double[d];
-        _highThresholds = new double[d];
-        _ranges = new double[d];
+        _lowThresholds = new Vector<T>(d);
+        _highThresholds = new Vector<T>(d);
+        _ranges = new Vector<T>(d);
+        T eps = NumOps.FromDouble(1e-10);
 
         for (int j = 0; j < d; j++)
         {
-            var values = new double[n];
+            var values = new T[n];
             for (int i = 0; i < n; i++)
             {
-                values[i] = NumOps.ToDouble(X[i, j]);
+                values[i] = X[i, j];
             }
 
-            Array.Sort(values);
+            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
 
             // Compute percentiles
             _lowThresholds[j] = Percentile(values, _lowPercentile);
             _highThresholds[j] = Percentile(values, _highPercentile);
-            _ranges[j] = _highThresholds[j] - _lowThresholds[j];
-            if (_ranges[j] < 1e-10) _ranges[j] = 1e-10;
+            _ranges[j] = NumOps.Subtract(_highThresholds[j], _lowThresholds[j]);
+            if (NumOps.LessThan(_ranges[j], eps)) _ranges[j] = eps;
         }
 
         // Calculate scores for training data to set threshold
@@ -127,7 +128,7 @@ public class PercentileDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private static double Percentile(double[] sortedValues, double percentile)
+    private T Percentile(T[] sortedValues, double percentile)
     {
         int n = sortedValues.Length;
         double index = (percentile / 100.0) * (n - 1);
@@ -139,8 +140,9 @@ public class PercentileDetector<T> : AnomalyDetectorBase<T>
             return sortedValues[Math.Min(lower, n - 1)];
         }
 
-        double fraction = index - lower;
-        return sortedValues[lower] + fraction * (sortedValues[upper] - sortedValues[lower]);
+        T fraction = NumOps.FromDouble(index - lower);
+        return NumOps.Add(sortedValues[lower],
+            NumOps.Multiply(fraction, NumOps.Subtract(sortedValues[upper], sortedValues[lower])));
     }
 
     /// <inheritdoc/>
@@ -167,36 +169,36 @@ public class PercentileDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double maxScore = 0;
+            T maxScore = NumOps.Zero;
 
             for (int j = 0; j < X.Columns; j++)
             {
-                double value = NumOps.ToDouble(X[i, j]);
-                double score;
+                T value = X[i, j];
+                T score;
 
-                if (value < lowThresholds[j])
+                if (NumOps.LessThan(value, lowThresholds[j]))
                 {
                     // Below low percentile
-                    score = (lowThresholds[j] - value) / ranges[j];
+                    score = NumOps.Divide(NumOps.Subtract(lowThresholds[j], value), ranges[j]);
                 }
-                else if (value > highThresholds[j])
+                else if (NumOps.GreaterThan(value, highThresholds[j]))
                 {
                     // Above high percentile
-                    score = (value - highThresholds[j]) / ranges[j];
+                    score = NumOps.Divide(NumOps.Subtract(value, highThresholds[j]), ranges[j]);
                 }
                 else
                 {
                     // Within normal range
-                    score = 0;
+                    score = NumOps.Zero;
                 }
 
-                if (score > maxScore)
+                if (NumOps.GreaterThan(score, maxScore))
                 {
                     maxScore = score;
                 }
             }
 
-            scores[i] = NumOps.FromDouble(maxScore);
+            scores[i] = maxScore;
         }
 
         return scores;

@@ -64,7 +64,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private Vector<T>[] _centroids;
 
     /// <summary>Per-cluster count for EMA weighting.</summary>
-    private double[] _clusterCounts;
+    private Vector<T> _clusterCounts;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.UnsupervisedMetaLearn;
@@ -85,7 +85,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         // Initialize centroids randomly
         _centroids = new Vector<T>[options.NumClusters];
-        _clusterCounts = new double[options.NumClusters];
+        _clusterCounts = new Vector<T>(options.NumClusters);
         for (int k = 0; k < options.NumClusters; k++)
         {
             _centroids[k] = new Vector<T>(_clusterDim);
@@ -107,7 +107,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         // Decay cluster counts once per batch to prevent indefinite accumulation
         for (int c = 0; c < _algoOptions.NumClusters; c++)
-            _clusterCounts[c] *= (1.0 - _algoOptions.ClusterUpdateRate);
+            _clusterCounts[c] = NumOps.FromDouble(NumOps.ToDouble(_clusterCounts[c]) * (1.0 - _algoOptions.ClusterUpdateRate));
 
         // Phase 1: Adapt all tasks and assign to clusters
         foreach (var task in taskBatch.Tasks)
@@ -119,7 +119,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             taskClusters.Add(cluster);
 
             // Update centroid via EMA
-            _clusterCounts[cluster] += 1.0;
+            _clusterCounts[cluster] = NumOps.Add(_clusterCounts[cluster], NumOps.One);
             double rate = _algoOptions.ClusterUpdateRate;
             for (int d = 0; d < _clusterDim; d++)
                 _centroids[cluster][d] = NumOps.FromDouble(
@@ -170,7 +170,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             {
                 int cluster = taskClusters[t];
                 // Inverse-frequency weighting: under-represented clusters get higher weight
-                double weight = 1.0 / Math.Max(_clusterCounts[cluster], 1.0);
+                double weight = 1.0 / Math.Max(NumOps.ToDouble(_clusterCounts[cluster]), 1.0);
                 totalWeight += weight;
 
                 for (int d = 0; d < _paramDim; d++)

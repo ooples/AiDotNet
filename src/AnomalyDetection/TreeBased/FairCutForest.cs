@@ -105,19 +105,8 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Compute feature importances based on spread
-        var featureImportances = ComputeFeatureImportances(data);
+        var featureImportances = ComputeFeatureImportances(X);
 
         // Build trees
         int maxDepth = (int)Math.Ceiling(Math.Log(_effectiveMaxSamples) / Math.Log(2));
@@ -127,7 +116,14 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         {
             // Sample data
             var sampleIndices = SampleIndices(n, _effectiveMaxSamples);
-            var sample = sampleIndices.Select(i => data[i]).ToArray();
+            var sample = new Matrix<T>(sampleIndices.Length, _inputDim);
+            for (int si = 0; si < sampleIndices.Length; si++)
+            {
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    sample[si, j] = X[sampleIndices[si], j];
+                }
+            }
 
             // Build tree with fair cuts
             var tree = BuildFairCutTree(sample, featureImportances, maxDepth);
@@ -141,42 +137,37 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private double[] ComputeFeatureImportances(double[][] data)
+    private Vector<T> ComputeFeatureImportances(Matrix<T> data)
     {
-        int d = data[0].Length;
-        var importances = new double[d];
+        int d = data.Columns;
+        var importances = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
-            double min = double.MaxValue;
-            double max = double.MinValue;
+            T min = NumOps.MaxValue;
+            T max = NumOps.MinValue;
 
-            foreach (var row in data)
+            for (int i = 0; i < data.Rows; i++)
             {
-                if (row[j] < min) min = row[j];
-                if (row[j] > max) max = row[j];
+                if (NumOps.LessThan(data[i, j], min)) min = data[i, j];
+                if (NumOps.GreaterThan(data[i, j], max)) max = data[i, j];
             }
 
-            // Importance is the range (spread) of the feature
-            importances[j] = max - min;
+            importances[j] = NumOps.Subtract(max, min);
         }
 
         // Normalize importances
-        double sum = importances.Sum();
-        if (sum > 0)
+        T sum = NumOps.Zero;
+        for (int j = 0; j < d; j++) sum = NumOps.Add(sum, importances[j]);
+
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int j = 0; j < d; j++)
-            {
-                importances[j] /= sum;
-            }
+            for (int j = 0; j < d; j++) importances[j] = NumOps.Divide(importances[j], sum);
         }
         else
         {
-            // Uniform if all features have zero range
-            for (int j = 0; j < d; j++)
-            {
-                importances[j] = 1.0 / d;
-            }
+            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(d));
+            for (int j = 0; j < d; j++) importances[j] = uniform;
         }
 
         return importances;
@@ -196,67 +187,81 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         return indices.Take(sampleSize).ToArray();
     }
 
-    private FCFTree BuildFairCutTree(double[][] data, double[] featureImportances, int maxDepth)
+    private FCFTree BuildFairCutTree(Matrix<T> data, Vector<T> featureImportances, int maxDepth)
     {
         return BuildFairCutTreeRecursive(data, featureImportances, 0, maxDepth);
     }
 
-    private FCFTree BuildFairCutTreeRecursive(double[][] data, double[] featureImportances,
+    private FCFTree BuildFairCutTreeRecursive(Matrix<T> data, Vector<T> featureImportances,
         int currentDepth, int maxDepth)
     {
         var node = new FCFTree();
 
-        if (data.Length <= 1 || currentDepth >= maxDepth)
+        if (data.Rows <= 1 || currentDepth >= maxDepth)
         {
             node.IsLeaf = true;
-            node.Size = data.Length;
+            node.Size = data.Rows;
             return node;
         }
-
-        int d = data[0].Length;
 
         // Select feature based on importance-weighted probability
         int selectedFeature = SelectFeatureByImportance(featureImportances);
 
         // Find min and max for selected feature
-        double min = double.MaxValue;
-        double max = double.MinValue;
+        T min = NumOps.MaxValue;
+        T max = NumOps.MinValue;
 
-        foreach (var row in data)
+        for (int i = 0; i < data.Rows; i++)
         {
-            if (row[selectedFeature] < min) min = row[selectedFeature];
-            if (row[selectedFeature] > max) max = row[selectedFeature];
+            if (NumOps.LessThan(data[i, selectedFeature], min)) min = data[i, selectedFeature];
+            if (NumOps.GreaterThan(data[i, selectedFeature], max)) max = data[i, selectedFeature];
         }
 
-        if (Math.Abs(max - min) < 1e-10)
+        T range = NumOps.Subtract(max, min);
+        T eps = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(NumOps.Abs(range), eps))
         {
             node.IsLeaf = true;
-            node.Size = data.Length;
+            node.Size = data.Rows;
             return node;
         }
 
         // Fair cut: use median instead of random split for more balanced trees
-        var values = data.Select(row => row[selectedFeature]).OrderBy(v => v).ToArray();
-        double splitValue = values[values.Length / 2]; // Median
+        var values = Enumerable.Range(0, data.Rows)
+            .Select(i => data[i, selectedFeature])
+            .OrderBy(v => NumOps.ToDouble(v))
+            .ToArray();
+        T splitValue = values[values.Length / 2]; // Median
 
         // Add small random perturbation to avoid identical splits
-        splitValue += (_random.NextDouble() - 0.5) * (max - min) * 0.1;
-        splitValue = Math.Max(min, Math.Min(max, splitValue));
+        T perturbation = NumOps.Multiply(NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1), range);
+        splitValue = NumOps.Add(splitValue, perturbation);
+        if (NumOps.LessThan(splitValue, min)) splitValue = min;
+        if (NumOps.GreaterThan(splitValue, max)) splitValue = max;
 
         node.SplitFeature = selectedFeature;
         node.SplitValue = splitValue;
 
         // Split data
-        var leftData = data.Where(row => row[selectedFeature] < splitValue).ToArray();
-        var rightData = data.Where(row => row[selectedFeature] >= splitValue).ToArray();
+        var leftIndices = new List<int>();
+        var rightIndices = new List<int>();
+        for (int i = 0; i < data.Rows; i++)
+        {
+            if (NumOps.LessThan(data[i, selectedFeature], splitValue))
+                leftIndices.Add(i);
+            else
+                rightIndices.Add(i);
+        }
 
-        // Handle edge case where all data goes to one side
-        if (leftData.Length == 0 || rightData.Length == 0)
+        if (leftIndices.Count == 0 || rightIndices.Count == 0)
         {
             node.IsLeaf = true;
-            node.Size = data.Length;
+            node.Size = data.Rows;
             return node;
         }
+
+        var leftData = ExtractRows(data, leftIndices);
+        var rightData = ExtractRows(data, rightIndices);
 
         node.Left = BuildFairCutTreeRecursive(leftData, featureImportances, currentDepth + 1, maxDepth);
         node.Right = BuildFairCutTreeRecursive(rightData, featureImportances, currentDepth + 1, maxDepth);
@@ -264,14 +269,28 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         return node;
     }
 
-    private int SelectFeatureByImportance(double[] importances)
+    private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
     {
+        var result = new Matrix<T>(indices.Count, data.Columns);
+        for (int i = 0; i < indices.Count; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                result[i, j] = data[indices[i], j];
+            }
+        }
+        return result;
+    }
+
+    private int SelectFeatureByImportance(Vector<T> importances)
+    {
+        // Feature selection uses Random.NextDouble() - this is a double boundary
         double r = _random.NextDouble();
         double cumulative = 0;
 
         for (int i = 0; i < importances.Length; i++)
         {
-            cumulative += importances[i];
+            cumulative += NumOps.ToDouble(importances[i]);
             if (r <= cumulative)
             {
                 return i;
@@ -306,55 +325,51 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
+        T cn = NumOps.FromDouble(ComputeCn(_effectiveMaxSamples));
+        T two = NumOps.FromDouble(2);
+        T nTreesT = NumOps.FromDouble(trees.Count);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Average path length across all trees
-            double avgPathLength = 0;
+            T avgPathLength = NumOps.Zero;
             foreach (var tree in trees)
             {
-                avgPathLength += ComputePathLength(point, tree, 0);
+                avgPathLength = NumOps.Add(avgPathLength, ComputePathLength(point, tree, 0));
             }
-            avgPathLength /= trees.Count;
+            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
 
             // Anomaly score: 2^(-avgPathLength / c(n))
-            // where c(n) is the average path length in an unsuccessful search in a BST
-            // Use effective sample size (actual samples per tree) for normalization
-            double cn = ComputeCn(_effectiveMaxSamples);
-            double score = Math.Pow(2, -avgPathLength / cn);
+            T score = NumOps.GreaterThan(cn, NumOps.Zero)
+                ? NumOps.Power(two, NumOps.Negate(NumOps.Divide(avgPathLength, cn)))
+                : NumOps.FromDouble(0.5);
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
     }
 
-    private double ComputePathLength(double[] point, FCFTree node, int currentDepth)
+    private T ComputePathLength(Vector<T> point, FCFTree node, int currentDepth)
     {
         if (node.IsLeaf)
         {
-            return currentDepth + ComputeCn(node.Size);
+            return NumOps.FromDouble(currentDepth + ComputeCn(node.Size));
         }
 
-        if (point[node.SplitFeature] < node.SplitValue)
+        if (NumOps.LessThan(point[node.SplitFeature], node.SplitValue))
         {
-            var left = node.Left;
-            return left != null
-                ? ComputePathLength(point, left, currentDepth + 1)
-                : currentDepth + 1;
+            if (node.Left is null)
+                throw new InvalidOperationException("Corrupt tree: non-leaf node missing left child.");
+            return ComputePathLength(point, node.Left, currentDepth + 1);
         }
         else
         {
-            var right = node.Right;
-            return right != null
-                ? ComputePathLength(point, right, currentDepth + 1)
-                : currentDepth + 1;
+            if (node.Right is null)
+                throw new InvalidOperationException("Corrupt tree: non-leaf node missing right child.");
+            return ComputePathLength(point, node.Right, currentDepth + 1);
         }
     }
 
@@ -363,8 +378,6 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         if (n <= 1) return 0;
         if (n == 2) return 1;
 
-        // c(n) = 2 * H(n-1) - 2*(n-1)/n
-        // where H(i) is the harmonic number
         double h = Math.Log(n - 1) + 0.5772156649; // Euler-Mascheroni constant
         return 2 * h - 2.0 * (n - 1) / n;
     }
@@ -374,7 +387,7 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         public bool IsLeaf { get; set; }
         public int Size { get; set; }
         public int SplitFeature { get; set; }
-        public double SplitValue { get; set; }
+        public T SplitValue { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public FCFTree? Left { get; set; }
         public FCFTree? Right { get; set; }
     }

@@ -224,9 +224,10 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -434,7 +435,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 klDouble += klTerm;
             }
             // Apply absolute value for consistency with inference
-            assocDisc[i] = NumOps.FromDouble(Math.Abs(klDouble));
+            assocDisc[i] = NumOps.Abs(NumOps.FromDouble(klDouble));
         }
 
         return (output, attention, assocDisc);
@@ -834,8 +835,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
             }
             // Take absolute value
-            double klVal = Math.Abs(NumOps.ToDouble(kl));
-            assocDisc[i] = NumOps.FromDouble(klVal);
+            assocDisc[i] = NumOps.Abs(kl);
         }
 
         // Feed-forward
@@ -874,7 +874,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         int seqLen = x.Rows;
         int headDim = _modelDim / _numHeads;
-        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(headDim));
 
         // Compute Q, K, V projections (full model dimension)
         var Q = new Matrix<T>(seqLen, _modelDim);
@@ -1052,29 +1052,31 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         var h = new Vector<T>(ffDim);
         var wCol = new Vector<T>(ffDim);
 
+        var w1Tensor = Tensor<T>.FromMatrix(W1);
+        var b1Tensor = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
+        var w2Tensor = Tensor<T>.FromMatrix(W2);
+        var b2Tensor = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
+
         for (int t = 0; t < seqLen; t++)
         {
-            // First layer with ReLU
-            for (int j = 0; j < ffDim; j++)
-            {
-                T sum = b1[j];
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(x[t, i], W1[i, j]));
-                }
-                // ReLU
-                h[j] = NumOps.FromDouble(Math.Max(0, NumOps.ToDouble(sum)));
-            }
+            // Extract row as vector for SIMD
+            var xRow = new Vector<T>(_modelDim);
+            for (int i = 0; i < _modelDim; i++) xRow[i] = x[t, i];
+            var xTensor = Tensor<T>.FromVector(xRow).Reshape(1, _modelDim);
 
-            // Second layer with residual connection
+            // Layer 1: h = ReLU(x @ W1 + b1)  (SIMD via Engine)
+            var h1Pre = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(xTensor, w1Tensor), b1Tensor);
+            var hVec = Engine.ReLU(h1Pre.Reshape(ffDim).ToVector());
+
+            // Layer 2: out = h @ W2 + b2  (SIMD via Engine)
+            var hTensor = Tensor<T>.FromVector(hVec).Reshape(1, ffDim);
+            var l2Out = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(hTensor, w2Tensor), b2Tensor).Reshape(_modelDim).ToVector();
+
+            // Residual connection
             for (int j = 0; j < _modelDim; j++)
-            {
-                T sum = b2[j];
-                for (int ii = 0; ii < ffDim; ii++) wCol[ii] = W2[ii, j];
-                sum = NumOps.Add(sum, Engine.DotProduct(h, wCol));
-                // Residual connection
-                output[t, j] = NumOps.Add(sum, x[t, j]);
-            }
+                output[t, j] = NumOps.Add(l2Out[j], x[t, j]);
         }
 
         return output;
@@ -1180,7 +1182,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     double val = NumOps.ToDouble(data[i, j]);
                     dist += val * val;
                 }
-                scores[i] = NumOps.FromDouble(Math.Sqrt(dist));
+                scores[i] = NumOps.Sqrt(NumOps.FromDouble(dist));
             }
         }
 
@@ -1195,7 +1197,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             double valueDev = 0;
             for (int j = 0; j < _inputDim; j++)
             {
-                double val = Math.Abs(NumOps.ToDouble(data[i, j]));
+                double val = NumOps.ToDouble(NumOps.Abs(data[i, j]));
                 valueDev += val * val;
             }
             valueDev = Math.Sqrt(valueDev);

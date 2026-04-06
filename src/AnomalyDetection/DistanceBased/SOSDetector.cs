@@ -46,8 +46,8 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class SOSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _perplexity;
-    private double[][]? _trainingData;
-    private double[]? _trainingBindingProbs;
+    private Matrix<T>? _trainingData;
+    private Vector<T>? _trainingBindingProbs;
 
     /// <summary>
     /// Gets the perplexity parameter.
@@ -80,21 +80,10 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int n = X.Rows;
-
-        // Convert to double array
-        _trainingData = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            _trainingData[i] = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                _trainingData[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
+        _trainingData = X;
 
         // Compute binding probabilities for training data
-        _trainingBindingProbs = ComputeBindingProbabilities(_trainingData);
+        _trainingBindingProbs = ComputeBindingProbabilities(X);
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -103,100 +92,105 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private double[] ComputeBindingProbabilities(double[][] data)
+    private Vector<T> ComputeBindingProbabilities(Matrix<T> data)
     {
-        int n = data.Length;
+        int n = data.Rows;
 
-        // Compute squared distances
-        var sqDistances = new double[n, n];
+        // Compute squared distances using Engine vectorization
+        var sqDistances = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
+            var pointI = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
             for (int j = i + 1; j < n; j++)
             {
-                double dist = 0;
-                for (int d = 0; d < data[0].Length; d++)
-                {
-                    double diff = data[i][d] - data[j][d];
-                    dist += diff * diff;
-                }
-                sqDistances[i, j] = dist;
-                sqDistances[j, i] = dist;
+                var pointJ = new Vector<T>(data.GetRowReadOnlySpan(j).ToArray());
+                var diff = Engine.Subtract(pointI, pointJ);
+                T distSq = Engine.DotProduct(diff, diff);
+                sqDistances[i, j] = distSq;
+                sqDistances[j, i] = distSq;
             }
         }
 
         // Compute affinities with binary search for sigma (perplexity-based)
-        var affinities = new double[n, n];
-        double targetEntropy = Math.Log(_perplexity);
+        var affinities = new Matrix<T>(n, n);
+        T targetEntropy = NumOps.Log(NumOps.FromDouble(_perplexity));
+        T eps10 = NumOps.FromDouble(1e-10);
+        T eps5 = NumOps.FromDouble(1e-5);
+        T two = NumOps.FromDouble(2);
 
         for (int i = 0; i < n; i++)
         {
             // Binary search for sigma that gives target perplexity
-            double sigmaMin = 1e-20;
-            double sigmaMax = 1e20;
-            double sigma = 1.0;
+            T sigmaMin = NumOps.FromDouble(1e-20);
+            T sigmaMax = NumOps.FromDouble(1e20);
+            T sigma = NumOps.One;
+            T sigmaMaxInit = sigmaMax;
 
             for (int iter = 0; iter < 50; iter++)
             {
                 // Compute affinities with current sigma
-                double sumAff = 0;
+                T sumAff = NumOps.Zero;
+                T twoSigmaSq = NumOps.Multiply(two, NumOps.Multiply(sigma, sigma));
                 for (int j = 0; j < n; j++)
                 {
                     if (i != j)
                     {
-                        affinities[i, j] = Math.Exp(-sqDistances[i, j] / (2 * sigma * sigma));
-                        sumAff += affinities[i, j];
+                        affinities[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Divide(sqDistances[i, j], twoSigmaSq)));
+                        sumAff = NumOps.Add(sumAff, affinities[i, j]);
                     }
                 }
 
                 // Normalize and compute entropy
-                double entropy = 0;
-                if (sumAff > 1e-10)
+                T entropy = NumOps.Zero;
+                if (NumOps.GreaterThan(sumAff, eps10))
                 {
                     for (int j = 0; j < n; j++)
                     {
                         if (i != j)
                         {
-                            double p = affinities[i, j] / sumAff;
-                            if (p > 1e-10)
+                            T p = NumOps.Divide(affinities[i, j], sumAff);
+                            if (NumOps.GreaterThan(p, eps10))
                             {
-                                entropy -= p * Math.Log(p);
+                                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, NumOps.Log(p)));
                             }
                         }
                     }
                 }
 
                 // Binary search update
-                if (Math.Abs(entropy - targetEntropy) < 1e-5) break;
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(entropy, targetEntropy)), eps5)) break;
 
-                if (entropy < targetEntropy)
+                if (NumOps.LessThan(entropy, targetEntropy))
                 {
                     sigmaMin = sigma;
-                    sigma = (sigmaMax == 1e20) ? sigma * 2 : (sigma + sigmaMax) / 2;
+                    sigma = NumOps.Equals(sigmaMax, sigmaMaxInit)
+                        ? NumOps.Multiply(sigma, two)
+                        : NumOps.Divide(NumOps.Add(sigma, sigmaMax), two);
                 }
                 else
                 {
                     sigmaMax = sigma;
-                    sigma = (sigma + sigmaMin) / 2;
+                    sigma = NumOps.Divide(NumOps.Add(sigma, sigmaMin), two);
                 }
             }
 
             // Normalize affinities
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
                 if (i != j)
                 {
-                    sum += affinities[i, j];
+                    sum = NumOps.Add(sum, affinities[i, j]);
                 }
             }
 
-            if (sum > 1e-10)
+            if (NumOps.GreaterThan(sum, eps10))
             {
                 for (int j = 0; j < n; j++)
                 {
                     if (i != j)
                     {
-                        affinities[i, j] /= sum;
+                        affinities[i, j] = NumOps.Divide(affinities[i, j], sum);
                     }
                 }
             }
@@ -205,20 +199,21 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
         // Compute binding probability for each point
         // p_j = product over i of (1 - a_ij)
         // = probability that j is NOT selected by ANY point
-        var bindingProbs = new double[n];
+        var bindingProbs = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
-            double logProd = 0;
+            T logProd = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
                 if (i != j)
                 {
-                    logProd += Math.Log(1 - affinities[i, j] + 1e-10);
+                    logProd = NumOps.Add(logProd,
+                        NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, affinities[i, j]), eps10)));
                 }
             }
             // Outlier score = probability of NOT being selected
-            bindingProbs[j] = Math.Exp(logProd);
+            bindingProbs[j] = NumOps.Exp(logProd);
         }
 
         return bindingProbs;
@@ -242,23 +237,31 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
         }
 
         // For scoring, we need to include the new points in the affinity computation
-        int nTrain = trainingData.Length;
+        int nTrain = trainingData.Rows;
         int nTest = X.Rows;
         int nTotal = nTrain + nTest;
+        int d = X.Columns;
 
-        // Combine training and test data
-        var allData = new double[nTotal][];
+        if (trainingData.Columns != d)
+        {
+            throw new ArgumentException($"Training data has {trainingData.Columns} features but test data has {d}.", nameof(X));
+        }
+
+        // Combine training and test data into a single Matrix<T>
+        var allData = new Matrix<T>(nTotal, d);
         for (int i = 0; i < nTrain; i++)
         {
-            allData[i] = trainingData[i];
+            for (int j = 0; j < d; j++)
+            {
+                allData[i, j] = trainingData[i, j];
+            }
         }
 
         for (int i = 0; i < nTest; i++)
         {
-            allData[nTrain + i] = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
+            for (int j = 0; j < d; j++)
             {
-                allData[nTrain + i][j] = NumOps.ToDouble(X[i, j]);
+                allData[nTrain + i, j] = X[i, j];
             }
         }
 
@@ -269,8 +272,7 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
         var scores = new Vector<T>(nTest);
         for (int i = 0; i < nTest; i++)
         {
-            // Binding probability = probability of being an outlier
-            scores[i] = NumOps.FromDouble(allBindingProbs[nTrain + i]);
+            scores[i] = allBindingProbs[nTrain + i];
         }
 
         return scores;

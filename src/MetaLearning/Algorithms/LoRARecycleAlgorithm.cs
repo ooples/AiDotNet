@@ -236,19 +236,17 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         for (int o = 0; o < _prototypeDim; o++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int i = 0; i < featureLen; i++)
-                sum += NumOps.ToDouble(features[i]) * NumOps.ToDouble(_encoderParams[o * inputDim + i]);
+                sum = NumOps.Add(sum, NumOps.Multiply(features[i], _encoderParams[o * inputDim + i]));
 
-            // Add bias
             if (biasOffset + o < _encoderParams.Length)
-                sum += NumOps.ToDouble(_encoderParams[biasOffset + o]);
+                sum = NumOps.Add(sum, _encoderParams[biasOffset + o]);
 
-            // Tanh activation for bounded embeddings
-            embedding[o] = NumOps.FromDouble(Math.Tanh(sum));
+            embedding[o] = sum;
         }
 
-        return embedding;
+        return VectorTanh(embedding);
     }
 
     /// <summary>

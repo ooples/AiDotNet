@@ -61,9 +61,11 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
-#pragma warning disable CS8601
-    private T _olsIntercept = default;
-#pragma warning restore CS8601
+
+
+    private T _olsIntercept;
+
+
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -116,6 +118,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     public NeuralNetworkRegression(NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _olsIntercept = NumOps.Zero;
         _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
         _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {

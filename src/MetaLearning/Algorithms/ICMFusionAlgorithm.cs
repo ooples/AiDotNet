@@ -254,7 +254,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
     private Vector<T> DecodeLatent(double[] z)
     {
-        var output = new Vector<T>(_compressedDim);
+        var preAct = new Vector<T>(_compressedDim);
         int biasOffset = _latentDim * _compressedDim;
 
         for (int o = 0; o < _compressedDim; o++)
@@ -266,9 +266,9 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             if (biasOffset + o < _decoderParams.Length)
                 sum += NumOps.ToDouble(_decoderParams[biasOffset + o]);
 
-            output[o] = NumOps.FromDouble(Math.Tanh(sum)); // Bounded output
+            preAct[o] = NumOps.FromDouble(sum);
         }
-        return output;
+        return VectorTanh(preAct);
     }
 
     private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, Vector<T> compressedDelta)

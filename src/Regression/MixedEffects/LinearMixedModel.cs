@@ -98,14 +98,15 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Residual variance estimate.
     /// </summary>
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-    private T _residualVariance = default;
-#pragma warning restore CS8601, CS8618
+
+
+    private T _residualVariance;
 
     /// <summary>
     /// Log-likelihood of the fitted model.
     /// </summary>
-    private double _logLikelihood;
+    private T _logLikelihood;
+
 
     /// <summary>
     /// Number of observations.
@@ -136,29 +137,28 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the log-likelihood of the fitted model.
     /// </summary>
-    public double LogLikelihood => _logLikelihood;
+    public T LogLikelihood => _logLikelihood;
 
     /// <summary>
     /// Gets the AIC (Akaike Information Criterion).
     /// </summary>
-    public double AIC => -2 * _logLikelihood + 2 * GetNumberOfParameters();
+    public T AIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(2 * GetNumberOfParameters()));
 
     /// <summary>
     /// Gets the BIC (Bayesian Information Criterion).
     /// </summary>
-    public double BIC => -2 * _logLikelihood + Math.Log(_nObservations) * GetNumberOfParameters();
+    public T BIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(Math.Log(_nObservations) * GetNumberOfParameters()));
 
     /// <summary>
     /// Marginal R-squared (fixed effects only).
     /// </summary>
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-    public T MarginalRSquared { get; private set; } = default;
+
+    public T MarginalRSquared { get; private set; }
 
     /// <summary>
     /// Conditional R-squared (fixed + random effects).
     /// </summary>
-    public T ConditionalRSquared { get; private set; } = default;
-#pragma warning restore CS8601, CS8618
+    public T ConditionalRSquared { get; private set; }
 
     /// <summary>
     /// Initializes a new Linear Mixed-Effects Model.
@@ -170,6 +170,10 @@ public class LinearMixedModel<T> : RegressionBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new LinearMixedModelOptions<T>(), regularization)
     {
+        ConditionalRSquared = NumOps.Zero;
+        MarginalRSquared = NumOps.Zero;
+        _logLikelihood = NumOps.Zero;
+        _residualVariance = NumOps.Zero;
         _options = options ?? new LinearMixedModelOptions<T>();
         _randomEffects = [];
     }
@@ -468,20 +472,20 @@ public class LinearMixedModel<T> : RegressionBase<T>
             UpdateVarianceComponents(fixedX, fullX, y);
 
             // Compute log-likelihood
-            _logLikelihood = ComputeLogLikelihood(fixedX, fullX, y);
+            _logLikelihood = NumOps.FromDouble(ComputeLogLikelihood(fixedX, fullX, y));
 
             if (_options.Verbose)
             {
-                Console.WriteLine($"Iteration {iter + 1}: Log-likelihood = {_logLikelihood:F4}");
+                Console.WriteLine($"Iteration {iter + 1}: Log-likelihood = {NumOps.ToDouble(_logLikelihood):F4}");
             }
 
             // Check convergence
-            if (Math.Abs(_logLikelihood - prevLogLik) < _options.Tolerance)
+            if (Math.Abs(NumOps.ToDouble(_logLikelihood) - prevLogLik) < _options.Tolerance)
             {
                 break;
             }
 
-            prevLogLik = _logLikelihood;
+            prevLogLik = NumOps.ToDouble(_logLikelihood);
         }
     }
 

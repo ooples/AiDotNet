@@ -1,8 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for DeepHit survival analysis model.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// DeepHit is a deep learning approach to survival analysis that directly learns the
@@ -25,16 +29,12 @@ namespace AiDotNet.Models.Options;
 /// DeepHit directly estimates these probabilities.
 /// </para>
 /// </remarks>
-public class DeepHitOptions
+public class DeepHitOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of discrete time bins for survival prediction.
     /// </summary>
     /// <value>Default is 100.</value>
-    /// <remarks>
-    /// The survival timeline is divided into this many bins. More bins give finer resolution
-    /// but require more data to estimate reliably.
-    /// </remarks>
     public int NumTimeBins { get; set; } = 100;
 
     /// <summary>
@@ -59,10 +59,6 @@ public class DeepHitOptions
     /// Gets or sets the number of competing risks/causes.
     /// </summary>
     /// <value>Default is 1 (single event type).</value>
-    /// <remarks>
-    /// For standard survival analysis, use 1. For competing risks (e.g., death from disease
-    /// vs death from other causes), set this to the number of distinct event types.
-    /// </remarks>
     public int NumRisks { get; set; } = 1;
 
     /// <summary>
@@ -93,26 +89,12 @@ public class DeepHitOptions
     /// Gets or sets the weight for the ranking loss component.
     /// </summary>
     /// <value>Default is 1.0.</value>
-    /// <remarks>
-    /// <para>
-    /// DeepHit uses a combination of log-likelihood loss and ranking loss. The ranking loss
-    /// ensures that subjects who experience events earlier are predicted to have higher
-    /// hazard probabilities at earlier times.
-    /// </para>
-    /// <para>
-    /// Higher values put more emphasis on correctly ranking subjects by their survival times.
-    /// </para>
-    /// </remarks>
     public double RankingWeight { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the sigma parameter for the ranking loss kernel.
     /// </summary>
     /// <value>Default is 0.1.</value>
-    /// <remarks>
-    /// Controls the smoothness of the ranking loss. Smaller values make the loss more
-    /// sensitive to time differences between subjects.
-    /// </remarks>
     public double RankingSigma { get; set; } = 0.1;
 
     /// <summary>
@@ -122,10 +104,15 @@ public class DeepHitOptions
     public double L2Regularization { get; set; } = 0.001;
 
     /// <summary>
-    /// Gets or sets the activation function type.
+    /// Gets or sets the activation function for hidden layers.
     /// </summary>
     /// <value>Default is ReLU.</value>
-    public DeepHitActivation Activation { get; set; } = DeepHitActivation.ReLU;
+    /// <remarks>
+    /// Uses the standard IActivationFunction interface, which provides SIMD-accelerated
+    /// Forward/Backward passes via the Engine. Any activation function that implements
+    /// the interface can be used — no need to modify DeepHit itself.
+    /// </remarks>
+    public IActivationFunction<T> Activation { get; set; } = new ReLUActivation<T>();
 
     /// <summary>
     /// Gets or sets whether to use batch normalization.
@@ -145,49 +132,8 @@ public class DeepHitOptions
     public int? EarlyStoppingPatience { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the time horizons of interest for evaluation (e.g., 1-year, 5-year survival).
+    /// Gets or sets the time horizons of interest for evaluation.
     /// </summary>
     /// <value>Default is null (all time points).</value>
-    /// <remarks>
-    /// If specified, these are the specific time points where survival probabilities
-    /// will be calculated and reported. Values should be proportions of the maximum
-    /// observed time (e.g., 0.25 for 25% of max time).
-    /// </remarks>
     public double[]? EvaluationHorizons { get; set; }
-}
-
-/// <summary>
-/// Activation functions for DeepHit.
-/// </summary>
-public enum DeepHitActivation
-{
-    /// <summary>
-    /// Rectified Linear Unit: max(0, x).
-    /// </summary>
-    ReLU,
-
-    /// <summary>
-    /// Scaled Exponential Linear Unit - self-normalizing.
-    /// </summary>
-    SELU,
-
-    /// <summary>
-    /// Exponential Linear Unit.
-    /// </summary>
-    ELU,
-
-    /// <summary>
-    /// Hyperbolic tangent.
-    /// </summary>
-    Tanh,
-
-    /// <summary>
-    /// Leaky ReLU with small negative slope.
-    /// </summary>
-    LeakyReLU,
-
-    /// <summary>
-    /// Gaussian Error Linear Unit - smooth activation.
-    /// </summary>
-    GELU
 }

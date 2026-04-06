@@ -55,8 +55,8 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 
     private readonly int _subsequenceLength;
     private readonly int _exclusionZone;
-    private double[]? _matrixProfile;
-    private double[]? _trainingValues;
+    private Vector<T>? _matrixProfile;
+    private Vector<T>? _trainingValues;
     private double _trainingChecksum;
 
     /// <summary>
@@ -121,18 +121,19 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Extract values
-        _trainingValues = new double[n];
+        var trainingValuesD = new double[n];
         double checksum = 0;
         for (int i = 0; i < n; i++)
         {
-            _trainingValues[i] = NumOps.ToDouble(X[i, 0]);
-            // Compute a weighted checksum for same-data detection
-            checksum += _trainingValues[i] * (i + 1);
+            trainingValuesD[i] = NumOps.ToDouble(X[i, 0]);
+            checksum += trainingValuesD[i] * (i + 1);
         }
         _trainingChecksum = checksum;
+        _trainingValues = new Vector<T>(trainingValuesD.Select(v => NumOps.FromDouble(v)));
 
         // Compute Matrix Profile using STOMP algorithm (simplified)
-        _matrixProfile = ComputeMatrixProfile(_trainingValues);
+        var matrixProfileD = ComputeMatrixProfile(trainingValuesD);
+        _matrixProfile = new Vector<T>(matrixProfileD.Select(v => NumOps.FromDouble(v)));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -305,9 +306,10 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 
                     for (int s = subStart; s <= subEnd; s++)
                     {
-                        if (matrixProfile[s] > maxProfileValue)
+                        double mpVal = NumOps.ToDouble(matrixProfile[s]);
+                        if (mpVal > maxProfileValue)
                         {
-                            maxProfileValue = matrixProfile[s];
+                            maxProfileValue = mpVal;
                         }
                     }
 
@@ -353,7 +355,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             double sum = 0, sumSq = 0;
             for (int j = 0; j < m; j++)
             {
-                double v = trainingValues[i + j];
+                double v = NumOps.ToDouble(trainingValues[i + j]);
                 sum += v;
                 sumSq += v * v;
             }
@@ -396,7 +398,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                     for (int k = 0; k < m; k++)
                     {
                         double testNorm = (values[s + k] - mean) / std;
-                        double trainNorm = (trainingValues[t + k] - trainMeans[t]) / trainStds[t];
+                        double trainNorm = (NumOps.ToDouble(trainingValues[t + k]) - trainMeans[t]) / trainStds[t];
                         double diff = testNorm - trainNorm;
                         dist += diff * diff;
                     }

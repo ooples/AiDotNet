@@ -79,7 +79,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the mean model.
     /// </summary>
+
     private T _meanIntercept;
+
 
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
@@ -89,7 +91,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the precision model.
     /// </summary>
+
     private T _precisionIntercept;
+
 
     /// <summary>
     /// Number of features.
@@ -102,8 +106,12 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly BetaRegressionOptions _options;
 
     /// <summary>Y min-max scaling for mapping to (0,1).</summary>
-    private double _yMin;
-    private double _yMax = 1.0;
+
+    private T _yMin;
+
+
+    private T _yMax;
+
     private bool _needsTransform;
     private bool _useOLS;
 
@@ -140,6 +148,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public BetaRegression(BetaRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _yMax = NumOps.Zero;
+        _yMin = NumOps.Zero;
         _options = options ?? new BetaRegressionOptions();
         _meanIntercept = NumOps.Zero;
         _precisionIntercept = NumOps.FromDouble(Math.Log(10));  // Initial precision = 10
@@ -161,8 +171,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             if (yi < yMin) yMin = yi;
             if (yi > yMax) yMax = yi;
         }
-        _yMin = yMin;
-        _yMax = yMax;
+        _yMin = NumOps.FromDouble(yMin);
+        _yMax = NumOps.FromDouble(yMax);
         double yRange = yMax - yMin;
         if (yRange < 1e-10) yRange = 1.0;
 
@@ -264,17 +274,19 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         var (mus, _) = await Task.Run(() => ComputePredictions(input));
 
-        // Inverse transform from (0.01, 0.99) back to original y scale
+        // Inverse transform from (0.01, 0.99) back to original y scale (SIMD)
         if (_needsTransform)
         {
-            double yRange = _yMax - _yMin;
-            if (yRange < 1e-10) yRange = 1.0;
-            for (int i = 0; i < mus.Length; i++)
-            {
-                double mu = NumOps.ToDouble(mus[i]);
-                double original = ((mu - 0.01) / 0.98) * yRange + _yMin;
-                mus[i] = NumOps.FromDouble(original);
-            }
+            T yRange = NumOps.Subtract(_yMax, _yMin);
+            T epsRange = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(yRange, epsRange)) yRange = NumOps.One;
+            T offset = NumOps.FromDouble(0.01);
+            T scale = NumOps.FromDouble(0.98);
+            // mus = ((mus - 0.01) / 0.98) * yRange + yMin
+            var shifted = (Vector<T>)Engine.Subtract(mus, Vector<T>.CreateDefault(mus.Length, offset));
+            var scaled = (Vector<T>)Engine.Divide(shifted, Vector<T>.CreateDefault(mus.Length, scale));
+            var ranged = (Vector<T>)Engine.Multiply(scaled, Vector<T>.CreateDefault(mus.Length, yRange));
+            mus = (Vector<T>)Engine.Add(ranged, Vector<T>.CreateDefault(mus.Length, _yMin));
         }
 
         return mus;
@@ -788,8 +800,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         writer.Write((int)_options.LinkFunction);
         writer.Write(_options.ModelVariablePrecision);
-        writer.Write(_yMin);
-        writer.Write(_yMax);
+        writer.Write(NumOps.ToDouble(_yMin));
+        writer.Write(NumOps.ToDouble(_yMax));
         writer.Write(_useOLS);
         writer.Write(_needsTransform);
         if (_useOLS && _meanCoefficients is not null)
@@ -834,8 +846,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         _options.LinkFunction = (BetaLinkFunction)reader.ReadInt32();
         _options.ModelVariablePrecision = reader.ReadBoolean();
-        _yMin = reader.ReadDouble();
-        _yMax = reader.ReadDouble();
+        _yMin = NumOps.FromDouble(reader.ReadDouble());
+        _yMax = NumOps.FromDouble(reader.ReadDouble());
         _useOLS = reader.ReadBoolean();
         _needsTransform = reader.ReadBoolean();
         int olsCoeffCount = reader.ReadInt32();

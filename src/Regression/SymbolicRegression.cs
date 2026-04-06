@@ -311,6 +311,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? preprocessingPipeline = null)
         : base(options, regularization)
     {
+        _olsIntercept = NumOps.Zero;
         _options = options ?? new SymbolicRegressionOptions();
         var dummyModel = new VectorModel<T>(Vector<T>.Empty());
         _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
@@ -363,9 +364,11 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
 
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
-#pragma warning disable CS8601
-    private T _olsIntercept = default;
-#pragma warning restore CS8601
+
+
+    private T _olsIntercept;
+
+
 
     protected override void ExtractModelParameters()
     {

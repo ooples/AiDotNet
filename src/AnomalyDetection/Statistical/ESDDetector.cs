@@ -52,7 +52,9 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _stds;
     private int _nFeatures;
     private int _nSamples;
-    private double _criticalValue;
+
+    private T _criticalValue;
+
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
@@ -73,7 +75,7 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     /// Compare ScoreAnomalies results against this value if you want hypothesis-test based detection
     /// instead of contamination-based thresholding.
     /// </remarks>
-    public double CriticalValue => _criticalValue;
+    public T CriticalValue => _criticalValue;
 
     /// <summary>
     /// Creates a new ESD anomaly detector.
@@ -93,6 +95,7 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     public ESDDetector(double alpha = 0.05, int? maxOutliers = null, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _criticalValue = NumOps.Zero;
         if (alpha <= 0 || alpha >= 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),
@@ -138,7 +141,7 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
             effectiveMaxOutliers = 1; // Need at least 1 for ESD to make sense
         }
 
-        _criticalValue = ComputeESDCriticalValue(_nSamples, 1, effectiveMaxOutliers);
+        _criticalValue = NumOps.FromDouble(ComputeESDCriticalValue(_nSamples, 1, effectiveMaxOutliers));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);

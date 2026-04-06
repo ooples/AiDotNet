@@ -52,12 +52,12 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
     private readonly double _gamma;
     private readonly double _varianceRatio;
     private readonly KernelType _kernel;
-    private double[][]? _trainingData;
-    private double[,]? _kernelMatrix;
-    private double[][]? _alphas; // Eigenvectors in kernel space
-    private double[]? _lambdas; // Eigenvalues
+    private Matrix<T>? _trainingData;
+    private Matrix<T>? _kernelMatrix;
+    private Matrix<T>? _alphas; // Eigenvectors in kernel space (nComponents x n)
+    private Vector<T>? _lambdas; // Eigenvalues
     private int _nComponents;
-    private double[]? _mean; // For centering
+    private Vector<T>? _mean; // For centering
 
     /// <summary>
     /// Type of kernel function.
@@ -117,27 +117,20 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int d = X.Columns;
 
-        // Convert to double array
-        _trainingData = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            _trainingData[i] = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                _trainingData[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
+        _trainingData = X;
 
         // Set gamma if auto
-        double effectiveGamma = _gamma > 0 ? _gamma : 1.0 / d;
+        T effectiveGamma = _gamma > 0 ? NumOps.FromDouble(_gamma) : NumOps.Divide(NumOps.One, NumOps.FromDouble(d));
 
         // Compute kernel matrix
-        _kernelMatrix = new double[n, n];
+        _kernelMatrix = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
+            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
             for (int j = i; j < n; j++)
             {
-                double k = ComputeKernel(_trainingData[i], _trainingData[j], effectiveGamma);
+                var pointJ = new Vector<T>(X.GetRowReadOnlySpan(j).ToArray());
+                T k = ComputeKernel(pointI, pointJ, effectiveGamma);
                 _kernelMatrix[i, j] = k;
                 _kernelMatrix[j, i] = k;
             }
@@ -150,19 +143,32 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
         var (eigenvalues, eigenvectors) = ComputeEigendecomposition(n);
 
         // Select components based on variance ratio
-        double totalVariance = eigenvalues.Sum();
-        double cumulativeVariance = 0;
+        T totalVariance = NumOps.Zero;
+        for (int i = 0; i < eigenvalues.Length; i++)
+            totalVariance = NumOps.Add(totalVariance, eigenvalues[i]);
+
+        T cumulativeVariance = NumOps.Zero;
+        T varThreshold = NumOps.FromDouble(_varianceRatio);
         _nComponents = 0;
 
         for (int i = 0; i < eigenvalues.Length; i++)
         {
-            cumulativeVariance += eigenvalues[i];
+            cumulativeVariance = NumOps.Add(cumulativeVariance, eigenvalues[i]);
             _nComponents++;
-            if (cumulativeVariance / totalVariance >= _varianceRatio) break;
+            if (NumOps.GreaterThan(totalVariance, NumOps.Zero) &&
+                !NumOps.LessThan(NumOps.Divide(cumulativeVariance, totalVariance), varThreshold)) break;
         }
 
-        _lambdas = eigenvalues.Take(_nComponents).ToArray();
-        _alphas = eigenvectors.Take(_nComponents).ToArray();
+        _lambdas = new Vector<T>(_nComponents);
+        _alphas = new Matrix<T>(_nComponents, n);
+        for (int i = 0; i < _nComponents; i++)
+        {
+            _lambdas[i] = eigenvalues[i];
+            for (int j = 0; j < n; j++)
+            {
+                _alphas[i, j] = eigenvectors[i][j];
+            }
+        }
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -173,87 +179,91 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 
     private void CenterKernelMatrix(int n)
     {
-        // K_c = K - 1_n K - K 1_n + 1_n K 1_n
-        // where 1_n is matrix with all entries 1/n
+        var km = _kernelMatrix ?? throw new InvalidOperationException("Kernel matrix not computed.");
+        T nT = NumOps.FromDouble(n);
 
-        _mean = new double[n];
-        double grandMean = 0;
+        _mean = new Vector<T>(n);
+        T grandMean = NumOps.Zero;
 
         // Compute row means
         for (int i = 0; i < n; i++)
         {
+            T rowSum = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
-                _mean[i] += (_kernelMatrix ?? throw new InvalidOperationException("Kernel matrix not computed."))[i, j];
+                rowSum = NumOps.Add(rowSum, km[i, j]);
             }
-            _mean[i] /= n;
-            grandMean += _mean[i];
+            _mean[i] = NumOps.Divide(rowSum, nT);
+            grandMean = NumOps.Add(grandMean, _mean[i]);
         }
-        grandMean /= n;
+        grandMean = NumOps.Divide(grandMean, nT);
 
-        // Center
+        // Center: K_c[i,j] = K[i,j] - mean[i] - mean[j] + grandMean
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                (_kernelMatrix ?? throw new InvalidOperationException("Kernel matrix not computed."))[i, j] = _kernelMatrix[i, j] - _mean[i] - _mean[j] + grandMean;
+                km[i, j] = NumOps.Add(NumOps.Subtract(NumOps.Subtract(km[i, j], _mean[i]), _mean[j]), grandMean);
             }
         }
     }
 
-    private (double[] eigenvalues, double[][] eigenvectors) ComputeEigendecomposition(int n)
+    private (Vector<T> eigenvalues, Vector<T>[] eigenvectors) ComputeEigendecomposition(int n)
     {
-        int maxComponents = Math.Min(n, 50); // Limit for efficiency
-        var eigenvalues = new List<double>();
-        var eigenvectors = new List<double[]>();
+        int maxComponents = Math.Min(n, 50);
+        var eigenvalues = new List<T>();
+        var eigenvectors = new List<Vector<T>>();
+        var km = _kernelMatrix ?? throw new InvalidOperationException("Kernel matrix not computed.");
 
-        var matrix = new double[n, n];
+        var matrix = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
-                matrix[i, j] = (_kernelMatrix ?? throw new InvalidOperationException("Kernel matrix not computed."))[i, j];
+                matrix[i, j] = km[i, j];
+
+        T eps8 = NumOps.FromDouble(1e-8);
+        T eps10 = NumOps.FromDouble(1e-10);
 
         for (int c = 0; c < maxComponents; c++)
         {
             // Power iteration
-            var v = new double[n];
+            var v = new Vector<T>(n);
             for (int i = 0; i < n; i++)
-                v[i] = _random.NextDouble();
+                v[i] = NumOps.FromDouble(_random.NextDouble());
 
-            Normalize(v);
+            NormalizeVector(v);
 
             for (int iter = 0; iter < 100; iter++)
             {
-                var vNew = new double[n];
+                var vNew = new Vector<T>(n);
                 for (int i = 0; i < n; i++)
                 {
+                    T sum = NumOps.Zero;
                     for (int j = 0; j < n; j++)
-                    {
-                        vNew[i] += matrix[i, j] * v[j];
-                    }
+                        sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], v[j]));
+                    vNew[i] = sum;
                 }
 
-                Normalize(vNew);
+                NormalizeVector(vNew);
 
-                // Check convergence
-                double diff = 0;
+                T diff = NumOps.Zero;
                 for (int i = 0; i < n; i++)
-                    diff += Math.Abs(vNew[i] - v[i]);
+                    diff = NumOps.Add(diff, NumOps.Abs(NumOps.Subtract(vNew[i], v[i])));
 
                 v = vNew;
-                if (diff < 1e-8) break;
+                if (NumOps.LessThan(diff, eps8)) break;
             }
 
             // Compute eigenvalue
-            double lambda = 0;
+            T lambda = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int j = 0; j < n; j++)
-                    sum += matrix[i, j] * v[j];
-                lambda += v[i] * sum;
+                    sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], v[j]));
+                lambda = NumOps.Add(lambda, NumOps.Multiply(v[i], sum));
             }
 
-            if (lambda < 1e-10) break;
+            if (NumOps.LessThan(lambda, eps10)) break;
 
             eigenvalues.Add(lambda);
             eigenvectors.Add(v);
@@ -263,55 +273,46 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    matrix[i, j] -= lambda * v[i] * v[j];
+                    matrix[i, j] = NumOps.Subtract(matrix[i, j], NumOps.Multiply(lambda, NumOps.Multiply(v[i], v[j])));
                 }
             }
         }
 
-        return (eigenvalues.ToArray(), eigenvectors.ToArray());
+        return (new Vector<T>(eigenvalues), eigenvectors.ToArray());
     }
 
-    private void Normalize(double[] v)
+    private void NormalizeVector(Vector<T> v)
     {
-        double norm = Math.Sqrt(v.Sum(x => x * x));
-        if (norm > 1e-10)
+        T normSq = NumOps.Zero;
+        for (int i = 0; i < v.Length; i++)
+            normSq = NumOps.Add(normSq, NumOps.Multiply(v[i], v[i]));
+        T norm = NumOps.Sqrt(normSq);
+        T eps = NumOps.FromDouble(1e-10);
+        if (NumOps.GreaterThan(norm, eps))
         {
             for (int i = 0; i < v.Length; i++)
-                v[i] /= norm;
+                v[i] = NumOps.Divide(v[i], norm);
         }
     }
 
-    private double ComputeKernel(double[] a, double[] b, double gamma)
+    private T ComputeKernel(Vector<T> a, Vector<T> b, T gamma)
     {
         switch (_kernel)
         {
             case KernelType.RBF:
-                double distSq = 0;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    double diff = a[i] - b[i];
-                    distSq += diff * diff;
-                }
-                return Math.Exp(-gamma * distSq);
+                var diff = Engine.Subtract(a, b);
+                T distSq = Engine.DotProduct(diff, diff);
+                return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distSq)));
 
             case KernelType.Polynomial:
-                double dot = 0;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    dot += a[i] * b[i];
-                }
-                return Math.Pow(dot + 1, 3); // Degree 3 polynomial
+                T dot = Engine.DotProduct(a, b);
+                return NumOps.Power(NumOps.Add(dot, NumOps.One), NumOps.FromDouble(3));
 
             case KernelType.Linear:
-                double dotLinear = 0;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    dotLinear += a[i] * b[i];
-                }
-                return dotLinear;
+                return Engine.DotProduct(a, b);
 
             default:
-                return 0;
+                return NumOps.Zero;
         }
     }
 
@@ -337,61 +338,69 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        int nTrain = trainingData.Length;
-        double effectiveGamma = _gamma > 0 ? _gamma : 1.0 / X.Columns;
+        int nTrain = trainingData.Rows;
+        T effectiveGamma = _gamma > 0
+            ? NumOps.FromDouble(_gamma)
+            : NumOps.Divide(NumOps.One, NumOps.FromDouble(X.Columns));
 
         var scores = new Vector<T>(X.Rows);
+        T eps10 = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Compute kernel vector with training data
-            var kVec = new double[nTrain];
+            var kVec = new Vector<T>(nTrain);
             for (int t = 0; t < nTrain; t++)
             {
-                kVec[t] = ComputeKernel(point, trainingData[t], effectiveGamma);
+                var trainPt = new Vector<T>(trainingData.GetRowReadOnlySpan(t).ToArray());
+                kVec[t] = ComputeKernel(point, trainPt, effectiveGamma);
             }
 
             // Center the kernel vector
-            double kMean = kVec.Average();
-            double grandMean = mean.Average();
+            T kMean = NumOps.Zero;
+            T grandMean = NumOps.Zero;
             for (int t = 0; t < nTrain; t++)
             {
-                kVec[t] = kVec[t] - kMean - mean[t] + grandMean;
+                kMean = NumOps.Add(kMean, kVec[t]);
+                grandMean = NumOps.Add(grandMean, mean[t]);
+            }
+            T nTrainT = NumOps.FromDouble(nTrain);
+            kMean = NumOps.Divide(kMean, nTrainT);
+            grandMean = NumOps.Divide(grandMean, nTrainT);
+
+            for (int t = 0; t < nTrain; t++)
+            {
+                kVec[t] = NumOps.Add(NumOps.Subtract(NumOps.Subtract(kVec[t], kMean), mean[t]), grandMean);
             }
 
             // Project to kernel PCA space and compute scores
-            double reconstructionError = ComputeKernel(point, point, effectiveGamma);
-            double mahalanobis = 0;
+            T reconstructionError = ComputeKernel(point, point, effectiveGamma);
+            T mahalanobis = NumOps.Zero;
 
             for (int c = 0; c < _nComponents; c++)
             {
                 // Projection coefficient
-                double proj = 0;
+                T proj = NumOps.Zero;
                 for (int t = 0; t < nTrain; t++)
                 {
-                    proj += alphas[c][t] * kVec[t];
+                    proj = NumOps.Add(proj, NumOps.Multiply(alphas[c, t], kVec[t]));
                 }
 
-                // Only use components with sufficiently large eigenvalues to avoid
-                // division by near-zero lambdas causing numerical instability
-                if (lambdas[c] > 1e-10)
+                if (NumOps.GreaterThan(lambdas[c], eps10))
                 {
-                    // Subtract reconstructed variance for reconstruction error
-                    reconstructionError -= proj * proj / lambdas[c];
-
-                    // Mahalanobis distance in kernel PCA space: sum(proj^2 / lambda)
-                    mahalanobis += (proj * proj) / lambdas[c];
+                    T projSq = NumOps.Multiply(proj, proj);
+                    T projSqOverLambda = NumOps.Divide(projSq, lambdas[c]);
+                    reconstructionError = NumOps.Subtract(reconstructionError, projSqOverLambda);
+                    mahalanobis = NumOps.Add(mahalanobis, projSqOverLambda);
                 }
             }
 
             // Combined score: Mahalanobis distance + reconstruction error
-            scores[i] = NumOps.FromDouble(Math.Sqrt(mahalanobis + Math.Max(0, reconstructionError)));
+            T combined = NumOps.Add(mahalanobis,
+                NumOps.GreaterThan(reconstructionError, NumOps.Zero) ? reconstructionError : NumOps.Zero);
+            scores[i] = NumOps.Sqrt(combined);
         }
 
         return scores;

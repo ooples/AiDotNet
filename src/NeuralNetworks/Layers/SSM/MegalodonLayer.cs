@@ -397,7 +397,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         _lastEmaInput = emaInput3D;
 
         // Build CEMA kernel: K[d, l] = Re((1-alpha[d]) * alpha[d]^l)
-        _cachedCemaKernel = new double[_emaDimension, seqLen];
+        var cemaKernelD = new double[_emaDimension, seqLen];
         for (int d = 0; d < _emaDimension; d++)
         {
             double aR = NumOps.ToDouble(_emaAlphaReal[d]);
@@ -410,13 +410,19 @@ public class MegalodonLayer<T> : LayerBase<T>
             {
                 // Re((1-alpha) * alpha^l) = Re((oneMinusR - aI*i) * (pow_r + pow_i*i))
                 double contrib = oneMinusR * pow_r - negAI * pow_i;
-                _cachedCemaKernel[d, l] = contrib;
+                cemaKernelD[d, l] = contrib;
 
                 double new_r = pow_r * aR - pow_i * aI;
                 double new_i = pow_r * aI + pow_i * aR;
                 pow_r = new_r; pow_i = new_i;
             }
         }
+
+        // Convert to Matrix<T>
+        _cachedCemaKernel = new Matrix<T>(_emaDimension, seqLen);
+        for (int d2 = 0; d2 < _emaDimension; d2++)
+            for (int l2 = 0; l2 < seqLen; l2++)
+                _cachedCemaKernel[d2, l2] = NumOps.FromDouble(cemaKernelD[d2, l2]);
 
         // Causal convolution: output[b,t,d] = sum_l K[d,l] * emaInput[b,t-l,d]
         var output = TensorAllocator.Rent<T>([batchSize, seqLen, _emaDimension]);
@@ -426,7 +432,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                 {
                     double sum = 0;
                     for (int l = 0; l <= t; l++)
-                        sum += _cachedCemaKernel[d, l] * NumOps.ToDouble(emaInput3D[b, t - l, d]);
+                        sum += NumOps.ToDouble(_cachedCemaKernel[d, l]) * NumOps.ToDouble(emaInput3D[b, t - l, d]);
                     output[b, t, d] = NumOps.FromDouble(sum);
                 }
 
@@ -446,7 +452,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         return normed;
     }
 
-    private double[,]? _cachedCemaKernel;
+    private Matrix<T>? _cachedCemaKernel;
 
     private Tensor<T> CEMAForward(Tensor<T> input, int batchSize, int seqLen)
     {
@@ -819,7 +825,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
                     double dxVal = 0;
                     for (int l = 0; l < seqLen - t; l++)
-                        dxVal += NumOps.ToDouble(dPreNorm[b, t + l, d]) * _cachedCemaKernel[d, l];
+                        dxVal += NumOps.ToDouble(dPreNorm[b, t + l, d]) * NumOps.ToDouble(_cachedCemaKernel[d, l]);
                     dEmaInput3D[b, t, d] = NumOps.FromDouble(dxVal);
                 }
             }

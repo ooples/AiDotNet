@@ -160,7 +160,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// - Default (1.0): balanced approach
     /// </para>
     /// </remarks>
-    private double _mutualInfoCoefficient;
+    private T _mutualInfoCoefficient;
 
     /// <summary>
     /// Gets the generator network.
@@ -311,7 +311,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(mutualInfoCoefficient), mutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
 
         _latentCodeSize = latentCodeSize;
-        _mutualInfoCoefficient = mutualInfoCoefficient;
+        _mutualInfoCoefficient = NumOps.FromDouble(mutualInfoCoefficient);
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
@@ -426,7 +426,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // Train generator with adversarial + mutual information loss via tape
         var newGeneratorInput = ConcatenateTensors(noise, latentCodes);
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
+        T miCoeff = _mutualInfoCoefficient;
         var capturedLatentCodes = latentCodes;
 
         var trainableGen = (NeuralNetworkBase<T>)Generator;
@@ -776,7 +776,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "QNetworkParameters", QNetwork.GetParameterCount() },
                 { "LatentCodeSize", _latentCodeSize },
-                { "MutualInfoCoefficient", _mutualInfoCoefficient }
+                { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
             ModelData = this.Serialize()
         };
@@ -799,7 +799,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     {
         // Serialize InfoGAN-specific hyperparameters
         writer.Write(_latentCodeSize);
-        writer.Write(_mutualInfoCoefficient);
+        writer.Write(NumOps.ToDouble(_mutualInfoCoefficient));
 
         // Serialize all three networks
         var generatorBytes = Generator.Serialize();
@@ -834,7 +834,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         // Deserialize InfoGAN-specific hyperparameters
         _latentCodeSize = reader.ReadInt32();
-        _mutualInfoCoefficient = reader.ReadDouble();
+        _mutualInfoCoefficient = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize all three networks with bounds checking
         int generatorDataLength = reader.ReadInt32();
@@ -896,7 +896,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             discriminatorOptimizer: null,
             qNetworkOptimizer: null,
             _lossFunction,
-            _mutualInfoCoefficient);
+            NumOps.ToDouble(_mutualInfoCoefficient));
     }
 
     /// <summary>

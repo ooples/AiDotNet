@@ -119,31 +119,30 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
             var distances = ComputeDistances(X, i, _trainingData!);
 
             // Sort and get k-nearest
+            // Sort distances while keeping index for self-exclusion
             var sortedDistances = distances.ToArray()
-                .Select((d, idx) => (Distance: NumOps.ToDouble(d), Index: idx))
-                .OrderBy(x => x.Distance)
+                .Select((d, idx) => (Distance: d, Index: idx))
+                .OrderBy(x => NumOps.ToDouble(x.Distance))
                 .ToList();
 
             // Take k nearest neighbors, excluding self by index when scoring training data
-            double avgDistance = 0;
+            T avgDistance = NumOps.Zero;
             int count = 0;
 
             foreach (var (distance, idx) in sortedDistances)
             {
                 if (count >= _k) break;
 
-                // Skip self by index when scoring training data
                 if (isSameAsTraining && idx == i)
                 {
                     continue;
                 }
 
-                avgDistance += distance;
+                avgDistance = NumOps.Add(avgDistance, distance);
                 count++;
             }
 
-            avgDistance = count > 0 ? avgDistance / count : 0;
-            scores[i] = NumOps.FromDouble(avgDistance);
+            scores[i] = count > 0 ? NumOps.Divide(avgDistance, NumOps.FromDouble(count)) : NumOps.Zero;
         }
 
         return scores;

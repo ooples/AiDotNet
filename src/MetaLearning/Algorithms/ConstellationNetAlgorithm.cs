@@ -308,7 +308,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             // Combine part feature with its relational context via tanh gate
             double bias = NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]);
-            constellation[i] = NumOps.Add(parts[i], NumOps.FromDouble(Math.Tanh(relSum + bias)));
+            constellation[i] = NumOps.Add(parts[i], ScalarTanh(NumOps.FromDouble(relSum + bias)));
         }
 
         return constellation;

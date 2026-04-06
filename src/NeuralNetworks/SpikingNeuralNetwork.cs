@@ -42,7 +42,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>
-    private double _timeStep { get; set; }
+    private T _timeStep { get; set; }
 
     /// <summary>
     /// Gets or sets the number of time steps to simulate when processing input.
@@ -207,7 +207,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new SpikingNeuralNetworkOptions();
         Options = _options;
 
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
         _vectorActivation = vectorActivation ?? new BinarySpikingActivation<T>();
         _scalarActivation = null;
@@ -236,7 +236,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new SpikingNeuralNetworkOptions();
         Options = _options;
 
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
         _scalarActivation = scalarActivation ?? new BinarySpikingActivation<T>();
         _vectorActivation = null;
@@ -848,9 +848,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "TimeStep", _timeStep },
+                { "TimeStep", NumOps.ToDouble(_timeStep) },
                 { "SimulationSteps", _simulationSteps },
-                { "TotalSimulationTime", _timeStep * _simulationSteps },
+                { "TotalSimulationTime", NumOps.ToDouble(_timeStep) * _simulationSteps },
                 { "MembraneDecay", Convert.ToDouble(_membraneDecay) },
                 { "RefractoryPeriod", _refractoryPeriod },
                 { "TotalNeurons", totalNeurons },
@@ -894,7 +894,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         // Write temporal parameters
-        writer.Write(_timeStep);
+        writer.Write(NumOps.ToDouble(_timeStep));
         writer.Write(_simulationSteps);
 
         // Write neuron model parameters
@@ -975,7 +975,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         // Read temporal parameters
-        _timeStep = reader.ReadDouble();
+        _timeStep = NumOps.FromDouble(reader.ReadDouble());
         _simulationSteps = reader.ReadInt32();
 
         // Read neuron model parameters
@@ -1143,7 +1143,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Set parameters
-        _timeStep = timeStep;
+        _timeStep = NumOps.FromDouble(timeStep);
         _simulationSteps = simulationSteps;
     }
 
@@ -1231,7 +1231,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the vector activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _vectorActivation,
                 LossFunction);
@@ -1241,7 +1241,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the scalar activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _scalarActivation,
                 LossFunction);

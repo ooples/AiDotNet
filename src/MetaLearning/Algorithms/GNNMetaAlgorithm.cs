@@ -497,7 +497,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 for (int j = 0; j < transformed.Length; j++)
                 {
                     double val = NumOps.ToDouble(transformed[j]);
-                    transformed[j] = NumOps.FromDouble(Math.Tanh(val));
+                    transformed[j] = ScalarTanh(NumOps.FromDouble(val));
                 }
 
                 newEmbeddings.Add(transformed);
@@ -574,7 +574,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 }
             }
             // Apply tanh nonlinearity
-            hidden[i] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+            hidden[i] = ScalarTanh(sum);
         }
 
         // Second layer: hidDim → embDim

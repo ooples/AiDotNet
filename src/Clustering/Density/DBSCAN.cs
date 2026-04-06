@@ -63,15 +63,17 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
-    private double _fittedEpsilon;
+
+    private T _fittedEpsilon;
+
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private bool[]? _corePointMask;
 
     // Feature normalization state for scale-invariant distance computation
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
 
     // Cluster centers in normalized space for Predict comparison
     private Matrix<T>? _normalizedClusterCenters;
@@ -93,6 +95,7 @@ public class DBSCAN<T> : ClusteringBase<T>
     public DBSCAN(DBSCANOptions<T>? options = null)
         : base(options ?? new DBSCANOptions<T>())
     {
+        _fittedEpsilon = NumOps.Zero;
         _options = options ?? new DBSCANOptions<T>();
 
         if (_options.DistanceMetric is null)
@@ -141,8 +144,8 @@ public class DBSCAN<T> : ClusteringBase<T>
     {
         var clone = (DBSCAN<T>)CreateNewInstance();
         clone._corePointMask = _corePointMask?.ToArray();
-        clone._featureMeans = _featureMeans?.ToArray();
-        clone._featureStds = _featureStds?.ToArray();
+        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
+        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
 
         if (Labels is not null)
         {
@@ -195,30 +198,34 @@ public class DBSCAN<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        _featureMeans = new double[d];
-        _featureStds = new double[d];
+        var featureMeansD = new double[d];
+        var featureStdsD = new double[d];
         for (int j = 0; j < d; j++)
         {
             double sum = 0;
             for (int i = 0; i < n; i++)
                 sum += NumOps.ToDouble(x[i, j]);
-            _featureMeans[j] = sum / n;
+            featureMeansD[j] = sum / n;
 
             double varSum = 0;
             for (int i = 0; i < n; i++)
             {
-                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                double diff = NumOps.ToDouble(x[i, j]) - featureMeansD[j];
                 varSum += diff * diff;
             }
-            _featureStds[j] = Math.Sqrt(varSum / n);
-            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0; // avoid division by zero
+            featureStdsD[j] = Math.Sqrt(varSum / n);
+            if (featureStdsD[j] < 1e-10) featureStdsD[j] = 1.0; // avoid division by zero
         }
+
+        // Convert to Vector<T>
+        _featureMeans = new Vector<T>(featureMeansD.Select(v => NumOps.FromDouble(v)));
+        _featureStds = new Vector<T>(featureStdsD.Select(v => NumOps.FromDouble(v)));
 
         // Create normalized copy of the data
         var xNorm = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < d; j++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - featureMeansD[j]) / featureStdsD[j]);
 
         x = xNorm;
         var labels = new int[n];
@@ -282,7 +289,7 @@ public class DBSCAN<T> : ClusteringBase<T>
             }
         }
 
-        _fittedEpsilon = effectiveEpsilon;
+        _fittedEpsilon = NumOps.FromDouble(effectiveEpsilon);
 
         // Find neighbors for each point and identify core points
         var neighbors = new List<int>[n];
@@ -344,7 +351,7 @@ public class DBSCAN<T> : ClusteringBase<T>
                     for (int j = 0; j < ClusterCenters.Columns; j++)
                     {
                         double normVal = NumOps.ToDouble(ClusterCenters[k, j]);
-                        double origVal = normVal * _featureStds[j] + _featureMeans[j];
+                        double origVal = normVal * NumOps.ToDouble(_featureStds[j]) + NumOps.ToDouble(_featureMeans[j]);
                         ClusterCenters[k, j] = NumOps.FromDouble(origVal);
                     }
             }
@@ -514,7 +521,7 @@ public class DBSCAN<T> : ClusteringBase<T>
             var xNorm = new Matrix<T>(x.Rows, x.Columns);
             for (int i = 0; i < x.Rows; i++)
                 for (int j = 0; j < x.Columns; j++)
-                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_featureMeans[j])) / NumOps.ToDouble(_featureStds[j]));
             x = xNorm;
         }
 

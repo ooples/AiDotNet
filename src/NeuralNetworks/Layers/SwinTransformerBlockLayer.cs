@@ -65,7 +65,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedResidual1;
     private Tensor<T>? _cachedNorm2Output;
     private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
-    private double[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
+    private T[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
     private int _cachedNumWindows;
     private int _cachedWindowArea;
     private int _cachedH;
@@ -539,11 +539,11 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
 
             // Cache attention probs for backward
             if (_cachedAttnProbs == null)
-                _cachedAttnProbs = new double[numWindows, _numHeads, windowArea, windowArea];
+                _cachedAttnProbs = new T[numWindows, _numHeads, windowArea, windowArea];
             for (int head = 0; head < _numHeads; head++)
                 for (int i = 0; i < windowArea; i++)
                     for (int j = 0; j < windowArea; j++)
-                        _cachedAttnProbs[win, head, i, j] = attnProbs[head, i, j];
+                        _cachedAttnProbs[win, head, i, j] = NumOps.FromDouble(attnProbs[head, i, j]);
 
             // Apply attention to values and concatenate heads
             var attnOut = new double[windowArea, c];

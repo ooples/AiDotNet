@@ -52,7 +52,9 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _numTrees;
     private readonly int _maxSamples;
     private List<IsolationTree>? _trees;
-    private double _averagePathLength;
+
+    private T _averagePathLength;
+
     private int _inputDim;
 
     /// <summary>
@@ -105,6 +107,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _averagePathLength = NumOps.Zero;
         if (numTrees < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(numTrees),
@@ -140,7 +143,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         int maxDepth = (int)Math.Ceiling(Math.Log(effectiveMaxSamples) / Math.Log(2));
 
         // Calculate the average path length for normalization
-        _averagePathLength = AveragePathLength(effectiveMaxSamples);
+        _averagePathLength = NumOps.FromDouble(AveragePathLength(effectiveMaxSamples));
 
         // Build the forest
         _trees = new List<IsolationTree>(_numTrees);
@@ -178,32 +181,33 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        if (_averagePathLength <= 0)
+        if (!NumOps.GreaterThan(_averagePathLength, NumOps.Zero))
         {
             throw new InvalidOperationException(
                 "Average path length is invalid. Ensure the model was fitted with at least 2 samples.");
         }
 
         var scores = new Vector<T>(X.Rows);
+        T two = NumOps.FromDouble(2);
+        T nTreesT = NumOps.FromDouble(_numTrees);
 
         for (int i = 0; i < X.Rows; i++)
         {
             var point = X.GetRow(i);
-            double avgPathLength = 0;
+            T avgPathLength = NumOps.Zero;
 
             foreach (var tree in _trees!)
             {
-                avgPathLength += PathLength(point, tree, 0);
+                avgPathLength = NumOps.Add(avgPathLength, PathLength(point, tree, 0));
             }
 
-            avgPathLength /= _numTrees;
+            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
 
             // Anomaly score: s(x, n) = 2^(-E(h(x))/c(n))
-            // Where c(n) is the average path length of unsuccessful search in BST
-            // Higher score = more anomalous
-            double anomalyScore = Math.Pow(2, -avgPathLength / _averagePathLength);
+            T exponent = NumOps.Negate(NumOps.Divide(avgPathLength, _averagePathLength));
+            T anomalyScore = NumOps.Power(two, exponent);
 
-            scores[i] = NumOps.FromDouble(anomalyScore);
+            scores[i] = anomalyScore;
         }
 
         return scores;
@@ -295,11 +299,11 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         };
     }
 
-    private double PathLength(Vector<T> point, IsolationTree node, int currentDepth)
+    private T PathLength(Vector<T> point, IsolationTree node, int currentDepth)
     {
         // External nodes add adjustment based on size, internal nodes recurse
         return node.IsExternal
-            ? currentDepth + AveragePathLength(node.Size)
+            ? NumOps.FromDouble(currentDepth + AveragePathLength(node.Size))
             : NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
                 ? PathLength(point, node.Left!, currentDepth + 1)
                 : PathLength(point, node.Right!, currentDepth + 1);
@@ -330,9 +334,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         public bool IsExternal { get; set; }
         public int Size { get; set; }
         public int SplitFeature { get; set; }
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-        public T SplitValue { get; set; } = default;
-#pragma warning restore CS8601, CS8618
+        public T SplitValue { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public IsolationTree? Left { get; set; }
         public IsolationTree? Right { get; set; }
     }

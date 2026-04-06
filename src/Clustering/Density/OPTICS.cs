@@ -56,8 +56,8 @@ namespace AiDotNet.Clustering.Density;
 public class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <inheritdoc/>
@@ -135,8 +135,8 @@ public class OPTICS<T> : ClusteringBase<T>
         clone._coreDistances = _coreDistances.Length > 0 ? Vector<T>.Wrap(_coreDistances.ToArray()) : new Vector<T>(0);
         clone._ordering = _ordering?.ToArray() ?? Array.Empty<int>();
         clone._predecessor = _predecessor?.ToArray() ?? Array.Empty<int>();
-        clone._featureMeans = _featureMeans?.ToArray();
-        clone._featureStds = _featureStds?.ToArray();
+        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
+        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
         if (_normalizedClusterCenters is not null)
         {
             clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
@@ -178,25 +178,27 @@ public class OPTICS<T> : ClusteringBase<T>
         }
 
         // Normalize features for scale-invariant density ordering
-        _featureMeans = new double[d];
-        _featureStds = new double[d];
+        var meansD = new double[d];
+        var stdsD = new double[d];
         var xNorm = new Matrix<T>(n, d);
         for (int j = 0; j < d; j++)
         {
             double sum = 0, varSum = 0;
             for (int i = 0; i < n; i++)
                 sum += NumOps.ToDouble(x[i, j]);
-            _featureMeans[j] = sum / n;
+            meansD[j] = sum / n;
             for (int i = 0; i < n; i++)
             {
-                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                double diff = NumOps.ToDouble(x[i, j]) - meansD[j];
                 varSum += diff * diff;
             }
-            _featureStds[j] = Math.Sqrt(varSum / n);
-            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0;
+            stdsD[j] = Math.Sqrt(varSum / n);
+            if (stdsD[j] < 1e-10) stdsD[j] = 1.0;
             for (int i = 0; i < n; i++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - meansD[j]) / stdsD[j]);
         }
+        _featureMeans = new Vector<T>(meansD.Select(v => NumOps.FromDouble(v)));
+        _featureStds = new Vector<T>(stdsD.Select(v => NumOps.FromDouble(v)));
         x = xNorm;
 
         // Initialize arrays
@@ -302,7 +304,7 @@ public class OPTICS<T> : ClusteringBase<T>
                 for (int j = 0; j < ClusterCenters.Columns; j++)
                 {
                     double normVal = NumOps.ToDouble(ClusterCenters[k, j]);
-                    double origVal = normVal * _featureStds[j] + _featureMeans[j];
+                    double origVal = normVal * NumOps.ToDouble(_featureStds[j]) + NumOps.ToDouble(_featureMeans[j]);
                     ClusterCenters[k, j] = NumOps.FromDouble(origVal);
                 }
         }
@@ -623,7 +625,7 @@ public class OPTICS<T> : ClusteringBase<T>
             for (int i = 0; i < x.Rows; i++)
                 for (int j = 0; j < x.Columns; j++)
                     xNorm[i, j] = NumOps.FromDouble(
-                        (NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+                        (NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_featureMeans[j])) / NumOps.ToDouble(_featureStds[j]));
             x = xNorm;
         }
 

@@ -203,9 +203,10 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -856,17 +857,13 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
     private Vector<T> ForwardFC(Vector<T> input, Matrix<T> W, Vector<T> b)
     {
+        // SIMD: output = input @ W + b via Engine.TensorMatMul
         int outputSize = W.Columns;
-        var output = new Vector<T>(outputSize);
-        var wCol = new Vector<T>(input.Length);
-
-        for (int j = 0; j < outputSize; j++)
-        {
-            for (int i = 0; i < input.Length; i++) wCol[i] = W[i, j];
-            output[j] = NumOps.Add(b[j], Engine.DotProduct(input, wCol));
-        }
-
-        return output;
+        var inputTensor = Tensor<T>.FromVector(input).Reshape(1, input.Length);
+        var result = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(inputTensor, Tensor<T>.FromMatrix(W)),
+            Tensor<T>.FromVector(b).Reshape(1, outputSize));
+        return result.Reshape(outputSize).ToVector();
     }
 
     private Vector<T> ForwardFCNoOffset(Vector<T> input, Matrix<T> W, int outputSize)
@@ -886,16 +883,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         return output;
     }
 
-    private Vector<T> ApplyReLU(Vector<T> x)
-    {
-        var output = new Vector<T>(x.Length);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            output[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return output;
-    }
+    private Vector<T> ApplyReLU(Vector<T> x) => (Vector<T>)Engine.ReLU(x);
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)

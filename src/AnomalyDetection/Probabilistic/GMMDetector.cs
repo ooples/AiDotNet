@@ -141,11 +141,10 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Compute log-likelihood under mixture model
-            double logLikelihood = ComputeLogLikelihood(point);
+            T logLikelihood = ComputeLogLikelihood(point);
 
             // Convert to anomaly score (negative log-likelihood)
-            double score = -logLikelihood;
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = NumOps.Negate(logLikelihood);
         }
 
         return scores;
@@ -223,47 +222,45 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         int d = X.Columns;
 
         // Responsibilities matrix (n x k)
-        var responsibilities = new double[n, _nComponents];
+        var responsibilities = new Matrix<T>(n, _nComponents);
+        T uniformResp = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nComponents));
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // E-step: Compute responsibilities
             for (int i = 0; i < n; i++)
             {
-                var point = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
-                {
-                    point[j] = X[i, j];
-                }
+                var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
-                double totalProb = 0;
-                var probs = new double[_nComponents];
+                T totalProb = NumOps.Zero;
+                var probs = new Vector<T>(_nComponents);
 
                 for (int c = 0; c < _nComponents; c++)
                 {
-                    double weight = NumOps.ToDouble(_weights[c]);
-                    double density = GaussianDensity(point, _means[c], _covariances[c]);
-                    probs[c] = weight * density;
-                    totalProb += probs[c];
+                    T density = GaussianDensity(point, _means[c], _covariances[c]);
+                    probs[c] = NumOps.Multiply(_weights[c], density);
+                    totalProb = NumOps.Add(totalProb, probs[c]);
                 }
 
                 for (int c = 0; c < _nComponents; c++)
                 {
-                    responsibilities[i, c] = totalProb > 0 ? probs[c] / totalProb : 1.0 / _nComponents;
+                    responsibilities[i, c] = NumOps.GreaterThan(totalProb, NumOps.Zero)
+                        ? NumOps.Divide(probs[c], totalProb)
+                        : uniformResp;
                 }
             }
 
             // M-step: Update parameters
             for (int c = 0; c < _nComponents; c++)
             {
-                double Nc = 0;
+                T Nc = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    Nc += responsibilities[i, c];
+                    Nc = NumOps.Add(Nc, responsibilities[i, c]);
                 }
 
                 // Update weight
-                _weights[c] = NumOps.FromDouble(Nc / n);
+                _weights[c] = NumOps.Divide(Nc, NumOps.FromDouble(n));
 
                 // Update mean
                 var newMean = new Vector<T>(d);
@@ -272,12 +269,13 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                     for (int j = 0; j < d; j++)
                     {
                         newMean[j] = NumOps.Add(newMean[j],
-                            NumOps.Multiply(NumOps.FromDouble(responsibilities[i, c]), X[i, j]));
+                            NumOps.Multiply(responsibilities[i, c], X[i, j]));
                     }
                 }
+                T ncEps = NumOps.FromDouble(1e-6);
                 for (int j = 0; j < d; j++)
                 {
-                    _means[c][j] = Nc > 0 ? NumOps.Divide(newMean[j], NumOps.FromDouble(Nc)) : _means[c][j];
+                    _means[c][j] = NumOps.GreaterThan(Nc, NumOps.Zero) ? NumOps.Divide(newMean[j], Nc) : _means[c][j];
                 }
 
                 // Update covariance
@@ -290,7 +288,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                         for (int j2 = j1; j2 < d; j2++)
                         {
                             T diff2 = NumOps.Subtract(X[i, j2], _means[c][j2]);
-                            T contrib = NumOps.Multiply(NumOps.FromDouble(responsibilities[i, c]),
+                            T contrib = NumOps.Multiply(responsibilities[i, c],
                                 NumOps.Multiply(diff1, diff2));
                             newCov[j1, j2] = NumOps.Add(newCov[j1, j2], contrib);
                             if (j1 != j2)
@@ -302,13 +300,13 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Normalize covariance first, then apply regularization
-                if (Nc > 1e-6)
+                if (NumOps.GreaterThan(Nc, ncEps))
                 {
                     for (int j1 = 0; j1 < d; j1++)
                     {
                         for (int j2 = 0; j2 < d; j2++)
                         {
-                            _covariances[c][j1, j2] = NumOps.Divide(newCov[j1, j2], NumOps.FromDouble(Nc));
+                            _covariances[c][j1, j2] = NumOps.Divide(newCov[j1, j2], Nc);
                         }
                     }
 
@@ -332,7 +330,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double ComputeLogLikelihood(Vector<T> point)
+    private T ComputeLogLikelihood(Vector<T> point)
     {
         if (point.Length != _nFeatures)
         {
@@ -341,46 +339,48 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 nameof(point));
         }
 
-        double likelihood = 0;
+        T likelihood = NumOps.Zero;
 
         for (int c = 0; c < _nComponents; c++)
         {
-            double weight = NumOps.ToDouble(_weights[c]);
-            double density = GaussianDensity(point, _means[c], _covariances[c]);
-            likelihood += weight * density;
+            T density = GaussianDensity(point, _means[c], _covariances[c]);
+            likelihood = NumOps.Add(likelihood, NumOps.Multiply(_weights[c], density));
         }
 
-        return likelihood > 0 ? Math.Log(likelihood) : -1000;
+        return NumOps.GreaterThan(likelihood, NumOps.Zero)
+            ? NumOps.Log(likelihood)
+            : NumOps.FromDouble(-1000);
     }
 
-    private double GaussianDensity(Vector<T> point, Vector<T> mean, Matrix<T> covariance)
+    private T GaussianDensity(Vector<T> point, Vector<T> mean, Matrix<T> covariance)
     {
         int d = point.Length;
-
-        // Compute (x - mu)
-        var diff = new double[d];
-        for (int i = 0; i < d; i++)
-        {
-            diff[i] = NumOps.ToDouble(NumOps.Subtract(point[i], mean[i]));
-        }
+        T half = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        T floorFraction = NumOps.FromDouble(0.01);
+        T minFloor = NumOps.FromDouble(1e-6);
 
         // Simplified: Use diagonal approximation for stability
-        double mahalanobis = 0;
-        double logDet = 0;
+        T mahalanobis = NumOps.Zero;
+        T logDet = NumOps.Zero;
 
         for (int i = 0; i < d; i++)
         {
-            double variance = NumOps.ToDouble(covariance[i, i]);
+            T diffI = NumOps.Subtract(point[i], mean[i]);
+            T variance = covariance[i, i];
             // Use global variance floor to prevent density explosion for singleton components
-            double globalVar = _globalVariance.Length > i ? NumOps.ToDouble(_globalVariance[i]) : 0.0;
-            double minVar = Math.Max(globalVar * 0.01, 1e-6);
-            variance = Math.Max(variance, minVar);
-            mahalanobis += diff[i] * diff[i] / variance;
-            logDet += Math.Log(variance);
+            T globalVar = _globalVariance.Length > i ? _globalVariance[i] : NumOps.Zero;
+            T varFloor = NumOps.Multiply(globalVar, floorFraction);
+            T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
+            if (NumOps.LessThan(variance, minVar)) variance = minVar;
+
+            mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(diffI, diffI), variance));
+            logDet = NumOps.Add(logDet, NumOps.Log(variance));
         }
 
-        double logDensity = -0.5 * (d * Math.Log(2 * Math.PI) + logDet + mahalanobis);
+        T logDensity = NumOps.Negate(NumOps.Multiply(half,
+            NumOps.Add(NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet), mahalanobis)));
 
-        return Math.Exp(logDensity);
+        return NumOps.Exp(logDensity);
     }
 }

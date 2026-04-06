@@ -175,34 +175,27 @@ public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var allScores = new double[_nEstimators][];
+        var allScores = new Vector<T>[_nEstimators];
 
         // Get scores from each detector
         for (int e = 0; e < _nEstimators; e++)
         {
             var subspaceData = ExtractSubspace(X, (_featureSubsets ?? throw new InvalidOperationException("_featureSubsets has not been initialized."))[e]);
-            var scores = (_baseDetectors ?? throw new InvalidOperationException("_baseDetectors has not been initialized."))[e].ScoreAnomalies(subspaceData);
-
-            allScores[e] = new double[X.Rows];
-            for (int i = 0; i < X.Rows; i++)
-            {
-                allScores[e][i] = NumOps.ToDouble(scores[i]);
-            }
+            allScores[e] = (_baseDetectors ?? throw new InvalidOperationException("_baseDetectors has not been initialized."))[e].ScoreAnomalies(subspaceData);
         }
 
         // Combine scores (average)
         var combinedScores = new Vector<T>(X.Rows);
+        T nEst = NumOps.FromDouble(_nEstimators);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double avg = 0;
+            T avg = NumOps.Zero;
             for (int e = 0; e < _nEstimators; e++)
             {
-                avg += allScores[e][i];
+                avg = NumOps.Add(avg, allScores[e][i]);
             }
-            avg /= _nEstimators;
-
-            combinedScores[i] = NumOps.FromDouble(avg);
+            combinedScores[i] = NumOps.Divide(avg, nEst);
         }
 
         return combinedScores;

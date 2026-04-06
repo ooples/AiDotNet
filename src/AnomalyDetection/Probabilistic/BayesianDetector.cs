@@ -48,11 +48,13 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 public class BayesianDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _priorStrength;
-    private double[]? _posteriorMean;
-    private double[,]? _posteriorCovariance;
-    private double[,]? _posteriorPrecision;
+    private Vector<T>? _posteriorMean;
+    private Matrix<T>? _posteriorCovariance;
+    private Matrix<T>? _posteriorPrecision;
     private int _nFeatures;
-    private double _logNormalization;
+
+    private T _logNormalization;
+
 
     /// <summary>
     /// Gets the prior strength parameter.
@@ -70,6 +72,7 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
     public BayesianDetector(double priorStrength = 0.01, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _logNormalization = NumOps.Zero;
         if (priorStrength <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(priorStrength),
@@ -86,38 +89,31 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
 
         int n = X.Rows;
         _nFeatures = X.Columns;
-
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_nFeatures];
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
+        T nT = NumOps.FromDouble(n);
 
         // Compute sample mean
-        var sampleMean = new double[_nFeatures];
+        var sampleMean = new Vector<T>(_nFeatures);
         for (int j = 0; j < _nFeatures; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                sampleMean[j] += data[i][j];
+                sum = NumOps.Add(sum, X[i, j]);
             }
-            sampleMean[j] /= n;
+            sampleMean[j] = NumOps.Divide(sum, nT);
         }
 
         // Compute sample covariance
-        var sampleCov = new double[_nFeatures, _nFeatures];
+        var sampleCov = new Matrix<T>(_nFeatures, _nFeatures);
         for (int i = 0; i < n; i++)
         {
             for (int j1 = 0; j1 < _nFeatures; j1++)
             {
+                T diff1 = NumOps.Subtract(X[i, j1], sampleMean[j1]);
                 for (int j2 = 0; j2 < _nFeatures; j2++)
                 {
-                    sampleCov[j1, j2] += (data[i][j1] - sampleMean[j1]) * (data[i][j2] - sampleMean[j2]);
+                    T diff2 = NumOps.Subtract(X[i, j2], sampleMean[j2]);
+                    sampleCov[j1, j2] = NumOps.Add(sampleCov[j1, j2], NumOps.Multiply(diff1, diff2));
                 }
             }
         }
@@ -126,44 +122,42 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j2 = 0; j2 < _nFeatures; j2++)
             {
-                sampleCov[j1, j2] /= n;
+                sampleCov[j1, j2] = NumOps.Divide(sampleCov[j1, j2], nT);
             }
         }
 
         // Prior parameters (vague/weakly informative)
-        double kappa0 = _priorStrength;
-        double nu0 = _nFeatures + 2; // Prior degrees of freedom
-        var mu0 = sampleMean; // Prior mean = sample mean (data-driven)
-        var Lambda0 = new double[_nFeatures, _nFeatures]; // Prior precision (identity)
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            Lambda0[j, j] = 1.0;
-        }
+        T kappa0 = NumOps.FromDouble(_priorStrength);
+        T nu0 = NumOps.FromDouble(_nFeatures + 2); // Prior degrees of freedom
 
         // Posterior parameters (Normal-Inverse-Wishart)
-        double kappaN = kappa0 + n;
-        double nuN = nu0 + n;
+        T kappaN = NumOps.Add(kappa0, nT);
+        T nuN = NumOps.Add(nu0, nT);
 
         // Posterior mean
-        _posteriorMean = new double[_nFeatures];
+        _posteriorMean = new Vector<T>(_nFeatures);
         for (int j = 0; j < _nFeatures; j++)
         {
-            _posteriorMean[j] = (kappa0 * mu0[j] + n * sampleMean[j]) / kappaN;
+            _posteriorMean[j] = NumOps.Divide(
+                NumOps.Add(NumOps.Multiply(kappa0, sampleMean[j]), NumOps.Multiply(nT, sampleMean[j])),
+                kappaN);
         }
 
         // Posterior covariance (for predictive distribution)
-        _posteriorCovariance = new double[_nFeatures, _nFeatures];
-        double scale = (kappaN + 1) / (kappaN * (nuN - _nFeatures + 1));
+        _posteriorCovariance = new Matrix<T>(_nFeatures, _nFeatures);
+        T scale = NumOps.Divide(
+            NumOps.Add(kappaN, NumOps.One),
+            NumOps.Multiply(kappaN, NumOps.Subtract(nuN, NumOps.FromDouble(_nFeatures - 1))));
+        T regularization = NumOps.FromDouble(1e-6);
 
-        // Simplified: use regularized sample covariance
         for (int j1 = 0; j1 < _nFeatures; j1++)
         {
             for (int j2 = 0; j2 < _nFeatures; j2++)
             {
-                _posteriorCovariance[j1, j2] = scale * sampleCov[j1, j2];
+                _posteriorCovariance[j1, j2] = NumOps.Multiply(scale, sampleCov[j1, j2]);
                 if (j1 == j2)
                 {
-                    _posteriorCovariance[j1, j2] += 1e-6; // Regularization
+                    _posteriorCovariance[j1, j2] = NumOps.Add(_posteriorCovariance[j1, j2], regularization);
                 }
             }
         }
@@ -172,8 +166,10 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
         _posteriorPrecision = InvertMatrix(_posteriorCovariance);
 
         // Compute log normalization for MVN
-        double logDet = LogDeterminant(_posteriorCovariance);
-        _logNormalization = -0.5 * (_nFeatures * Math.Log(2 * Math.PI) + logDet);
+        T logDet = LogDeterminant(_posteriorCovariance);
+        T half = NumOps.FromDouble(0.5);
+        _logNormalization = NumOps.Negate(NumOps.Multiply(half,
+            NumOps.Add(NumOps.FromDouble(_nFeatures * Math.Log(2 * Math.PI)), logDet)));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -182,41 +178,38 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private double[,] InvertMatrix(double[,] matrix)
+    private Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
-        int n = matrix.GetLength(0);
-        var result = new double[n, n];
-        var temp = new double[n, n];
+        int n = matrix.Rows;
+        var result = new Matrix<T>(n, n);
+        var temp = new Matrix<T>(n, n);
+        T eps = NumOps.FromDouble(1e-10);
 
-        // Copy matrix and create identity
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
                 temp[i, j] = matrix[i, j];
-                result[i, j] = (i == j) ? 1.0 : 0.0;
+                result[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
             }
         }
 
-        // Gaussian elimination with partial pivoting
         for (int col = 0; col < n; col++)
         {
-            // Find pivot
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(temp[row, col]) > Math.Abs(temp[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(temp[row, col]), NumOps.Abs(temp[maxRow, col])))
                 {
                     maxRow = row;
                 }
             }
 
-            // Swap rows
             if (maxRow != col)
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double tmpVal = temp[col, j];
+                    T tmpVal = temp[col, j];
                     temp[col, j] = temp[maxRow, j];
                     temp[maxRow, j] = tmpVal;
 
@@ -226,29 +219,27 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
                 }
             }
 
-            // Scale pivot row
-            double pivot = temp[col, col];
-            if (Math.Abs(pivot) < 1e-10)
+            T pivot = temp[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), eps))
             {
-                pivot = 1e-10;
+                pivot = eps;
             }
 
             for (int j = 0; j < n; j++)
             {
-                temp[col, j] /= pivot;
-                result[col, j] /= pivot;
+                temp[col, j] = NumOps.Divide(temp[col, j], pivot);
+                result[col, j] = NumOps.Divide(result[col, j], pivot);
             }
 
-            // Eliminate column
             for (int row = 0; row < n; row++)
             {
                 if (row != col)
                 {
-                    double factor = temp[row, col];
+                    T factor = temp[row, col];
                     for (int j = 0; j < n; j++)
                     {
-                        temp[row, j] -= factor * temp[col, j];
-                        result[row, j] -= factor * result[col, j];
+                        temp[row, j] = NumOps.Subtract(temp[row, j], NumOps.Multiply(factor, temp[col, j]));
+                        result[row, j] = NumOps.Subtract(result[row, j], NumOps.Multiply(factor, result[col, j]));
                     }
                 }
             }
@@ -257,10 +248,11 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
         return result;
     }
 
-    private double LogDeterminant(double[,] matrix)
+    private T LogDeterminant(Matrix<T> matrix)
     {
-        int n = matrix.GetLength(0);
-        var temp = new double[n, n];
+        int n = matrix.Rows;
+        var temp = new Matrix<T>(n, n);
+        T eps = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < n; i++)
         {
@@ -270,16 +262,14 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        double logDet = 0;
-        int sign = 1;
+        T logDet = NumOps.Zero;
 
         for (int col = 0; col < n; col++)
         {
-            // Find pivot
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(temp[row, col]) > Math.Abs(temp[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(temp[row, col]), NumOps.Abs(temp[maxRow, col])))
                 {
                     maxRow = row;
                 }
@@ -287,28 +277,27 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
 
             if (maxRow != col)
             {
-                sign *= -1;
                 for (int j = col; j < n; j++)
                 {
-                    double tmpVal = temp[col, j];
+                    T tmpVal = temp[col, j];
                     temp[col, j] = temp[maxRow, j];
                     temp[maxRow, j] = tmpVal;
                 }
             }
 
-            if (Math.Abs(temp[col, col]) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(temp[col, col]), eps))
             {
-                return double.NegativeInfinity;
+                return NumOps.FromDouble(-1e30); // Approximate negative infinity
             }
 
-            logDet += Math.Log(Math.Abs(temp[col, col]));
+            logDet = NumOps.Add(logDet, NumOps.Log(NumOps.Abs(temp[col, col])));
 
             for (int row = col + 1; row < n; row++)
             {
-                double factor = temp[row, col] / temp[col, col];
+                T factor = NumOps.Divide(temp[row, col], temp[col, col]);
                 for (int j = col + 1; j < n; j++)
                 {
-                    temp[row, j] -= factor * temp[col, j];
+                    temp[row, j] = NumOps.Subtract(temp[row, j], NumOps.Multiply(factor, temp[col, j]));
                 }
             }
         }
@@ -331,31 +320,26 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
         var posteriorPrecision = _posteriorPrecision ?? throw new InvalidOperationException("_posteriorPrecision has not been initialized.");
 
         var scores = new Vector<T>(X.Rows);
+        T half = NumOps.FromDouble(0.5);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[_nFeatures];
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
-
             // Compute Mahalanobis distance squared
-            double mahalSq = 0;
+            T mahalSq = NumOps.Zero;
             for (int j1 = 0; j1 < _nFeatures; j1++)
             {
-                double diff1 = point[j1] - posteriorMean[j1];
+                T diff1 = NumOps.Subtract(X[i, j1], posteriorMean[j1]);
                 for (int j2 = 0; j2 < _nFeatures; j2++)
                 {
-                    double diff2 = point[j2] - posteriorMean[j2];
-                    mahalSq += diff1 * posteriorPrecision[j1, j2] * diff2;
+                    T diff2 = NumOps.Subtract(X[i, j2], posteriorMean[j2]);
+                    mahalSq = NumOps.Add(mahalSq, NumOps.Multiply(NumOps.Multiply(diff1, posteriorPrecision[j1, j2]), diff2));
                 }
             }
 
             // Negative log likelihood (higher = more anomalous)
-            double negLogLikelihood = -(_logNormalization - 0.5 * mahalSq);
+            T negLogLikelihood = NumOps.Negate(NumOps.Subtract(_logNormalization, NumOps.Multiply(half, mahalSq)));
 
-            scores[i] = NumOps.FromDouble(negLogLikelihood);
+            scores[i] = negLogLikelihood;
         }
 
         return scores;

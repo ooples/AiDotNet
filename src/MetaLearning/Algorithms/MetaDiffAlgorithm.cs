@@ -261,15 +261,15 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         int biasOffset = featureDim * _condDim;
         for (int o = 0; o < _condDim; o++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             int fLen = Math.Min(features.Length, featureDim);
             for (int i = 0; i < fLen; i++)
-                sum += NumOps.ToDouble(features[i]) * NumOps.ToDouble(_taskEncoderParams[o * featureDim + i]);
+                sum = NumOps.Add(sum, NumOps.Multiply(features[i], _taskEncoderParams[o * featureDim + i]));
             if (biasOffset + o < _taskEncoderParams.Length)
-                sum += NumOps.ToDouble(_taskEncoderParams[biasOffset + o]);
-            condition[o] = NumOps.FromDouble(Math.Tanh(sum));
+                sum = NumOps.Add(sum, _taskEncoderParams[biasOffset + o]);
+            condition[o] = sum;
         }
-        return condition;
+        return VectorTanh(condition);
     }
 
     /// <summary>

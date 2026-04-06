@@ -108,7 +108,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right balance helps the network process complex patterns efficiently.
     /// </para>
     /// </remarks>
-    private double _connectionProbability;
+    private T _connectionProbability;
 
     /// <summary>
     /// Gets the spectral radius of the reservoir weight matrix.
@@ -135,7 +135,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps balance the network's memory capacity with its stability.
     /// </para>
     /// </remarks>
-    private double _spectralRadius;
+    private T _spectralRadius;
 
     /// <summary>
     /// Gets the scaling factor applied to input signals.
@@ -160,7 +160,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right input scaling helps the network properly respond to the strength of your signals.
     /// </para>
     /// </remarks>
-    private double _inputScaling;
+    private T _inputScaling;
 
     /// <summary>
     /// Gets the leaking rate of the reservoir neurons.
@@ -188,7 +188,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps control the network's memory duration.
     /// </para>
     /// </remarks>
-    private double _leakingRate;
+    private T _leakingRate;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiquidStateMachine{T}"/> class with the specified architecture and parameters.
@@ -258,11 +258,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new LiquidStateMachineOptions();
         Options = _options;
-        _leakingRate = leakingRate;
-        _inputScaling = inputScaling;
-        _spectralRadius = spectralRadius;
+        _leakingRate = NumOps.FromDouble(leakingRate);
+        _inputScaling = NumOps.FromDouble(inputScaling);
+        _spectralRadius = NumOps.FromDouble(spectralRadius);
         _reservoirSize = reservoirSize;
-        _connectionProbability = connectionProbability;
+        _connectionProbability = NumOps.FromDouble(connectionProbability);
 
         InitializeLayers();
     }
@@ -304,7 +304,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultLSMLayers(Architecture, _reservoirSize, _connectionProbability, _spectralRadius, _inputScaling, _leakingRate));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultLSMLayers(Architecture, _reservoirSize, NumOps.ToDouble(_connectionProbability), NumOps.ToDouble(_spectralRadius), NumOps.ToDouble(_inputScaling), NumOps.ToDouble(_leakingRate)));
         }
     }
 
@@ -511,10 +511,10 @@ finally
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },
-                { "ConnectionProbability", _connectionProbability },
-                { "SpectralRadius", _spectralRadius },
-                { "InputScaling", _inputScaling },
-                { "LeakingRate", _leakingRate },
+                { "ConnectionProbability", NumOps.ToDouble(_connectionProbability) },
+                { "SpectralRadius", NumOps.ToDouble(_spectralRadius) },
+                { "InputScaling", NumOps.ToDouble(_inputScaling) },
+                { "LeakingRate", NumOps.ToDouble(_leakingRate) },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -549,10 +549,10 @@ finally
     {
         // Write LSM-specific properties
         writer.Write(_reservoirSize);
-        writer.Write(_connectionProbability);
-        writer.Write(_spectralRadius);
-        writer.Write(_inputScaling);
-        writer.Write(_leakingRate);
+        writer.Write(NumOps.ToDouble(_connectionProbability));
+        writer.Write(NumOps.ToDouble(_spectralRadius));
+        writer.Write(NumOps.ToDouble(_inputScaling));
+        writer.Write(NumOps.ToDouble(_leakingRate));
 
         // Write whether we're in training mode
         writer.Write(IsTrainingMode);
@@ -583,10 +583,10 @@ finally
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _reservoirSize = reader.ReadInt32();
-        _connectionProbability = reader.ReadDouble();
-        _spectralRadius = reader.ReadDouble();
-        _inputScaling = reader.ReadDouble();
-        _leakingRate = reader.ReadDouble();
+        _connectionProbability = NumOps.FromDouble(reader.ReadDouble());
+        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
+        _inputScaling = NumOps.FromDouble(reader.ReadDouble());
+        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
 
         // Read training mode
         IsTrainingMode = reader.ReadBoolean();
@@ -753,9 +753,9 @@ finally
         return new LiquidStateMachine<T>(
             this.Architecture,
             _reservoirSize,
-            _connectionProbability,
-            _spectralRadius,
-            _inputScaling,
-            _leakingRate);
+            NumOps.ToDouble(_connectionProbability),
+            NumOps.ToDouble(_spectralRadius),
+            NumOps.ToDouble(_inputScaling),
+            NumOps.ToDouble(_leakingRate));
     }
 }
