@@ -39,6 +39,7 @@ namespace AiDotNet.AutoML;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("A Tutorial on Bayesian Optimization", "https://arxiv.org/abs/1807.02811")]
 public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     private const int MinSuccessfulTrialsForGuidance = 12;

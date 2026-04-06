@@ -51,6 +51,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("PLS-Regression: A Basic Tool of Chemometrics", "https://doi.org/10.1016/S0169-7439(01)00155-1")]
 public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
     /// <summary>

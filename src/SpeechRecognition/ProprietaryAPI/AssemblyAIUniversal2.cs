@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AssemblyAI Universal-2", "https://www.assemblyai.com/research/universal-2")]
 public class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AssemblyAIUniversal2Options _options; public override ModelOptions GetOptions() => _options;

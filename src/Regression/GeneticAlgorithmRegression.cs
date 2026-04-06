@@ -55,6 +55,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
 public class GeneticAlgorithmRegression<T> : RegressionBase<T>
 {
     /// <summary>

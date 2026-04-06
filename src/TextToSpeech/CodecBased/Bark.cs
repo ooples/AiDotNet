@@ -34,6 +34,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
 public class Bark<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly BarkOptions _options; public override ModelOptions GetOptions() => _options;

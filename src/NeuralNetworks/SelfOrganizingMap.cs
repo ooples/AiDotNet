@@ -51,6 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288")]
 public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;

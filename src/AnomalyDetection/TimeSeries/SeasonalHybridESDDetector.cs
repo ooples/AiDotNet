@@ -47,6 +47,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Automatic Anomaly Detection in the Cloud Via Statistical Learning", "https://arxiv.org/abs/1704.07706")]
 public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _seasonLength;

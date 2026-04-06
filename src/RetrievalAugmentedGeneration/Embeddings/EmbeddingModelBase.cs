@@ -176,6 +176,45 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     }
 
     /// <summary>
+    /// Generates a deterministic fallback embedding based on the text hash.
+    /// Used when the underlying model or API is not available (e.g., in unit tests).
+    /// </summary>
+    /// <param name="text">The text to generate a fallback embedding for.</param>
+    /// <returns>A normalized vector of the correct embedding dimension.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is a "fake" embedding used when the real model is unavailable.
+    /// It produces consistent (deterministic) results for the same input text, but the vectors
+    /// are not semantically meaningful. This is useful for unit testing and offline development.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> GenerateFallbackEmbedding(string text)
+    {
+        Guard.NotNull(text);
+        if (EmbeddingDimension <= 0)
+            throw new InvalidOperationException("EmbeddingDimension must be positive.");
+
+        // Use stable FNV-1a hash instead of string.GetHashCode() which is
+        // randomized per process in .NET Core/.NET 5+
+        var lower = text.ToLowerInvariant();
+        uint hash = 2166136261u;
+        foreach (char c in lower)
+        {
+            hash ^= c;
+            hash *= 16777619u;
+        }
+        var dim = EmbeddingDimension;
+        var values = new T[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            // Generate deterministic values based on text hash and position
+            double val = Math.Sin(hash * 0.0001 + i * 0.1) * 0.5;
+            values[i] = NumOps.FromDouble(val);
+        }
+
+        return new Vector<T>(values).Normalize();
+    }
+
+    /// <summary>
     /// Validates the input text.
     /// </summary>
     /// <param name="text">The text to validate.</param>

@@ -32,7 +32,8 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YOLOv8", "https://github.com/ultralytics/ultralytics")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YOLOSeg<T> : InstanceSegmenterBase<T>
 {
     private readonly CSPDarknet<T> _backbone;

@@ -38,6 +38,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Automatic Chord Estimation from Audio: A Review of the State of the Art", "https://doi.org/10.1109/TASLP.2014.2318375")]
 public class ChordRecognizer<T> : MusicAnalysisBase<T>
 {
     private const double CosineEpsilon = 1e-10;

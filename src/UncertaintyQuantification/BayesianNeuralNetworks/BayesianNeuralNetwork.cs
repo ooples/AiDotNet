@@ -46,6 +46,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Weight Uncertainty in Neural Networks", "https://arxiv.org/abs/1505.05424")]
 public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;

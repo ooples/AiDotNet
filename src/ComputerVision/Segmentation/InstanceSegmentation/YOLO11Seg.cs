@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
@@ -55,7 +55,8 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Ultralytics YOLO11", "https://docs.ultralytics.com/models/yolo11/")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 {
     private readonly YOLO11SegOptions _options;

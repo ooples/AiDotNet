@@ -74,6 +74,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Solving Multiclass Learning Problems via Error-Correcting Output Codes", "https://doi.org/10.1613/jair.105", Year = 1995, Authors = "Thomas G. Dietterich, Ghulum Bakiri")]
 public class OneVsOneClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

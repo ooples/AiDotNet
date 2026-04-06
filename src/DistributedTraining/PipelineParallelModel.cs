@@ -71,7 +71,8 @@ namespace AiDotNet.DistributedTraining;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GPipe: Efficient Training of Giant Neural Networks", "https://arxiv.org/abs/1811.06965")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _microBatchCount;

@@ -50,6 +50,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Robust Voice Activity Detection Using Long-Term Signal Variability", "https://doi.org/10.1109/TASLP.2011.2145380")]
 public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
 {
     #region Configuration

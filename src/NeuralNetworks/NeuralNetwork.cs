@@ -46,6 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;

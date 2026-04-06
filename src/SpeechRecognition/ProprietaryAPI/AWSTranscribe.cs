@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Amazon Transcribe", "https://aws.amazon.com/transcribe/")]
 public class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AWSTranscribeOptions _options; public override ModelOptions GetOptions() => _options;

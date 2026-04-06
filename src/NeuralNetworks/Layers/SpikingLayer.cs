@@ -668,6 +668,15 @@ public partial class SpikingLayer<T> : LayerBase<T>
         : base([inputSize], [outputSize])
     {
 #pragma warning restore CS8618
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+        if (tau <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tau), tau, "Time constant tau must be positive.");
+        if (refractoryPeriod < 0)
+            throw new ArgumentOutOfRangeException(nameof(refractoryPeriod), refractoryPeriod, "Refractory period must be non-negative.");
+
         _neuronType = neuronType;
         _tau = NumOps.FromDouble(tau);
         _refractoryPeriod = NumOps.FromDouble(refractoryPeriod);

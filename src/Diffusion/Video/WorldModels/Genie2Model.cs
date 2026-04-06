@@ -50,6 +50,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Genie 2: A Large-Scale Foundation World Model", "https://deepmind.google/discover/blog/genie-2-a-large-scale-foundation-world-model/")]
 public class Genie2Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

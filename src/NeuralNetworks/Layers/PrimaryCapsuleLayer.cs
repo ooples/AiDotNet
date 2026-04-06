@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 4, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class PrimaryCapsuleLayer<T> : LayerBase<T>
+public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor for convolution operations. Shape: [outputChannels, inputChannels * kernelSize * kernelSize]

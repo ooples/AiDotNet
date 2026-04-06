@@ -93,6 +93,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Kling: A Text-to-Video Generation Model", "https://kling.kuaishou.com")]
 public class KlingModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

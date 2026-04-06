@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-public class FlashAttentionLayer<T> : LayerBase<T>
+public partial class FlashAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;

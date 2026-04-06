@@ -65,6 +65,7 @@ namespace AiDotNet.CausalInference;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Doubly Robust Estimation in Missing Data and Causal Inference Models", "https://doi.org/10.1111/j.0006-341X.2005.031007.x")]
 public class DoublyRobustEstimator<T> : CausalModelBase<T>
 {
     /// <summary>
@@ -101,10 +102,6 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// Number of folds for cross-fitting.
     /// </summary>
     private readonly int _numFolds;
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
 
     /// <summary>
     /// Initializes a new instance of the DoublyRobustEstimator class.

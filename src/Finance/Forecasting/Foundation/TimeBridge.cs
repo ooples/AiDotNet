@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -60,7 +60,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TimeBridge: Non-Stationarity Matters for Long-term Forecasting", "https://arxiv.org/abs/2410.04442")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

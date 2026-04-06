@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Gradient-Based Learning Applied to Document Recognition", "https://doi.org/10.1109/5.726791")]
 public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly ConvolutionalNeuralNetworkOptions _options;

@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pheme: AI Voice Synthesis", "https://www.pheme.ai")]
 public class Pheme<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PhemeOptions _options; public override ModelOptions GetOptions() => _options;

@@ -48,6 +48,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Learning for CVaR Estimation", "https://doi.org/10.21314/JOR.2000.038")]
 public class NeuralCVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields

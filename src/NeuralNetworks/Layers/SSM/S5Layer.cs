@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class S5Layer<T> : LayerBase<T>
+public partial class S5Layer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _stateDimension;
@@ -968,6 +968,13 @@ public class S5Layer<T> : LayerBase<T>
             Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias,
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

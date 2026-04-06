@@ -251,6 +251,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         InputShape = inputShape;
         InputShapes = [inputShape];
+        _cachedInputPorts = null; // Invalidate cached port metadata
     }
 
     /// <summary>
@@ -928,11 +929,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <returns>Output tensor.</returns>
     public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
-        if (inputs.TryGetValue("input", out var input))
-            return Forward(input);
+        // Only use single-tensor shortcut for true single-port layers.
+        // Multi-port layers must override this method to handle all their inputs.
+        if (InputPorts.Count <= 1)
+        {
+            if (inputs.TryGetValue("input", out var input))
+                return Forward(input);
 
-        if (inputs.Count == 1)
-            return Forward(inputs.Values.First());
+            if (inputs.Count == 1)
+                return Forward(inputs.Values.First());
+        }
 
         var missing = InputPorts
             .Where(p => p.Required && !inputs.ContainsKey(p.Name))
@@ -955,11 +961,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     public virtual Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
-        if (inputs.TryGetValue("input", out var input))
-            return ForwardGpu(input);
+        if (InputPorts.Count <= 1)
+        {
+            if (inputs.TryGetValue("input", out var input))
+                return ForwardGpu(input);
 
-        if (inputs.Count == 1)
-            return ForwardGpu(inputs.Values.First());
+            if (inputs.Count == 1)
+                return ForwardGpu(inputs.Values.First());
+        }
 
         throw new NotSupportedException(
             $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");

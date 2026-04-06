@@ -63,6 +63,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("In Defense of One-Vs-All Classification", "https://jmlr.org/papers/v5/rifkin04a.html")]
 public class OneVsRestClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

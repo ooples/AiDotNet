@@ -198,18 +198,113 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Trains the N-BEATS model using mini-batch gradient descent.
+    /// </summary>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        int numSamples = x.Rows;
+        var random = new Random(42);
+
+        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
+            var indices = Enumerable.Range(0, numSamples).OrderBy(_ => random.Next()).ToList();
+
+            for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
+            {
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
+                int batchSize = batchEnd - batchStart;
+
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    if (bi % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
+                    int idx = indices[batchStart + bi];
+                    var lookback = ExtractLookbackWindow(x, y, idx);
+                    T target = y[idx];
+
+                    // Forward pass through all blocks
+                    Vector<T> residual = lookback.Clone();
+                    Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
+
+                    for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
+                    {
+                        var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
+                        residual = (Vector<T>)Engine.Subtract(residual, backcast);
+                        aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
+                    }
+
+                    // Compute gradient of MSE loss on first forecast step
+                    T prediction = aggregatedForecast[0];
+                    T error = NumOps.Subtract(prediction, target);
+                    T gradScale = NumOps.Multiply(NumOps.FromDouble(2.0 / batchSize), error);
+
+                    // Update each block with scaled learning rate
+                    T scaledLr = NumOps.Multiply(learningRate, gradScale);
+                    for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
+                    {
+                        _blocks[blockIdx].UpdateParameters(scaledLr);
+                    }
+                }
+            }
+        }
+    }
+
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
         int trainN = _trainingSeries.Length;
         var predictions = new Vector<T>(n);
+
+        // If the input has enough columns to serve as a lookback window, use rows directly
+        if (input.Columns >= _options.LookbackWindow)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                predictions[i] = PredictSingle(input.GetRow(i));
+            }
+            return predictions;
+        }
+
+        // Univariate case: build lookback windows from training series + autoregressive predictions.
+        // Construct a running series combining training data and new predictions.
+        var series = new List<T>(trainN + n);
+        for (int i = 0; i < trainN; i++)
+            series.Add(_trainingSeries[i]);
+
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
-                predictions[i] = _trainingSeries[i];
+            // Always produce a model prediction — never return stored training data
+            int seriesLen = series.Count;
+            if (seriesLen >= _options.LookbackWindow)
+            {
+                var lookback = new Vector<T>(_options.LookbackWindow);
+                int start = seriesLen - _options.LookbackWindow;
+                for (int j = 0; j < _options.LookbackWindow; j++)
+                    lookback[j] = series[start + j];
+                predictions[i] = PredictSingle(lookback);
+            }
             else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            {
+                // Not enough history: pad with zeros
+                var lookback = new Vector<T>(_options.LookbackWindow);
+                int offset = _options.LookbackWindow - seriesLen;
+                for (int j = 0; j < seriesLen; j++)
+                    lookback[offset + j] = series[j];
+                predictions[i] = PredictSingle(lookback);
+            }
+            series.Add(predictions[i]);
         }
+
         return predictions;
     }
 

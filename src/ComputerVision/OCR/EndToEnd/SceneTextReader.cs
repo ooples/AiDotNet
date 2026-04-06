@@ -31,6 +31,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
+[ModelPaper("ABCNet: Real-time Scene Text Spotting", "https://arxiv.org/abs/1911.09941")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {

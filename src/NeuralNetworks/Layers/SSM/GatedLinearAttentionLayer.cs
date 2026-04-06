@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-internal class GatedLinearAttentionLayer<T> : LayerBase<T>
+internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -324,6 +324,16 @@ internal class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient, negLR));
         _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
         _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

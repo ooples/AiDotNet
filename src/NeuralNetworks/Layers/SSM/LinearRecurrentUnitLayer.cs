@@ -79,7 +79,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class LinearRecurrentUnitLayer<T> : LayerBase<T>
+public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _stateDimension;
@@ -670,6 +670,13 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
         _inputProjectionBias = Engine.TensorAdd(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

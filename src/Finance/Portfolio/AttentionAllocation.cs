@@ -43,6 +43,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Attention-Based Portfolio Allocation", "https://arxiv.org/abs/2007.07643")]
 public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

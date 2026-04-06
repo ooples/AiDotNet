@@ -67,6 +67,7 @@ namespace AiDotNet.Regression.MixedEffects;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Generalized Linear Mixed Models", "https://doi.org/10.1201/b13459")]
 public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 {
     /// <summary>

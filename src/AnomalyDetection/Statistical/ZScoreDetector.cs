@@ -33,6 +33,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Exploratory Data Analysis", "https://doi.org/10.1002/bimj.4710230408")]
 public class ZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _zThreshold;

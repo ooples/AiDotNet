@@ -20,7 +20,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// scores avoids recalculating the same parent-set configurations.
 /// </para>
 /// <para>
-/// Reference: Ramsey et al. (2017), "A Million Variables and More", JMLR.
+/// Reference: Ramsey et al. (2017), "A Million Variables and More", International Journal of Data Science and Analytics.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -31,6 +31,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("A Million Variables and More: The Fast Greedy Equivalence Search Algorithm", "https://doi.org/10.1007/s41060-016-0032-z")]
 public class FGESAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

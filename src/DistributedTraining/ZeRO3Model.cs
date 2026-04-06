@@ -58,7 +58,8 @@ namespace AiDotNet.DistributedTraining;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ZeRO: Memory Optimizations Toward Training Trillion Parameter Models", "https://arxiv.org/abs/1910.02054")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class ZeRO3Model<T, TInput, TOutput> : FSDPModel<T, TInput, TOutput>
 {
     /// <summary>

@@ -85,37 +85,17 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
 
         var epsilon = NumOps.FromDouble(Options.Epsilon);
 
-        // Compute exact gradient of loss w.r.t. input using tape-based autodiff
-        var inputTensor = Tensor<T>.FromVector(vectorInput);
-        var targetTensor = Tensor<T>.FromVector(vectorLabel);
+        // Compute gradient of loss w.r.t. input
         Vector<T> gradient;
+        if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
         {
-            var eng = AiDotNetEngine.Current;
-            using var tape = new GradientTape<T>();
-            // Forward pass through model (tape records engine ops)
-            var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, input);
-            Tensor<T> outputTensor;
-            if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
-            {
-                outputTensor = nnModel.ForwardForTraining(inputTensor);
-            }
-            else
-            {
-                var output = targetModel.Predict(modelInput);
-                outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
-            }
-            // Compute loss via tape-recorded ops
-            var diff = eng.TensorSubtract(outputTensor, targetTensor);
-            var squared = eng.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
-            // Get gradient of loss w.r.t. input
-            var grads = tape.ComputeGradients(loss, [inputTensor]);
-            if (!grads.TryGetValue(inputTensor, out var g))
-                throw new InvalidOperationException(
-                    "FGSM: gradient computation failed — no gradient for input tensor. " +
-                    "The target model must be a NeuralNetworkBase<T> for tape-based adversarial attacks.");
-            gradient = g.ToVector();
+            // Tape-based autodiff for neural network models
+            gradient = ComputeTapeGradient(vectorInput, vectorLabel, nnModel);
+        }
+        else
+        {
+            // Numerical gradient via central finite differences for black-box models
+            gradient = ComputeNumericalGradient(vectorInput, vectorLabel, input, targetModel);
         }
 
         // Apply FGSM perturbation using vectorized operations:
@@ -138,6 +118,92 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
     }
 
+
+    /// <summary>
+    /// Computes exact gradient of loss w.r.t. input using tape-based autodiff.
+    /// Only works with NeuralNetworkBase models whose forward pass is tape-recorded.
+    /// </summary>
+    private Vector<T> ComputeTapeGradient(
+        Vector<T> vectorInput,
+        Vector<T> vectorLabel,
+        NeuralNetworks.NeuralNetworkBase<T> nnModel)
+    {
+        var eng = AiDotNetEngine.Current;
+        var inputTensor = Tensor<T>.FromVector(vectorInput);
+        var targetTensor = Tensor<T>.FromVector(vectorLabel);
+        using var tape = new GradientTape<T>();
+        var outputTensor = nnModel.ForwardForTraining(inputTensor);
+        var diff = eng.TensorSubtract(outputTensor, targetTensor);
+        var squared = eng.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
+        var grads = tape.ComputeGradients(loss, [inputTensor]);
+        if (!grads.TryGetValue(inputTensor, out var g))
+            throw new InvalidOperationException(
+                "FGSM: gradient computation failed — no gradient for input tensor.");
+        return g.ToVector();
+    }
+
+    /// <summary>
+    /// Computes the gradient of MSE loss w.r.t. input using central finite differences.
+    /// This is the standard approach for adversarial attacks on black-box models:
+    /// grad_i ≈ (loss(x + δ*e_i) - loss(x - δ*e_i)) / (2δ)
+    /// </summary>
+    private Vector<T> ComputeNumericalGradient(
+        Vector<T> vectorInput,
+        Vector<T> vectorLabel,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel)
+    {
+        const double delta = 1e-4;
+        var gradient = new Vector<T>(vectorInput.Length);
+
+        for (int i = 0; i < vectorInput.Length; i++)
+        {
+            // Forward: x + delta * e_i (clamped to [0,1] valid input domain)
+            var plusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
+            plusInput[i] = NumOps.Add(plusInput[i], NumOps.FromDouble(delta));
+            double plusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(plusInput[i])));
+            plusInput[i] = NumOps.FromDouble(plusVal);
+            var plusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(plusInput, referenceInput);
+            var plusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(plusModelInput));
+            var plusLoss = ComputeMseLoss(plusOutput, vectorLabel);
+
+            // Backward: x - delta * e_i (clamped to [0,1])
+            var minusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
+            minusInput[i] = NumOps.Subtract(minusInput[i], NumOps.FromDouble(delta));
+            double minusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(minusInput[i])));
+            minusInput[i] = NumOps.FromDouble(minusVal);
+            var minusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(minusInput, referenceInput);
+            var minusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(minusModelInput));
+            var minusLoss = ComputeMseLoss(minusOutput, vectorLabel);
+
+            // Central difference using actual clamped step width
+            double actualDelta = plusVal - minusVal;
+            gradient[i] = actualDelta > 1e-10
+                ? NumOps.FromDouble((NumOps.ToDouble(plusLoss) - NumOps.ToDouble(minusLoss)) / actualDelta)
+                : NumOps.Zero;
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes the mean squared error loss between output and target vectors.
+    /// </summary>
+    private T ComputeMseLoss(Vector<T> output, Vector<T> target)
+    {
+        var diff = Engine.Subtract<T>(output, target);
+        var squared = new Vector<T>(diff.Length);
+        for (int i = 0; i < diff.Length; i++)
+            squared[i] = NumOps.Multiply(diff[i], diff[i]);
+        var sum = NumOps.Zero;
+        for (int i = 0; i < squared.Length; i++)
+        {
+            sum = NumOps.Add(sum, squared[i]);
+        }
+        return NumOps.Divide(sum, NumOps.FromDouble(squared.Length));
+    }
 
     /// <inheritdoc/>
     public override TInput CalculatePerturbation(TInput original, TInput adversarial)

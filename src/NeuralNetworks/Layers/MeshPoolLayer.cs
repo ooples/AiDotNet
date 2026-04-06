@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2", TestSetupCode = "var e = new int[4, 2]; for (int i = 0; i < 4; i++) for (int j = 0; j < 2; j++) e[i, j] = (i + j + 1) % 4; ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(e);")]
-public class MeshPoolLayer<T> : LayerBase<T>
+public partial class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -61,6 +61,14 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// Gets the number of input feature channels per edge.
     /// </summary>
     public int InputChannels { get; private set; }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["TargetEdges"] = TargetEdges.ToString();
+        metadata["NumNeighbors"] = _numNeighbors.ToString();
+        return metadata;
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

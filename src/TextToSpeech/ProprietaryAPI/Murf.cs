@@ -32,7 +32,8 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Murf AI", "https://murf.ai")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Murf<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MurfOptions _options; public override ModelOptions GetOptions() => _options;

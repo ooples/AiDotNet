@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WellSaid Labs", "https://wellsaidlabs.com")]
 public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly WellSaidLabsOptions _options; public override ModelOptions GetOptions() => _options;

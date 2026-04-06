@@ -348,14 +348,16 @@ public partial class RBMLayer<T> : LayerBase<T>
         _visibleBiases.Fill(NumOps.Zero);
         _hiddenBiases.Fill(NumOps.Zero);
 
-        // Initialize weights: U(-0.1, 0.1) scaled by 1/sqrt(visibleUnits).
-        // Standard U(-0.05, 0.05) is too narrow for large layers.
-        // This gives wider initialization while remaining stable for sigmoid.
-        double range = 2.0 / Math.Sqrt(_visibleUnits);
+        // Xavier/Glorot uniform initialization (Glorot & Bengio, 2010):
+        // U(-a, a) where a = sqrt(6 / (fan_in + fan_out))
+        // This ensures Var(W) = 2 / (fan_in + fan_out) for uniform distributions,
+        // keeping sigmoid activations in the linear regime while preserving gradient flow.
+        double a = Math.Sqrt(6.0 / (_visibleUnits + _hiddenUnits));
         var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
-        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(range));
+        // Map [0,1] uniform to [-a, a]
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * a));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        shiftTensor.Fill(NumOps.FromDouble(range / 2.0));
+        shiftTensor.Fill(NumOps.FromDouble(a));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);

@@ -57,6 +57,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Spline Models for Observational Data", "https://doi.org/10.1137/1.9781611970128")]
 public class SplineRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

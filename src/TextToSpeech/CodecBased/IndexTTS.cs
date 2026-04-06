@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("IndexTTS: Zero-Shot Text-to-Speech", "https://github.com/indexteam/IndexTTS")]
 public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly IndexTTSOptions _options; public override ModelOptions GetOptions() => _options;

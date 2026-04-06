@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class RBFLayer<T> : LayerBase<T>
+public partial class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the center positions of each RBF neuron in the input space.
@@ -46,6 +46,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// of a center point for one RBF neuron. These centers are the primary trainable parameters of
     /// the layer and determine where in the input space each neuron responds most strongly.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _centers;
 
     /// <summary>
@@ -57,6 +58,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _widths;
 
     /// <summary>

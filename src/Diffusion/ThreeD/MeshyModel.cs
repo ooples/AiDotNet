@@ -91,6 +91,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Meshy: AI 3D Model Generator", "https://www.meshy.ai")]
 public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

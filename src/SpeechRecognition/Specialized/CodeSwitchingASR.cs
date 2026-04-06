@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("End-to-End Speech Recognition for Code-Switching", "https://arxiv.org/abs/2011.13573")]
 public class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CodeSwitchingASROptions _options; public override ModelOptions GetOptions() => _options;

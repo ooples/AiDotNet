@@ -98,6 +98,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelMetadataExempt]
 public class UdioModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

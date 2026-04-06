@@ -441,7 +441,7 @@ public class UNetDiscriminator<T> : LayerBase<T>
 /// <summary>
 /// Convolutional block for U-Net encoder with optional downsampling.
 /// </summary>
-internal class UNetConvBlock<T> : LayerBase<T>
+internal partial class UNetConvBlock<T> : LayerBase<T>
 {
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
@@ -590,7 +590,7 @@ internal class UNetConvBlock<T> : LayerBase<T>
 /// <summary>
 /// Upsampling block for U-Net decoder with skip connection concatenation.
 /// </summary>
-internal class UNetUpBlock<T> : LayerBase<T>
+internal partial class UNetUpBlock<T> : LayerBase<T>
 {
     private readonly UpsamplingLayer<T> _upsample;
     private readonly ConvolutionalLayer<T> _conv1;

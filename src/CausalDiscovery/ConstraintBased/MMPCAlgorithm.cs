@@ -29,6 +29,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("The Max-Min Hill-Climbing Bayesian Network Structure Learning Algorithm", "https://doi.org/10.1007/s10994-006-6889-7")]
 public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
 {
     private double _minAssocThreshold = 0.05;

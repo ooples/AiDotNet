@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class MixtureOfMambaLayer<T> : LayerBase<T>
+public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numExperts;
@@ -506,6 +506,15 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_routerWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_routerBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

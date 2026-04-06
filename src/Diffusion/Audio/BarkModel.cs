@@ -98,6 +98,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
 public class BarkModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

@@ -60,6 +60,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Large Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16")]
 public class SGDClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

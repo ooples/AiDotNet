@@ -52,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Real-Time Computing Without Stable States", "https://doi.org/10.1162/089976602760407955")]
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
@@ -472,14 +473,14 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-try
-{
-    TrainWithTape(input, expectedOutput, _optimizer);
-}
-finally
-{
-    SetTrainingMode(false);
-}
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

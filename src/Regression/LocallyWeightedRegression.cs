@@ -59,6 +59,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting", "https://doi.org/10.1080/01621459.1988.10478639")]
 public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

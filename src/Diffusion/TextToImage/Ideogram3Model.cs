@@ -89,6 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Ideogram 3", "https://about.ideogram.ai/3.0")]
 public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

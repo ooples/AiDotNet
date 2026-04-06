@@ -53,6 +53,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Classification and Regression Trees", "https://doi.org/10.1201/9781315139470")]
 public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 {
     /// <summary>

@@ -53,6 +53,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Applied Linear Statistical Models", "https://doi.org/10.1007/978-0-387-98502-0")]
 public class SimpleRegression<T> : RegressionBase<T>
 {
     /// <summary>

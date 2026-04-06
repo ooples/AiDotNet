@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
@@ -58,7 +58,8 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Ultralytics YOLOv8", "https://docs.ultralytics.com/models/yolov8/")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 {
     private readonly YOLOv8SegOptions _options;

@@ -32,6 +32,8 @@ namespace AiDotNet.NeuralNetworks;
 /// Common applications include text generation, translation, speech recognition, and stock price prediction - 
 /// all tasks where what happened before affects how you interpret what's happening now.
 /// </para>
+/// <para><b>Reference:</b> Elman, J.L. (1990). "Finding structure in time." Cognitive Science, 14(2), 179-211.
+/// https://doi.org/10.1016/0364-0213(90)90002-E</para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -50,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Long-Term Dependencies with Gradient Descent is Difficult", "https://doi.org/10.1109/72.279181")]
 public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;
@@ -306,55 +309,12 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
         }
 
-        SetTrainingMode(true);
+        // Reset recurrent state before each training step
         foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
             layer.ResetState();
-        }
 
-        try
-        {
-            // Forward pass with memory for backpropagation
-            var output = ForwardWithMemory(input);
-
-            // Calculate loss
-            var outputVector = output.ToVector();
-            var expectedVector = expectedOutput.ToVector();
-            LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-            // Compute loss gradient
-            var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-
-            // Reshape gradient to match output tensor shape for proper BPTT
-            var gradTensor = Tensor<T>.FromVector(lossGrad);
-            if (gradTensor.Rank < output.Rank)
-                gradTensor = gradTensor.Reshape(output._shape);
-
-            // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
-            var clippedLossGrad = ClipGradient(gradTensor);
-
-            // Backpropagate error through time
-
-            // Use _learningRate but cap for Adam stability (default SGD LR of 0.01 is too high for Adam)
-            double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.001);
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
-            var paramGrads = GetParameterGradients();
-            var currentParams = GetParameters();
-            var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-            UpdateParameters(updatedParams);
-        }
-        finally
-        {
-            // Restore inference mode (per PyTorch model.train()/model.eval() pattern)
-            SetTrainingMode(false);
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
-        }
+        TrainWithTape(input, expectedOutput);
     }
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Updates the parameters of all layers in the network based on computed gradients.

@@ -83,6 +83,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Riffusion: Stable Diffusion for Real-Time Music Generation", "https://riffusion.com/about")]
 public class RiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

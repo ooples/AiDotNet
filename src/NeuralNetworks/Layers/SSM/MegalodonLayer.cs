@@ -78,7 +78,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public class MegalodonLayer<T> : LayerBase<T>
+public partial class MegalodonLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -1000,6 +1000,20 @@ public class MegalodonLayer<T> : LayerBase<T>
         _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_emaInputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaInputBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_emaOutputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaOutputBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
     }
 
     /// <inheritdoc />

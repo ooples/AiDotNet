@@ -83,7 +83,8 @@ namespace AiDotNet.DistributedTraining;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PyTorch FSDP: Scaling Fully Sharded Data Parallel", "https://arxiv.org/abs/2304.11277")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _computedGradients;

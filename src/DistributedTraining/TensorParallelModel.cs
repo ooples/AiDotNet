@@ -89,7 +89,8 @@ namespace AiDotNet.DistributedTraining;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Megatron-LM: Training Multi-Billion Parameter Language Models", "https://arxiv.org/abs/1909.08053")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private int _tensorParallelSize;

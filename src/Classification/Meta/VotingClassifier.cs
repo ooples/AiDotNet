@@ -67,6 +67,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("The Strength of Weak Learnability", "https://doi.org/10.1007/BF00116037")]
 public class VotingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

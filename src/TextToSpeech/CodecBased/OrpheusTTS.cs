@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OrpheusTTS: Audio Native Speech Generation", "https://github.com/canopyai/OrpheusTTS")]
 public class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OrpheusTTSOptions _options; public override ModelOptions GetOptions() => _options;

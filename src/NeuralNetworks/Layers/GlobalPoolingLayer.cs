@@ -157,6 +157,13 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => false;
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PoolingType"] = _poolingType.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GlobalPoolingLayer{T}"/> class with a scalar activation function.
     /// </summary>

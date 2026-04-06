@@ -69,6 +69,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelTask(ModelTask.MultiClassClassification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Classifier Chains for Multi-label Classification", "https://doi.org/10.1007/s10994-011-5256-5")]
 public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>

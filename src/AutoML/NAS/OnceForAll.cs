@@ -15,7 +15,7 @@ namespace AiDotNet.AutoML.NAS
     /// Trains a single large network that supports diverse architectural configurations,
     /// enabling instant specialization to different hardware platforms without retraining.
     ///
-    /// Reference: "Once for All: Train One Network and Specialize it for Efficient Deployment" (ICLR 2020)
+    /// Reference: "Once-for-All: Train One Network and Specialize it for Efficient Deployment" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
     /// <remarks>
@@ -39,6 +39,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Once-for-All: Train One Network and Specialize it for Efficient Deployment", "https://arxiv.org/abs/1908.09791")]
     public class OnceForAll<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
