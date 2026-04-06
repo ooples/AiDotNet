@@ -100,6 +100,11 @@ public partial class RBMLayer<T> : LayerBase<T>
     private Tensor<T> _weights;
 
     /// <summary>
+    /// Cached transpose of weights — invalidated when weights change via SetParameters/CD update.
+    /// </summary>
+    private Tensor<T>? _weightsTCache;
+
+    /// <summary>
     /// Gets or sets the bias values for the visible units.
     /// </summary>
     /// <remarks>
@@ -409,8 +414,8 @@ public partial class RBMLayer<T> : LayerBase<T>
         _lastVisibleInput = visible2D;
 
         // Use FusedLinear for tape-tracked forward: h = sigmoid(v @ W^T + b_h)
-        var weightsT = Engine.TensorTranspose(_weights);
-        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
+        _weightsTCache ??= Engine.TensorTranspose(_weights);
+        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, _weightsTCache, _hiddenBiases, FusedActivationType.Sigmoid);
         _lastHiddenOutput = hiddenProbs;
 
         if (rank == 1)
@@ -879,6 +884,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         // _hiddenBiases is a 1D Tensor [hiddenUnits]
         for (int i = 0; i < _hiddenBiases.Length; i++)
             _hiddenBiases.SetFlat(i, parameters[idx++]);
+        _weightsTCache = null;
     }
 
     /// <summary>

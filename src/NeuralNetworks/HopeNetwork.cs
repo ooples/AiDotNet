@@ -472,15 +472,15 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         try
         {
             TrainWithTape(input, expectedOutput, _optimizer);
-
-            // Periodically consolidate memory
+        }
+        finally
+        {
+            // Consolidate memory even on failure — accumulated state should be preserved
             if (_adaptationStep % 100 == 0)
             {
                 ConsolidateMemory();
             }
-        }
-        finally
-        {
+
             SetTrainingMode(false);
             foreach (var layer in Layers)
                 layer.SetTrainingMode(false);

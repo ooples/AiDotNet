@@ -15,14 +15,16 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
 {
     private readonly int _capacity;
     private readonly int _dimension;
+    private readonly double _inverseTemperature;
     private readonly List<(Vector<T> Input, Vector<T> Target)> _memories;
     private Matrix<T> _associationMatrix;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
-    public AssociativeMemory(int dimension, int capacity = 1000)
+    public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
     {
         _dimension = dimension;
         _capacity = capacity;
+        _inverseTemperature = inverseTemperature;
         _memories = new List<(Vector<T>, Vector<T>)>();
         _associationMatrix = new Matrix<T>(dimension, dimension);
     }
@@ -51,22 +53,22 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
             throw new ArgumentException("Query must match memory dimension");
 
         // Modern continuous Hopfield retrieval per Ramsauer et al. 2021:
-        // new_state = softmax(β * stored_patterns^T @ query) @ stored_patterns
+        // Scores keys (Input) against query, returns weighted sum of values (Target).
+        // new_state = softmax(β * keys^T @ query) @ values
         // Falls back to association matrix when no memories are stored.
         if (_memories.Count > 0)
         {
-            T beta = _numOps.FromDouble(8.0); // Inverse temperature (sharpens attention)
             var scores = new double[_memories.Count];
             double maxScore = double.NegativeInfinity;
 
-            // Compute similarity scores: β * <pattern_i, query>
+            // Compute similarity scores: β * <key_i, query>
             for (int m = 0; m < _memories.Count; m++)
             {
                 double dot = 0;
-                var pattern = _memories[m].Input;
+                var key = _memories[m].Input;
                 for (int d = 0; d < _dimension; d++)
-                    dot += _numOps.ToDouble(_numOps.Multiply(pattern[d], query[d]));
-                scores[m] = _numOps.ToDouble(beta) * dot;
+                    dot += _numOps.ToDouble(_numOps.Multiply(key[d], query[d]));
+                scores[m] = _inverseTemperature * dot;
                 if (scores[m] > maxScore) maxScore = scores[m];
             }
 
@@ -80,14 +82,14 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
             for (int m = 0; m < _memories.Count; m++)
                 scores[m] /= (sumExp + 1e-10);
 
-            // Weighted sum of stored targets
+            // Weighted sum of stored values (Target)
             var result = new Vector<T>(_dimension);
             for (int m = 0; m < _memories.Count; m++)
             {
                 T weight = _numOps.FromDouble(scores[m]);
-                var target = _memories[m].Target;
+                var value = _memories[m].Target;
                 for (int d = 0; d < _dimension; d++)
-                    result[d] = _numOps.Add(result[d], _numOps.Multiply(weight, target[d]));
+                    result[d] = _numOps.Add(result[d], _numOps.Multiply(weight, value[d]));
             }
             return result;
         }

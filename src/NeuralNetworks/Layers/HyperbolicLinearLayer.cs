@@ -215,7 +215,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         // M⊗_c x = tanh(||Mx|| * arctanh(√c·||x||) / (√c·||x||)) * Mx / (√c·||Mx||)
         // All operations are tape-tracked tensor ops for automatic differentiation.
 
-        T c = _curvature;
+        // Use |c| — curvature is stored as negative but Möbius formulas require positive
+        T c = NumOps.Abs(_curvature);
         T sqrtC = NumOps.Sqrt(c);
         T eps = NumOps.FromDouble(1e-7);
 
@@ -254,17 +255,15 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         // Broadcast scale [batch,1] across mx [batch, outputFeatures] via Engine
         var resultInBall = Engine.TensorBroadcastMultiply(scale, mx);
 
-        // Step 7: Add bias via Möbius addition approximation (small bias regime).
-        // Compute bias norms per output: ||b_o|| = sqrt(sum_i(b[o,i]²))
-        // Then add to result: p = resultInBall + biasNorm (broadcast across batch)
-        var biasSq = Engine.TensorMultiply(_biases, _biases); // [outputFeatures, inputFeatures]
-        var biasNormSq = Engine.ReduceSum(biasSq, new[] { 1 }, keepDims: false); // [outputFeatures]
-        var biasNorm = Engine.TensorSqrt(Engine.TensorAddScalar(biasNormSq, eps)); // [outputFeatures]
-        var biasNorm2D = biasNorm.Reshape([1, OutputFeatures]);
-        var withBias = Engine.TensorBroadcastAdd(resultInBall, biasNorm2D); // [batch, outputFeatures]
+        // Step 7: Add bias — mean of bias vector per output as scalar shift.
+        // _biases is [outputFeatures, inputFeatures]; reduce to [outputFeatures] via mean
+        var biasSum = Engine.ReduceSum(_biases, new[] { 1 }, keepDims: false); // [outputFeatures]
+        var biasMean = Engine.TensorMultiplyScalar(biasSum, NumOps.FromDouble(1.0 / InputFeatures));
+        var biasMean2D = biasMean.Reshape([1, OutputFeatures]);
+        var withBias = Engine.TensorBroadcastAdd(resultInBall, biasMean2D); // [batch, outputFeatures]
 
-        // Step 8: Poincaré distance from origin = (2/√c) * arctanh(√c * |p|)
-        // All via Engine tensor ops — zero per-element loops
+        // Step 8: Poincaré distance from origin = (2/√|c|) * arctanh(√|c| * ||p||)
+        // Distance is non-negative by definition
         var absP = Engine.TensorAbs(withBias); // [batch, outputFeatures]
         var sqrtCp = Engine.TensorMultiplyScalar(absP, sqrtC);
         var clampedP = Engine.TensorClamp(sqrtCp, NumOps.Zero, NumOps.FromDouble(0.9999));
@@ -273,9 +272,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clampedP);
         var atanhP = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(onePlusP, oneMinusP)), NumOps.FromDouble(0.5));
         T twoOverSqrtC = NumOps.Divide(NumOps.FromDouble(2.0), sqrtC);
-        var dist = Engine.TensorMultiplyScalar(atanhP, twoOverSqrtC);
-        // Preserve sign: output = sign(withBias) * dist
-        var output = Engine.TensorMultiply(Engine.TensorSign(withBias), dist); // [batch, outputFeatures]
+        var output = Engine.TensorMultiplyScalar(atanhP, twoOverSqrtC); // [batch, outputFeatures]
 
         _lastOutput = output;
 
