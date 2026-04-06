@@ -63,7 +63,9 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
-    private double _maxRadius;
+
+    private T _maxRadius;
+
 
     /// <summary>
     /// Gets the alpha parameter (sampling neighborhood ratio).
@@ -88,6 +90,7 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
     public LOCIDetector(double alpha = 0.5, int kMax = 20, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _maxRadius = NumOps.Zero;
         if (alpha <= 0 || alpha > 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),
@@ -143,86 +146,93 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double maxMdef = 0;
+            T maxMdef = NumOps.Zero;
             bool hadNeighbors = false;
 
             // Test multiple radii (use more steps for better resolution)
             for (int ri = 1; ri <= NumRadiiSteps; ri++)
             {
                 // Use slightly larger than _maxRadius to handle floating-point edge cases
-                double r = (_maxRadius * RadiusOvershootFactor * ri) / NumRadiiSteps;
-                double alphaR = _alpha * r;
+                T r = NumOps.Divide(
+                    NumOps.Multiply(NumOps.Multiply(_maxRadius, NumOps.FromDouble(RadiusOvershootFactor)), NumOps.FromDouble(ri)),
+                    NumOps.FromDouble(NumRadiiSteps));
+                T alphaR = NumOps.Multiply(NumOps.FromDouble(_alpha), r);
 
                 // Count points in r-neighborhood (counting neighborhood)
-                int nR = CountPointsInRadius(X, i, _trainingData!, r);
+                int nR = CountPointsInRadius(X, i, _trainingData ?? throw new InvalidOperationException("Model not properly fitted."), r);
 
                 if (nR < 2) continue;
                 hadNeighbors = true;
 
                 // Get points in alpha*r neighborhood (sampling neighborhood)
-                var samplingNeighbors = GetPointsInRadius(X, i, _trainingData!, alphaR);
+                var samplingNeighbors = GetPointsInRadius(X, i, _trainingData, alphaR);
 
                 if (samplingNeighbors.Count == 0)
                 {
-                    // No sampling neighbors means this point is extremely isolated at this radius.
-                    // It has counting neighbors at radius r but not at alpha*r, indicating
-                    // a large gap between this point and its neighborhood.
-                    if (IsolatedPointScore > maxMdef) maxMdef = IsolatedPointScore;
+                    T isolatedScore = NumOps.FromDouble(IsolatedPointScore);
+                    if (NumOps.GreaterThan(isolatedScore, maxMdef)) maxMdef = isolatedScore;
                     continue;
                 }
 
                 // Compute average n(r) of neighbors in sampling neighborhood
-                double avgNR = 0;
-                double varNR = 0;
+                T avgNR = NumOps.Zero;
 
                 foreach (int neighborIdx in samplingNeighbors)
                 {
                     int neighborNR = CountPointsInRadiusFromTraining(neighborIdx, r);
-                    avgNR += neighborNR;
+                    avgNR = NumOps.Add(avgNR, NumOps.FromDouble(neighborNR));
                 }
-                avgNR /= samplingNeighbors.Count;
+                avgNR = NumOps.Divide(avgNR, NumOps.FromDouble(samplingNeighbors.Count));
 
                 // Compute variance
+                T varNR = NumOps.Zero;
                 foreach (int neighborIdx in samplingNeighbors)
                 {
                     int neighborNR = CountPointsInRadiusFromTraining(neighborIdx, r);
-                    varNR += (neighborNR - avgNR) * (neighborNR - avgNR);
+                    T diff = NumOps.Subtract(NumOps.FromDouble(neighborNR), avgNR);
+                    varNR = NumOps.Add(varNR, NumOps.Multiply(diff, diff));
                 }
-                varNR /= samplingNeighbors.Count;
+                varNR = NumOps.Divide(varNR, NumOps.FromDouble(samplingNeighbors.Count));
 
                 // MDEF = 1 - n(p,r) / avg_n(r)
-                double mdef = avgNR > 0 ? 1.0 - (nR / avgNR) : 0;
+                T mdef = NumOps.GreaterThan(avgNR, NumOps.Zero)
+                    ? NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.FromDouble(nR), avgNR))
+                    : NumOps.Zero;
 
                 // Sigma-MDEF (normalized deviation)
-                double sigmaMdef = avgNR > 0 ? Math.Sqrt(varNR) / avgNR : 0;
+                T sigmaMdef = NumOps.GreaterThan(avgNR, NumOps.Zero)
+                    ? NumOps.Divide(NumOps.Sqrt(varNR), avgNR)
+                    : NumOps.Zero;
 
                 // Final score: MDEF / sigma-MDEF (or just MDEF if sigma is 0)
-                double lociScore = sigmaMdef > 0 ? Math.Abs(mdef) / sigmaMdef : Math.Abs(mdef);
+                T absMdef = NumOps.Abs(mdef);
+                T lociScore = NumOps.GreaterThan(sigmaMdef, NumOps.Zero)
+                    ? NumOps.Divide(absMdef, sigmaMdef)
+                    : absMdef;
 
-                if (lociScore > maxMdef)
+                if (NumOps.GreaterThan(lociScore, maxMdef))
                 {
                     maxMdef = lociScore;
                 }
             }
 
             // If the point had no neighbors at ANY tested radius, it is an extreme isolate.
-            // Use a large but finite score safely representable for Half/float/double.
             if (!hadNeighbors)
             {
-                maxMdef = NoNeighborScore;
+                maxMdef = NumOps.FromDouble(NoNeighborScore);
             }
 
-            scores[i] = NumOps.FromDouble(maxMdef);
+            scores[i] = maxMdef;
         }
 
         return scores;
     }
 
-    private double EstimateMaxRadius(Matrix<T> X)
+    private T EstimateMaxRadius(Matrix<T> X)
     {
         // Estimate maximum radius as the max distance between any two points
         // For efficiency, sample a subset
-        double maxDist = 0;
+        T maxDist = NumOps.Zero;
         int sampleSize = Math.Min(100, X.Rows);
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
 
@@ -231,47 +241,34 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
             int idx1 = random.Next(X.Rows);
             int idx2 = random.Next(X.Rows);
 
-            var p1 = new Vector<T>(X.Columns);
-            var p2 = new Vector<T>(X.Columns);
+            var p1 = new Vector<T>(X.GetRowReadOnlySpan(idx1).ToArray());
+            var p2 = new Vector<T>(X.GetRowReadOnlySpan(idx2).ToArray());
 
-            for (int j = 0; j < X.Columns; j++)
-            {
-                p1[j] = X[idx1, j];
-                p2[j] = X[idx2, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(p1, p2));
-            if (dist > maxDist) maxDist = dist;
+            var diff = Engine.Subtract(p1, p2);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+            if (NumOps.GreaterThan(dist, maxDist)) maxDist = dist;
         }
 
         return maxDist;
     }
 
-    private int CountPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, double radius)
+    private int CountPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, T radius)
     {
         int count = 0;
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
         for (int i = 0; i < reference.Rows; i++)
         {
-            var refPoint = new Vector<T>(reference.Columns);
-            for (int j = 0; j < reference.Columns; j++)
-            {
-                refPoint[j] = reference[i, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint));
-            if (dist <= radius) count++;
+            var refPoint = new Vector<T>(reference.GetRowReadOnlySpan(i).ToArray());
+            var diff = Engine.Subtract(point, refPoint);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+            if (!NumOps.GreaterThan(dist, radius)) count++;
         }
 
         return count;
     }
 
-    private int CountPointsInRadiusFromTraining(int trainingIdx, double radius)
+    private int CountPointsInRadiusFromTraining(int trainingIdx, T radius)
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -280,46 +277,30 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
         }
 
         int count = 0;
-        var point = new Vector<T>(trainingData.Columns);
-        for (int j = 0; j < trainingData.Columns; j++)
-        {
-            point[j] = trainingData[trainingIdx, j];
-        }
+        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(trainingIdx).ToArray());
 
         for (int i = 0; i < trainingData.Rows; i++)
         {
-            var refPoint = new Vector<T>(trainingData.Columns);
-            for (int j = 0; j < trainingData.Columns; j++)
-            {
-                refPoint[j] = trainingData[i, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint));
-            if (dist <= radius) count++;
+            var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+            var diff = Engine.Subtract(point, refPoint);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+            if (!NumOps.GreaterThan(dist, radius)) count++;
         }
 
         return count;
     }
 
-    private List<int> GetPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, double radius)
+    private List<int> GetPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, T radius)
     {
         var neighbors = new List<int>();
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
         for (int i = 0; i < reference.Rows; i++)
         {
-            var refPoint = new Vector<T>(reference.Columns);
-            for (int j = 0; j < reference.Columns; j++)
-            {
-                refPoint[j] = reference[i, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint));
-            if (dist <= radius && dist > 0)
+            var refPoint = new Vector<T>(reference.GetRowReadOnlySpan(i).ToArray());
+            var diff = Engine.Subtract(point, refPoint);
+            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+            if (!NumOps.GreaterThan(dist, radius) && NumOps.GreaterThan(dist, NumOps.Zero))
             {
                 neighbors.Add(i);
             }

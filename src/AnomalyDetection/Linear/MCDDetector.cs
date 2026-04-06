@@ -424,13 +424,18 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
+            // Compute Mahalanobis distance in T-space
+            T dist = NumOps.Zero;
+            for (int j1 = 0; j1 < _nFeatures; j1++)
             {
-                point[j] = NumOps.ToDouble(X[i, j]);
+                T diff1 = NumOps.Subtract(X[i, j1], robustMean[j1]);
+                for (int j2 = 0; j2 < _nFeatures; j2++)
+                {
+                    T diff2 = NumOps.Subtract(X[i, j2], robustMean[j2]);
+                    dist = NumOps.Add(dist, NumOps.Multiply(NumOps.Multiply(diff1, robustPrecision[j1, j2]), diff2));
+                }
             }
-
-            scores[i] = MahalanobisDistance(point, robustMean, robustPrecision);
+            scores[i] = NumOps.Sqrt(NumOps.GreaterThan(dist, NumOps.Zero) ? dist : NumOps.Zero);
         }
 
         return scores;

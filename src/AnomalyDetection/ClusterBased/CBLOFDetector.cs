@@ -160,11 +160,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = X[i, j];
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Find nearest cluster and distance
             int nearestCluster = 0;
@@ -180,11 +176,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 
             for (int c = 0; c < _nClusters; c++)
             {
-                var centroid = new Vector<T>(centroids.Columns);
-                for (int j = 0; j < centroids.Columns; j++)
-                {
-                    centroid[j] = centroids[c, j];
-                }
+                var centroid = new Vector<T>(centroids.GetRowReadOnlySpan(c).ToArray());
 
                 T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
                 if (NumOps.LessThan(dist, nearestDist))

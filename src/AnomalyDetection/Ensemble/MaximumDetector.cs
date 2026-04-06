@@ -117,13 +117,13 @@ public class MaximumDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Collect and normalize scores from all detectors
-        var allScores = new List<double[]>();
+        var allScores = new List<Vector<T>>();
 
         foreach (var detector in baseDetectors)
         {
             var scores = detector.ScoreAnomalies(X);
-            var doubleScores = NormalizeScores(scores);
-            allScores.Add(doubleScores);
+            var normalizedScores = NormalizeScores(scores);
+            allScores.Add(normalizedScores);
         }
 
         // Take maximum of normalized scores
@@ -131,41 +131,42 @@ public class MaximumDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double maxVal = double.MinValue;
+            T maxVal = NumOps.MinValue;
             foreach (var scores in allScores)
             {
-                if (scores[i] > maxVal)
+                if (NumOps.GreaterThan(scores[i], maxVal))
                 {
                     maxVal = scores[i];
                 }
             }
-            maxScores[i] = NumOps.FromDouble(maxVal);
+            maxScores[i] = maxVal;
         }
 
         return maxScores;
     }
 
-    private double[] NormalizeScores(Vector<T> scores)
+    private Vector<T> NormalizeScores(Vector<T> scores)
     {
         int n = scores.Length;
-        var result = new double[n];
+        var result = new Vector<T>(n);
 
-        double min = double.MaxValue;
-        double max = double.MinValue;
+        T min = NumOps.MaxValue;
+        T max = NumOps.MinValue;
 
         for (int i = 0; i < n; i++)
         {
-            result[i] = NumOps.ToDouble(scores[i]);
-            if (result[i] < min) min = result[i];
-            if (result[i] > max) max = result[i];
+            if (NumOps.LessThan(scores[i], min)) min = scores[i];
+            if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
         }
 
-        double range = max - min;
-        if (range > 1e-10)
+        T range = NumOps.Subtract(max, min);
+        T eps = NumOps.FromDouble(1e-10);
+
+        if (NumOps.GreaterThan(range, eps))
         {
             for (int i = 0; i < n; i++)
             {
-                result[i] = (result[i] - min) / range;
+                result[i] = NumOps.Divide(NumOps.Subtract(scores[i], min), range);
             }
         }
 

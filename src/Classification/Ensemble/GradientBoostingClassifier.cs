@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Ensemble;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Gradient Boosting classifier that builds trees sequentially to correct errors.
@@ -84,7 +84,9 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <summary>
     /// Initial prediction (prior).
     /// </summary>
-    private T _initPrediction = default;
+
+    private T _initPrediction;
+
 
     /// <summary>
     /// Random number generator.
@@ -115,6 +117,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new GradientBoostingClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
     {
+        _initPrediction = NumOps.Zero;
     }
 
     /// <summary>
@@ -695,14 +698,18 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
                 L1Ratio = modelDataObj["RegularizationL1Ratio"]?.ToObject<double>() ?? 0.5
             };
 
+
+#pragma warning disable CS8601 // Regularization can be null for RegularizationType.None
             Regularization = (RegularizationType)regType.Value switch
             {
+
                 RegularizationType.L1 => new L1Regularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.L2 => new L2Regularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.ElasticNet => new ElasticNetRegularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.None => null,
                 _ => null
             };
+#pragma warning restore CS8601
         }
     }
 }

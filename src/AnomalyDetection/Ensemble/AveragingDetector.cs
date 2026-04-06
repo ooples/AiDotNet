@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 public class AveragingDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;
-    private List<(double Min, double Max)>? _trainingScoreRanges;
+    private List<(T Min, T Max)>? _trainingScoreRanges;
 
     /// <summary>
     /// Creates a new Averaging ensemble anomaly detector with default base detectors.
@@ -93,7 +93,7 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
         };
 
         // Fit all base detectors and compute training score ranges
-        _trainingScoreRanges = new List<(double Min, double Max)>();
+        _trainingScoreRanges = new List<(T Min, T Max)>();
 
         foreach (var detector in _baseDetectors)
         {
@@ -101,14 +101,13 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
 
             // Compute training scores to establish min/max for normalization
             var scores = detector.ScoreAnomalies(X);
-            double min = double.MaxValue;
-            double max = double.MinValue;
+            T min = NumOps.MaxValue;
+            T max = NumOps.MinValue;
 
             for (int i = 0; i < scores.Length; i++)
             {
-                double val = NumOps.ToDouble(scores[i]);
-                if (val < min) min = val;
-                if (val > max) max = val;
+                if (NumOps.LessThan(scores[i], min)) min = scores[i];
+                if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
             }
 
             _trainingScoreRanges.Add((min, max));
@@ -140,50 +139,55 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Collect and normalize scores from all detectors using training min/max
-        var allScores = new List<double[]>();
+        var allScores = new List<Vector<T>>();
 
         for (int d = 0; d < baseDetectors.Count; d++)
         {
             var scores = baseDetectors[d].ScoreAnomalies(X);
             var (trainMin, trainMax) = trainingRanges[d];
-            var doubleScores = NormalizeScores(scores, trainMin, trainMax);
-            allScores.Add(doubleScores);
+            var normalizedScores = NormalizeScores(scores, trainMin, trainMax);
+            allScores.Add(normalizedScores);
         }
 
         // Average the normalized scores
         var avgScores = new Vector<T>(X.Rows);
+        T detectorCount = NumOps.FromDouble(allScores.Count);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             foreach (var scores in allScores)
             {
-                sum += scores[i];
+                sum = NumOps.Add(sum, scores[i]);
             }
-            avgScores[i] = NumOps.FromDouble(sum / allScores.Count);
+            avgScores[i] = NumOps.Divide(sum, detectorCount);
         }
 
         return avgScores;
     }
 
-    private double[] NormalizeScores(Vector<T> scores, double trainMin, double trainMax)
+    private Vector<T> NormalizeScores(Vector<T> scores, T trainMin, T trainMax)
     {
         int n = scores.Length;
-        var result = new double[n];
+        var result = new Vector<T>(n);
 
-        double range = trainMax - trainMin;
+        T range = NumOps.Subtract(trainMax, trainMin);
+        T eps = NumOps.FromDouble(1e-10);
+        T half = NumOps.FromDouble(0.5);
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(scores[i]);
-            if (range > 1e-10)
+            if (NumOps.GreaterThan(range, eps))
             {
                 // Normalize using training min/max, clamp to [0, 1]
-                result[i] = Math.Max(0, Math.Min(1, (val - trainMin) / range));
+                T normalized = NumOps.Divide(NumOps.Subtract(scores[i], trainMin), range);
+                if (NumOps.LessThan(normalized, NumOps.Zero)) normalized = NumOps.Zero;
+                if (NumOps.GreaterThan(normalized, NumOps.One)) normalized = NumOps.One;
+                result[i] = normalized;
             }
             else
             {
-                result[i] = 0.5; // Constant scores map to midpoint
+                result[i] = half; // Constant scores map to midpoint
             }
         }
 

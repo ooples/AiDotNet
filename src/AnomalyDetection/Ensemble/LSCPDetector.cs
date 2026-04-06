@@ -51,8 +51,8 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
     private readonly int _nEstimators;
     private readonly int _localRegionSize;
     private List<IAnomalyDetector<T>>? _baseDetectors;
-    private double[][]? _trainingData;
-    private double[][]? _detectorScores;
+    private Matrix<T>? _trainingData;
+    private Vector<T>[]? _detectorScores;
 
     /// <summary>
     /// Gets the number of estimators.
@@ -100,20 +100,11 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
 
         int n = X.Rows;
 
-        // Convert to double array
-        _trainingData = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            _trainingData[i] = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                _trainingData[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
+        _trainingData = X;
 
         // Create diverse base detectors
         _baseDetectors = new List<IAnomalyDetector<T>>();
-        _detectorScores = new double[_nEstimators][];
+        _detectorScores = new Vector<T>[_nEstimators];
 
         int k = Math.Min(10, n - 1);
 
@@ -149,12 +140,7 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
             _baseDetectors.Add(detector);
 
             // Store training scores
-            var scores = detector.ScoreAnomalies(X);
-            _detectorScores[e] = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                _detectorScores[e][i] = NumOps.ToDouble(scores[i]);
-            }
+            _detectorScores[e] = detector.ScoreAnomalies(X);
         }
 
         // Calculate scores for training data to set threshold
@@ -183,56 +169,45 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int effectiveRegionSize = Math.Min(_localRegionSize, trainingData.Length);
+        int effectiveRegionSize = Math.Min(_localRegionSize, trainingData.Rows);
 
         // Get scores from all detectors for test data
-        var testScores = new double[_nEstimators][];
+        var testScores = new Vector<T>[_nEstimators];
         for (int e = 0; e < _nEstimators; e++)
         {
-            var detectorScores = baseDetectors[e].ScoreAnomalies(X);
-            testScores[e] = new double[X.Rows];
-            for (int i = 0; i < X.Rows; i++)
-            {
-                testScores[e][i] = NumOps.ToDouble(detectorScores[i]);
-            }
+            testScores[e] = baseDetectors[e].ScoreAnomalies(X);
         }
+
+        var detScores = _detectorScores ?? throw new InvalidOperationException("Model not properly fitted.");
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Find local region (nearest neighbors in training data)
-            var distances = new (double dist, int idx)[trainingData.Length];
-            for (int t = 0; t < trainingData.Length; t++)
+            var distancesWithIdx = new (T dist, int idx)[trainingData.Rows];
+            for (int t = 0; t < trainingData.Rows; t++)
             {
-                double dist = EuclideanDistance(point, trainingData[t]);
-                distances[t] = (dist, t);
+                var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(t).ToArray());
+                var diff = Engine.Subtract(point, trainPoint);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                distancesWithIdx[t] = (dist, t);
             }
 
-            var localRegion = distances
-                .OrderBy(d => d.dist)
+            var localRegion = distancesWithIdx
+                .OrderBy(d => NumOps.ToDouble(d.dist))
                 .Take(effectiveRegionSize)
                 .Select(d => d.idx)
                 .ToArray();
 
             // Evaluate detector competence in local region
             // Use Pearson correlation between scores and distance rank as competence
-            var competence = new double[_nEstimators];
+            var competence = new T[_nEstimators];
 
             for (int e = 0; e < _nEstimators; e++)
             {
-                var detectorScores = _detectorScores;
-                if (detectorScores == null)
-                {
-                    throw new InvalidOperationException("Model not properly fitted.");
-                }
-
-                var localScores = localRegion.Select(idx => detectorScores[e][idx]).ToArray();
-                var localDistances = localRegion.Select(idx => distances[idx].dist).ToArray();
+                var localScores = localRegion.Select(idx => detScores[e][idx]).ToArray();
+                var localDistances = localRegion.Select(idx => distancesWithIdx[idx].dist).ToArray();
 
                 // Higher scores should correlate with higher distances for good detectors
                 competence[e] = ComputeCorrelation(localScores, localDistances);
@@ -242,51 +217,51 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
             int nSelect = Math.Max(1, _nEstimators / 2);
             var selectedDetectors = competence
                 .Select((c, idx) => (c, idx))
-                .OrderByDescending(x => x.c)
+                .OrderByDescending(x => NumOps.ToDouble(x.c))
                 .Take(nSelect)
                 .Select(x => x.idx)
                 .ToArray();
 
             // Average scores from selected detectors
-            double combinedScore = selectedDetectors.Average(e => testScores[e][i]);
-            scores[i] = NumOps.FromDouble(combinedScore);
+            T combinedScore = NumOps.Zero;
+            foreach (int e in selectedDetectors)
+            {
+                combinedScore = NumOps.Add(combinedScore, testScores[e][i]);
+            }
+            scores[i] = NumOps.Divide(combinedScore, NumOps.FromDouble(selectedDetectors.Length));
         }
 
         return scores;
     }
 
-    private static double EuclideanDistance(double[] a, double[] b)
-    {
-        double sum = 0;
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-
-        return Math.Sqrt(sum);
-    }
-
-    private static double ComputeCorrelation(double[] x, double[] y)
+    private T ComputeCorrelation(T[] x, T[] y)
     {
         int n = x.Length;
-        if (n < 2) return 0;
+        if (n < 2) return NumOps.Zero;
 
-        double meanX = x.Average();
-        double meanY = y.Average();
-
-        double cov = 0, varX = 0, varY = 0;
+        T meanX = NumOps.Zero;
+        T meanY = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            double dx = x[i] - meanX;
-            double dy = y[i] - meanY;
-            cov += dx * dy;
-            varX += dx * dx;
-            varY += dy * dy;
+            meanX = NumOps.Add(meanX, x[i]);
+            meanY = NumOps.Add(meanY, y[i]);
+        }
+        T nT = NumOps.FromDouble(n);
+        meanX = NumOps.Divide(meanX, nT);
+        meanY = NumOps.Divide(meanY, nT);
+
+        T cov = NumOps.Zero, varX = NumOps.Zero, varY = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            T dx = NumOps.Subtract(x[i], meanX);
+            T dy = NumOps.Subtract(y[i], meanY);
+            cov = NumOps.Add(cov, NumOps.Multiply(dx, dy));
+            varX = NumOps.Add(varX, NumOps.Multiply(dx, dx));
+            varY = NumOps.Add(varY, NumOps.Multiply(dy, dy));
         }
 
-        double denom = Math.Sqrt(varX * varY);
-        return denom > 1e-10 ? cov / denom : 0;
+        T denom = NumOps.Sqrt(NumOps.Multiply(varX, varY));
+        T eps = NumOps.FromDouble(1e-10);
+        return NumOps.GreaterThan(denom, eps) ? NumOps.Divide(cov, denom) : NumOps.Zero;
     }
 }

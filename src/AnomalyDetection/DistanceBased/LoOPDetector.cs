@@ -49,7 +49,7 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
     private readonly int _k;
     private readonly double _lambda;
     private Matrix<T>? _trainingData;
-    private double[]? _probabilisticDistances;
+    private Vector<T>? _probabilisticDistances;
 
     /// <summary>
     /// Gets the number of neighbors used for detection.
@@ -126,49 +126,59 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         var scores = new Vector<T>(X.Rows);
+        var probDists = _probabilisticDistances ?? throw new InvalidOperationException("_probabilisticDistances has not been initialized.");
 
         for (int i = 0; i < X.Rows; i++)
         {
             // Compute probabilistic distance for this point
             var neighbors = GetKNearestNeighbors(X, i);
-            double pdist = ComputePDist(X, i, neighbors);
+            T pdist = ComputePDist(X, i, neighbors);
 
             // Compute expected value E[pdist] over neighbors
-            double ePdist = 0;
+            T ePdist = NumOps.Zero;
             foreach (int neighborIdx in neighbors)
             {
-                ePdist += (_probabilisticDistances ?? throw new InvalidOperationException("_probabilisticDistances has not been initialized."))[neighborIdx];
+                ePdist = NumOps.Add(ePdist, probDists[neighborIdx]);
             }
-            ePdist /= neighbors.Count;
+            ePdist = NumOps.Divide(ePdist, NumOps.FromDouble(neighbors.Count));
 
             // Compute PLOF (Probabilistic LOF)
-            double plof = ePdist > 0 ? (pdist / ePdist) - 1 : 0;
+            T plof = NumOps.GreaterThan(ePdist, NumOps.Zero)
+                ? NumOps.Subtract(NumOps.Divide(pdist, ePdist), NumOps.One)
+                : NumOps.Zero;
 
             // Compute standard deviation of PLOF in neighborhood
-            double nplof = ComputeNPLOF(neighbors);
+            T nplof = ComputeNPLOF(neighbors);
 
             // Compute LoOP using error function
-            // LoOP = max(0, erf(plof / (sqrt(2) * nplof)))
-            double loop = 0;
-            if (nplof > 0)
+            // LoOP = max(0, erf(plof / (sqrt(2) * lambda * nplof)))
+            T loop;
+            if (NumOps.GreaterThan(nplof, NumOps.Zero))
             {
-                double z = plof / (Math.Sqrt(2) * _lambda * nplof);
-                loop = Math.Max(0, ErrorFunction(z));
+                T z = NumOps.Divide(plof,
+                    NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(2) * _lambda), nplof));
+                double zDouble = NumOps.ToDouble(z);
+                double erfVal = ErrorFunction(zDouble);
+                loop = NumOps.FromDouble(Math.Max(0, erfVal));
             }
-            else if (plof > 0)
+            else if (NumOps.GreaterThan(plof, NumOps.Zero))
             {
-                loop = 1.0;
+                loop = NumOps.One;
+            }
+            else
+            {
+                loop = NumOps.Zero;
             }
 
-            scores[i] = NumOps.FromDouble(loop);
+            scores[i] = loop;
         }
 
         return scores;
     }
 
-    private double[] ComputeProbabilisticDistances(Matrix<T> X)
+    private Vector<T> ComputeProbabilisticDistances(Matrix<T> X)
     {
-        var pdist = new double[X.Rows];
+        var pdist = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
@@ -179,15 +189,11 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
         return pdist;
     }
 
-    private double ComputePDist(Matrix<T> X, int pointIdx, List<int> neighbors)
+    private T ComputePDist(Matrix<T> X, int pointIdx, List<int> neighbors)
     {
         // Probabilistic set distance: sqrt(sum(d^2) / k)
-        double sumSquaredDist = 0;
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        T sumSquaredDist = NumOps.Zero;
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -197,20 +203,16 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
 
         foreach (int neighborIdx in neighbors)
         {
-            var neighbor = new Vector<T>(trainingData.Columns);
-            for (int j = 0; j < trainingData.Columns; j++)
-            {
-                neighbor[j] = trainingData[neighborIdx, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, neighbor));
-            sumSquaredDist += dist * dist;
+            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
+            var diff = Engine.Subtract(point, neighbor);
+            T distSq = Engine.DotProduct(diff, diff);
+            sumSquaredDist = NumOps.Add(sumSquaredDist, distSq);
         }
 
-        return Math.Sqrt(sumSquaredDist / neighbors.Count);
+        return NumOps.Sqrt(NumOps.Divide(sumSquaredDist, NumOps.FromDouble(neighbors.Count)));
     }
 
-    private double ComputePDistFromTraining(int pointIdx, List<int> neighbors)
+    private T ComputePDistFromTraining(int pointIdx, List<int> neighbors)
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -218,29 +220,23 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        double sumSquaredDist = 0;
-        var point = new Vector<T>(trainingData.Columns);
-        for (int j = 0; j < trainingData.Columns; j++)
-        {
-            point[j] = trainingData[pointIdx, j];
-        }
+        T sumSquaredDist = NumOps.Zero;
+        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pointIdx).ToArray());
 
         foreach (int neighborIdx in neighbors)
         {
-            var neighbor = new Vector<T>(trainingData.Columns);
-            for (int j = 0; j < trainingData.Columns; j++)
-            {
-                neighbor[j] = trainingData[neighborIdx, j];
-            }
-
-            double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, neighbor));
-            sumSquaredDist += dist * dist;
+            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
+            var diff = Engine.Subtract(point, neighbor);
+            T distSq = Engine.DotProduct(diff, diff);
+            sumSquaredDist = NumOps.Add(sumSquaredDist, distSq);
         }
 
-        return neighbors.Count > 0 ? Math.Sqrt(sumSquaredDist / neighbors.Count) : 0;
+        return neighbors.Count > 0
+            ? NumOps.Sqrt(NumOps.Divide(sumSquaredDist, NumOps.FromDouble(neighbors.Count)))
+            : NumOps.Zero;
     }
 
-    private double ComputeNPLOF(List<int> neighbors)
+    private T ComputeNPLOF(List<int> neighbors)
     {
         // Normalization factor for PLOF
         var probabilisticDistances = _probabilisticDistances;
@@ -249,25 +245,29 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        double sumSquaredRatio = 0;
+        T sumSquaredRatio = NumOps.Zero;
 
         foreach (int neighborIdx in neighbors)
         {
             var neighborNeighbors = GetKNearestNeighborsFromTraining(neighborIdx);
-            double pdist = probabilisticDistances[neighborIdx];
+            T pdist = probabilisticDistances[neighborIdx];
 
-            double ePdist = 0;
+            T ePdist = NumOps.Zero;
             foreach (int nn in neighborNeighbors)
             {
-                ePdist += probabilisticDistances[nn];
+                ePdist = NumOps.Add(ePdist, probabilisticDistances[nn]);
             }
-            ePdist /= neighborNeighbors.Count;
+            ePdist = NumOps.Divide(ePdist, NumOps.FromDouble(neighborNeighbors.Count));
 
-            double plof = ePdist > 0 ? (pdist / ePdist) - 1 : 0;
-            sumSquaredRatio += plof * plof;
+            T plof = NumOps.GreaterThan(ePdist, NumOps.Zero)
+                ? NumOps.Subtract(NumOps.Divide(pdist, ePdist), NumOps.One)
+                : NumOps.Zero;
+            sumSquaredRatio = NumOps.Add(sumSquaredRatio, NumOps.Multiply(plof, plof));
         }
 
-        return _lambda * Math.Sqrt(sumSquaredRatio / neighbors.Count);
+        return NumOps.Multiply(
+            NumOps.FromDouble(_lambda),
+            NumOps.Sqrt(NumOps.Divide(sumSquaredRatio, NumOps.FromDouble(neighbors.Count))));
     }
 
     private List<int> GetKNearestNeighbors(Matrix<T> X, int pointIdx)
@@ -278,21 +278,14 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
 
         return Enumerable.Range(0, trainingData.Rows)
             .Select(i =>
             {
-                var refPoint = new Vector<T>(trainingData.Columns);
-                for (int j = 0; j < trainingData.Columns; j++)
-                {
-                    refPoint[j] = trainingData[i, j];
-                }
-                return (Index: i, Dist: NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint)));
+                var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+                var diff = Engine.Subtract(point, refPoint);
+                return (Index: i, Dist: NumOps.ToDouble(NumOps.Sqrt(Engine.DotProduct(diff, diff))));
             })
             .Where(x => x.Dist > 0)
             .OrderBy(x => x.Dist)
@@ -309,22 +302,15 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var point = new Vector<T>(trainingData.Columns);
-        for (int j = 0; j < trainingData.Columns; j++)
-        {
-            point[j] = trainingData[pointIdx, j];
-        }
+        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pointIdx).ToArray());
 
         return Enumerable.Range(0, trainingData.Rows)
             .Where(i => i != pointIdx)
             .Select(i =>
             {
-                var refPoint = new Vector<T>(trainingData.Columns);
-                for (int j = 0; j < trainingData.Columns; j++)
-                {
-                    refPoint[j] = trainingData[i, j];
-                }
-                return (Index: i, Dist: NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint)));
+                var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+                var diff = Engine.Subtract(point, refPoint);
+                return (Index: i, Dist: NumOps.ToDouble(NumOps.Sqrt(Engine.DotProduct(diff, diff))));
             })
             .OrderBy(x => x.Dist)
             .Take(_k)

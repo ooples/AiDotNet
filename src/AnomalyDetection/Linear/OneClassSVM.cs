@@ -283,10 +283,10 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
 
     private T RbfKernel(Vector<T> x1, Vector<T> x2, double gamma)
     {
-        // Use StatisticsHelper for distance calculation
-        T dist = StatisticsHelper<T>.EuclideanDistance(x1, x2);
-        double squaredDist = Math.Pow(NumOps.ToDouble(dist), 2);
-        return NumOps.FromDouble(Math.Exp(-gamma * squaredDist));
+        // Vectorized distance using Engine
+        var diff = Engine.Subtract(x1, x2);
+        T squaredDist = Engine.DotProduct(diff, diff);
+        return NumOps.Exp(NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(gamma), squaredDist)));
     }
 
     private Vector<T> SolveDual(Matrix<T> K, int n)

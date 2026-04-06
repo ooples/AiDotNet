@@ -4,7 +4,7 @@ using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression.MixedEffects;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Generalized Linear Mixed-Effects Model (GLMM) for non-Gaussian hierarchical data.
@@ -97,12 +97,14 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Dispersion parameter (for overdispersed models).
     /// </summary>
-    private T _dispersion = default;
+
+    private T _dispersion;
+
 
     /// <summary>
     /// Log-likelihood of the fitted model.
     /// </summary>
-    private double _logLikelihood;
+    private T _logLikelihood;
 
     /// <summary>
     /// Number of observations.
@@ -133,17 +135,17 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the log-likelihood of the fitted model.
     /// </summary>
-    public double LogLikelihood => _logLikelihood;
+    public T LogLikelihood => _logLikelihood;
 
     /// <summary>
     /// Gets the AIC (Akaike Information Criterion).
     /// </summary>
-    public double AIC => -2 * _logLikelihood + 2 * GetNumberOfParameters();
+    public T AIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(2 * GetNumberOfParameters()));
 
     /// <summary>
     /// Gets the BIC (Bayesian Information Criterion).
     /// </summary>
-    public double BIC => -2 * _logLikelihood + Math.Log(_nObservations) * GetNumberOfParameters();
+    public T BIC => NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), _logLikelihood), NumOps.FromDouble(Math.Log(_nObservations) * GetNumberOfParameters()));
 
     /// <summary>
     /// Gets the dispersion parameter.
@@ -170,6 +172,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new GLMMOptions<T>(), regularization)
     {
+        _logLikelihood = NumOps.Zero;
         _options = options ?? new GLMMOptions<T>();
         _randomEffects = [];
         _dispersion = NumOps.One;
@@ -540,13 +543,13 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             double newLogLik = ComputeLogLikelihood(y, mu);
 
             // Check convergence
-            if (outerIter > 0 && Math.Abs(newLogLik - _logLikelihood) < _options.Tolerance)
+            if (outerIter > 0 && Math.Abs(newLogLik - NumOps.ToDouble(_logLikelihood)) < _options.Tolerance)
             {
-                _logLikelihood = newLogLik;
+                _logLikelihood = NumOps.FromDouble(newLogLik);
                 break;
             }
 
-            _logLikelihood = newLogLik;
+            _logLikelihood = NumOps.FromDouble(newLogLik);
         }
     }
 
@@ -569,7 +572,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         var sqrtW = new Vector<T>(weights.Length);
         for (int i = 0; i < weights.Length; i++)
         {
-            sqrtW[i] = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(weights[i])));
+            sqrtW[i] = NumOps.Sqrt(weights[i]);
         }
 
         // Weight-transform the design matrix and response
@@ -662,7 +665,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         {
             adjustedY[i] = wY[i];
 
-            double sqrtW = Math.Sqrt(NumOps.ToDouble(weights[i]));
+            T sqrtW = NumOps.Sqrt(weights[i]);
             foreach (var re in _randomEffects)
             {
                 double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
@@ -670,7 +673,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
                 if (blup.Length > 0)
                 {
                     adjustedY[i] = NumOps.Subtract(adjustedY[i],
-                        NumOps.FromDouble(NumOps.ToDouble(blup[0]) * sqrtW));
+                        NumOps.Multiply(blup[0], sqrtW));
                 }
             }
         }

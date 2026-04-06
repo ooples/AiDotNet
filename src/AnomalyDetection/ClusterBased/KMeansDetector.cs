@@ -159,13 +159,13 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
             // Points in small clusters (e.g., a singleton outlier that became its own centroid)
             // get amplified scores. A point with distance 0 in a singleton cluster gets
             // a high score because being in a tiny cluster is itself anomalous.
-            double clusterFraction = _clusterSizes != null && _clusterSizes[nearestCluster] > 0
-                ? (double)_clusterSizes[nearestCluster] / _totalSamples
-                : 1.0;
+            T clusterFraction = _clusterSizes != null && _clusterSizes[nearestCluster] > 0
+                ? NumOps.Divide(NumOps.FromDouble(_clusterSizes[nearestCluster]), NumOps.FromDouble(_totalSamples))
+                : NumOps.One;
 
             // Score = distance + penalty for small clusters
             // The penalty term ensures singleton cluster members get high scores even with distance 0
-            T smallClusterPenalty = NumOps.FromDouble(1.0 - clusterFraction);
+            T smallClusterPenalty = NumOps.Subtract(NumOps.One, clusterFraction);
             T score = NumOps.Add(minDist, smallClusterPenalty);
 
             scores[i] = score;
@@ -291,33 +291,28 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
         for (int c = 1; c < _k; c++)
         {
             // Calculate distance to nearest centroid for each point
+            // K-Means++ distance calculation — compute in T, convert to double only for sampling
             var distances = new double[n];
             double totalDist = 0;
 
             for (int i = 0; i < n; i++)
             {
                 T minDist = NumOps.MaxValue;
-                var point = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
-                {
-                    point[j] = X[i, j];
-                }
+                var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
                 for (int prevC = 0; prevC < c; prevC++)
                 {
-                    var centroid = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        centroid[j] = centroids[prevC, j];
-                    }
-
-                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                    var centroid = new Vector<T>(centroids.GetRowReadOnlySpan(prevC).ToArray());
+                    // Vectorized distance via Engine
+                    var diff = Engine.Subtract(point, centroid);
+                    T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
                     if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                     }
                 }
 
+                // Convert to double only at sampling boundary (random.NextDouble is double)
                 double minDistDouble = NumOps.ToDouble(minDist);
                 distances[i] = minDistDouble * minDistDouble;
                 totalDist += distances[i];

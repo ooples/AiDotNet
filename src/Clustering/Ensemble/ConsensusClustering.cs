@@ -64,7 +64,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[,]? _coAssociationMatrix;
+    private Matrix<T>? _coAssociationMatrix;
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
@@ -81,7 +81,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the co-association matrix.
     /// </summary>
-    public double[,]? CoAssociationMatrix => _coAssociationMatrix;
+    public Matrix<T>? CoAssociationMatrix => _coAssociationMatrix;
 
     /// <inheritdoc />
 
@@ -173,9 +173,9 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         return result;
     }
 
-    private double[,] BuildCoAssociationMatrix(List<int[]> clusterings, int n)
+    private Matrix<T> BuildCoAssociationMatrix(List<int[]> clusterings, int n)
     {
-        var matrix = new double[n, n];
+        var matrix = new Matrix<T>(n, n);
 
         foreach (var clustering in clusterings)
         {
@@ -185,10 +185,10 @@ public class ConsensusClustering<T> : ClusteringBase<T>
                 {
                     if (clustering[i] == clustering[j])
                     {
-                        matrix[i, j] += 1;
+                        matrix[i, j] = _numOps.Add(matrix[i, j], _numOps.One);
                         if (i != j)
                         {
-                            matrix[j, i] += 1;
+                            matrix[j, i] = _numOps.Add(matrix[j, i], _numOps.One);
                         }
                     }
                 }
@@ -196,19 +196,19 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         }
 
         // Normalize by number of clusterings
-        double numClusterings = clusterings.Count;
+        T numClusterings = _numOps.FromDouble(clusterings.Count);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                matrix[i, j] /= numClusterings;
+                matrix[i, j] = _numOps.Divide(matrix[i, j], numClusterings);
             }
         }
 
         return matrix;
     }
 
-    private int EstimateNumClusters(double[,] coAssoc, int n)
+    private int EstimateNumClusters(Matrix<T> coAssoc, int n)
     {
         // Use eigenvalue analysis or simple heuristic
         // Here we use a simple heuristic based on the matrix structure
@@ -216,7 +216,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         // Count distinct "strong" groups (high co-association)
         var visited = new bool[n];
         int numClusters = 0;
-        double threshold = 0.5;
+        T threshold = _numOps.FromDouble(0.5);
 
         for (int i = 0; i < n; i++)
         {
@@ -228,7 +228,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
             // Mark all strongly connected points
             for (int j = i + 1; j < n; j++)
             {
-                if (!visited[j] && coAssoc[i, j] > threshold)
+                if (!visited[j] && _numOps.GreaterThan(coAssoc[i, j], threshold))
                 {
                     visited[j] = true;
                 }
@@ -238,7 +238,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         return Math.Max(2, numClusters);
     }
 
-    private int[] ApplyFinalClustering(double[,] coAssoc, int n, int numClusters)
+    private int[] ApplyFinalClustering(Matrix<T> coAssoc, int n, int numClusters)
     {
         // Convert co-association to distance (1 - similarity)
         var distMatrix = new double[n, n];
@@ -246,7 +246,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         {
             for (int j = 0; j < n; j++)
             {
-                distMatrix[i, j] = 1 - coAssoc[i, j];
+                distMatrix[i, j] = 1 - _numOps.ToDouble(coAssoc[i, j]);
             }
         }
 

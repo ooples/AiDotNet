@@ -394,35 +394,13 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         int numQueries = scores.Rows;
         int numClasses = scores.Columns;
         var probabilities = new Matrix<T>(numQueries, numClasses);
-
         for (int q = 0; q < numQueries; q++)
         {
-            // Find max score for numerical stability
-            T maxScore = scores[q, 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(scores[q, c], maxScore))
-                    maxScore = scores[q, c];
-            }
-
-            // Compute exp and sum
-            var expValues = new T[numClasses];
-            T sumExp = NumOps.Zero;
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                T shifted = NumOps.Subtract(scores[q, c], maxScore);
-                expValues[c] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-                sumExp = NumOps.Add(sumExp, expValues[c]);
-            }
-
-            // Normalize to probabilities
-            for (int c = 0; c < numClasses; c++)
-            {
-                probabilities[q, c] = NumOps.Divide(expValues[c], sumExp);
-            }
+            var row = new Vector<T>(numClasses);
+            for (int c = 0; c < numClasses; c++) row[c] = scores[q, c];
+            var probs = Softmax(row);
+            for (int c = 0; c < numClasses; c++) probabilities[q, c] = probs[c];
         }
-
         return probabilities;
     }
 

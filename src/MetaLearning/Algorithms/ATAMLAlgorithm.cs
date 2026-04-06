@@ -178,7 +178,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(grad[d]);
                 count++;
             }
-            result[a] = NumOps.FromDouble(Math.Tanh(count > 0 ? sum / count : 0));
+            result[a] = ScalarTanh(NumOps.FromDouble(count > 0 ? sum / count : 0));
         }
         return result;
     }

@@ -96,122 +96,92 @@ public class ABODDetector<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int n = trainingData.Rows;
+        int d = X.Columns;
 
         for (int p = 0; p < X.Rows; p++)
         {
-            // Get query point
-            var pointP = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                pointP[j] = NumOps.ToDouble(X[p, j]);
-            }
+            // Extract query point row as Vector<T> for vectorized ops
+            var pointP = new Vector<T>(X.GetRowReadOnlySpan(p).ToArray());
 
             // Compute ABOF (Angle-Based Outlier Factor)
-            double abof = ComputeABOF(pointP);
+            T abof = ComputeABOF(pointP, trainingData);
 
-            // ABOF is inversely related to outlierness
-            // Low ABOF = outlier, High ABOF = inlier
-            // We invert it for consistent scoring (high = outlier)
-            double score = abof > 0 ? 1.0 / abof : double.MaxValue;
-            scores[p] = NumOps.FromDouble(score);
+            // ABOF is inversely related to outlierness — invert for consistent scoring
+            scores[p] = NumOps.GreaterThan(abof, NumOps.Zero)
+                ? NumOps.Divide(NumOps.One, abof)
+                : NumOps.MaxValue;
         }
 
         return scores;
     }
 
-    private double ComputeABOF(double[] point)
+    private T ComputeABOF(Vector<T> point, Matrix<T> trainingData)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
         int n = trainingData.Rows;
         int d = trainingData.Columns;
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        // For each pair of points (a, b), compute angle at point p
-        var weightedAngles = new List<double>();
-        var weights = new List<double>();
+        var weightedAngles = new List<T>();
+        var weights = new List<T>();
 
         for (int i = 0; i < n; i++)
         {
-            var pointA = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                pointA[j] = NumOps.ToDouble(trainingData[i, j]);
-            }
+            // Extract row as Vector<T> and compute PA = A - P via IEngine
+            var pointA = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
+            var pa = Engine.Subtract(pointA, point);
 
-            // Vector PA = A - P
-            var pa = new double[d];
-            double paNorm = 0;
-            for (int j = 0; j < d; j++)
-            {
-                pa[j] = pointA[j] - point[j];
-                paNorm += pa[j] * pa[j];
-            }
-            paNorm = Math.Sqrt(paNorm);
-            if (paNorm < 1e-10) continue; // Skip if same point
+            // Squared norm via dot product (SIMD-accelerated)
+            T paNormSq = Engine.DotProduct(pa, pa);
+            T paNorm = NumOps.Sqrt(paNormSq);
+            if (NumOps.LessThan(paNorm, epsilon)) continue;
 
             for (int k = i + 1; k < n; k++)
             {
-                var pointB = new double[d];
-                for (int j = 0; j < d; j++)
-                {
-                    pointB[j] = NumOps.ToDouble(trainingData[k, j]);
-                }
+                var pointB = new Vector<T>(trainingData.GetRowReadOnlySpan(k).ToArray());
+                var pb = Engine.Subtract(pointB, point);
 
-                // Vector PB = B - P
-                var pb = new double[d];
-                double pbNorm = 0;
-                for (int j = 0; j < d; j++)
-                {
-                    pb[j] = pointB[j] - point[j];
-                    pbNorm += pb[j] * pb[j];
-                }
-                pbNorm = Math.Sqrt(pbNorm);
-                if (pbNorm < 1e-10) continue; // Skip if same point
+                T pbNormSq = Engine.DotProduct(pb, pb);
+                T pbNorm = NumOps.Sqrt(pbNormSq);
+                if (NumOps.LessThan(pbNorm, epsilon)) continue;
 
-                // Compute angle using dot product: cos(angle) = (PA . PB) / (|PA| * |PB|)
-                double dot = 0;
-                for (int j = 0; j < d; j++)
-                {
-                    dot += pa[j] * pb[j];
-                }
+                // cos(angle) = (PA · PB) / (|PA| * |PB|) via vectorized dot product
+                T dot = Engine.DotProduct(pa, pb);
+                T cosAngle = NumOps.Divide(dot, NumOps.Multiply(paNorm, pbNorm));
 
-                double cosAngle = dot / (paNorm * pbNorm);
-                cosAngle = Math.Max(-1, Math.Min(1, cosAngle)); // Clamp for numerical stability
+                // Clamp for numerical stability
+                T negOne = NumOps.FromDouble(-1.0);
+                if (NumOps.LessThan(cosAngle, negOne)) cosAngle = negOne;
+                if (NumOps.GreaterThan(cosAngle, NumOps.One)) cosAngle = NumOps.One;
 
-                // Weight by inverse of product of distances squared
-                double weight = 1.0 / (paNorm * paNorm * pbNorm * pbNorm);
+                // Weight = 1 / (|PA|² * |PB|²)
+                T weight = NumOps.Divide(NumOps.One, NumOps.Multiply(paNormSq, pbNormSq));
 
-                weightedAngles.Add(cosAngle * weight);
+                weightedAngles.Add(NumOps.Multiply(cosAngle, weight));
                 weights.Add(weight);
             }
         }
 
-        if (weights.Count == 0) return double.MaxValue;
+        if (weights.Count == 0) return NumOps.MaxValue;
 
-        // Compute weighted variance of angles
-        // Formula: mean = Σ(w_i * v_i) / Σ(w_i)
-        //          variance = Σ(w_i * (v_i - mean)²) / Σ(w_i)
-        double sumWeights = weights.Sum();
-        if (sumWeights < 1e-10) return double.MaxValue;
+        // Weighted variance of angles
+        T sumWeights = NumOps.Zero;
+        T sumWeightedAngles = NumOps.Zero;
+        foreach (var w in weights) sumWeights = NumOps.Add(sumWeights, w);
+        foreach (var wa in weightedAngles) sumWeightedAngles = NumOps.Add(sumWeightedAngles, wa);
 
-        // weightedAngles[i] = cosAngle_i * weight_i, so weighted mean is correct
-        double mean = weightedAngles.Sum() / sumWeights;
+        if (NumOps.LessThan(sumWeights, epsilon)) return NumOps.MaxValue;
 
-        double variance = 0;
+        T mean = NumOps.Divide(sumWeightedAngles, sumWeights);
+
+        T variance = NumOps.Zero;
         for (int i = 0; i < weightedAngles.Count; i++)
         {
-            // Extract the original angle from the weighted angle
-            double angle = weightedAngles[i] / weights[i];
-            double diff = angle - mean;
-            variance += weights[i] * diff * diff;
+            T angle = NumOps.Divide(weightedAngles[i], weights[i]);
+            T diff = NumOps.Subtract(angle, mean);
+            variance = NumOps.Add(variance,
+                NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
         }
-        variance /= sumWeights;
 
-        return variance;
+        return NumOps.Divide(variance, sumWeights);
     }
 }

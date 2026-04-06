@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.SVM;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Linear Support Vector Classifier optimized for linear classification.
@@ -81,7 +81,9 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Bias term (intercept) for the linear classifier.
     /// </summary>
-    private T _bias = default;
+
+    private T _bias;
+
 
     /// <summary>
     /// Random number generator for SGD.
@@ -97,6 +99,7 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _bias = NumOps.Zero;
         // Override kernel to Linear for this classifier
         if (Options.Kernel != KernelType.Linear)
         {

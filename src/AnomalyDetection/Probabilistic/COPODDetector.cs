@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelPaper("COPOD: Copula-Based Outlier Detection", "https://doi.org/10.1109/ICDM50108.2020.00135", Year = 2020, Authors = "Zheng Li, Yue Zhao, Nicola Botta, Cezar Ionescu, Xiyang Hu")]
 public class COPODDetector<T> : AnomalyDetectorBase<T>
 {
-    private double[][]? _sortedFeatureValues;
+    private Vector<T>[]? _sortedFeatureValues;
     private int _nFeatures;
     private int _nSamples;
 
@@ -68,16 +68,16 @@ public class COPODDetector<T> : AnomalyDetectorBase<T>
         _nSamples = X.Rows;
 
         // Pre-sort feature values for O(log n) ECDF lookups
-        _sortedFeatureValues = new double[_nFeatures][];
+        _sortedFeatureValues = new Vector<T>[_nFeatures];
         for (int j = 0; j < _nFeatures; j++)
         {
-            var values = new double[_nSamples];
+            var values = new T[_nSamples];
             for (int i = 0; i < _nSamples; i++)
             {
-                values[i] = NumOps.ToDouble(X[i, j]);
+                values[i] = X[i, j];
             }
-            Array.Sort(values);
-            _sortedFeatureValues[j] = values;
+            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
+            _sortedFeatureValues[j] = new Vector<T>(values);
         }
 
         // Calculate scores for training data to set threshold
@@ -100,36 +100,37 @@ public class COPODDetector<T> : AnomalyDetectorBase<T>
 
         var scores = new Vector<T>(X.Rows);
 
+        T eps = NumOps.FromDouble(1e-10);
+
         for (int i = 0; i < X.Rows; i++)
         {
-            double score = 0;
+            T score = NumOps.Zero;
 
             // For each feature, compute the empirical tail probability
             for (int j = 0; j < _nFeatures; j++)
             {
-                double value = NumOps.ToDouble(X[i, j]);
+                T value = X[i, j];
 
                 // Compute empirical CDF (left tail) and survival function (right tail)
-                double leftTailProb = ComputeECDF(j, value);
-                double rightTailProb = 1 - leftTailProb;
+                T leftTailProb = ComputeECDF(j, value);
+                T rightTailProb = NumOps.Subtract(NumOps.One, leftTailProb);
 
                 // Add negative log of minimum tail probability (skewness-corrected)
-                // This follows the COPOD paper's approach
-                double minTailProb = Math.Min(leftTailProb, rightTailProb);
+                T minTailProb = NumOps.LessThan(leftTailProb, rightTailProb) ? leftTailProb : rightTailProb;
 
                 // Avoid log(0)
-                minTailProb = Math.Max(minTailProb, 1e-10);
+                if (NumOps.LessThan(minTailProb, eps)) minTailProb = eps;
 
-                score += -Math.Log(minTailProb);
+                score = NumOps.Subtract(score, NumOps.Log(minTailProb));
             }
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
     }
 
-    private double ComputeECDF(int featureIndex, double value)
+    private T ComputeECDF(int featureIndex, T value)
     {
         var sortedValues = _sortedFeatureValues;
         if (sortedValues == null)
@@ -137,28 +138,22 @@ public class COPODDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Use binary search for O(log n) lookup
+        // Linear search for count of values <= value (binary search needs IComparable<T>)
         var featureValues = sortedValues[featureIndex];
-        int index = Array.BinarySearch(featureValues, value);
-
-        // BinarySearch returns bitwise complement of insertion point if not found
-        int count;
-        if (index >= 0)
+        int count = 0;
+        for (int i = 0; i < featureValues.Length; i++)
         {
-            // Value found - count all values <= value (handle duplicates)
-            count = index + 1;
-            while (count < featureValues.Length && featureValues[count] <= value)
+            if (!NumOps.GreaterThan(featureValues[i], value))
             {
                 count++;
             }
-        }
-        else
-        {
-            // Value not found - insertion point is the count of values < value
-            count = ~index;
+            else
+            {
+                break; // Values are sorted, so we can stop early
+            }
         }
 
         // Return proportion, adjusted to avoid 0 and 1
-        return (count + 0.5) / (_nSamples + 1);
+        return NumOps.FromDouble((count + 0.5) / (_nSamples + 1));
     }
 }

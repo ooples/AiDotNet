@@ -199,30 +199,30 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             }
 
             // Compute reconstruction error (residual from unretained components)
-            double reconstructionError = 0;
+            T reconstructionError = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
                 T diff = NumOps.Subtract(centered[j], reconstructed[j]);
-                reconstructionError += NumOps.ToDouble(NumOps.Multiply(diff, diff));
+                reconstructionError = NumOps.Add(reconstructionError, NumOps.Multiply(diff, diff));
             }
 
             // Compute Mahalanobis distance in PCA space (distance along retained components,
             // weighted by inverse eigenvalues). This catches outliers that lie far from the mean
             // along principal component directions, even when reconstruction error is low.
-            double mahalanobis = 0;
+            T mahalanobis = NumOps.Zero;
+            T eigenFloor = NumOps.FromDouble(EigenvalueFloor);
             for (int c = 0; c < _fittedComponents; c++)
             {
-                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
-                if (eigenvalue > EigenvalueFloor)
+                T eigenvalue = _explainedVariance![c];
+                if (NumOps.GreaterThan(eigenvalue, eigenFloor))
                 {
-                    double proj = NumOps.ToDouble(projected[c]);
-                    mahalanobis += (proj * proj) / eigenvalue;
+                    T proj = projected[c];
+                    mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(proj, proj), eigenvalue));
                 }
             }
 
             // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
-            // Both are kept as squared statistics, consistent with standard MSPC-based PCA anomaly scoring.
-            scores[i] = NumOps.FromDouble(mahalanobis + reconstructionError);
+            scores[i] = NumOps.Add(mahalanobis, reconstructionError);
         }
 
         return scores;
@@ -343,17 +343,24 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
     private int DetermineComponents(Vector<T> eigenvalues)
     {
         // Find number of components to explain variance threshold
-        double totalVariance = 0;
+        T totalVariance = NumOps.Zero;
         for (int i = 0; i < eigenvalues.Length; i++)
         {
-            totalVariance += Math.Max(0, NumOps.ToDouble(eigenvalues[i]));
+            T ev = eigenvalues[i];
+            if (NumOps.GreaterThan(ev, NumOps.Zero))
+                totalVariance = NumOps.Add(totalVariance, ev);
         }
 
-        double cumulativeVariance = 0;
+        T cumulativeVariance = NumOps.Zero;
+        T threshold = NumOps.FromDouble(_varianceThreshold);
         for (int i = 0; i < eigenvalues.Length; i++)
         {
-            cumulativeVariance += Math.Max(0, NumOps.ToDouble(eigenvalues[i]));
-            if (totalVariance > 0 && cumulativeVariance / totalVariance >= _varianceThreshold)
+            T ev = eigenvalues[i];
+            if (NumOps.GreaterThan(ev, NumOps.Zero))
+                cumulativeVariance = NumOps.Add(cumulativeVariance, ev);
+
+            if (NumOps.GreaterThan(totalVariance, NumOps.Zero) &&
+                !NumOps.LessThan(NumOps.Divide(cumulativeVariance, totalVariance), threshold))
             {
                 return i + 1;
             }

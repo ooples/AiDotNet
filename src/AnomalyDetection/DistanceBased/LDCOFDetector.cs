@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.DistanceBased;
@@ -50,10 +51,10 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numClusters;
     private readonly int _numNeighbors;
-    private double[][]? _trainingData;
-    private double[][]? _clusterCenters;
+    private Matrix<T>? _trainingData;
+    private Matrix<T>? _clusterCenters;
     private int[]? _clusterAssignments;
-    private double[]? _clusterDensities;
+    private Vector<T>? _clusterDensities;
 
     /// <summary>
     /// Gets the number of clusters.
@@ -98,22 +99,12 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int n = X.Rows;
-        int d = X.Columns;
 
-        // Convert to double array
-        _trainingData = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            _trainingData[i] = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                _trainingData[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
+        _trainingData = X;
 
         // Run k-means clustering
         int effectiveClusters = Math.Min(_numClusters, n);
-        (_clusterCenters, _clusterAssignments) = KMeansClustering(_trainingData, effectiveClusters);
+        (_clusterCenters, _clusterAssignments) = KMeansClustering(X, effectiveClusters);
 
         // Compute cluster densities
         _clusterDensities = ComputeClusterDensities();
@@ -125,17 +116,21 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] centers, int[] assignments) KMeansClustering(double[][] data, int k)
+    private (Matrix<T> centers, int[] assignments) KMeansClustering(Matrix<T> data, int k)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
 
         // Initialize centers randomly
-        var centers = new double[k][];
-        var indices = Enumerable.Range(0, n).OrderBy(_ => _random.NextDouble()).Take(k).ToArray();
+        var centers = new Matrix<T>(k, d);
+        var indices = Enumerable.Range(0, n).OrderBy(_ => random.NextDouble()).Take(k).ToArray();
         for (int i = 0; i < k; i++)
         {
-            centers[i] = (double[])data[indices[i]].Clone();
+            for (int j = 0; j < d; j++)
+            {
+                centers[i, j] = data[indices[i], j];
+            }
         }
 
         var assignments = new int[n];
@@ -147,13 +142,17 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 int bestCluster = 0;
+
+                var point = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
 
                 for (int c = 0; c < k; c++)
                 {
-                    double dist = EuclideanDistance(data[i], centers[c]);
-                    if (dist < minDist)
+                    var centroid = new Vector<T>(centers.GetRowReadOnlySpan(c).ToArray());
+                    var diff = Engine.Subtract(point, centroid);
+                    T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         bestCluster = c;
@@ -171,11 +170,7 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
 
             // Update centers
             var counts = new int[k];
-            var newCenters = new double[k][];
-            for (int c = 0; c < k; c++)
-            {
-                newCenters[c] = new double[d];
-            }
+            var newCenters = new Matrix<T>(k, d);
 
             for (int i = 0; i < n; i++)
             {
@@ -183,7 +178,7 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
                 counts[c]++;
                 for (int j = 0; j < d; j++)
                 {
-                    newCenters[c][j] += data[i][j];
+                    newCenters[c, j] = NumOps.Add(newCenters[c, j], data[i, j]);
                 }
             }
 
@@ -193,17 +188,27 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
                 {
                     for (int j = 0; j < d; j++)
                     {
-                        newCenters[c][j] /= counts[c];
+                        newCenters[c, j] = NumOps.Divide(newCenters[c, j], NumOps.FromDouble(counts[c]));
                     }
-                    centers[c] = newCenters[c];
+                }
+                else
+                {
+                    // Re-initialize empty cluster
+                    int randomIdx = random.Next(n);
+                    for (int j = 0; j < d; j++)
+                    {
+                        newCenters[c, j] = data[randomIdx, j];
+                    }
                 }
             }
+
+            centers = newCenters;
         }
 
         return (centers, assignments);
     }
 
-    private double[] ComputeClusterDensities()
+    private Vector<T> ComputeClusterDensities()
     {
         var clusterCenters = _clusterCenters;
         var trainingData = _trainingData;
@@ -213,45 +218,54 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        int k = clusterCenters.Length;
-        var densities = new double[k];
+        int k = clusterCenters.Rows;
+        var densities = new Vector<T>(k);
 
         for (int c = 0; c < k; c++)
         {
-            // Get points in this cluster
-            var clusterPoints = trainingData
-                .Select((p, i) => new { Point = p, Index = i })
-                .Where(x => clusterAssignments[x.Index] == c)
-                .Select(x => x.Point)
+            // Get indices of points in this cluster
+            var clusterIndices = Enumerable.Range(0, trainingData.Rows)
+                .Where(i => clusterAssignments[i] == c)
                 .ToArray();
 
-            if (clusterPoints.Length == 0)
+            if (clusterIndices.Length == 0)
             {
-                densities[c] = 1.0;
+                densities[c] = NumOps.One;
                 continue;
             }
 
             // Compute average k-distance within cluster
-            double totalKDist = 0;
-            int effectiveK = Math.Min(_numNeighbors, clusterPoints.Length - 1);
+            T totalKDist = NumOps.Zero;
+            int effectiveK = Math.Min(_numNeighbors, clusterIndices.Length - 1);
 
-            foreach (var point in clusterPoints)
+            foreach (int pIdx in clusterIndices)
             {
-                var distances = clusterPoints
-                    .Where(p => p != point)
-                    .Select(p => EuclideanDistance(point, p))
-                    .OrderBy(d => d)
+                var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pIdx).ToArray());
+
+                var distances = clusterIndices
+                    .Where(qIdx => qIdx != pIdx)
+                    .Select(qIdx =>
+                    {
+                        var other = new Vector<T>(trainingData.GetRowReadOnlySpan(qIdx).ToArray());
+                        var diff = Engine.Subtract(point, other);
+                        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                    })
+                    .OrderBy(d => NumOps.ToDouble(d))
                     .ToArray();
 
                 if (distances.Length > 0 && effectiveK > 0)
                 {
-                    totalKDist += distances[Math.Min(effectiveK - 1, distances.Length - 1)];
+                    totalKDist = NumOps.Add(totalKDist, distances[Math.Min(effectiveK - 1, distances.Length - 1)]);
                 }
             }
 
             // Average k-distance (inverse is density)
-            double avgKDist = clusterPoints.Length > 0 ? totalKDist / clusterPoints.Length : 1.0;
-            densities[c] = 1.0 / (avgKDist + 1e-10);
+            T avgKDist = clusterIndices.Length > 0
+                ? NumOps.Divide(totalKDist, NumOps.FromDouble(clusterIndices.Length))
+                : NumOps.One;
+
+            T eps = NumOps.FromDouble(1e-10);
+            densities[c] = NumOps.Divide(NumOps.One, NumOps.Add(avgKDist, eps));
         }
 
         return densities;
@@ -277,23 +291,22 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int effectiveK = Math.Min(_numNeighbors, trainingData.Length - 1);
+        int effectiveK = Math.Min(_numNeighbors, trainingData.Rows - 1);
+        T eps = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]);
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Find nearest cluster
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
-            for (int c = 0; c < clusterCenters.Length; c++)
+            for (int c = 0; c < clusterCenters.Rows; c++)
             {
-                double dist = EuclideanDistance(point, clusterCenters[c]);
-                if (dist < minDist)
+                var centroid = new Vector<T>(clusterCenters.GetRowReadOnlySpan(c).ToArray());
+                var diff = Engine.Subtract(point, centroid);
+                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestCluster = c;
@@ -301,34 +314,27 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Compute local density (k-distance to training points)
-            var scoringTrainingData = _trainingData ?? throw new InvalidOperationException("_trainingData has not been initialized.");
-            var distances = scoringTrainingData
-                .Select(p => EuclideanDistance(point, p))
-                .OrderBy(d => d)
+            var distances = Enumerable.Range(0, trainingData.Rows)
+                .Select(ti =>
+                {
+                    var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(ti).ToArray());
+                    var diff = Engine.Subtract(point, trainPoint);
+                    return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                })
+                .OrderBy(d => NumOps.ToDouble(d))
                 .ToArray();
 
-            double kDist = effectiveK > 0 && effectiveK <= distances.Length
+            T kDist = effectiveK > 0 && effectiveK <= distances.Length
                 ? distances[effectiveK - 1]
-                : distances.LastOrDefault();
-            double localDensity = 1.0 / (kDist + 1e-10);
+                : (distances.Length > 0 ? distances[distances.Length - 1] : NumOps.Zero);
+            T localDensity = NumOps.Divide(NumOps.One, NumOps.Add(kDist, eps));
 
             // LDCOF score: ratio of cluster density to local density
-            double score = (_clusterDensities ?? throw new InvalidOperationException("_clusterDensities has not been initialized."))[nearestCluster] / (localDensity + 1e-10);
+            T score = NumOps.Divide(clusterDensities[nearestCluster], NumOps.Add(localDensity, eps));
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
-    }
-
-    private static double EuclideanDistance(double[] a, double[] b)
-    {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
     }
 }

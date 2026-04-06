@@ -98,8 +98,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Y standardization parameters for scale-invariant training.
     /// </summary>
-    private double _yMean;
-    private double _yStd = 1.0;
+
+    private T _yMean;
+
+
+    private T _yStd;
+
 
     /// <inheritdoc/>
     public override int NumberOfTrees => _trees.Count * _numParams;
@@ -117,6 +121,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public NGBoostRegression(NGBoostRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.Zero;
         _options = options ?? new NGBoostRegressionOptions();
         _trees = [];
         _initialParameters = new Vector<T>(0);
@@ -138,23 +144,17 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = x.Rows;
 
-        // Standardize y for scale-invariant training
-        double yMean = 0, yStd = 0;
-        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
-        yMean /= n;
-        for (int i = 0; i < n; i++)
-        {
-            double d = NumOps.ToDouble(y[i]) - yMean;
-            yStd += d * d;
-        }
-        yStd = Math.Sqrt(yStd / n);
-        if (yStd < 1e-10) yStd = 1.0;
-        _yMean = yMean;
-        _yStd = yStd;
+        // Standardize y for scale-invariant training (SIMD-accelerated via Engine)
+        T yMeanT = Engine.Mean(y);
+        var centered = (Vector<T>)Engine.Subtract(y, Vector<T>.CreateDefault(n, yMeanT));
+        T yVarT = Engine.DotProduct(centered, centered);
+        T yStdT = NumOps.Sqrt(NumOps.Divide(yVarT, NumOps.FromDouble(n)));
+        T eps = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(yStdT, eps)) yStdT = NumOps.One;
+        _yMean = yMeanT;
+        _yStd = yStdT;
 
-        var yStandardized = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        var yStandardized = (Vector<T>)Engine.Divide(centered, Vector<T>.CreateDefault(n, yStdT));
         y = yStandardized;
 
         // Initialize distribution and get number of parameters
@@ -307,8 +307,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Denormalize: prediction = standardized_mean * yStd + yMean
-            double mean = NumOps.ToDouble(distributions[i].Mean);
-            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
+            predictions[i] = NumOps.Add(NumOps.Multiply(distributions[i].Mean, _yStd), _yMean);
         }
 
         return predictions;
@@ -457,21 +456,20 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             variance = minVariance;
         }
 
-        // Distribution construction — some use special math functions (Math.Sqrt, Math.Log)
-        // at the boundary for parameter transformations
-        double meanD = NumOps.ToDouble(mean);
-        double varianceD = NumOps.ToDouble(variance);
+        // Distribution construction using NumOps for all math
+        T minVar = NumOps.FromDouble(MinVariance);
 
         return _options.DistributionType switch
         {
             NGBoostDistributionType.Normal => new NormalDistribution<T>(mean, variance),
             NGBoostDistributionType.Laplace => new LaplaceDistribution<T>(
-                mean, NumOps.FromDouble(Math.Sqrt(varianceD / 2))),
+                mean, NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(2)))),
             NGBoostDistributionType.StudentT => new StudentTDistribution<T>(
                 mean, NumOps.Sqrt(variance), NumOps.FromDouble(MaxStdDevMultiplier)),
             NGBoostDistributionType.LogNormal => new LogNormalDistribution<T>(
-                NumOps.FromDouble(Math.Log(Math.Max(meanD, MinVariance))),
-                NumOps.FromDouble(Math.Sqrt(Math.Log(1 + varianceD / (meanD * meanD + MinVariance))))),
+                NumOps.Log(NumOps.GreaterThan(mean, minVar) ? mean : minVar),
+                NumOps.Sqrt(NumOps.Log(NumOps.Add(NumOps.One,
+                    NumOps.Divide(variance, NumOps.Add(NumOps.Multiply(mean, mean), minVar)))))),
             NGBoostDistributionType.Exponential => new ExponentialDistribution<T>(
                 NumOps.Divide(NumOps.One, EnsurePositive(mean))),
             NGBoostDistributionType.Gamma => new GammaDistribution<T>(
@@ -795,8 +793,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_options.UseNaturalGradient);
 
         // Y standardization
-        writer.Write(_yMean);
-        writer.Write(_yStd);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
 
         // Initial parameters
         writer.Write(_numParams);
@@ -839,8 +837,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.UseNaturalGradient = reader.ReadBoolean();
 
         // Y standardization
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
 
         // Initial parameters
         _numParams = reader.ReadInt32();

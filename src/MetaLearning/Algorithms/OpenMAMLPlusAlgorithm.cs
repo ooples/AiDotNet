@@ -230,23 +230,12 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         if (prediction.Length == 0) return 0;
 
-        // Softmax
-        double maxVal = double.NegativeInfinity;
-        for (int i = 0; i < prediction.Length; i++)
-        {
-            double v = NumOps.ToDouble(prediction[i]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < prediction.Length; i++)
-            sumExp += Math.Exp(NumOps.ToDouble(prediction[i]) - maxVal);
-
-        // Entropy
+        // Softmax via Engine (SIMD), then entropy
+        var probs = Softmax(prediction);
         double entropy = 0;
-        for (int i = 0; i < prediction.Length; i++)
+        for (int i = 0; i < probs.Length; i++)
         {
-            double p = Math.Exp(NumOps.ToDouble(prediction[i]) - maxVal) / (sumExp + 1e-10);
+            double p = NumOps.ToDouble(probs[i]);
             if (p > 1e-10)
                 entropy -= p * Math.Log(p);
         }

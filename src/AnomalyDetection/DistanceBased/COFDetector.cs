@@ -7,47 +7,26 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AnomalyDetection.DistanceBased;
 
 /// <summary>
-/// Detects anomalies using Connectivity-based Outlier Factor (COF).
+/// Detects anomalies using Connectivity-Based Outlier Factor (COF).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> COF improves on LOF by considering the connectivity patterns
-/// of data points. It's particularly effective at detecting outliers that lie along
-/// low-density paths between clusters.
-/// </para>
-/// <para>
-/// The algorithm works by:
-/// 1. Build a chaining distance based on connectivity paths
-/// 2. Compare local chaining distance to neighbors' chaining distances
-/// 3. Points with relatively high chaining distances are anomalies
-/// </para>
-/// <para>
-/// <b>When to use:</b>
-/// - When outliers lie on low-density paths between clusters
-/// - When LOF fails to detect certain types of outliers
-/// - Data has non-uniform density
-/// </para>
-/// <para>
-/// <b>Industry Standard Defaults:</b>
-/// - K (neighbors): 10
-/// - Contamination: 0.1 (10%)
-/// </para>
-/// <para>
-/// Reference: Tang, J., et al. (2002). "Enhancing Effectiveness of Outlier Detections
-/// for Low Density Patterns." PAKDD.
+/// <b>For Beginners:</b> COF improves on LOF by considering the connectivity pattern
+/// of a point's neighborhood. It detects outliers that are connected differently
+/// from their neighbors (e.g., points in low-density corridors).
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.InstanceBased)]
+[ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
-    private double[]? _chainingDistances;
+    private Vector<T>? _chainingDistances;
 
     /// <summary>
     /// Gets the number of neighbors used for detection.
@@ -57,16 +36,16 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
     /// <summary>
     /// Creates a new COF anomaly detector.
     /// </summary>
-    /// <param name="k">Number of nearest neighbors to consider. Default is 10.</param>
+    /// <param name="k">Number of nearest neighbors. Default is 20.</param>
     /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
     /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
-    public COFDetector(int k = 10, double contamination = 0.1, int randomSeed = 42)
+    public COFDetector(int k = 20, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
         if (k < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(k),
-                "K must be at least 1. Recommended value is 10.");
+                "K must be at least 1. Recommended is 20.");
         }
 
         _k = k;
@@ -86,7 +65,7 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
 
         _trainingData = X;
 
-        // Compute chaining distances for training data
+        // Precompute chaining distances for training data
         _chainingDistances = ComputeChainingDistances(X);
 
         // Calculate scores for training data to set threshold
@@ -108,37 +87,35 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         var scores = new Vector<T>(X.Rows);
-
-        // Compute distance matrix
         var distanceMatrix = ComputeDistanceMatrix(X, _trainingData!);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            // Get k-nearest neighbors and their distances
             var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k);
 
-            // Compute average chaining distance (ac-dist)
-            double acDist = ComputeAverageChainDist(distanceMatrix, i, neighbors);
+            T acDist = ComputeAverageChainDist(distanceMatrix, i, neighbors);
 
-            // Compute COF as ratio of local ac-dist to neighbors' ac-dist
-            double avgNeighborAcDist = 0;
+            T avgNeighborAcDist = NumOps.Zero;
+            var chainingDist = _chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized.");
             foreach (int neighborIdx in neighbors)
             {
-                avgNeighborAcDist += (_chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized."))[neighborIdx];
+                avgNeighborAcDist = NumOps.Add(avgNeighborAcDist, chainingDist[neighborIdx]);
             }
-            avgNeighborAcDist /= neighbors.Count;
+            avgNeighborAcDist = NumOps.Divide(avgNeighborAcDist, NumOps.FromDouble(neighbors.Count));
 
             // COF = ac-dist(point) / average(ac-dist(neighbors))
-            double cof = avgNeighborAcDist > 0 ? acDist / avgNeighborAcDist : 1.0;
-            scores[i] = NumOps.FromDouble(cof);
+            T cof = NumOps.GreaterThan(avgNeighborAcDist, NumOps.Zero)
+                ? NumOps.Divide(acDist, avgNeighborAcDist)
+                : NumOps.One;
+            scores[i] = cof;
         }
 
         return scores;
     }
 
-    private double[] ComputeChainingDistances(Matrix<T> X)
+    private Vector<T> ComputeChainingDistances(Matrix<T> X)
     {
-        var chainDist = new double[X.Rows];
+        var chainDist = new Vector<T>(X.Rows);
         var distanceMatrix = ComputeDistanceMatrix(X, X);
 
         for (int i = 0; i < X.Rows; i++)
@@ -150,72 +127,67 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
         return chainDist;
     }
 
-    private double ComputeAverageChainDist(double[,] distanceMatrix, int pointIdx, List<int> neighbors)
+    private T ComputeAverageChainDist(T[,] distanceMatrix, int pointIdx, List<int> neighbors)
     {
-        if (neighbors.Count == 0) return 0;
+        if (neighbors.Count == 0) return NumOps.Zero;
 
-        // Build SBN-path (Set-Based Nearest) chaining distance
         var visited = new HashSet<int> { pointIdx };
-        double totalChainDist = 0;
+        T totalChainDist = NumOps.Zero;
 
-        // Process neighbors in order of distance
         var orderedNeighbors = neighbors
-            .OrderBy(n => distanceMatrix[pointIdx, n])
+            .OrderBy(n => NumOps.ToDouble(distanceMatrix[pointIdx, n]))
             .ToList();
 
         for (int i = 0; i < orderedNeighbors.Count; i++)
         {
             int current = orderedNeighbors[i];
 
-            // Find minimum distance from current to any visited point
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             foreach (int v in visited)
             {
-                if (distanceMatrix[current, v] < minDist)
+                if (NumOps.LessThan(distanceMatrix[current, v], minDist))
                 {
                     minDist = distanceMatrix[current, v];
                 }
             }
 
-            totalChainDist += (2.0 * (_k - i) / (_k * (_k + 1))) * minDist;
+            // Weight: 2 * (k - i) / (k * (k + 1))
+            T weight = NumOps.Divide(
+                NumOps.FromDouble(2.0 * (_k - i)),
+                NumOps.FromDouble((double)_k * (_k + 1)));
+            totalChainDist = NumOps.Add(totalChainDist, NumOps.Multiply(weight, minDist));
             visited.Add(current);
         }
 
         return totalChainDist;
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> X, Matrix<T> reference)
+    private T[,] ComputeDistanceMatrix(Matrix<T> X, Matrix<T> reference)
     {
-        var matrix = new double[X.Rows, reference.Rows];
+        var matrix = new T[X.Rows, reference.Rows];
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var pointI = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                pointI[j] = X[i, j];
-            }
+            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             for (int k = 0; k < reference.Rows; k++)
             {
-                var pointK = new Vector<T>(reference.Columns);
-                for (int j = 0; j < reference.Columns; j++)
-                {
-                    pointK[j] = reference[k, j];
-                }
+                var pointK = new Vector<T>(reference.GetRowReadOnlySpan(k).ToArray());
 
-                matrix[i, k] = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(pointI, pointK));
+                // Vectorized Euclidean distance via Engine
+                var diff = Engine.Subtract(pointI, pointK);
+                matrix[i, k] = NumOps.Sqrt(Engine.DotProduct(diff, diff));
             }
         }
 
         return matrix;
     }
 
-    private List<int> GetKNearestNeighbors(double[,] distanceMatrix, int pointIdx, int k)
+    private List<int> GetKNearestNeighbors(T[,] distanceMatrix, int pointIdx, int k)
     {
         return Enumerable.Range(0, distanceMatrix.GetLength(1))
-            .Where(i => i != pointIdx || distanceMatrix[pointIdx, i] > 0)
-            .OrderBy(i => distanceMatrix[pointIdx, i])
+            .Where(i => i != pointIdx || NumOps.GreaterThan(distanceMatrix[pointIdx, i], NumOps.Zero))
+            .OrderBy(i => NumOps.ToDouble(distanceMatrix[pointIdx, i]))
             .Take(k)
             .ToList();
     }

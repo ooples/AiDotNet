@@ -43,7 +43,9 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private Vector<T>? _mean;
     private Matrix<T>? _covarianceInverse;
-    private double _chiSquareCritical;
+
+    private T _chiSquareCritical;
+
     private int _nFeatures;
 
     /// <summary>
@@ -55,7 +57,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     /// Gets the Chi-Square critical value based on the fitted degrees of freedom (number of features) and alpha.
     /// Use this for statistical threshold-based anomaly detection.
     /// </summary>
-    public double ChiSquareCritical => _chiSquareCritical;
+    public T ChiSquareCritical => _chiSquareCritical;
 
     /// <summary>
     /// Creates a new Chi-Square anomaly detector.
@@ -72,6 +74,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     public ChiSquareDetector(double alpha = 0.05, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _chiSquareCritical = NumOps.Zero;
         if (alpha <= 0 || alpha >= 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),
@@ -132,7 +135,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         _covarianceInverse = ComputeInverse(covariance);
 
         // Get Chi-Square critical value (approximation)
-        _chiSquareCritical = GetChiSquareCritical(p, 1 - _alpha);
+        _chiSquareCritical = NumOps.FromDouble(GetChiSquareCritical(p, 1 - _alpha));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -211,7 +214,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 
         var scores = ScoreAnomalies(X);
         var predictions = new Vector<T>(scores.Length);
-        T criticalT = NumOps.FromDouble(_chiSquareCritical);
+        T criticalT = _chiSquareCritical;
 
         for (int i = 0; i < scores.Length; i++)
         {
@@ -241,10 +244,10 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Add small regularization for numerical stability
-        double epsilon = 1e-6;
+        T epsilon = NumOps.FromDouble(1e-6);
         for (int i = 0; i < n; i++)
         {
-            augmented[i, i] = NumOps.Add(augmented[i, i], NumOps.FromDouble(epsilon));
+            augmented[i, i] = NumOps.Add(augmented[i, i], epsilon);
         }
 
         // Gauss-Jordan elimination
@@ -276,7 +279,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
             if (NumOps.Equals(pivot, NumOps.Zero))
             {
                 // Matrix is singular, use pseudo-inverse approximation
-                pivot = NumOps.FromDouble(epsilon);
+                pivot = epsilon;
             }
 
             for (int j = 0; j < 2 * n; j++)

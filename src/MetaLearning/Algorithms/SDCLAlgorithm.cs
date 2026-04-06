@@ -261,28 +261,24 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         if (dim == 0) return 0;
 
         // Compute softened distributions
-        double maxT = double.NegativeInfinity, maxS = double.NegativeInfinity;
+        // Temperature-scaled softmax via Engine (SIMD)
+        T tempT = NumOps.FromDouble(temp);
+        var teacherLogits = new Vector<T>(dim);
+        var studentLogits = new Vector<T>(dim);
         for (int i = 0; i < dim; i++)
         {
-            double t = NumOps.ToDouble(teacherPred[i]) / temp;
-            double s = NumOps.ToDouble(studentPred[i]) / temp;
-            if (t > maxT) maxT = t;
-            if (s > maxS) maxS = s;
+            teacherLogits[i] = NumOps.Divide(teacherPred[i], tempT);
+            studentLogits[i] = NumOps.Divide(studentPred[i], tempT);
         }
-
-        double sumExpT = 0, sumExpS = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            sumExpT += Math.Exp(NumOps.ToDouble(teacherPred[i]) / temp - maxT);
-            sumExpS += Math.Exp(NumOps.ToDouble(studentPred[i]) / temp - maxS);
-        }
+        var pTeacher = Softmax(teacherLogits);
+        var pStudent = Softmax(studentLogits);
 
         // KL(teacher || student)
         double kl = 0;
         for (int i = 0; i < dim; i++)
         {
-            double pT = Math.Exp(NumOps.ToDouble(teacherPred[i]) / temp - maxT) / (sumExpT + 1e-10);
-            double pS = Math.Exp(NumOps.ToDouble(studentPred[i]) / temp - maxS) / (sumExpS + 1e-10);
+            double pT = NumOps.ToDouble(pTeacher[i]);
+            double pS = NumOps.ToDouble(pStudent[i]);
             if (pT > 1e-10)
                 kl += pT * Math.Log(pT / (pS + 1e-10));
         }

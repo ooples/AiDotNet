@@ -51,9 +51,11 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _seasonLength;
     private readonly int _trendSmoothness;
-    private double[]? _trend;
-    private double[]? _seasonal;
-    private double _residualStd;
+    private Vector<T>? _trend;
+    private Vector<T>? _seasonal;
+
+    private T _residualStd;
+
 
     /// <summary>
     /// Gets the season length.
@@ -90,6 +92,7 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 
         _seasonLength = seasonLength;
         _trendSmoothness = trendSmoothness;
+        _residualStd = NumOps.Zero;
     }
 
     /// <inheritdoc/>
@@ -136,8 +139,8 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
         int n = values.Length;
 
         // Initialize
-        _trend = new double[n];
-        _seasonal = new double[n];
+        var trendLocal = new double[n];
+        var seasonalLocal = new double[n];
 
         // Iterative STL (simplified)
         for (int iter = 0; iter < 3; iter++)
@@ -146,7 +149,7 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
             var detrended = new double[n];
             for (int i = 0; i < n; i++)
             {
-                detrended[i] = values[i] - _trend[i];
+                detrended[i] = values[i] - trendLocal[i];
             }
 
             // Step 2: Extract seasonal using subseries
@@ -172,31 +175,42 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 
             // Normalize seasonal (mean = 0)
             double seasonalMean = seasonalTemp.Average();
+            var seasonalD = new double[n];
             for (int i = 0; i < n; i++)
             {
-                _seasonal[i] = seasonalTemp[i] - seasonalMean;
+                seasonalD[i] = seasonalTemp[i] - seasonalMean;
             }
 
             // Step 3: Deseasonalize
             var deseasoned = new double[n];
             for (int i = 0; i < n; i++)
             {
-                deseasoned[i] = values[i] - _seasonal[i];
+                deseasoned[i] = values[i] - seasonalD[i];
             }
 
             // Step 4: Smooth to get trend (moving average)
-            _trend = SmoothMovingAverage(deseasoned, _trendSmoothness);
+            var trendD = SmoothMovingAverage(deseasoned, _trendSmoothness);
+
+            // Feed updated decomposition into next iteration
+            trendLocal = trendD;
+            seasonalLocal = seasonalD;
+
+            _trend = new Vector<T>(trendD.Select(v => NumOps.FromDouble(v)));
+            _seasonal = new Vector<T>(seasonalD.Select(v => NumOps.FromDouble(v)));
         }
 
         // Compute residual standard deviation
+        var trendVec = _trend ?? throw new InvalidOperationException("Trend not computed.");
+        var seasonalVec = _seasonal ?? throw new InvalidOperationException("Seasonal not computed.");
         var residuals = new double[n];
         for (int i = 0; i < n; i++)
         {
-            residuals[i] = values[i] - _trend[i] - _seasonal[i];
+            residuals[i] = values[i] - NumOps.ToDouble(trendVec[i]) - NumOps.ToDouble(seasonalVec[i]);
         }
 
-        _residualStd = Math.Sqrt(residuals.Select(r => r * r).Average());
-        if (_residualStd < 1e-10) _residualStd = 1e-10;
+        double residualStdD = Math.Sqrt(residuals.Select(r => r * r).Average());
+        if (residualStdD < 1e-10) residualStdD = 1e-10;
+        _residualStd = NumOps.FromDouble(residualStdD);
     }
 
     private double[] SmoothMovingAverage(double[] values, int windowSize)
@@ -256,8 +270,8 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
             int trendIdx = Math.Min(i, trend.Length - 1);
             int seasonIdx = i % _seasonLength;
 
-            double residual = value - trend[trendIdx] - seasonal[seasonIdx];
-            double score = Math.Abs(residual) / _residualStd;
+            double residual = value - NumOps.ToDouble(trend[trendIdx]) - NumOps.ToDouble(seasonal[seasonIdx]);
+            double score = Math.Abs(residual) / NumOps.ToDouble(_residualStd);
 
             scores[i] = NumOps.FromDouble(score);
         }

@@ -154,12 +154,12 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < n; i++)
         {
             // Use precomputed values for training data, otherwise compute for new point
-            double lofScore = isTrainingData
+            T lofScore = isTrainingData
                 ? ComputeLOFScore(i)
                 : ComputeLOFScoreForNewPoint(X.GetRow(i));
 
             // LOF > 1 indicates anomaly, higher = more anomalous
-            scores[i] = NumOps.FromDouble(lofScore);
+            scores[i] = lofScore;
         }
 
         return scores;
@@ -259,7 +259,7 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         return lrd;
     }
 
-    private double ComputeLOFScore(int pointIndex)
+    private T ComputeLOFScore(int pointIndex)
     {
         var neighborIndices = _neighborIndices;
         var lrd = _lrd;
@@ -284,10 +284,10 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         }
 
         // LOF = average of ratios
-        return NumOps.ToDouble(lofSum) / _numNeighbors;
+        return NumOps.Divide(lofSum, NumOps.FromDouble(_numNeighbors));
     }
 
-    private double ComputeLOFScoreForNewPoint(Vector<T> point)
+    private T ComputeLOFScoreForNewPoint(Vector<T> point)
     {
         var kDistances = _kDistances;
         var lrd = _lrd;
@@ -328,6 +328,6 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
                 : lofSum;
         }
 
-        return NumOps.ToDouble(lofSum) / _numNeighbors;
+        return NumOps.Divide(lofSum, NumOps.FromDouble(_numNeighbors));
     }
 }

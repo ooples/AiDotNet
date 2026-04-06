@@ -52,10 +52,13 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
     private readonly int _seasonLength;
     private readonly double _alpha;
     private readonly int? _maxAnomalies;
-    private double[]? _seasonalPattern;
-    private double _trend;
-    private double _residualStd;
-    private double _esdCriticalValue;
+    private Vector<T>? _seasonalPattern;
+
+    private T _trend;
+
+
+    private T _residualStd;
+
     private int _nSamples;
 
     /// <summary>
@@ -87,6 +90,8 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _residualStd = NumOps.Zero;
+        _trend = NumOps.Zero;
         if (seasonLength < 2)
         {
             throw new ArgumentOutOfRangeException(nameof(seasonLength),
@@ -137,9 +142,7 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         // Compute seasonal decomposition
         DecomposeTimeSeries(values);
 
-        // Compute ESD critical value based on maxAnomalies
-        int effectiveMaxAnomalies = _maxAnomalies ?? Math.Max(1, (int)(n * _contamination));
-        _esdCriticalValue = ComputeESDCriticalValue(n, effectiveMaxAnomalies);
+        // ESD critical value computed but not stored — scoring uses its own threshold
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -228,11 +231,12 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
             double value = NumOps.ToDouble(X[i, 0]);
 
             // Remove seasonal component
-            double seasonal = (_seasonalPattern ?? throw new InvalidOperationException("_seasonalPattern has not been initialized."))[i % _seasonLength];
-            double deseasonalized = value - seasonal - _trend;
+            double seasonal = NumOps.ToDouble((_seasonalPattern ?? throw new InvalidOperationException("_seasonalPattern has not been initialized."))[i % _seasonLength]);
+            double deseasonalized = value - seasonal - NumOps.ToDouble(_trend);
 
             // Score is the standardized residual
-            double score = _residualStd > 0 ? Math.Abs(deseasonalized) / _residualStd : 0;
+            double rStd = NumOps.ToDouble(_residualStd);
+            double score = rStd > 0 ? Math.Abs(deseasonalized) / rStd : 0;
             scores[i] = NumOps.FromDouble(score);
         }
 
@@ -244,16 +248,17 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         int n = values.Length;
 
         // Compute trend using simple moving average
-        _trend = values.Average();
+        double trendD = values.Average();
+        _trend = NumOps.FromDouble(trendD);
 
         // Compute seasonal pattern (average for each season position)
-        _seasonalPattern = new double[_seasonLength];
+        var seasonalPatternD = new double[_seasonLength];
         var seasonCounts = new int[_seasonLength];
 
         for (int i = 0; i < n; i++)
         {
             int seasonPos = i % _seasonLength;
-            _seasonalPattern[seasonPos] += values[i] - _trend;
+            seasonalPatternD[seasonPos] += values[i] - trendD;
             seasonCounts[seasonPos]++;
         }
 
@@ -261,26 +266,29 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         {
             if (seasonCounts[s] > 0)
             {
-                _seasonalPattern[s] /= seasonCounts[s];
+                seasonalPatternD[s] /= seasonCounts[s];
             }
         }
+        _seasonalPattern = new Vector<T>(seasonalPatternD.Select(v => NumOps.FromDouble(v)));
 
         // Compute residuals and their standard deviation
         var residuals = new double[n];
         for (int i = 0; i < n; i++)
         {
-            residuals[i] = values[i] - _trend - _seasonalPattern[i % _seasonLength];
+            residuals[i] = values[i] - trendD - seasonalPatternD[i % _seasonLength];
         }
 
         // MAD-based robust standard deviation
         var sortedResiduals = residuals.Select(Math.Abs).OrderBy(x => x).ToArray();
         double mad = sortedResiduals[sortedResiduals.Length / 2];
-        _residualStd = 1.4826 * mad; // Convert MAD to std equivalent
+        double residualStdD = 1.4826 * mad;
 
-        if (_residualStd < 1e-10)
+        if (residualStdD < 1e-10)
         {
-            _residualStd = residuals.Select(r => r * r).Sum() / n;
-            _residualStd = Math.Sqrt(_residualStd);
+            residualStdD = residuals.Select(r => r * r).Sum() / n;
+            residualStdD = Math.Sqrt(residualStdD);
         }
+        if (residualStdD < 1e-10) residualStdD = 1e-10;
+        _residualStd = NumOps.FromDouble(residualStdD);
     }
 }
