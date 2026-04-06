@@ -62,7 +62,7 @@ public class NestedLearningIntegrationTests
     }
 
     [Fact]
-    public void AssociativeMemory_Associate_UpdatesAssociationMatrix()
+    public void AssociativeMemory_Associate_StoresAndRecallsTarget()
     {
         // Arrange
         var memory = new AssociativeMemory<double>(dimension: 4, capacity: 10);
@@ -146,7 +146,7 @@ public class NestedLearningIntegrationTests
     }
 
     [Fact]
-    public void AssociativeMemory_Update_ModifiesAssociationMatrix()
+    public void AssociativeMemory_Update_ChangesRetrievalResult()
     {
         // Arrange
         var memory = new AssociativeMemory<double>(dimension: 4, capacity: 10);

@@ -49,8 +49,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     private Tensor<T>? _weightsTCache;
 
     /// <summary>
-    /// Bias values as points on the Poincare ball.
-    /// Shape: [OutputFeatures, InputFeatures] - each row is a bias point.
+    /// Scalar bias per output feature — shifts the Poincaré distance.
+    /// Shape: [OutputFeatures].
     /// </summary>
     private Tensor<T> _biases;
 
@@ -524,25 +524,21 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        var epsilon = NumOps.FromDouble(1e-5);
-
         for (int o = 0; o < OutputFeatures; o++)
         {
-            // Update weights in tangent space (per-element update)
             for (int i = 0; i < InputFeatures; i++)
             {
                 var grad = _weightsGradient[o, i];
-                var scaledGrad = NumOps.Multiply(learningRate, grad);
-                _weights[o, i] = NumOps.Subtract(_weights[o, i], scaledGrad);
+                _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, grad));
             }
 
-            // Update scalar bias with Euclidean gradient descent
             if (_biasesGradient != null && o < _biasesGradient.Length)
             {
-                var grad = _biasesGradient[o];
-                _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, grad));
+                _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
             }
         }
+
+        _weightsTCache = null;
     }
 
     /// <summary>
@@ -625,8 +621,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         if (_biasesGradient != null)
         {
             for (int o = 0; o < OutputFeatures; o++)
-                for (int i = 0; i < InputFeatures; i++)
-                    gradients[idx++] = _biasesGradient[o, i];
+                    gradients[idx++] = _biasesGradient[o];
         }
 
         return gradients;

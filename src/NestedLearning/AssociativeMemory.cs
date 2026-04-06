@@ -60,19 +60,18 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         // Modern continuous Hopfield retrieval per Ramsauer et al. 2021:
         // Scores keys (Input) against query, returns weighted sum of values (Target).
         // new_state = softmax(β * keys^T @ query) @ values
+        // Compute similarity scores via Engine.DotProduct: β * <key_i, query>
         var scores = new double[_memories.Count];
         double maxScore = double.NegativeInfinity;
 
         for (int m = 0; m < _memories.Count; m++)
         {
-            double dot = 0;
-            var key = _memories[m].Input;
-            for (int d = 0; d < _dimension; d++)
-                dot += NumOps.ToDouble(NumOps.Multiply(key[d], query[d]));
-            scores[m] = _inverseTemperature * dot;
+            T dot = Engine.DotProduct(_memories[m].Input, query);
+            scores[m] = _inverseTemperature * NumOps.ToDouble(dot);
             if (scores[m] > maxScore) maxScore = scores[m];
         }
 
+        // Numerically stable softmax
         double sumExp = 0;
         for (int m = 0; m < _memories.Count; m++)
         {
@@ -82,15 +81,15 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         for (int m = 0; m < _memories.Count; m++)
             scores[m] /= (sumExp + 1e-10);
 
-        var result = new Vector<T>(_dimension);
+        // Weighted sum of values via Engine tensor ops
+        var resultTensor = new Tensor<T>([_dimension]);
         for (int m = 0; m < _memories.Count; m++)
         {
-            T weight = NumOps.FromDouble(scores[m]);
-            var value = _memories[m].Target;
-            for (int d = 0; d < _dimension; d++)
-                result[d] = NumOps.Add(result[d], NumOps.Multiply(weight, value[d]));
+            var valueTensor = Tensor<T>.FromVector(_memories[m].Target);
+            var weighted = Engine.TensorMultiplyScalar(valueTensor, NumOps.FromDouble(scores[m]));
+            resultTensor = Engine.TensorAdd(resultTensor, weighted);
         }
-        return result;
+        return resultTensor.ToVector();
     }
 
     public void Update(Vector<T> input, Vector<T> target, T learningRate)
@@ -100,35 +99,33 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         if (input.Length != _dimension || target.Length != _dimension)
             throw new ArgumentException("Input and target must match memory dimension");
 
-        // If a matching key already exists, replace its target (accumulate learning signal)
+        double lr = NumOps.ToDouble(learningRate);
+        if (lr < 0 || lr > 1 || double.IsNaN(lr) || double.IsInfinity(lr))
+            throw new ArgumentOutOfRangeException(nameof(learningRate), lr, "Learning rate must be in [0, 1].");
+
+        // If a matching key already exists, blend its target (accumulate learning signal)
         // instead of appending a duplicate that splits softmax attention
+        var inputTensor = Tensor<T>.FromVector(input);
+        T inputNormSq = Engine.DotProduct(input, input);
+        double inputNorm = Math.Sqrt(NumOps.ToDouble(inputNormSq));
+
         for (int m = 0; m < _memories.Count; m++)
         {
-            double dot = 0;
             var key = _memories[m].Input;
-            for (int d = 0; d < _dimension; d++)
-                dot += NumOps.ToDouble(NumOps.Multiply(key[d], input[d]));
+            T dot = Engine.DotProduct(key, input);
+            T keyNormSq = Engine.DotProduct(key, key);
+            double cosine = NumOps.ToDouble(dot) / (Math.Sqrt(NumOps.ToDouble(keyNormSq)) * inputNorm + 1e-10);
 
-            double keyNormSq = 0, inputNormSq = 0;
-            for (int d = 0; d < _dimension; d++)
-            {
-                keyNormSq += NumOps.ToDouble(NumOps.Multiply(key[d], key[d]));
-                inputNormSq += NumOps.ToDouble(NumOps.Multiply(input[d], input[d]));
-            }
-
-            double cosine = dot / (Math.Sqrt(keyNormSq * inputNormSq) + 1e-10);
             if (cosine > 0.99)
             {
-                // Blend existing target with new target using learning rate
-                var existing = _memories[m].Target;
-                var updated = new Vector<T>(_dimension);
-                for (int d = 0; d < _dimension; d++)
-                {
-                    T keep = NumOps.Multiply(NumOps.Subtract(NumOps.One, learningRate), existing[d]);
-                    T add = NumOps.Multiply(learningRate, target[d]);
-                    updated[d] = NumOps.Add(keep, add);
-                }
-                _memories[m] = (key, updated);
+                // Blend: updated = (1-lr) * existing + lr * target
+                var existingTensor = Tensor<T>.FromVector(_memories[m].Target);
+                var targetTensor = Tensor<T>.FromVector(target);
+                T oneMinusLr = NumOps.Subtract(NumOps.One, learningRate);
+                var kept = Engine.TensorMultiplyScalar(existingTensor, oneMinusLr);
+                var added = Engine.TensorMultiplyScalar(targetTensor, learningRate);
+                var blended = Engine.TensorAdd(kept, added);
+                _memories[m] = (key, blended.ToVector());
                 _cachedAssociationMatrix = null;
                 return;
             }
@@ -152,18 +149,27 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
     /// </summary>
     public Matrix<T> GetAssociationMatrix()
     {
-        if (_cachedAssociationMatrix != null)
-            return _cachedAssociationMatrix;
-
-        var matrix = new Matrix<T>(_dimension, _dimension);
-        foreach (var (input, target) in _memories)
+        if (_cachedAssociationMatrix == null)
         {
+            // W = Σ target_i ⊗ input_i  (outer product sum via Engine matmul)
+            var result = new Tensor<T>([_dimension, _dimension]);
+            foreach (var (input, target) in _memories)
+            {
+                var tCol = Tensor<T>.FromVector(target).Reshape([_dimension, 1]);
+                var iRow = Tensor<T>.FromVector(input).Reshape([1, _dimension]);
+                var outer = Engine.TensorMatMul(tCol, iRow);
+                result = Engine.TensorAdd(result, outer);
+            }
+
+            var matrix = new Matrix<T>(_dimension, _dimension);
             for (int i = 0; i < _dimension; i++)
                 for (int j = 0; j < _dimension; j++)
-                    matrix[i, j] = NumOps.Add(matrix[i, j], NumOps.Multiply(target[i], input[j]));
+                    matrix[i, j] = result[i, j];
+            _cachedAssociationMatrix = matrix;
         }
-        _cachedAssociationMatrix = matrix;
-        return matrix;
+
+        // Return a copy so callers can't mutate the cache
+        return _cachedAssociationMatrix.Clone();
     }
 
     /// <summary>
