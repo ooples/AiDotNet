@@ -408,7 +408,9 @@ public partial class RBMLayer<T> : LayerBase<T>
 
         _lastVisibleInput = visible2D;
 
-        Tensor<T> hiddenProbs = SampleHiddenGivenVisibleTensor(visible2D);
+        // Use FusedLinear for tape-tracked forward: h = sigmoid(v @ W^T + b_h)
+        var weightsT = Engine.TensorTranspose(_weights);
+        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
         _lastHiddenOutput = hiddenProbs;
 
         if (rank == 1)
