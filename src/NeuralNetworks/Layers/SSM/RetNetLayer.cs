@@ -669,15 +669,15 @@ public partial class RetNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_queryBiasGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_keyBiasGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()),
-            new Vector<T>(_gammasGradient!.ToArray()),
-            new Vector<T>(_groupNormScaleGradient!.ToArray()),
-            new Vector<T>(_groupNormBiasGradient!.ToArray()));
+            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_queryBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_keyBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_valueBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_gammasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_groupNormScaleGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_groupNormBiasGradient?.ToArray() ?? Array.Empty<T>()));
     }
 
     public override void ClearGradients()
