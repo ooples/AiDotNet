@@ -96,41 +96,8 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
             return result;
         }
 
-        // Fallback: association matrix retrieval when no memory buffer entries
-        var retrieved = _associationMatrix.Multiply(query);
-
-        // Check for exact or near matches in memory buffer
-        T bestSimilarity = _numOps.FromDouble(double.NegativeInfinity);
-        Vector<T>? bestMatch = null;
-
-        foreach (var (input, target) in _memories)
-        {
-            T similarity = ComputeSimilarity(query, input);
-            if (_numOps.GreaterThan(similarity, bestSimilarity))
-            {
-                bestSimilarity = similarity;
-                bestMatch = target;
-            }
-        }
-
-        // Blend matrix-based retrieval with buffer-based retrieval
-        if (bestMatch != null && _numOps.GreaterThan(bestSimilarity, _numOps.FromDouble(0.8)))
-        {
-            T blendFactor = _numOps.FromDouble(0.3);
-            var blended = new Vector<T>(_dimension);
-
-            for (int i = 0; i < _dimension; i++)
-            {
-                T matrixPart = _numOps.Multiply(retrieved[i],
-                    _numOps.Subtract(_numOps.One, blendFactor));
-                T bufferPart = _numOps.Multiply(bestMatch[i], blendFactor);
-                blended[i] = _numOps.Add(matrixPart, bufferPart);
-            }
-
-            return blended;
-        }
-
-        return retrieved;
+        // No memories stored — fall back to association matrix retrieval
+        return _associationMatrix.Multiply(query);
     }
 
     public void Update(Vector<T> input, Vector<T> target, T learningRate)
