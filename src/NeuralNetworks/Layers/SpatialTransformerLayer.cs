@@ -79,6 +79,8 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// would be most helpful.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _localizationWeights1;
 
     /// <summary>
@@ -95,6 +97,8 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// They work together with the weights to determine how the network responds to different inputs.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _localizationBias1;
 
     /// <summary>
@@ -113,6 +117,8 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// how to scale, rotate, translate, and shear the input image.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _localizationWeights2;
 
     /// <summary>
@@ -130,6 +136,8 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// learn more complex transformations as needed.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _localizationBias2;
 
     /// <summary>

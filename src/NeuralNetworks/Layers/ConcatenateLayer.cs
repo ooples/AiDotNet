@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -443,6 +443,37 @@ public class ConcatenateLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in a concatenate layer
+    }
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _inputPortsCache;
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _inputPortsCache ??=
+        [
+            new LayerPort("input_0", GetInputShape()),
+            new LayerPort("input_1", GetInputShape())
+        ];
+
+    /// <summary>
+    /// Named multi-input forward pass. Collects all "input_N" keys and concatenates.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        var tensors = new List<Tensor<T>>();
+        for (int i = 0; ; i++)
+        {
+            if (!inputs.TryGetValue($"input_{i}", out var tensor))
+                break;
+            if (tensor == null)
+                throw new ArgumentException($"ConcatenateLayer input 'input_{i}' must not be null.", nameof(inputs));
+            tensors.Add(tensor);
+        }
+        if (tensors.Count < 2)
+            throw new ArgumentException($"ConcatenateLayer requires at least 'input_0' and 'input_1'. Got {tensors.Count} sequential inputs.", nameof(inputs));
+        return Forward(tensors.ToArray());
     }
 
     /// <summary>

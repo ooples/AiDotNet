@@ -76,18 +76,24 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// Weights for incoming edge aggregation.
     /// Shape: [inputFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _incomingWeights;
 
     /// <summary>
     /// Weights for outgoing edge aggregation.
     /// Shape: [inputFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outgoingWeights;
 
     /// <summary>
     /// Self-loop weights.
     /// Shape: [inputFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _selfWeights;
 
     /// <summary>
@@ -106,20 +112,30 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// Biases for incoming, outgoing, and self transformations.
     /// Shape: [outputFeatures] each
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _incomingBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outgoingBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _selfBias;
 
     /// <summary>
     /// Combination weights for merging in/out/self features.
     /// Shape: [3 * outputFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _combinationWeights;
 
     /// <summary>
     /// Combination bias.
     /// Shape: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _combinationBias;
 
     /// <summary>

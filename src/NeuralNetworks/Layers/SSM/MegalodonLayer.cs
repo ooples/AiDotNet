@@ -91,11 +91,19 @@ public partial class MegalodonLayer<T> : LayerBase<T>
     private Tensor<T> _emaAlphaImag;
 
     // EMA input projection: [modelDim, emaDimension]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _emaInputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _emaInputBias;
 
     // EMA output projection: [emaDimension, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _emaOutputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _emaOutputBias;
 
     // Timestep normalization: [emaDimension] each
@@ -103,16 +111,30 @@ public partial class MegalodonLayer<T> : LayerBase<T>
     private Tensor<T> _tsNormBeta;
 
     // Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
 
     // Gating: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _gateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _gateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values

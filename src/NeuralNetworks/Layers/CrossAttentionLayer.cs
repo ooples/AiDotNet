@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -166,12 +166,44 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Declares named input ports: "query" (required) and "context" (optional, defaults to query for self-attention).
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _inputPortsCache;
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _inputPortsCache ??=
+        [
+            new LayerPort("query", GetInputShape()),
+            new LayerPort("context", new[] { 1, _contextDim }, Required: false)
+        ];
+
+    /// <summary>
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // For single input, use it as both query and context (self-attention fallback)
         return ForwardCrossAttention(input, input);
+    }
+
+    /// <summary>
+    /// Named multi-input forward pass. Accepts "query" and optional "context" by name.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("query", out var query) || query == null)
+            throw new ArgumentException("CrossAttentionLayer requires a non-null 'query' input.", nameof(inputs));
+
+        // Context is optional — defaults to query for self-attention only when dimensions match
+        if (!inputs.TryGetValue("context", out var context) || context == null)
+        {
+            if (_queryDim != _contextDim)
+                throw new ArgumentException(
+                    $"CrossAttentionLayer requires 'context' when queryDim ({_queryDim}) != contextDim ({_contextDim}).", nameof(inputs));
+            context = query;
+        }
+
+        return ForwardCrossAttention(query, context);
     }
 
     /// <summary>

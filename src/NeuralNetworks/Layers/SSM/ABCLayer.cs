@@ -72,23 +72,41 @@ public partial class ABCLayer<T> : LayerBase<T>
     private readonly int _headDimension;
 
     // Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
 
     // Slot key embeddings: [numHeads, numSlots, headDim]
     private Tensor<T> _slotKeys;
 
     // Forget gate projection: [modelDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _forgetGateBias;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values

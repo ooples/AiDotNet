@@ -44,8 +44,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _transitionMatrix;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _startScores;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _endScores;
 
     private Tensor<T>? _lastInput;

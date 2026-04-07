@@ -68,19 +68,35 @@ public partial class HGRNLayer<T> : LayerBase<T>
     private readonly double _forgetBias;
 
     // Input projection: [modelDim, modelDim] - projects input before gating
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Forget gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _forgetGateBias;
 
     // Input gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass

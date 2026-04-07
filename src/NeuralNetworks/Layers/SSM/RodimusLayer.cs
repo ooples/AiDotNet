@@ -79,24 +79,46 @@ public partial class RodimusLayer<T> : LayerBase<T>
     private readonly double _baseTemperature;
 
     // Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
 
     // Temperature projection: [modelDim, numHeads] -> produces per-head temperature
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _temperatureWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _temperatureBias;
 
     // Forget gate projection: [modelDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _forgetGateBias;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values

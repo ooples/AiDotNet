@@ -68,31 +68,51 @@ public partial class Mamba2Block<T> : LayerBase<T>
     private readonly int _chunkSize;
 
     // Input projection: [modelDim, innerDim * 2]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Conv1D weights: [innerDim, convKernelSize]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _convWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _convBias;
 
     // B projection: [innerDim, stateDim] (shared across heads)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _bProjectionWeights;
 
     // C projection: [innerDim, stateDim] (shared across heads)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _cProjectionWeights;
 
     // Per-head scalar A (stored as log for stability): [numHeads]
     private Tensor<T> _aLog;
 
     // Delta projection: [innerDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _dtProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _dtProjectionBias;
 
     // D: [numHeads] skip connection per head
     private Tensor<T> _dParam;
 
     // Output projection: [innerDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Layer norm on output (GroupNorm in original, simplified to per-head norm)
@@ -334,6 +354,11 @@ public partial class Mamba2Block<T> : LayerBase<T>
 
         _normGamma.Fill(NumOps.One);
         _normBeta.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_aLog, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_normGamma, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_normBeta, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor)

@@ -72,7 +72,6 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>>? _teacherForward;
-    private readonly IJitCompilable<T>? _jitCompilableModel;
     private readonly Action<Vector<T>, Vector<T>>? _teacherUpdate;
     private readonly OnlineUpdateMode _updateMode;
     private readonly double _updateRate;
@@ -122,7 +121,6 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         _updateRate = updateRate;
         _updateFrequency = updateFrequency;
         _updateCounter = 0;
-        _jitCompilableModel = null;
 
         if (updateFrequency < 1)
             throw new ArgumentException("Update frequency must be at least 1", nameof(updateFrequency));
@@ -130,46 +128,6 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             throw new ArgumentException("Update rate must be in (0, 1]", nameof(updateRate));
     }
 
-    /// <summary>
-    /// Initializes a new instance of the OnlineTeacherModel class using a JIT-compilable model.
-    /// </summary>
-    /// <param name="jitCompilableModel">A JIT-compilable model for forward pass.</param>
-    /// <param name="inputDimension">Input dimension of the teacher.</param>
-    /// <param name="outputDimension">Output dimension of the teacher.</param>
-    /// <param name="teacherUpdate">Optional function to update teacher parameters.</param>
-    /// <param name="updateMode">How to update the teacher (default: EMA).</param>
-    /// <param name="updateRate">Update rate for EMA or learning rate (default: 0.999 for EMA).</param>
-    /// <param name="updateFrequency">How often to update (default: every step).</param>
-    /// <remarks>
-    /// <para><b>JIT Support:</b> This constructor enables JIT compilation for inference
-    /// when the underlying model supports it. Note that updates still use the teacherUpdate
-    /// function if provided.</para>
-    /// </remarks>
-    public OnlineTeacherModel(
-        IJitCompilable<T> jitCompilableModel,
-        int inputDimension,
-        int outputDimension,
-        Action<Vector<T>, Vector<T>>? teacherUpdate = null,
-        OnlineUpdateMode updateMode = OnlineUpdateMode.EMA,
-        double updateRate = 0.999,
-        int updateFrequency = 1)
-    {
-        Guard.NotNull(jitCompilableModel);
-        _jitCompilableModel = jitCompilableModel;
-        _teacherUpdate = teacherUpdate;
-        _inputDim = inputDimension;
-        OutputDimension = outputDimension;
-        _updateMode = updateMode;
-        _updateRate = updateRate;
-        _updateFrequency = updateFrequency;
-        _updateCounter = 0;
-        _teacherForward = null;
-
-        if (updateFrequency < 1)
-            throw new ArgumentException("Update frequency must be at least 1", nameof(updateFrequency));
-        if (updateRate <= 0 || updateRate > 1)
-            throw new ArgumentException("Update rate must be in (0, 1]", nameof(updateRate));
-    }
 
     /// <summary>
     /// Gets logits from the teacher model.
@@ -182,21 +140,8 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
 
-        if (_jitCompilableModel != null)
-        {
-            // IJitCompilable doesn't have execution methods - need to cast to a model interface
-            if (_jitCompilableModel is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
-            {
-                return model.Predict(input);
-            }
-
-            throw new InvalidOperationException(
-                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
-                "IJitCompilable only provides computation graph export for JIT compilation.");
-        }
-
         if (_teacherForward == null)
-            throw new InvalidOperationException("No forward function or JIT-compilable model configured");
+            throw new InvalidOperationException("No forward function configured");
 
         return _teacherForward(input);
     }

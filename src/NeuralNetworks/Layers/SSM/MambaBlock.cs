@@ -66,19 +66,33 @@ internal partial class MambaBlock<T> : LayerBase<T>
     private readonly int _dtRank;
 
     // Input projection: [modelDim, innerDim * 2] (projects to x and z branches)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Conv1D weights: [innerDim, convKernelSize] (depthwise over sequence)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _convWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _convBias;
 
     // SSM parameter projections (from inner dimension after Conv1D + SiLU)
     // x_proj: [innerDim, dtRank + stateDim * 2] (projects to delta, B, C)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _xProjectionWeights;
 
     // dt_proj: [dtRank, innerDim] (projects dt from low rank to inner dimension)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _dtProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _dtProjectionBias;
 
     // SSM continuous parameters
@@ -88,7 +102,11 @@ internal partial class MambaBlock<T> : LayerBase<T>
     private Tensor<T> _dParam;
 
     // Output projection: [innerDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass

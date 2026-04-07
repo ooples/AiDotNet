@@ -67,22 +67,40 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
     private readonly int _latentDimension;
 
     // Latent compression: [modelDim, latentDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _compressWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _compressBias;
 
     // K, V reconstruction from latent: [latentDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyUpWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueUpWeights;
 
     // Q projection (full rank): [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values

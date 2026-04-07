@@ -46,6 +46,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// The sparse weight matrix.
     /// Shape: [OutputFeatures, InputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private SparseTensor<T> _weights;
 
     /// <summary>

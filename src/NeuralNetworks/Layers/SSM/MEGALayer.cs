@@ -74,29 +74,57 @@ public partial class MEGALayer<T> : LayerBase<T>
     private Tensor<T> _emaAlphaLogit;
 
     // EMA projection: input -> EMA space [modelDim, emaDimension]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _emaProjectInWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _emaProjectInBias;
 
     // EMA projection: EMA space -> model [emaDimension, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _emaProjectOutWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _emaProjectOutBias;
 
     // Q, K projections from EMA output: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _queryBias;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _keyBias;
 
     // V projection from original input: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _valueBias;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
@@ -267,6 +295,8 @@ public partial class MEGALayer<T> : LayerBase<T>
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_emaAlphaLogit, PersistentTensorRole.Weights);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)
@@ -558,22 +588,6 @@ public partial class MEGALayer<T> : LayerBase<T>
         _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
-
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_emaProjectInWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_emaProjectInBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_emaProjectOutWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_emaProjectOutBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_queryBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
     }
 

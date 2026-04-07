@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -253,6 +253,38 @@ public class AddLayer<T> : LayerBase<T>
                 throw new ArgumentException("All input shapes must be identical for AddLayer.", nameof(inputShapes));
             }
         }
+    }
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _inputPortsCache;
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _inputPortsCache ??=
+        [
+            new LayerPort("input_0", GetInputShape()),
+            new LayerPort("input_1", GetInputShape())
+        ];
+
+    /// <summary>
+    /// Named multi-input forward pass.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        // Collect sequential input_0, input_1, ... — require contiguous keys starting at 0
+        var tensors = new List<Tensor<T>>();
+        for (int i = 0; ; i++)
+        {
+            if (!inputs.TryGetValue($"input_{i}", out var tensor))
+                break;
+            if (tensor == null)
+                throw new ArgumentException($"AddLayer input 'input_{i}' must not be null.", nameof(inputs));
+            tensors.Add(tensor);
+        }
+        if (tensors.Count < 2)
+            throw new ArgumentException($"AddLayer requires at least 'input_0' and 'input_1'. Got {tensors.Count} sequential inputs.", nameof(inputs));
+        return Forward(tensors.ToArray());
     }
 
     /// <summary>

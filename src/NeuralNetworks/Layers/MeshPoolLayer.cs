@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -105,6 +105,8 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights for computing edge importance scores.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _importanceWeights;
 
     /// <summary>

@@ -502,57 +502,11 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// Individual processes execute the same compiled code but operate on different parameter shards.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation
-    {
-        get
-        {
-            if (WrappedModel is null || WrappedModel == null)
-                return false;
+    public virtual bool SupportsJitCompilation => false;
 
-            return InterfaceGuard.JitCompilable(WrappedModel).SupportsJitCompilation;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation by delegating to the wrapped model.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the model's prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// Sharded models delegate graph export to their wrapped model.
-    /// The computation graph represents the full model's forward pass, independent of parameter sharding.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a computation graph from the wrapped model.
-    ///
-    /// Even though parameters are distributed (sharded) across multiple processes:
-    /// - The computation graph structure is the same for all processes
-    /// - Each process compiles the same graph into fast code
-    /// - The only difference is which parameter values each process uses
-    ///
-    /// This allows distributed models to benefit from JIT compilation while maintaining
-    /// their distributed training capabilities.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when the wrapped model does not support JIT compilation.
-    /// </exception>
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (WrappedModel is null || WrappedModel == null)
-            throw new InvalidOperationException(
-                "Cannot export computation graph: Wrapped model is null.");
-
-        if (!InterfaceGuard.JitCompilable(WrappedModel).SupportsJitCompilation)
-            throw new NotSupportedException(
-                $"The wrapped model of type {WrappedModel.GetType().Name} does not support JIT compilation. " +
-                "JIT compilation availability depends on the wrapped model's capabilities.");
-
-        return InterfaceGuard.JitCompilable(WrappedModel).ExportComputationGraph(inputNodes);
+        throw new NotSupportedException("JIT compilation has been removed.");
     }
 
     #endregion

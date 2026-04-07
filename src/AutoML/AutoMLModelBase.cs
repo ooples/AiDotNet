@@ -1178,60 +1178,11 @@ namespace AiDotNet.AutoML
         /// After finding a best model, it delegates to that model's JIT support.
         /// </para>
         /// </remarks>
-        public virtual bool SupportsJitCompilation
-        {
-            get
-            {
-                if (BestModel is null || BestModel == null)
-                    return false;
+        public virtual bool SupportsJitCompilation => false;
 
-                return InterfaceGuard.JitCompilable(BestModel).SupportsJitCompilation;
-            }
-        }
-
-        /// <summary>
-        /// Exports the computation graph for JIT compilation by delegating to the best model.
-        /// </summary>
-        /// <param name="inputNodes">List to populate with input computation nodes.</param>
-        /// <returns>The output computation node representing the model's prediction.</returns>
-        /// <remarks>
-        /// <para>
-        /// AutoML models delegate graph export to their best model found during search.
-        /// The graph structure and complexity depends on the specific best model type.
-        /// </para>
-        /// <para><b>For Beginners:</b> This creates a computation graph from the best model found.
-        ///
-        /// AutoML itself doesn't have a fixed computation structure since it tries multiple model types.
-        /// Instead, it delegates to the best model it found:
-        /// - If the best model is a neural network, you get a neural network graph
-        /// - If it's a regression model, you get a regression graph
-        /// - And so on
-        ///
-        /// This only works after SearchAsync has found and selected a best model.
-        /// </para>
-        /// </remarks>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when no best model exists (SearchAsync not called yet).
-        /// </exception>
-        /// <exception cref="NotSupportedException">
-        /// Thrown when the best model does not support JIT compilation.
-        /// </exception>
         public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         {
-            if (inputNodes == null)
-                throw new ArgumentNullException(nameof(inputNodes));
-
-            if (BestModel is null || BestModel == null)
-                throw new InvalidOperationException(
-                    "Cannot export computation graph: No best model has been found yet. " +
-                    "Call SearchAsync to find the best model first.");
-
-            if (!InterfaceGuard.JitCompilable(BestModel).SupportsJitCompilation)
-                throw new NotSupportedException(
-                    $"The best model of type {BestModel.GetType().Name} does not support JIT compilation. " +
-                    "JIT compilation availability depends on the specific model type found during AutoML search.");
-
-            return InterfaceGuard.JitCompilable(BestModel).ExportComputationGraph(inputNodes);
+            throw new NotSupportedException("JIT compilation has been removed.");
         }
 
         #endregion

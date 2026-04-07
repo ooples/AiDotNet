@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -48,6 +48,8 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// This tensor contains the learnable weights for the convolution operation.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _convWeights;
 
     /// <summary>
@@ -56,6 +58,8 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// This tensor contains the learnable biases for the convolution operation.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _convBias;
 
     /// <summary>

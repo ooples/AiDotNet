@@ -35,7 +35,6 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>>? _forwardFunc;
-    private readonly IJitCompilable<T>? _jitCompilableModel;
     private readonly int _outputDim;
     private readonly int _inputDim;
 
@@ -71,37 +70,6 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
                 "Output dimension must be positive.");
         _inputDim = inputDimension;
         _outputDim = outputDimension;
-        _jitCompilableModel = null;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the TransformerTeacherModel class using a JIT-compilable model.
-    /// </summary>
-    /// <param name="jitCompilableModel">A JIT-compilable model that performs forward pass.</param>
-    /// <param name="inputDimension">The number of input dimensions.</param>
-    /// <param name="outputDimension">The number of output dimensions.</param>
-    /// <exception cref="ArgumentNullException">Thrown when jitCompilableModel is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when dimensions are not positive.</exception>
-    /// <remarks>
-    /// <para><b>JIT Support:</b> This constructor enables JIT compilation when the underlying
-    /// model supports it. Use this constructor for optimal inference performance.</para>
-    /// </remarks>
-    public TransformerTeacherModel(
-        IJitCompilable<T> jitCompilableModel,
-        int inputDimension,
-        int outputDimension)
-    {
-        Guard.NotNull(jitCompilableModel);
-        _jitCompilableModel = jitCompilableModel;
-        if (inputDimension <= 0)
-            throw new ArgumentOutOfRangeException(nameof(inputDimension),
-                "Input dimension must be positive.");
-        if (outputDimension <= 0)
-            throw new ArgumentOutOfRangeException(nameof(outputDimension),
-                "Output dimension must be positive.");
-        _inputDim = inputDimension;
-        _outputDim = outputDimension;
-        _forwardFunc = null;
     }
 
     /// <summary>
@@ -115,21 +83,9 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         {
             return _forwardFunc(input);
         }
-        else if (_jitCompilableModel != null)
-        {
-            // For JIT-compilable models, we need to predict through the model
-            // This is a fallback for non-JIT execution
-            var inputNodes = new List<ComputationNode<T>>();
-            var inputTensor = new Tensor<T>(new[] { _inputDim }, input);
-            var inputNode = TensorOperations<T>.Variable(inputTensor, "transformer_input");
-            inputNodes.Add(inputNode);
-
-            var outputNode = _jitCompilableModel.ExportComputationGraph(inputNodes);
-            return outputNode.Value.ToVector();
-        }
         else
         {
-            throw new InvalidOperationException("No forward function or JIT-compilable model available.");
+            throw new InvalidOperationException("No forward function available.");
         }
     }
 }

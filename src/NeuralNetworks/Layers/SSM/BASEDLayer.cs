@@ -73,24 +73,44 @@ public partial class BASEDLayer<T> : LayerBase<T>
     private readonly int _expandedDimension;
 
     // Linear attention Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linearQueryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linearKeyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linearValueWeights;
 
     // Sliding window attention Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _windowQueryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _windowKeyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _windowValueWeights;
 
     // Feature map scale parameter for Taylor expansion: [numHeads, headDim]
     private Tensor<T> _featureMapScale;
 
     // Mixing gate: learned alpha per head [modelDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _mixingGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _mixingGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values

@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -40,17 +40,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private readonly List<ILayer<T>> _layers;
 
-    /// <summary>
-    /// JIT-compiled forward pass function. When non-null, Predict uses this instead
-    /// of layer-by-layer interpretation for zero-allocation, fused-kernel execution.
-    /// Set via <see cref="CompileForward"/>.
-    /// </summary>
-    private Func<Tensor<T>[], Tensor<T>[]>? _compiledForward;
-
-    /// <summary>
-    /// The JIT compiler instance used for graph compilation.
-    /// </summary>
-    private JitCompiler.JitCompiler? _jitCompiler;
 
     /// <summary>
     /// Gets the collection of layers that make up this neural network (read-only access).
@@ -2097,75 +2086,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     /// <param name="sampleInput">A sample input tensor to trace the computation graph shapes.</param>
     /// <param name="options">Optional JIT compiler options. Null uses defaults (all optimizations enabled).</param>
-    /// <remarks>
-    /// <para>
-    /// This method:
-    /// 1. Exports the computation graph from all layers via ExportComputationGraph
-    /// 2. Runs JIT optimization passes (constant folding, operation fusion, memory planning)
-    /// 3. Compiles the optimized graph to native code via expression trees
-    /// 4. Stores the compiled function for subsequent Forward/Predict calls
-    /// </para>
-    /// <para><b>For Beginners:</b> This makes your model run MUCH faster.
-    ///
-    /// Call this once after creating your model:
-    ///   model.CompileForward(sampleInput);
-    ///
-    /// Then every Predict call will use the optimized version automatically.
-    /// Expected speedup: 5-10x for typical neural networks.
-    /// </para>
-    /// </remarks>
-    public virtual void CompileForward(Tensor<T> sampleInput, JitCompiler.JitCompilerOptions? options = null)
-    {
-        if (Layers.Count == 0) return;
-
-        _jitCompiler ??= new JitCompiler.JitCompiler(options ?? new JitCompiler.JitCompilerOptions());
-
-        // Build the computation graph by chaining ExportComputationGraph through all layers
-        var inputNode = Autodiff.TensorOperations<T>.Variable(sampleInput, "input", requiresGradient: false);
-        var inputNodes = new List<Autodiff.ComputationNode<T>> { inputNode };
-
-        Autodiff.ComputationNode<T> current = inputNode;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            try
-            {
-                current = Layers[i].ExportComputationGraph([current]);
-            }
-            catch (NotSupportedException)
-            {
-                // Layer doesn't support JIT — fall back to interpreted
-                return;
-            }
-        }
-
-        // Compile the graph
-        _compiledForward = _jitCompiler.Compile(current, inputNodes);
-    }
-
-    /// <summary>
-    /// Gets whether the forward pass has been JIT-compiled.
-    /// </summary>
-    public bool IsCompiled => _compiledForward is not null;
-
-    /// <summary>
-    /// Executes the JIT-compiled forward pass if available, otherwise falls back to interpreted.
-    /// </summary>
-    protected Tensor<T> ForwardCompiled(Tensor<T> input)
-    {
-        if (_compiledForward is not null)
-        {
-            var results = _compiledForward([input]);
-            return results[0];
-        }
-
-        // Fallback to interpreted layer-by-layer execution
-        var current = input;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-        }
-        return current;
-    }
 
     /// <summary>
     /// Updates the network's parameters with new values.
@@ -2488,54 +2408,77 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        var engine = AiDotNetEngine.Current;
-
-        // Initialize parameter buffer BEFORE collecting params and running the forward pass.
+        // Initialize parameter buffer — replaces layer tensors with buffer-backed views.
+        // try/finally MUST cover this so views are restored even if setup throws.
         var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
         var paramBuffer = GetOrCreateParameterBuffer(initialParams);
 
-        // Re-collect after buffer initialization — parameter tensor references may have changed
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
-
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
-
-        // Forward + loss under tape — uses the buffer-backed view tensors
-        using var tape = new GradientTape<T>();
-        var output = ForwardForTraining(input);
-
-        // Align output shape to target: squeeze leading batch dim when batch=1
-        // (ForwardForTraining may add a batch dim that the target doesn't have)
-        if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+        try
         {
-            output = output.Reshape(expected._shape);
+            // Re-collect after buffer initialization — references are now views
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+
+            var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+                ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
+            // Forward + loss under tape — uses the buffer-backed view tensors
+            using var tape = new GradientTape<T>();
+            var output = ForwardForTraining(input);
+
+            // Align output shape to target: squeeze leading batch dim when batch=1
+            // (ForwardForTraining may add a batch dim that the target doesn't have)
+            if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+            {
+                output = output.Reshape(expected._shape);
+            }
+            else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+            {
+                expected = expected.Reshape(output._shape);
+            }
+
+            var lossTensor = loss.ComputeTapeLoss(output, expected);
+
+            // Compute all gradients then filter to trainable params.
+            // Passing sources directly can miss parameters when the tape backward
+            // can't match view tensor references through the GradFn chain.
+            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var param in trainableParams)
+            {
+                if (allGrads.TryGetValue(param, out var grad))
+                    grads[param] = grad;
+            }
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+
+            // Resolve optimizer
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+            // Re-evaluation callback applies same shape alignment as initial forward
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt)
+            {
+                var fwd = ForwardForTraining(inp);
+                if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
+                    fwd = fwd.Reshape(tgt._shape);
+                return fwd;
+            }
+
+            var context = new TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, expected, ComputeForward,
+                (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+                paramBuffer);
+
+            opt.Step(context);
         }
-        else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+        finally
         {
-            expected = expected.Reshape(output._shape);
+            // Restore original tensor references so Clone/serialization see real tensors.
+            // Copies updated weights from buffer views back to originals before restoring.
+            RestoreOriginalParameters();
         }
-
-        var lossTensor = loss.ComputeTapeLoss(output, expected);
-
-        // Compute gradients
-        var grads = tape.ComputeGradients(lossTensor, trainableParams);
-
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        LastLoss = lossValue;
-
-        // Resolve optimizer
-        var opt = optimizer ?? GetOrCreateBaseOptimizer();
-
-        // Build context with re-evaluation support and zero-copy buffer
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
-
-        var context = new TapeStepContext<T>(
-            trainableParams, grads, lossValue,
-            input, expected, ComputeForward,
-            (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
-            paramBuffer);
-
-        opt.Step(context);
     }
 
     /// <summary>
@@ -2618,6 +2561,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private ParameterBuffer<T>? _parameterBuffer;
 
     /// <summary>
+    /// <summary>
+    /// Original tensor references saved before buffer view replacement.
+    /// Restored after each training step so Clone/serialization see real tensors.
+    /// </summary>
+    private Dictionary<ILayer<T>, IReadOnlyList<Tensor<T>>>? _savedOriginalParameters;
+
+    /// <summary>
     /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
     /// </summary>
     private ParameterBuffer<T>? GetOrCreateParameterBuffer(IReadOnlyList<Tensor<T>> trainableParams)
@@ -2649,6 +2599,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         for (int i = 0; i < trainableParams.Count; i++)
             paramToView[trainableParams[i]] = views[i];
+
+        // Save original tensor references before replacement so we can restore later
+        _savedOriginalParameters = new Dictionary<ILayer<T>, IReadOnlyList<Tensor<T>>>();
+        SaveOriginalParameters(Layers, _savedOriginalParameters, new HashSet<ILayer<T>>());
 
         // Replace each layer's parameters with their buffer-backed views.
         var seenLayers = new HashSet<ILayer<T>>();
@@ -2697,6 +2651,73 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (subLayers.Count > 0)
                 ReplaceParametersFromMap(subLayers, paramToView, seenLayers);
         }
+    }
+
+    /// <summary>
+    /// Saves original tensor references from all trainable layers before buffer view replacement.
+    /// </summary>
+    private static void SaveOriginalParameters(
+        IEnumerable<ILayer<T>> layers,
+        Dictionary<ILayer<T>, IReadOnlyList<Tensor<T>>> saved,
+        HashSet<ILayer<T>> seen)
+    {
+        foreach (var layer in layers)
+        {
+            if (!seen.Add(layer)) continue;
+
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                var current = trainable.GetTrainableParameters();
+                // Clone the list so we have the original references, not the views
+                saved[layer] = current.ToArray();
+            }
+
+            var subLayers = layer.GetSubLayers();
+            if (subLayers.Count > 0)
+                SaveOriginalParameters(subLayers, saved, seen);
+        }
+    }
+
+    /// <summary>
+    /// Restores original tensor references on all layers after a training step.
+    /// Copies updated data from buffer views back to the original tensors first.
+    /// </summary>
+    private void RestoreOriginalParameters()
+    {
+        if (_savedOriginalParameters == null)
+            return;
+
+        // For each layer, copy updated data from the current (view) tensors
+        // back to the saved original tensors, then restore the originals.
+        foreach (var (layer, originals) in _savedOriginalParameters)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                var currentViews = trainable.GetTrainableParameters();
+                if (currentViews.Count != originals.Count)
+                    throw new InvalidOperationException(
+                        $"Parameter count changed during training step: expected {originals.Count}, got {currentViews.Count}.");
+
+                for (int i = 0; i < originals.Count; i++)
+                {
+                    var view = currentViews[i];
+                    var orig = originals[i];
+                    if (view.Length != orig.Length)
+                        throw new InvalidOperationException(
+                            $"Parameter {i} size changed: expected {orig.Length}, got {view.Length}.");
+                    for (int j = 0; j < view.Length; j++)
+                        orig.SetFlat(j, view.GetFlat(j));
+                }
+
+                trainable.SetTrainableParameters(originals);
+            }
+        }
+
+        _savedOriginalParameters = null;
+        // Clear buffer so next training step creates fresh views
+        _parameterBuffer = null;
+        // Invalidate the tape parameter cache so next CollectParameters re-walks
+        _layerStructureVersion++;
     }
 
     /// <summary>
@@ -4221,7 +4242,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// property indicates whether this specific network configuration can be JIT compiled.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => Layers.Count == 0 || Layers.All(layer => layer.SupportsJitCompilation);
+    public virtual bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -4253,57 +4274,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        // Validation: Ensure network has layers
-        if (Layers == null || Layers.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Network has no layers.");
-        }
-
-        // Create input node (placeholder for input data)
-        // For neural networks, input shape is typically [batch_size, input_features]
-        // We use [1, Architecture.InputSize] as a placeholder
-        var inputShape = new int[] { 1, Architecture.InputSize };
-        var inputTensor = new Tensor<T>(inputShape);
-        var inputNode = new ComputationNode<T>(inputTensor);
-        inputNodes.Add(inputNode);
-
-        // Build computation graph by chaining layers
-        var currentNode = inputNode;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            var layer = Layers[i];
-            try
-            {
-                currentNode = ConvertLayerToGraph(layer, currentNode);
-            }
-            catch (NotSupportedException ex)
-            {
-                throw new NotSupportedException(
-                    $"JIT compilation failed at layer {i} ({layer.GetType().Name}): {ex.Message}. " +
-                    $"This layer type is not yet supported for JIT compilation.", ex);
-            }
-        }
-
-        return currentNode;
+        throw new NotSupportedException("JIT compilation has been removed.");
     }
 
-    /// <summary>
-    /// Converts a single layer to computation graph nodes by delegating to the layer's ExportComputationGraph method.
-    /// </summary>
-    /// <param name="layer">The layer to convert.</param>
-    /// <param name="input">The input node to the layer.</param>
-    /// <returns>The output node from the layer.</returns>
-    /// <exception cref="NotSupportedException">Thrown when the layer does not support JIT compilation.</exception>
-    /// <remarks>
-    /// This method follows the Open/Closed Principle by delegating to each layer's own ExportComputationGraph implementation.
-    /// New layers can be added without modifying this base class.
-    /// </remarks>
     protected virtual ComputationNode<T> ConvertLayerToGraph(ILayer<T> layer, ComputationNode<T> input)
     {
-        // Delegate to the layer's ExportComputationGraph implementation
-        // Each layer is responsible for converting itself to a computation graph
-        var layerInputs = new List<ComputationNode<T>> { input };
-        return layer.ExportComputationGraph(layerInputs);
+        if (layer is Layers.LayerBase<T> layerBase)
+        {
+            var layerInputs = new List<ComputationNode<T>> { input };
+            return layerBase.ExportComputationGraph(layerInputs);
+        }
+        throw new NotSupportedException(
+            $"Layer {layer.GetType().Name} does not support computation graph export.");
     }
 
 

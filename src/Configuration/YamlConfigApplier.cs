@@ -114,11 +114,6 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
         }
 
         // Infrastructure POCO configs
-        if (config.JitCompilation is not null)
-        {
-            builder.ConfigureJitCompilation(config.JitCompilation);
-        }
-
         if (config.MixedPrecision is not null)
         {
             builder.ConfigureMixedPrecision(config.MixedPrecision);

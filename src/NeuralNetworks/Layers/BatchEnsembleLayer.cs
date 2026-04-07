@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -47,11 +48,18 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     private readonly bool _useBias;
 
     // Shared base weights
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;      // Shape: [inputDim, outputDim]
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T>? _bias;        // Shape: [outputDim] (shared across members)
 
     // Per-member rank vectors
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _rVectors;     // Shape: [numMembers, inputDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _sVectors;     // Shape: [numMembers, outputDim]
 
     // Gradients

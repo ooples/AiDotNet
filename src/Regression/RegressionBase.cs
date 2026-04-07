@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.

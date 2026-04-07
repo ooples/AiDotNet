@@ -104,11 +104,19 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
     private Tensor<T> _dParam;
 
     // Input projection: [modelDimension, modelDimension]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Output projection: [modelDimension, modelDimension]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass

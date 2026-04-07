@@ -80,21 +80,7 @@ quantization:
         Assert.Equal(200, config.Quantization.CalibrationSamples);
     }
 
-    [Fact]
-    public void LoadFromString_WithJitCompilationSection_DeserializesCorrectly()
-    {
-        var yaml = @"
-jitCompilation:
-  enabled: true
-  throwOnFailure: false
-";
-
-        var config = YamlConfigLoader.LoadFromString(yaml);
-
-        Assert.NotNull(config.JitCompilation);
-        Assert.True(config.JitCompilation.Enabled);
-        Assert.False(config.JitCompilation.ThrowOnFailure);
-    }
+    // JitCompilation YAML test removed — per-layer JIT compiler system has been deleted
 
     [Fact]
     public void LoadFromString_WithProfilingSection_DeserializesCorrectly()
@@ -181,9 +167,6 @@ caching:
   enabled: true
   maxCacheSize: 1000
 
-jitCompilation:
-  enabled: true
-
 profiling:
   enabled: false
 ";
@@ -196,9 +179,6 @@ profiling:
         Assert.NotNull(config.Caching);
         Assert.True(config.Caching.Enabled);
         Assert.Equal(1000, config.Caching.MaxCacheSize);
-
-        Assert.NotNull(config.JitCompilation);
-        Assert.True(config.JitCompilation.Enabled);
 
         Assert.NotNull(config.Profiling);
         Assert.False(config.Profiling.Enabled);
@@ -220,7 +200,6 @@ optimizer:
         Assert.Null(config.Caching);
         Assert.Null(config.Versioning);
         Assert.Null(config.Telemetry);
-        Assert.Null(config.JitCompilation);
         Assert.Null(config.TimeSeriesModel);
         Assert.Null(config.InferenceOptimizations);
         Assert.Null(config.Interpretability);
@@ -318,10 +297,6 @@ unknownSection:
 caching:
   enabled: true
   maxCacheSize: 2000
-
-jitCompilation:
-  enabled: true
-  throwOnFailure: true
 ");
 
             // The builder successfully parses and applies the YAML config
@@ -332,10 +307,6 @@ jitCompilation:
             Assert.NotNull(builder.ConfiguredCaching);
             Assert.True(builder.ConfiguredCaching.Enabled);
             Assert.Equal(2000, builder.ConfiguredCaching.MaxCacheSize);
-
-            Assert.NotNull(builder.ConfiguredJitCompilation);
-            Assert.True(builder.ConfiguredJitCompilation.Enabled);
-            Assert.True(builder.ConfiguredJitCompilation.ThrowOnFailure);
         }
         finally
         {
@@ -730,10 +701,6 @@ telemetry:
 profiling:
   enabled: true
 
-jitCompilation:
-  enabled: true
-  throwOnFailure: false
-
 inferenceOptimizations:
   enableKVCache: true
 
@@ -774,10 +741,6 @@ memoryManagement:
         Assert.NotNull(config.Profiling);
         Assert.True(config.Profiling.Enabled);
 
-        Assert.NotNull(config.JitCompilation);
-        Assert.True(config.JitCompilation.Enabled);
-        Assert.False(config.JitCompilation.ThrowOnFailure);
-
         Assert.NotNull(config.InferenceOptimizations);
         Assert.True(config.InferenceOptimizations.EnableKVCache);
 
@@ -802,9 +765,6 @@ caching:
   enabled: true
   maxCacheSize: 1000
 
-jitCompilation:
-  enabled: true
-
 inferenceOptimizations:
   enableKVCache: true
 
@@ -825,9 +785,6 @@ memoryManagement:
             Assert.NotNull(builder.ConfiguredCaching);
             Assert.True(builder.ConfiguredCaching.Enabled);
             Assert.Equal(1000, builder.ConfiguredCaching.MaxCacheSize);
-
-            Assert.NotNull(builder.ConfiguredJitCompilation);
-            Assert.True(builder.ConfiguredJitCompilation.Enabled);
 
             Assert.NotNull(builder.ConfiguredInferenceOptimizations);
             Assert.True(builder.ConfiguredInferenceOptimizations.EnableKVCache);

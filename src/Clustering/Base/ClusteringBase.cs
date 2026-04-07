@@ -20,7 +20,7 @@ namespace AiDotNet.Clustering.Base;
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -670,15 +670,6 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
                 }
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this clustering algorithm.");
     }
 
     #endregion

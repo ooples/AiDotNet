@@ -38,7 +38,6 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly ITeacherModel<Vector<T>, Vector<T>>? _baseTeacher;
-    private readonly IJitCompilable<T>? _jitCompilableBase;
     private readonly int _quantizationBits;
     private readonly int _outputDim;
     private readonly T _scale;
@@ -67,7 +66,6 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         _baseTeacher = baseTeacher;
         _quantizationBits = quantizationBits;
         _outputDim = baseTeacher.OutputDimension;
-        _jitCompilableBase = null;
         _scale = NumOps.One;
         _zeroPoint = NumOps.Zero;
         _symmetric = true;
@@ -76,56 +74,6 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
             throw new ArgumentException("Quantization bits must be between 1 and 32");
     }
 
-    /// <summary>
-    /// Initializes a new instance of QuantizedTeacherModel wrapping a JIT-compilable model.
-    /// </summary>
-    /// <param name="jitCompilableBase">The JIT-compilable base model to quantize.</param>
-    /// <param name="outputDimension">Output dimension of the model.</param>
-    /// <param name="quantizationBits">Number of bits for quantization (1-32).</param>
-    /// <param name="scale">Scale factor for quantization. If default, uses 1/(2^(bits-1)).</param>
-    /// <param name="zeroPoint">Zero point for asymmetric quantization. Default is 0.</param>
-    /// <param name="symmetric">Whether to use symmetric quantization (centered at 0).</param>
-    /// <remarks>
-    /// <para><b>JIT Support:</b> This constructor enables JIT compilation using FakeQuantization
-    /// with Straight-Through Estimator (STE). The scale and zero point are fixed at construction
-    /// time, allowing the graph to be statically compiled.</para>
-    /// <para><b>Symmetric vs Asymmetric:</b></para>
-    /// <list type="bullet">
-    /// <item><description>Symmetric: Range is [-max, max], zero point is 0. Good for weights.</description></item>
-    /// <item><description>Asymmetric: Range is [min, max], zero point may be non-zero. Good for activations with bias.</description></item>
-    /// </list>
-    /// </remarks>
-    public QuantizedTeacherModel(
-        IJitCompilable<T> jitCompilableBase,
-        int outputDimension,
-        int quantizationBits = 8,
-        T? scale = default,
-        T? zeroPoint = default,
-        bool symmetric = true)
-    {
-        Guard.NotNull(jitCompilableBase);
-        _jitCompilableBase = jitCompilableBase;
-        _quantizationBits = quantizationBits;
-        _outputDim = outputDimension;
-        _baseTeacher = null;
-        _symmetric = symmetric;
-
-        // Default scale: 1/(2^(bits-1)) for symmetric quantization
-        if (scale == null || NumOps.Equals(scale, default(T)!))
-        {
-            double defaultScale = 1.0 / (1 << (quantizationBits - 1));
-            _scale = NumOps.FromDouble(defaultScale);
-        }
-        else
-        {
-            _scale = scale;
-        }
-
-        _zeroPoint = zeroPoint ?? NumOps.Zero;
-
-        if (quantizationBits < 1 || quantizationBits > 32)
-            throw new ArgumentException("Quantization bits must be between 1 and 32");
-    }
 
     /// <summary>
     /// Gets quantized logits from the teacher model.
@@ -134,22 +82,8 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
     /// <returns>Quantized logits.</returns>
     public override Vector<T> GetLogits(Vector<T> input)
     {
-        if (_jitCompilableBase != null)
-        {
-            // IJitCompilable doesn't have execution methods - need to cast to a model interface
-            if (_jitCompilableBase is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
-            {
-                var logits = model.Predict(input);
-                return QuantizeFixedScale(logits);
-            }
-
-            throw new InvalidOperationException(
-                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
-                "IJitCompilable only provides computation graph export for JIT compilation.");
-        }
-
         if (_baseTeacher == null)
-            throw new InvalidOperationException("No base teacher or JIT-compilable model configured");
+            throw new InvalidOperationException("No base teacher configured");
 
         var baseLogits = _baseTeacher.GetLogits(input);
         return QuantizeDynamic(baseLogits);

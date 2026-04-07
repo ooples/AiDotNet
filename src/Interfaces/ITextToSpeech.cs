@@ -35,7 +35,7 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("TextToSpeech")]
 public interface ITextToSpeech<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
     /// Gets the sample rate of generated audio.

@@ -131,13 +131,13 @@ public static class TapeLayerBridge<T>
 
             // Forward through FC layer
             var fcInputs = new List<ComputationNode<T>> { current };
-            current = hiddenLayers[i].ExportComputationGraph(fcInputs);
+            current = ((Layers.LayerBase<T>)hiddenLayers[i]).ExportComputationGraph(fcInputs);
 
             // Forward through BN layer if present
             if (bnLayers is not null && i < bnLayers.Count)
             {
                 var bnInputs = new List<ComputationNode<T>> { current };
-                current = bnLayers[i].ExportComputationGraph(bnInputs);
+                current = ((Layers.LayerBase<T>)bnLayers[i]).ExportComputationGraph(bnInputs);
             }
 
             // Apply hidden activation
@@ -152,7 +152,7 @@ public static class TapeLayerBridge<T>
         }
 
         var outInputs = new List<ComputationNode<T>> { current };
-        current = outputLayer.ExportComputationGraph(outInputs);
+        current = ((Layers.LayerBase<T>)outputLayer).ExportComputationGraph(outInputs);
 
         // Apply output activation
         current = ApplyComputationNodeActivation(current, outputAct, 0.2);

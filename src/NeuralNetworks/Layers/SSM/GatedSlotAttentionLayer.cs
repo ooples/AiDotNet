@@ -74,27 +74,49 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
     private readonly int _numSlots;
 
     // Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
 
     // Forget gate projection: [modelDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _forgetGateBias;
 
     // Input gate projection: [modelDim, numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputGateBias;
 
     // Initial slot embeddings: [numHeads, numSlots, headDim]
     private Tensor<T> _initialSlots;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
@@ -238,6 +260,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
             _forgetGateBias[i] = NumOps.FromDouble(2.0);
         _inputGateBias.Fill(NumOps.FromDouble(0.1));
         InitializeSlots();
+        RegisterTrainableParameter(_initialSlots, PersistentTensorRole.Weights);
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);
@@ -478,19 +501,6 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
         _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
-
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_forgetGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_forgetGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
     }
 

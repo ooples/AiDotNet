@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
-public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenerator<T>, IJitCompilable<T>
+public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenerator<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.

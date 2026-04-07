@@ -60,25 +60,43 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     private readonly int _recurrenceDimension;
 
     // Input projection: [modelDim, recurrenceDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Recurrence gate: [recurrenceDim, recurrenceDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _recurrenceGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _recurrenceGateBias;
 
     // Input gate: [recurrenceDim, recurrenceDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputGateBias;
 
     // Value projection: [recurrenceDim, recurrenceDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueProjectionWeights;
 
     // Learned decay parameter: [recurrenceDim] (passed through softplus for positivity)
     private Tensor<T> _decayParam;
 
     // Output projection: [recurrenceDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
@@ -195,6 +213,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_decayParam, PersistentTensorRole.Weights);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -352,17 +372,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _decayParam = Engine.TensorAdd(_decayParam, Engine.TensorMultiplyScalar(_decayParamGradient!, negLR));
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
-
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_recurrenceGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_recurrenceGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_valueProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
     }
 

@@ -77,15 +77,31 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> _timeMixB;  // v7: shift coefficient for 'b' (state injection)
 
     // Linear projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _receptanceWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputWeights;
 
     // v7: Dynamic state evolution projections
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _aWeights;  // [modelDim, modelDim] projects to per-head diagonal decay
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _aBias;     // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _bWeights;  // [modelDim, modelDim] projects to per-head additive injection
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bBias;     // [modelDim]
 
     // v7: Group norm on WKV output (per head)
@@ -96,8 +112,14 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
     private Tensor<T> _channelMixR;  // [modelDim]
     private Tensor<T> _channelMixK;  // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelKeyWeights;        // [modelDim, ffnDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelValueWeights;      // [ffnDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelReceptanceWeights; // [modelDim, modelDim]
 
     // ============ Layer Norms ============

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -31,8 +32,14 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     private readonly int _outputDim;
 
     // Each level has one feature selection and one threshold
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _featureSelectionWeights;  // [depth, inputDim] - softmax to select feature
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _thresholds;                // [depth]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _leafValues;                // [numLeaves, outputDim]
 
     // Gradients

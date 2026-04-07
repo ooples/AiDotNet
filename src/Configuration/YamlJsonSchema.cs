@@ -109,7 +109,6 @@ public static class YamlJsonSchema
             ("export", "Export configuration for converting models to different formats.", typeof(Deployment.Configuration.ExportConfig)),
             ("gpuAcceleration", "GPU acceleration configuration for hardware-accelerated computation.", typeof(Engines.GpuAccelerationConfig)),
             ("profiling", "Performance profiling configuration.", typeof(Deployment.Configuration.ProfilingConfig)),
-            ("jitCompilation", "JIT compilation configuration for accelerated inference.", typeof(JitCompilationConfig)),
             ("mixedPrecision", "Mixed precision training configuration.", typeof(MixedPrecision.MixedPrecisionConfig)),
             ("reasoning", "Reasoning strategy configuration.", typeof(Reasoning.Models.ReasoningConfig)),
             ("benchmarking", "Benchmarking configuration for standardized benchmark suites.", typeof(BenchmarkingOptions)),

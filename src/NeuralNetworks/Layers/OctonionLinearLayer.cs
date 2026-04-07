@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -43,12 +43,16 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// The octonion weight tensor with shape [OutputFeatures, InputFeatures, 8].
     /// Each [o, i, 0..7] slice stores one octonion's 8 components (Scalar, E1-E7).
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// The octonion bias tensor with shape [OutputFeatures, 8].
     /// Each [o, 0..7] slice stores one octonion's 8 components.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -36,7 +37,11 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     private readonly FullyConnectedLayer<T> _outputProjection;
 
     // Layer normalization parameters
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _layerNormGamma;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _layerNormBeta;
 
     // Cached values for backward pass

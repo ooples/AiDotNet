@@ -44,7 +44,7 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("OnlineLearningModel")]
 public interface IOnlineLearningModel<T> : IFullModel<T, Matrix<T>, Vector<T>>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Updates the model with a single training example.

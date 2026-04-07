@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -589,6 +589,29 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Engine.InvalidatePersistentTensor(_valueWeights);
         Engine.InvalidatePersistentTensor(_outputWeights);
         Engine.InvalidatePersistentTensor(_outputBias);
+    }
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+    [
+        new LayerPort("query", GetInputShape()),
+        new LayerPort("memory", GetOutputShape(), Required: false)
+    ];
+
+    /// <summary>
+    /// Named multi-input forward pass.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("query", out var query) || query == null)
+            throw new ArgumentException("MemoryReadLayer requires 'query'.", nameof(inputs));
+        // Memory is optional — falls back to default memory (parity with Forward(Tensor<T>))
+        if (!inputs.TryGetValue("memory", out var memory) || memory == null)
+            return Forward(query);
+        return Forward(query, memory);
     }
 
     /// <summary>

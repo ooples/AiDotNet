@@ -26,7 +26,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// temperature scaling are handled by distillation strategies, not teachers. Teachers are responsible
 /// only for providing raw logits.</para>
 /// </remarks>
-public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInput, TOutput>, IJitCompilable<T>
+public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInput, TOutput>
 {
     /// <summary>
     /// Numeric operations for the specified type T.
@@ -68,44 +68,6 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
     /// </remarks>
     public abstract TOutput GetLogits(TInput input);
 
-    #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Gets whether this teacher model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the teacher model can be JIT compiled; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Teacher models that wrap other models should delegate to the wrapped model's JIT support.
-    /// Teacher models using function delegates or cached predictions may not support JIT.
-    /// </para>
-    /// <para><b>For Implementers:</b> Return <c>true</c> if your teacher model can export its
-    /// computation as a graph. Models wrapping IJitCompilable implementations should return
-    /// the wrapped model's SupportsJitCompilation value.
-    /// </para>
-    /// </remarks>
-    // JIT compilation removed — use gradient tape autodiff instead
-    public virtual bool SupportsJitCompilation => false;
-
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation removed. Use GradientTape-based autodiff instead.");
-    }
-
-    #endregion
-
-    #region JIT Helper Methods
-    /// </code>
-    /// </para>
-    /// </remarks>
-    protected static bool CheckWrappedModelJitSupport(ITeacherModel<TInput, TOutput> wrappedModel)
-    {
-        return wrappedModel is IJitCompilable<T> jitCompilable && jitCompilable.SupportsJitCompilation;
-    }
-
-    #endregion
 
     /// <summary>
     /// Validates that the input is not null.

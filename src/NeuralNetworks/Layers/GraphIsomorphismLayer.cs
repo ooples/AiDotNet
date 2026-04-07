@@ -55,21 +55,29 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// First layer of the MLP: [inputFeatures, mlpHiddenDim].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _mlpWeights1;
 
     /// <summary>
     /// Second layer of the MLP: [mlpHiddenDim, outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _mlpWeights2;
 
     /// <summary>
     /// Bias for first MLP layer: [mlpHiddenDim].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _mlpBias1;
 
     /// <summary>
     /// Bias for second MLP layer: [outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _mlpBias2;
 
     /// <summary>

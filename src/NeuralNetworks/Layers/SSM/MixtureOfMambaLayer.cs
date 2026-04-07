@@ -76,7 +76,11 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     private readonly int _stateDimension;
 
     // Router: [modelDim, numExperts]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _routerWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _routerBias;
 
     // Per-expert SSM parameters
@@ -90,11 +94,19 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     private Tensor<T> _expertD;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass

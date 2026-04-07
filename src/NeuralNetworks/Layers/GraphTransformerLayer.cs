@@ -70,26 +70,36 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     /// <summary>
     /// Key transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
 
     /// <summary>
     /// Value transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
 
     /// <summary>
     /// Output projection weights: [numHeads * headDim, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputWeights;
 
     /// <summary>
     /// Output projection bias: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -100,41 +110,57 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Feed-forward network first layer weights: [outputFeatures, ffnHiddenDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _ffnWeights1;
 
     /// <summary>
     /// Feed-forward network second layer weights: [ffnHiddenDim, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _ffnWeights2;
 
     /// <summary>
     /// Feed-forward network first layer bias: [ffnHiddenDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _ffnBias1;
 
     /// <summary>
     /// Feed-forward network second layer bias: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _ffnBias2;
 
     /// <summary>
     /// Layer normalization scale for first norm: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _layerNorm1Scale;
 
     /// <summary>
     /// Layer normalization bias for first norm: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _layerNorm1Bias;
 
     /// <summary>
     /// Layer normalization scale for second norm: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _layerNorm2Scale;
 
     /// <summary>
     /// Layer normalization bias for second norm: [outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _layerNorm2Bias;
 
     /// <summary>
