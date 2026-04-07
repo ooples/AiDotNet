@@ -1411,19 +1411,26 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         {
             var expertOutput = expertOutputs[i];
 
-            // Extract routing weight for expert i using tape-tracked Engine slice
-            // TensorSliceAxis returns shape [batchSize] from [batchSize, numExperts] at axis=1, index=i
-            var weightVector = Engine.TensorSliceAxis(routingWeights, 1, i);
+            // Extract routing weight for expert i using tape-tracked Engine gather
+            // routingWeights shape: [batchSize, numExperts]
+            // Create index tensor filled with expert index i, shape [batchSize, 1]
+            int batchSize = routingWeights.Shape[0];
+            var indexTensor = new Tensor<int>(new[] { batchSize, 1 });
+            for (int b = 0; b < batchSize; b++)
+                indexTensor[b, 0] = i;
 
-            // Reshape for broadcasting across any-rank expert outputs: [batchSize] -> [batchSize, 1, ...]
+            // Gather along axis=1 gives [batchSize, 1] — tape-tracked
+            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensor, axis: 1);
+
+            // Reshape for broadcasting across any-rank expert outputs: [batchSize, 1] -> [batchSize, 1, ...]
             var broadcastShape = new int[expertOutput.Shape.Length];
-            broadcastShape[0] = weightVector.Shape[0];
+            broadcastShape[0] = batchSize;
             for (int d = 1; d < broadcastShape.Length; d++)
             {
                 broadcastShape[d] = 1;
             }
 
-            var weightColumn = Engine.Reshape(weightVector, broadcastShape);
+            var weightColumn = Engine.Reshape(weightColumn2D, broadcastShape);
 
             // Multiply expert output by weight (broadcasts across output dimensions) — tape-tracked
             var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn);
