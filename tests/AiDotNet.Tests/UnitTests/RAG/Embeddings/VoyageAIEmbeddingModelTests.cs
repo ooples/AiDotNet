@@ -192,5 +192,120 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 
             Assert.Equal(16000, model.MaxTokens);
         }
+
+        // ────────── Success-path tests via mock embedding model ──────────
+        // These test the EmbeddingModelBase behavior (dimension, normalization, batch consistency)
+        // without requiring an actual ONNX model file.
+
+        [Fact]
+        public void MockEmbed_WithValidText_ReturnsVectorOfCorrectDimension()
+        {
+            using var model = new MockEmbeddingModel(1024);
+
+            var embedding = model.Embed("Test sentence");
+
+            Assert.NotNull(embedding);
+            Assert.Equal(1024, embedding.Length);
+        }
+
+        [Fact]
+        public void MockEmbed_ReturnsNormalizedVector()
+        {
+            using var model = new MockEmbeddingModel(512);
+
+            var embedding = model.Embed("Test normalization");
+
+            var magnitude = 0.0;
+            for (int i = 0; i < embedding.Length; i++)
+                magnitude += embedding[i] * embedding[i];
+            magnitude = Math.Sqrt(magnitude);
+            Assert.Equal(1.0, magnitude, 5);
+        }
+
+        [Fact]
+        public void MockEmbed_WithSameText_ReturnsSameEmbedding()
+        {
+            using var model = new MockEmbeddingModel(384);
+
+            var embedding1 = model.Embed("Hello world");
+            var embedding2 = model.Embed("Hello world");
+
+            for (int i = 0; i < embedding1.Length; i++)
+                Assert.Equal(embedding1[i], embedding2[i], 10);
+        }
+
+        [Fact]
+        public void MockEmbed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        {
+            using var model = new MockEmbeddingModel(384);
+
+            var embedding1 = model.Embed("Hello world");
+            var embedding2 = model.Embed("Goodbye world");
+
+            var hasDifference = false;
+            for (int i = 0; i < embedding1.Length; i++)
+            {
+                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
+                {
+                    hasDifference = true;
+                    break;
+                }
+            }
+            Assert.True(hasDifference, "Embeddings for different texts should be different");
+        }
+
+        [Fact]
+        public void MockEmbedBatch_ReturnsCorrectDimensions()
+        {
+            using var model = new MockEmbeddingModel(256);
+            var texts = new List<string> { "First", "Second", "Third" };
+
+            var embeddings = model.EmbedBatch(texts);
+
+            Assert.Equal(3, embeddings.Rows);
+            Assert.Equal(256, embeddings.Columns);
+        }
+
+        [Fact]
+        public void MockEmbedBatch_ProducesSameAsIndividualCalls()
+        {
+            using var model = new MockEmbeddingModel(384);
+            var texts = new List<string> { "Alpha", "Beta", "Gamma" };
+
+            var batchEmbeddings = model.EmbedBatch(texts);
+            var individualEmbeddings = texts.Select(t => model.Embed(t)).ToList();
+
+            for (int i = 0; i < texts.Count; i++)
+            {
+                for (int j = 0; j < model.EmbeddingDimension; j++)
+                    Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
+            }
+        }
+
+        /// <summary>
+        /// Deterministic mock embedding model for testing base class behavior
+        /// without ONNX dependencies. Uses hash-based vector generation.
+        /// </summary>
+        private sealed class MockEmbeddingModel : AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase<double>
+        {
+            private readonly int _dimension;
+            public override int EmbeddingDimension => _dimension;
+            public override int MaxTokens => 512;
+
+            public MockEmbeddingModel(int dimension) { _dimension = dimension; }
+
+            protected override Vector<double> EmbedCore(string text)
+            {
+                var hash = text.ToLowerInvariant().GetHashCode();
+                var values = new double[_dimension];
+                for (int i = 0; i < _dimension; i++)
+                    values[i] = Math.Sin(hash * 0.0001 + i * 0.1) * 0.5;
+
+                var vec = new Vector<double>(values);
+                return vec.Normalize();
+            }
+
+            protected override void Dispose(bool disposing) { }
+        }
     }
 }

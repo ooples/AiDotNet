@@ -1330,9 +1330,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Step 1: Use TensorTopK ONLY for index selection (non-differentiable, indices only)
         _ = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
 
-        // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant)
-        // This is the straight-through estimator approach per Shazeer et al. §3.2:
-        // forward uses discrete selection, backward passes gradients through softmax weights
+        // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant).
+        // Straight-through estimator per Shazeer et al. §3.2: forward uses discrete selection,
+        // backward passes gradients through the softmax weights.
+        // NOTE: The O(batchSize×k) scalar loop is intentional — TensorScatter is non-differentiable
+        // in the Tensors OpRegistry, so we must use this approach for gradient flow.
         var mask = new Tensor<T>(weights.Shape.ToArray());
         mask.Fill(NumOps.Zero);
         for (int b = 0; b < batchSize; b++)
@@ -1344,12 +1346,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Step 3: Multiply original weights by mask using tape-tracked Engine operation
-        // This preserves gradient flow through the softmax weights for selected experts
         var maskedWeights = Engine.TensorBroadcastMultiply(weights, mask); // [batchSize, numExperts]
 
-        // Step 4: Renormalize using tape-tracked operations
+        // Step 4: Renormalize using tape-tracked operations (epsilon for numerical stability)
         var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
-        var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, sumPerRow); // [batchSize, numExperts]
+        var epsilon = new Tensor<T>(sumPerRow.Shape.ToArray());
+        epsilon.Fill(NumOps.FromDouble(1e-10));
+        var safeSumPerRow = Engine.TensorBroadcastAdd(sumPerRow, epsilon);
+        var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
 
         // Convert topKIndicesTensor to int[,] for backward compatibility
         var topKIndices = new int[batchSize, k];

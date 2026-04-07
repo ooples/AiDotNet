@@ -407,8 +407,8 @@ public class ModelsController : ControllerBase
     {
         // Load the serialized AiModelResult using internal constructor
         // This is accessible via InternalsVisibleTo
-        // Serving infrastructure loads models internally — bypass license check
-        using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
+        // NOTE: No InternalOperation bypass here — HTTP model loading enforces license checks.
+        // Only internal services (startup, federated coordinator) bypass license checks.
         var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
 

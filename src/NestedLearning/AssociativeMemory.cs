@@ -17,6 +17,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
     private readonly double _inverseTemperature;
     private readonly List<(Vector<T> Input, Vector<T> Target)> _memories;
     private Matrix<T>? _cachedAssociationMatrix;
+    private Tensor<T>? _cachedValuesTensor;
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
     {
@@ -41,6 +42,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
 
         _memories.Add((input.Clone(), target.Clone()));
         _cachedAssociationMatrix = null;
+        _cachedValuesTensor = null;
 
         if (_memories.Count > _capacity)
         {
@@ -58,9 +60,11 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
             return new Vector<T>(_dimension);
 
         // Modern continuous Hopfield retrieval per Ramsauer et al. 2021:
-        // Scores keys (Input) against query, returns weighted sum of values (Target).
         // new_state = softmax(β * keys^T @ query) @ values
-        // Compute similarity scores via Engine.DotProduct: β * <key_i, query>
+        //
+        // Softmax is computed in double for numerical stability — the exp/log operations
+        // in softmax benefit from double precision regardless of T. This matches PyTorch's
+        // F.softmax which upcasts to float32 even for float16 inputs.
         var scores = new double[_memories.Count];
         double maxScore = double.NegativeInfinity;
 
@@ -71,7 +75,6 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
             if (scores[m] > maxScore) maxScore = scores[m];
         }
 
-        // Numerically stable softmax
         double sumExp = 0;
         for (int m = 0; m < _memories.Count; m++)
         {
@@ -81,19 +84,24 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
         for (int m = 0; m < _memories.Count; m++)
             scores[m] /= (sumExp + 1e-10);
 
-        // Batched weighted sum: weights^T @ values via single matmul
-        // Stack values into [M, D] and weights into [1, M], compute [1, D] = [1, M] @ [M, D]
+        // Use cached values tensor to avoid per-call O(M×D) allocation
         int M = _memories.Count;
-        var values = new Tensor<T>([M, _dimension]);
+        if (_cachedValuesTensor == null || _cachedValuesTensor.Shape[0] != M)
+        {
+            _cachedValuesTensor = new Tensor<T>([M, _dimension]);
+            for (int m = 0; m < M; m++)
+            {
+                var target = _memories[m].Target;
+                for (int d = 0; d < _dimension; d++)
+                    _cachedValuesTensor[m, d] = target[d];
+            }
+        }
+
         var weights = new Tensor<T>([1, M]);
         for (int m = 0; m < M; m++)
-        {
             weights[0, m] = NumOps.FromDouble(scores[m]);
-            var target = _memories[m].Target;
-            for (int d = 0; d < _dimension; d++)
-                values[m, d] = target[d];
-        }
-        var resultTensor = Engine.TensorMatMul(weights, values); // [1, D]
+
+        var resultTensor = Engine.TensorMatMul(weights, _cachedValuesTensor); // [1, D]
         return resultTensor.Reshape([_dimension]).ToVector();
     }
 
@@ -131,6 +139,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
                 var blended = Engine.TensorAdd(kept, added);
                 _memories[m] = (key, blended.ToVector());
                 _cachedAssociationMatrix = null;
+                _cachedValuesTensor = null;
                 return;
             }
         }

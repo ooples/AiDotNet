@@ -489,33 +489,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         return grad;
     }
 
-    /// <summary>
-    /// Recomputes a single output value for the given batch and output feature index.
-    /// </summary>
-    private T ComputeSingleOutput(int b, int o)
-    {
-        if (_lastInput is null)
-            throw new InvalidOperationException("Forward must be called before ComputeSingleOutput.");
-
-        var inputVec = new Vector<T>(InputFeatures);
-        for (int i = 0; i < InputFeatures; i++)
-            inputVec[i] = _lastInput[b, i];
-
-        var origin = CreateOriginVector(InputFeatures);
-        var projectedInput = Engine.PoincareExpMap(origin, inputVec, _curvature);
-
-        var weightVec = new Vector<T>(InputFeatures);
-        for (int i = 0; i < InputFeatures; i++)
-            weightVec[i] = _weights[o, i];
-        var weightPoint = Engine.PoincareExpMap(CreateOriginVector(InputFeatures), weightVec, _curvature);
-
-        var transformed = Engine.MobiusAdd(projectedInput, weightPoint, _curvature);
-
-        var dist = Engine.PoincareDistance(origin, transformed, _curvature);
-        // Add scalar bias
-        return NumOps.Add(dist, _biases[o]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
