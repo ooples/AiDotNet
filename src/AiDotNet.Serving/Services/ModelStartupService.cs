@@ -214,6 +214,8 @@ public class ModelStartupService : IHostedService
     {
         // Load the serialized AiModelResult using internal constructor
         // This is accessible via InternalsVisibleTo
+        // Serving infrastructure loads models internally — bypass license check
+        using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
         var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
 
