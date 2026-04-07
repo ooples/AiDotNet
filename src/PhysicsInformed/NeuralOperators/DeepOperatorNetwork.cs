@@ -615,7 +615,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var grads = tape.ComputeGradients(lossTensor, allParams);
 
                         // Update all parameters using optimizer
-                        var opt = GetOrCreateBaseOptimizer();
+                        var opt = _optimizer;
                         var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
                             allParams, grads, lossVal,
                             branchInput, targets,

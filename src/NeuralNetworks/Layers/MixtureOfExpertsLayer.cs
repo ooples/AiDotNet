@@ -207,6 +207,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     private List<Tensor<T>>? _lastExpertOutputs;
 
+    /// <summary>Cached per-expert index tensors — only depend on batchSize and expert count.</summary>
+    private Tensor<int>[]? _cachedGatherIndices;
+    private int _cachedGatherBatchSize;
+
     /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
     /// </summary>
@@ -1410,14 +1414,19 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         Tensor<T>? combined = null;
         int batchSize = routingWeights.Shape[0];
 
-        // Pre-allocate index tensors for all experts (constant per forward pass)
-        var indexTensors = new Tensor<int>[expertOutputs.Count];
-        for (int i = 0; i < expertOutputs.Count; i++)
+        // Cache index tensors — they only depend on batchSize and expert count
+        if (_cachedGatherIndices == null || _cachedGatherBatchSize != batchSize || _cachedGatherIndices.Length != expertOutputs.Count)
         {
-            indexTensors[i] = new Tensor<int>(new[] { batchSize, 1 });
-            for (int b = 0; b < batchSize; b++)
-                indexTensors[i][b, 0] = i;
+            _cachedGatherIndices = new Tensor<int>[expertOutputs.Count];
+            for (int i = 0; i < expertOutputs.Count; i++)
+            {
+                _cachedGatherIndices[i] = new Tensor<int>(new[] { batchSize, 1 });
+                for (int b = 0; b < batchSize; b++)
+                    _cachedGatherIndices[i][b, 0] = i;
+            }
+            _cachedGatherBatchSize = batchSize;
         }
+        var indexTensors = _cachedGatherIndices;
 
         for (int i = 0; i < expertOutputs.Count; i++)
         {
