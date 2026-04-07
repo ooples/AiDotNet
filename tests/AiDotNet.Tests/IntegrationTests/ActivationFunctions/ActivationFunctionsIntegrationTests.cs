@@ -595,6 +595,87 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
+    [Fact]
+    public void IdentityActivation_ActivateTensor_ReturnsSameReference()
+    {
+        // Arrange — the override must return the input tensor itself (no allocation)
+        var identity = new IdentityActivation<double>();
+        var input = new Tensor<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }, [2, 2]);
+
+        // Act
+        var result = identity.Activate(input);
+
+        // Assert
+        Assert.True(ReferenceEquals(input, result),
+            "IdentityActivation.Activate(Tensor<T>) must return the same tensor reference (no copy)");
+    }
+
+    [Fact]
+    public void IdentityActivation_ActivateTensor_PreservesAllValues()
+    {
+        // Arrange
+        var identity = new IdentityActivation<double>();
+        var data = new double[] { -3.5, 0.0, 1.0, 100.0, -0.001, 42.0 };
+        var input = new Tensor<double>(data, [2, 3]);
+
+        // Act
+        var result = identity.Activate(input);
+
+        // Assert — every element is unchanged
+        for (int i = 0; i < data.Length; i++)
+        {
+            Assert.Equal(data[i], result.GetFlat(i), Tolerance);
+        }
+    }
+
+    [Fact]
+    public void IdentityActivation_ActivateTensor_1D_ReturnsSameReference()
+    {
+        // Arrange
+        var identity = new IdentityActivation<double>();
+        var input = new Tensor<double>(new double[] { 7.0, -2.0, 0.5 }, [3]);
+
+        // Act
+        var result = identity.Activate(input);
+
+        // Assert
+        Assert.True(ReferenceEquals(input, result),
+            "IdentityActivation.Activate(Tensor<T>) must return the same reference for 1-D tensors");
+    }
+
+    [Fact]
+    public void IdentityActivation_ActivateTensor_3D_ReturnsSameReference()
+    {
+        // Arrange
+        var identity = new IdentityActivation<double>();
+        var data = new double[24];
+        for (int i = 0; i < data.Length; i++) data[i] = i * 0.5;
+        var input = new Tensor<double>(data, [2, 3, 4]);
+
+        // Act
+        var result = identity.Activate(input);
+
+        // Assert
+        Assert.True(ReferenceEquals(input, result),
+            "IdentityActivation.Activate(Tensor<T>) must return the same reference for 3-D tensors");
+    }
+
+    [Fact]
+    public void IdentityActivation_ActivateTensor_NegativeValues_PreservedExactly()
+    {
+        // Arrange — regression: no clipping of negative values (unlike ReLU)
+        var identity = new IdentityActivation<double>();
+        var input = new Tensor<double>(new double[] { -100.0, -1.0, -0.5 }, [3]);
+
+        // Act
+        var result = identity.Activate(input);
+
+        // Assert
+        Assert.Equal(-100.0, result.GetFlat(0), Tolerance);
+        Assert.Equal(-1.0,   result.GetFlat(1), Tolerance);
+        Assert.Equal(-0.5,   result.GetFlat(2), Tolerance);
+    }
+
     #endregion
 
     #region Integration Tests

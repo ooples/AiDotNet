@@ -14,7 +14,7 @@ namespace AiDotNet.Interfaces;
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("Layer")]
-public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoadable<T>
+public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
 {
     /// <summary>
     /// Gets the shape (dimensions) of the input data expected by this layer.

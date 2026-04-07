@@ -38,7 +38,11 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     private readonly int _numLeaves;
 
     // Parameters: split weights and biases for internal nodes, leaf values
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _splitWeights;   // [numInternalNodes, inputDim]
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _splitBiases;    // [numInternalNodes]
     private Tensor<T> _leafValues;     // [numLeaves, outputDim]
 
@@ -134,6 +138,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_splitBiases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_leafValues, PersistentTensorRole.Weights);
     }
 
     /// <summary>

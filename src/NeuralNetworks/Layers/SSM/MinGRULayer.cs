@@ -82,19 +82,35 @@ public partial class MinGRULayer<T> : LayerBase<T>
     private readonly int _expansionFactor;
 
     // Input projection: [modelDim, expandedDim] - projects input to expanded space
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Gate projection: z_t = sigma(W_z * x_t + b_z), [expandedDim, expandedDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _gateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _gateBias;
 
     // Candidate projection: h_tilde_t = W_h * x_t + b_h, [expandedDim, expandedDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _candidateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _candidateBias;
 
     // Output projection: [expandedDim, modelDim] - projects back to model dimension
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass

@@ -84,11 +84,19 @@ public partial class S4DLayer<T> : LayerBase<T>
     private Tensor<T> _dParam;
 
     // Input projection: [modelDim, innerDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Output projection: [innerDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Delta (discretization step size): [innerDim] (learned, stored as log for positivity)

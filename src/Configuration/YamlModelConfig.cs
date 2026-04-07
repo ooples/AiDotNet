@@ -82,11 +82,6 @@ public partial class YamlModelConfig
     public ProfilingConfig? Profiling { get; set; }
 
     /// <summary>
-    /// JIT compilation configuration for accelerated inference.
-    /// </summary>
-    public JitCompilationConfig? JitCompilation { get; set; }
-
-    /// <summary>
     /// Mixed precision training configuration.
     /// </summary>
     public MixedPrecisionConfig? MixedPrecision { get; set; }

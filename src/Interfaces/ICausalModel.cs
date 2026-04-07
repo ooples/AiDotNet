@@ -28,7 +28,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("CausalModel")]
 public interface ICausalModel<T> : IFullModel<T, Matrix<T>, Vector<T>>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Fits the causal model to observational data.

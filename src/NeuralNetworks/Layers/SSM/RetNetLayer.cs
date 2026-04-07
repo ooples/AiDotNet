@@ -85,11 +85,23 @@ public partial class RetNetLayer<T> : LayerBase<T>
     private readonly int _headDimension;
 
     // Q, K, V projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _queryBias;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _keyBias;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _valueBias;
 
     // Per-head decay parameters (gammas): [numHeads]
@@ -97,15 +109,25 @@ public partial class RetNetLayer<T> : LayerBase<T>
     private Tensor<T> _gammas;
 
     // Output gate: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputGateBias;
 
     // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Group normalization parameters per head: scale [numHeads, headDim] and bias [numHeads, headDim]
     private Tensor<T> _groupNormScale;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _groupNormBias;
 
     // Cached values for backward pass
@@ -260,6 +282,9 @@ public partial class RetNetLayer<T> : LayerBase<T>
         for (int i = 0; i < _groupNormScale.Length; i++)
             _groupNormScale[i] = NumOps.One;
         _groupNormBias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_gammas, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_groupNormScale, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -616,19 +641,6 @@ public partial class RetNetLayer<T> : LayerBase<T>
             if (gVal <= 0.0) _gammas[h] = NumOps.FromDouble(1e-6);
             else if (gVal >= 1.0) _gammas[h] = NumOps.FromDouble(1.0 - 1e-6);
         }
-
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_queryBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_groupNormBias, PersistentTensorRole.Biases);
 
     }
 

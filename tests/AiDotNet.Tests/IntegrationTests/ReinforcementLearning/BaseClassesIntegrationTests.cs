@@ -71,32 +71,17 @@ public class BaseClassesIntegrationTests
     [Fact]
     public void DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks()
     {
-        var agent = new TestDeepAgent(CreateOptions(), jitPolicy: null);
+        var agent = new TestDeepAgent(CreateOptions());
 
         Assert.Equal(agent.NetworkParameterCount, agent.ParameterCount);
     }
 
     [Fact]
-    public void DeepReinforcementLearningAgentBase_ExportComputationGraph_UsesJitPolicy()
+    public void DeepReinforcementLearningAgentBase_JitRemoved_SupportsJitIsFalse()
     {
-        var jitPolicy = new StubJitPolicy { SupportsJitCompilation = true };
-        var agent = new TestDeepAgent(CreateOptions(), jitPolicy);
+        var agent = new TestDeepAgent(CreateOptions());
 
-        Assert.True(agent.SupportsJitCompilation);
-
-        var inputs = new List<ComputationNode<double>>();
-        var output = agent.ExportComputationGraph(inputs);
-
-        Assert.Single(inputs);
-        Assert.Same(inputs[0], output);
-    }
-
-    [Fact]
-    public void DeepReinforcementLearningAgentBase_ExportComputationGraph_ThrowsWhenUnsupported()
-    {
-        var jitPolicy = new StubJitPolicy { SupportsJitCompilation = false };
-        var agent = new TestDeepAgent(CreateOptions(), jitPolicy);
-
+        // After JIT removal, SupportsJitCompilation always returns false
         Assert.False(agent.SupportsJitCompilation);
         Assert.Throws<NotSupportedException>(() => agent.ExportComputationGraph(new List<ComputationNode<double>>()));
     }
@@ -214,12 +199,10 @@ public class BaseClassesIntegrationTests
     private sealed class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
     {
         private readonly Vector<double> _parameters;
-        private readonly IJitCompilable<double>? _jitPolicy;
 
-        public TestDeepAgent(ReinforcementLearningOptions<double> options, IJitCompilable<double>? jitPolicy)
+        public TestDeepAgent(ReinforcementLearningOptions<double> options)
             : base(options)
         {
-            _jitPolicy = jitPolicy;
             Networks.Add(CreateNetwork());
             _parameters = new Vector<double>(1);
             _parameters[0] = 0.1;
@@ -228,11 +211,6 @@ public class BaseClassesIntegrationTests
         public int NetworkParameterCount => Networks.Sum(network => network.ParameterCount);
 
         public override int FeatureCount => 2;
-
-        protected override IJitCompilable<double>? GetPolicyNetworkForJit()
-        {
-            return _jitPolicy;
-        }
 
         public override Vector<double> SelectAction(Vector<double> state, bool training = true)
         {
@@ -280,7 +258,7 @@ public class BaseClassesIntegrationTests
 
         public override IFullModel<double, Vector<double>, Vector<double>> Clone()
         {
-            return new TestDeepAgent(Options, _jitPolicy);
+            return new TestDeepAgent(Options);
         }
 
         public override Vector<double> ComputeGradients(
@@ -415,15 +393,4 @@ public class BaseClassesIntegrationTests
         }
     }
 
-    private sealed class StubJitPolicy : IJitCompilable<double>
-    {
-        public bool SupportsJitCompilation { get; set; }
-
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            var node = new ComputationNode<double>(Tensor<double>.FromScalar(1.0));
-            inputNodes.Add(node);
-            return node;
-        }
-    }
 }

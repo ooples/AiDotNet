@@ -75,13 +75,25 @@ public partial class RWKVLayer<T> : LayerBase<T>
     private Tensor<T> _timeMixV;  // [modelDim] lerp coefficient for value
 
     // Time mixing projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _receptanceWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputWeights;
 
     // Decay parameter (w): [numHeads, headDim] - data-dependent in v6
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _decayWeights;  // [modelDim, modelDim] projects input to per-head decay
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _decayBias;     // [modelDim]
 
     // Bonus parameter for current token: [numHeads, headDim]
@@ -90,8 +102,14 @@ public partial class RWKVLayer<T> : LayerBase<T>
     // Channel mixing parameters
     private Tensor<T> _channelMixR;  // [modelDim]
     private Tensor<T> _channelMixK;  // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelKeyWeights;    // [modelDim, modelDim * 4]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelValueWeights;  // [modelDim * 4, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _channelReceptanceWeights;  // [modelDim, modelDim]
 
     // Layer norm parameters

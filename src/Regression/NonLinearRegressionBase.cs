@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the numeric operations provider for the specified type T.

@@ -43,6 +43,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Weight matrix stored in tangent space at the origin.
     /// Shape: [OutputFeatures, InputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>Cached W^T — invalidated when weights change.</summary>
@@ -52,6 +54,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Scalar bias per output feature — shifts the Poincaré distance.
     /// Shape: [OutputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>

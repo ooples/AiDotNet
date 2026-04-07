@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -640,6 +640,36 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         return diagnostics;
+    }
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _inputPortsCache;
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _inputPortsCache ??=
+        [
+            new LayerPort("query", GetInputShape()),
+            new LayerPort("key", GetInputShape(), Required: false),
+            new LayerPort("value", GetInputShape(), Required: false)
+        ];
+
+    /// <summary>
+    /// Named multi-input forward pass.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("query", out var query) || query == null)
+            throw new ArgumentException("MultiHeadAttentionLayer requires a 'query' input.", nameof(inputs));
+        inputs.TryGetValue("key", out var key);
+        inputs.TryGetValue("value", out var value);
+        // Default resolution: K defaults to V (if provided), then query.
+        // V defaults to K (if provided), then query.
+        // This keeps K/V aligned per standard transformer convention.
+        var resolvedKey = key ?? value ?? query;
+        var resolvedValue = value ?? key ?? query;
+        return ForwardInternal(query, resolvedKey, resolvedValue);
     }
 
     /// <summary>

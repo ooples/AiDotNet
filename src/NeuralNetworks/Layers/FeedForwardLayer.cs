@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -71,7 +71,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// to features like "contains an edge" or "contains a curved line."
     /// </para>
     /// </remarks>
-    private Tensor<T> Weights { get; set; }
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _weights;
 
     /// <summary>
     /// The bias values for each output neuron.
@@ -97,7 +98,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// which would limit what the network can learn.
     /// </para>
     /// </remarks>
-    private Tensor<T> Biases { get; set; }
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.
@@ -170,7 +172,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// modify the weights.
     /// </para>
     /// </remarks>
-    private Tensor<T> WeightsGradient { get; set; }
+    private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// The gradients for the biases, computed during backpropagation.
@@ -197,7 +199,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// each bias affects only one output directly.
     /// </para>
     /// </remarks>
-    private Tensor<T> BiasesGradient { get; set; }
+    private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
     private Tensor<T>? _gpuInput;
@@ -243,17 +245,17 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <remarks>
     /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
     /// </remarks>
-    public override int ParameterCount => Weights.Length + Biases.Length;
+    public override int ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Gets the weight tensor for JIT compilation and graph composition.
     /// </summary>
-    public Tensor<T> GetWeightsTensor() => Weights;
+    public Tensor<T> GetWeightsTensor() => _weights;
 
     /// <summary>
     /// Gets the bias tensor for JIT compilation and graph composition.
     /// </summary>
-    public Tensor<T> GetBiasesTensor() => Biases;
+    public Tensor<T> GetBiasesTensor() => _biases;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a scalar activation function.
@@ -292,16 +294,16 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
-        Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
-        WeightsGradient = Tensor<T>.Empty();
-        BiasesGradient = Tensor<T>.Empty();
+        _weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
+        _biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
 
         // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(Weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(Biases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -335,16 +337,16 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
-        Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
-        WeightsGradient = Tensor<T>.Empty();
-        BiasesGradient = Tensor<T>.Empty();
+        _weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
+        _biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
 
         // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(Weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(Biases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -377,10 +379,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         Input = input;
 
         // Use Engine.TensorMatMul for GPU acceleration
-        var matmul = Engine.TensorMatMul(Input, Weights);
+        var matmul = Engine.TensorMatMul(Input, _weights);
 
         // Add biases (broadcast [1, outputSize] to [batchSize, outputSize]) using engine op
-        var biasBroadcast = Biases.Reshape([1, Weights.Shape[1]]);
+        var biasBroadcast = _biases.Reshape([1, _weights.Shape[1]]);
         var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
 
         PreActivationOutput = linearOutput;
@@ -410,11 +412,11 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        // MatMul: input @ Weights
-        var matmul = gpuEngine.BatchedMatMulGpu(input, Weights);
+        // MatMul: input @ _weights
+        var matmul = gpuEngine.BatchedMatMulGpu(input, _weights);
 
         // Add biases
-        var biased = gpuEngine.AddBiasGpu(matmul, Biases);
+        var biased = gpuEngine.AddBiasGpu(matmul, _biases);
 
         // Apply activation
         Tensor<T> output;
@@ -475,12 +477,15 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        Weights = Weights.Subtract(WeightsGradient.Multiply(learningRate));
-        Biases = Biases.Subtract(BiasesGradient.Multiply(learningRate));
+        if (_weightsGradient == null || _biasesGradient == null ||
+            _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(Weights);
-        Engine.InvalidatePersistentTensor(Biases);
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -513,24 +518,24 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
-        int totalParams = Weights.Length + Biases.Length;
+        int totalParams = _weights.Length + _biases.Length;
         var parameters = new Vector<T>(totalParams);
 
         int index = 0;
 
         // Copy weights parameters
-        for (int i = 0; i < Weights.Shape[0]; i++)
+        for (int i = 0; i < _weights.Shape[0]; i++)
         {
-            for (int j = 0; j < Weights.Shape[1]; j++)
+            for (int j = 0; j < _weights.Shape[1]; j++)
             {
-                parameters[index++] = Weights[i, j];
+                parameters[index++] = _weights[i, j];
             }
         }
 
         // Copy biases parameters
-        for (int j = 0; j < Biases.Shape[1]; j++)
+        for (int j = 0; j < _biases.Shape[1]; j++)
         {
-            parameters[index++] = Biases[0, j];
+            parameters[index++] = _biases[0, j];
         }
 
         return parameters;
@@ -564,25 +569,25 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != Weights.Length + Biases.Length)
+        if (parameters.Length != _weights.Length + _biases.Length)
         {
-            throw new ArgumentException($"Expected {Weights.Length + Biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {_weights.Length + _biases.Length} parameters, but got {parameters.Length}");
         }
 
         int index = 0;
 
         // Set weights parameters using indexer
-        for (int i = 0; i < Weights.Shape[0]; i++)
-            for (int j = 0; j < Weights.Shape[1]; j++)
-                Weights[i, j] = parameters[index++];
+        for (int i = 0; i < _weights.Shape[0]; i++)
+            for (int j = 0; j < _weights.Shape[1]; j++)
+                _weights[i, j] = parameters[index++];
 
         // Set biases parameters
-        for (int j = 0; j < Biases.Shape[1]; j++)
-            Biases[0, j] = parameters[index++];
+        for (int j = 0; j < _biases.Shape[1]; j++)
+            _biases[0, j] = parameters[index++];
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(Weights);
-        Engine.InvalidatePersistentTensor(Biases);
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -612,22 +617,22 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        if (WeightsGradient.Length == 0 || BiasesGradient.Length == 0)
+        if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
             return new Vector<T>(ParameterCount);
         var result = new Vector<T>(ParameterCount);
         int idx = 0;
-        for (int i = 0; i < WeightsGradient.Length; i++)
-            result[idx++] = WeightsGradient.Data.Span[i];
-        for (int i = 0; i < BiasesGradient.Length; i++)
-            result[idx++] = BiasesGradient.Data.Span[i];
+        for (int i = 0; i < _weightsGradient.Length; i++)
+            result[idx++] = _weightsGradient.Data.Span[i];
+        for (int i = 0; i < _biasesGradient.Length; i++)
+            result[idx++] = _biasesGradient.Data.Span[i];
         return result;
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        WeightsGradient = Tensor<T>.Empty();
-        BiasesGradient = Tensor<T>.Empty();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
     }
 
     public override void ResetState()
@@ -635,8 +640,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
-        WeightsGradient = Tensor<T>.Empty();
-        BiasesGradient = Tensor<T>.Empty();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
 
         // Clear GPU cached tensors
         _gpuInput = null;

@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -45,32 +44,22 @@ public class GPUExplainerHelper<T> : IDisposable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly IGPURuntime? _gpuRuntime;
-    private readonly bool _useGPU;
     private readonly int _maxParallelism;
     private bool _disposed;
 
     /// <summary>
     /// Gets whether GPU acceleration is available and enabled.
+    /// Always returns false — per-layer GPU support was removed with the JIT compiler.
+    /// GPU acceleration is now handled at the Tensors engine level.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This property tells you if the helper is using a GPU.
-    /// If false, all operations fall back to CPU (which still uses parallel processing).
-    /// </para>
-    /// </remarks>
-    public bool IsGPUEnabled => _useGPU && _gpuRuntime != null;
+    public bool IsGPUEnabled => false;
 
     /// <summary>
-    /// Gets information about the GPU device, if available.
+    /// Gets information about the GPU device.
+    /// Always returns null — per-layer GPU support was removed with the JIT compiler.
+    /// GPU device management is now handled at the Tensors engine level.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Contains details like GPU name, memory, and compute capability.
-    /// Useful for understanding performance characteristics.
-    /// </para>
-    /// </remarks>
-    public GPUCodeGenerator.GPUDeviceInfo? DeviceInfo => _gpuRuntime?.DeviceInfo;
+    public object? DeviceInfo => null;
 
     /// <summary>
     /// Gets the maximum parallelism level for CPU fallback operations.
@@ -78,22 +67,19 @@ public class GPUExplainerHelper<T> : IDisposable
     public int MaxParallelism => _maxParallelism;
 
     /// <summary>
-    /// Initializes a new GPU explainer helper.
+    /// Initializes a new GPU explainer helper using CPU parallel processing.
     /// </summary>
-    /// <param name="gpuRuntime">The GPU runtime to use. If null, CPU fallback is used.</param>
     /// <param name="maxParallelism">Maximum parallelism for CPU operations (default: processor count).</param>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Create this helper with a GPU runtime for maximum performance.
-    /// If you don't have a GPU or want to use CPU, pass null - the helper will still
-    /// use parallel processing on CPU cores.
-    /// </para>
+    /// Per-layer GPU support was removed with the JIT compiler. GPU acceleration
+    /// is now handled at the Tensors engine level. This helper uses CPU parallelism.
     /// </remarks>
-    public GPUExplainerHelper(IGPURuntime? gpuRuntime = null, int? maxParallelism = null)
+    public GPUExplainerHelper(int? maxParallelism = null)
     {
-        _gpuRuntime = gpuRuntime;
-        _useGPU = gpuRuntime != null;
-        _maxParallelism = maxParallelism ?? Environment.ProcessorCount;
+        var resolved = maxParallelism ?? Environment.ProcessorCount;
+        if (resolved <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxParallelism), resolved, "Must be at least 1.");
+        _maxParallelism = resolved;
     }
 
     /// <summary>
@@ -112,9 +98,8 @@ public class GPUExplainerHelper<T> : IDisposable
     /// </remarks>
     public static GPUExplainerHelper<T> CreateWithAutoDetect()
     {
-        // For now, use MockGPURuntime for consistent behavior
-        // In production, this could detect CUDA, OpenCL, or Metal availability
-        return new GPUExplainerHelper<T>(new MockGPURuntime());
+        // GPU runtime has been removed — returns CPU-only helper
+        return new GPUExplainerHelper<T>();
     }
 
     /// <summary>
@@ -129,7 +114,7 @@ public class GPUExplainerHelper<T> : IDisposable
     /// </remarks>
     public static GPUExplainerHelper<T> CreateCPUOnly(int? maxParallelism = null)
     {
-        return new GPUExplainerHelper<T>(null, maxParallelism);
+        return new GPUExplainerHelper<T>(maxParallelism);
     }
 
     /// <summary>
@@ -686,7 +671,6 @@ public class GPUExplainerHelper<T> : IDisposable
     {
         if (!_disposed)
         {
-            _gpuRuntime?.Dispose();
             _disposed = true;
             GC.SuppressFinalize(this);
         }

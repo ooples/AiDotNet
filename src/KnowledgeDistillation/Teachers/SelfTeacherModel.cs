@@ -33,7 +33,6 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private Vector<T>[]? _cachedPredictions;
     private readonly int _outputDim;
-    private readonly IJitCompilable<T>? _underlyingModel;
 
     /// <summary>
     /// Gets the output dimension of the teacher model.
@@ -51,24 +50,6 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public SelfTeacherModel(int outputDimension)
     {
-        _outputDim = outputDimension;
-        _underlyingModel = null;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of SelfTeacherModel wrapping an IJitCompilable model.
-    /// </summary>
-    /// <param name="model">The JIT-compilable model to wrap.</param>
-    /// <param name="outputDimension">The output dimension of the model.</param>
-    /// <remarks>
-    /// <para>Use this constructor when you want the teacher to generate predictions dynamically
-    /// from the underlying model. JIT compilation is supported when the underlying model supports it.</para>
-    /// <para>You can still use <see cref="CachePredictions"/> to cache predictions if needed.</para>
-    /// </remarks>
-    public SelfTeacherModel(IJitCompilable<T> model, int outputDimension)
-    {
-        Guard.NotNull(model);
-        _underlyingModel = model;
         _outputDim = outputDimension;
     }
 
@@ -107,23 +88,8 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {
-        if (_underlyingModel != null)
-        {
-            // IJitCompilable doesn't have execution methods - need to cast to a model interface
-            // that has Predict. Typically IJitCompilable models also implement IModel.
-            if (_underlyingModel is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
-            {
-                return model.Predict(input);
-            }
-
-            throw new InvalidOperationException(
-                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
-                "IJitCompilable only provides computation graph export for JIT compilation.");
-        }
-
         throw new InvalidOperationException(
-            "Self teacher in cached mode does not support direct input. Use GetCachedPrediction instead, " +
-            "or construct with an IJitCompilable model for dynamic predictions.");
+            "Self teacher in cached mode does not support direct input. Use GetCachedPrediction instead.");
     }
 
     /// <summary>

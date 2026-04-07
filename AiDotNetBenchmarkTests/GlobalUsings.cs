@@ -20,7 +20,6 @@ global using AiDotNet.GaussianProcesses;
 global using AiDotNet.Genetics;
 global using AiDotNet.Interfaces;
 global using AiDotNet.Interpretability;
-global using AiDotNet.JitCompiler;
 global using AiDotNet.Kernels;
 global using AiDotNet.LoRA;
 global using AiDotNet.LossFunctions;

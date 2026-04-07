@@ -47,18 +47,6 @@ public static class InterfaceGuard
     }
 
     /// <summary>
-    /// Returns the model as IJitCompilable or throws with a clear message.
-    /// </summary>
-    public static IJitCompilable<T> JitCompilable<T, TInput, TOutput>(
-        IFullModel<T, TInput, TOutput> model)
-    {
-        if (model is IJitCompilable<T> j)
-            return j;
-        throw new InvalidOperationException(
-            $"{model.GetType().Name} does not implement IJitCompilable.");
-    }
-
-    /// <summary>
     /// Returns the model as IParameterizable if supported, null otherwise.
     /// </summary>
     public static IParameterizable<T, TInput, TOutput>? TryParameterizable<T, TInput, TOutput>(

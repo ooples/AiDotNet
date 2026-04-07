@@ -6671,13 +6671,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return false;
             }
 
-            // Check if the model implements IJitCompilable and supports JIT
-            if (Model is IJitCompilable<T> jitModel)
-            {
-                return jitModel.SupportsJitCompilation;
-            }
-
-            // Model doesn't implement IJitCompilable
+            // JIT compilation has been removed
             return false;
         }
     }
@@ -6719,28 +6713,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
     {
-        if (Model == null)
-        {
-            throw new InvalidOperationException("Model is not initialized.");
-        }
-
-        if (Model is not IJitCompilable<T> jitModel)
-        {
-            throw new NotSupportedException(
-                $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
-                "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
-                "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
-                "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
-        }
-
-        if (!jitModel.SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
-                "Check SupportsJitCompilation property before calling ExportComputationGraph.");
-        }
-
-        return jitModel.ExportComputationGraph(inputNodes);
+        throw new NotSupportedException("JIT compilation has been removed.");
     }
 
     #endregion

@@ -27,7 +27,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
-    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -155,15 +155,4 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// <inheritdoc/>
     public virtual Dictionary<string, T> GetFeatureImportance() => BaseModel.GetFeatureImportance();
 
-    // --- IJitCompilable ---
-
-    /// <inheritdoc/>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            $"JIT compilation is not supported for {GetType().Name}.");
-    }
 }

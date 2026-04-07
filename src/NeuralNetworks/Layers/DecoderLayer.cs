@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -570,6 +570,31 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1.ResetState();
         _norm2.ResetState();
         _norm3.ResetState();
+    }
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+    [
+        new LayerPort("decoder_input", GetInputShape()),
+        new LayerPort("encoder_output", GetInputShape()),
+        new LayerPort("mask", GetInputShape(), Required: false)
+    ];
+
+    /// <summary>
+    /// Named multi-input forward pass.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
+            throw new ArgumentException("DecoderLayer requires 'decoder_input'.", nameof(inputs));
+        if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
+            throw new ArgumentException("DecoderLayer requires 'encoder_output'.", nameof(inputs));
+        if (inputs.TryGetValue("mask", out var mask))
+            return Forward(decoderInput, encoderOutput, mask);
+        return Forward(decoderInput, encoderOutput);
     }
 
     /// <summary>

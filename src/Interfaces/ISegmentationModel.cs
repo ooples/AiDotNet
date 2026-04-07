@@ -30,7 +30,7 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("SegmentationModel")]
 public interface ISegmentationModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>, IJitCompilable<T>
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
     /// Gets the number of segmentation classes this model predicts.

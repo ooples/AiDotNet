@@ -131,16 +131,9 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     /// <item><description><b>SAC/TD3:</b> Returns the policy network (actor)</description></item>
     /// </list>
     /// </remarks>
-    protected virtual IJitCompilable<T>? GetPolicyNetworkForJit()
+    protected virtual INeuralNetworkModel<T>? GetPolicyNetworkForJit()
     {
-        // Try to find a network that supports JIT compilation
-        foreach (var network in Networks)
-        {
-            if (network is IJitCompilable<T> jitCompilable && jitCompilable.SupportsJitCompilation)
-            {
-                return jitCompilable;
-            }
-        }
+        // JIT compilation has been removed — always returns null
         return null;
     }
 }

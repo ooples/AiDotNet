@@ -121,6 +121,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// <summary>
     /// Basis matrices for weight decomposition (if using basis). Shape: [numBases, inputFeatures, outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T>? _basisMatrices;
 
     /// <summary>

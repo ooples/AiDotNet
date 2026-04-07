@@ -83,26 +83,46 @@ public partial class MinLSTMLayer<T> : LayerBase<T>
     private readonly int _expandedDimension;
 
     // Input projection: [modelDim, expandedDim] -- projects input to internal dimension
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputProjectionBias;
 
     // Forget gate projection: [expandedDim, expandedDim]
     // f_t = sigma(W_f * x_proj + b_f)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _forgetGateBias;
 
     // Input gate projection: [expandedDim, expandedDim]
     // i_t = sigma(W_i * x_proj + b_i)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _inputGateBias;
 
     // Cell candidate projection: [expandedDim, expandedDim]
     // c_tilde = W_c * x_proj + b_c
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _cellCandidateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _cellCandidateBias;
 
     // Output projection: [expandedDim, modelDim] -- projects back to model dimension
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values for backward

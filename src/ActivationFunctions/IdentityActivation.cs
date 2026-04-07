@@ -109,6 +109,11 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     protected override bool SupportsScalarOperations() => true;
 
     /// <summary>
+    /// Returns the input tensor unchanged — no allocation, preserves tape chain.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) => input;
+
+    /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>

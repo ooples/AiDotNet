@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -31,11 +32,19 @@ public partial class InteractingLayer<T> : LayerBase<T>
     private readonly bool _useResidual;
 
     // Multi-head attention parameters
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;   // [embeddingDim, attentionDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;     // [embeddingDim, attentionDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _valueWeights;   // [embeddingDim, attentionDim]
 
     // Output projection (combines heads)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _outputWeights;  // [attentionDim, embeddingDim]
 
     // Residual projection (if dimensions don't match)

@@ -360,8 +360,6 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         /// <inheritdoc/>
         public Vector<T> SanitizeParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SanitizeParameters(parameters);
 
-        /// <inheritdoc/>
-        public bool SupportsJitCompilation => InterfaceGuard.JitCompilable(_inner).SupportsJitCompilation;
 
         /// <inheritdoc/>
         public TOutput Predict(TInput input)
@@ -489,10 +487,5 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             InterfaceGuard.GradientComputable(_inner).ApplyGradients(gradients, learningRate);
         }
 
-        /// <inheritdoc/>
-        public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            return InterfaceGuard.JitCompilable(_inner).ExportComputationGraph(inputNodes);
-        }
     }
 }

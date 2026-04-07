@@ -40,7 +40,11 @@ public partial class QuantumLayer<T> : LayerBase<T>
 {
     private readonly int _numQubits;
     private Tensor<Complex<T>> _quantumCircuit;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _circuitReal;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _circuitImag;
     private Tensor<T>? _lastInput;
 

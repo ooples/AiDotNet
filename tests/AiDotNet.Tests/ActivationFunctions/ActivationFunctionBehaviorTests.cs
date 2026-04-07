@@ -82,5 +82,80 @@ namespace AiDotNet.Tests.ActivationFunctions
             var vfn = ActivationFunctionFactory<double>.CreateVectorActivationFunction(ActivationFunction.Softmax);
             Assert.IsAssignableFrom<IVectorActivationFunction<double>>(vfn);
         }
+
+        // ----------------------------------------------------------------
+        // IdentityActivation.Activate(Tensor<T>) — PR change coverage
+        // ----------------------------------------------------------------
+
+        [Fact]
+        public void IdentityActivation_TensorActivate_ReturnsSameReference()
+        {
+            // The new override must return the exact same object (no allocation).
+            // This is required to preserve the autodiff tape chain.
+            var fn = new IdentityActivation<double>();
+            var input = new Tensor<double>([3, 4]);
+            for (int i = 0; i < input.Length; i++)
+                input.SetFlat(i, i * 1.5);
+
+            var output = fn.Activate(input);
+
+            Assert.True(ReferenceEquals(input, output),
+                "IdentityActivation.Activate(Tensor) must return the exact same tensor reference — no copy.");
+        }
+
+        [Fact]
+        public void IdentityActivation_TensorActivate_With1DTensor_ReturnsSameReference()
+        {
+            var fn = new IdentityActivation<double>();
+            var input = new Tensor<double>([8]);
+            input.SetFlat(0, 42.0);
+
+            var output = fn.Activate(input);
+
+            Assert.True(ReferenceEquals(input, output),
+                "IdentityActivation.Activate(Tensor) must return the same reference for 1-D tensors.");
+        }
+
+        [Fact]
+        public void IdentityActivation_TensorActivate_With3DTensor_ReturnsSameReference()
+        {
+            var fn = new IdentityActivation<double>();
+            var input = new Tensor<double>([2, 3, 4]);
+            for (int i = 0; i < input.Length; i++)
+                input.SetFlat(i, (double)i);
+
+            var output = fn.Activate(input);
+
+            Assert.True(ReferenceEquals(input, output),
+                "IdentityActivation.Activate(Tensor) must return the same reference for 3-D tensors.");
+        }
+
+        [Fact]
+        public void IdentityActivation_TensorActivate_DataIsUnchanged()
+        {
+            // Even though it's the same reference, verify values are untouched.
+            var fn = new IdentityActivation<double>();
+            var data = new double[] { -5.0, 0.0, 3.14, double.MaxValue, double.MinValue };
+            var input = new Tensor<double>(data, [data.Length]);
+
+            var output = fn.Activate(input);
+
+            for (int i = 0; i < data.Length; i++)
+                Assert.Equal(data[i], output.GetFlat(i));
+        }
+
+        [Fact]
+        public void IdentityActivation_TensorActivate_WithFloatType_ReturnsSameReference()
+        {
+            var fn = new IdentityActivation<float>();
+            var input = new Tensor<float>([4]);
+            input.SetFlat(0, 1.0f);
+            input.SetFlat(1, -1.0f);
+
+            var output = fn.Activate(input);
+
+            Assert.True(ReferenceEquals(input, output),
+                "IdentityActivation<float>.Activate(Tensor) must return the same reference.");
+        }
     }
 }

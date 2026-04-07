@@ -86,25 +86,45 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// Message computation network (MLP).
     /// Shape: [messageInputDim, messageFeatures] and [messageFeatures, messageFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _messageWeights1;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _messageWeights2;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _messageBias1;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _messageBias2;
 
     /// <summary>
     /// Update computation network (GRU-style update).
     /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _updateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _updateMessageWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _updateBias;
 
     /// <summary>
     /// Reset gate weights (GRU-style).
     /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _resetWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _resetMessageWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _resetBias;
 
     /// <summary>

@@ -26,7 +26,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("MultiLabelClassifier")]
 public interface IMultiLabelClassifier<T> : IFullModel<T, Matrix<T>, Matrix<T>>,
-    IParameterizable<T, Matrix<T>, Matrix<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Matrix<T>>, IJitCompilable<T>
+    IParameterizable<T, Matrix<T>, Matrix<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Matrix<T>>
 {
     /// <summary>
     /// Gets the number of possible labels.
