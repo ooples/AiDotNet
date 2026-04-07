@@ -399,7 +399,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        // Reset all state for deterministic inference
+        // Set network + layer eval mode for deterministic inference
+        SetTrainingMode(false);
         _metaState = new Vector<T>(_hiddenDim);
         foreach (var layer in Layers)
         {

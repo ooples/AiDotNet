@@ -150,9 +150,9 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
             }
         }
 
-        // No matching key — store scaled by learningRate for consistency with blend path
-        var scaledTarget = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(target), learningRate);
-        Associate(input, scaledTarget.ToVector());
+        // No matching key — store full target (not scaled, since retrieval expects
+        // actual values, and learningRate only modulates blend strength for existing keys)
+        Associate(input, target);
     }
 
     public int Capacity => _capacity;

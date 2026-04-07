@@ -220,6 +220,24 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 
         // Use |c| — curvature is stored as negative but Möbius formulas require positive
         T c = NumOps.Abs(_curvature);
+        double cVal = NumOps.ToDouble(c);
+
+        // Euclidean limit: when c ≈ 0, Möbius matmul reduces to standard linear + bias
+        if (cVal < 1e-12)
+        {
+            var euclideanW = IsTrainingMode
+                ? Engine.TensorTranspose(_weights)
+                : (_weightsTCache ??= Engine.TensorTranspose(_weights));
+            var linear = Engine.FusedLinear(inputTensor, euclideanW, _biases, FusedActivationType.None);
+            _lastOutput = linear;
+            var euclideanOut = ApplyActivation(linear);
+            if (_originalInputShape == null || _originalInputShape.Length == 2) return euclideanOut;
+            if (_originalInputShape.Length == 1) return euclideanOut.Reshape([OutputFeatures]);
+            var eucOutShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++) eucOutShape[d] = _originalInputShape[d];
+            eucOutShape[_originalInputShape.Length - 1] = OutputFeatures;
+            return euclideanOut.Reshape(eucOutShape);
+        }
         T sqrtC = NumOps.Sqrt(c);
         T eps = NumOps.FromDouble(1e-7);
 
@@ -497,24 +515,16 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
-        {
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        }
+        if (_biasesGradient.Length < OutputFeatures)
+            throw new InvalidOperationException($"Bias gradient shape mismatch: expected {OutputFeatures}, got {_biasesGradient.Length}.");
 
         for (int o = 0; o < OutputFeatures; o++)
         {
             for (int i = 0; i < InputFeatures; i++)
-            {
-                var grad = _weightsGradient[o, i];
-                _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, grad));
-            }
+                _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, _weightsGradient[o, i]));
 
-            if (_biasesGradient != null)
-            {
-                if (o >= _biasesGradient.Length)
-                    throw new InvalidOperationException($"Bias gradient shape mismatch: expected at least {o + 1} elements, got {_biasesGradient.Length}.");
-                _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
-            }
+            _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
         }
 
         _weightsTCache = null;

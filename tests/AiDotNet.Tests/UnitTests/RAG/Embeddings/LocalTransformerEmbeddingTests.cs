@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         }
 
         [Fact]
-        public void Embed_WithDifferentTexts_ThrowsFileNotFoundForMissingModel()
+        public void Embed_WithSingleText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
 
