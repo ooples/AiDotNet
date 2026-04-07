@@ -17,6 +17,12 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
     private readonly double _inverseTemperature;
     private readonly List<(Vector<T> Input, Vector<T> Target)> _memories;
     private Matrix<T>? _cachedAssociationMatrix;
+
+    /// <summary>Cosine similarity threshold for treating two keys as duplicates in Update.</summary>
+    private const double DuplicateKeyThreshold = 0.99;
+
+    /// <summary>Small epsilon to prevent division by zero in cosine similarity.</summary>
+    private const double CosineEpsilon = 1e-10;
     private Tensor<T>? _cachedValuesTensor;
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)
@@ -126,9 +132,9 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
             var key = _memories[m].Input;
             T dot = Engine.DotProduct(key, input);
             T keyNormSq = Engine.DotProduct(key, key);
-            double cosine = NumOps.ToDouble(dot) / (Math.Sqrt(NumOps.ToDouble(keyNormSq)) * inputNorm + 1e-10);
+            double cosine = NumOps.ToDouble(dot) / (Math.Sqrt(NumOps.ToDouble(keyNormSq)) * inputNorm + CosineEpsilon);
 
-            if (cosine > 0.99)
+            if (cosine > DuplicateKeyThreshold)
             {
                 // Blend: updated = (1-lr) * existing + lr * target
                 var existingTensor = Tensor<T>.FromVector(_memories[m].Target);

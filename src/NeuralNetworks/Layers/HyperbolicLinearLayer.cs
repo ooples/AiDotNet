@@ -273,7 +273,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var normSq = Engine.ReduceSum(Engine.TensorMultiply(output, output), new[] { 1 }, keepDims: true); // [batch, 1]
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8))); // [batch, 1]
         // projScale = min(1, maxNorm / ||x||) — clamp via TensorClamp upper bound of 1.0
-        var maxNormTensor = Engine.TensorAddScalar(new Tensor<T>(norm._shape), NumOps.FromDouble(maxNorm));
+        var maxNormTensor = Engine.TensorAddScalar(new Tensor<T>([batchSize, 1]), NumOps.FromDouble(maxNorm));
         var projScale = Engine.TensorDivide(maxNormTensor, Engine.TensorAddScalar(norm, NumOps.FromDouble(1e-8)));
         projScale = Engine.TensorClamp(projScale, NumOps.Zero, NumOps.One); // clamp to [0, 1]
         output = Engine.TensorBroadcastMultiply(projScale, output); // [batch, outputFeatures]
@@ -509,8 +509,10 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, grad));
             }
 
-            if (_biasesGradient != null && o < _biasesGradient.Length)
+            if (_biasesGradient != null)
             {
+                if (o >= _biasesGradient.Length)
+                    throw new InvalidOperationException($"Bias gradient shape mismatch: expected at least {o + 1} elements, got {_biasesGradient.Length}.");
                 _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
             }
         }
