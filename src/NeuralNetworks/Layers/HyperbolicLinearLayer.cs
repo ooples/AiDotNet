@@ -267,11 +267,16 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var bias2D = _biases.Reshape([1, OutputFeatures]);
         var output = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
 
-        // Clamp to stay inside the ball: ||x|| < 1/√c
-        var outputNormSq = Engine.ReduceSum(Engine.TensorMultiply(output, output), new[] { 1 }, keepDims: true);
-        T maxNormSq = NumOps.FromDouble(0.99 / NumOps.ToDouble(c));
-        output = Engine.TensorClamp(output, NumOps.Negate(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(maxNormSq)))),
-            NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(maxNormSq))));
+        // Project back into Poincaré ball: if ||x|| >= maxNorm, scale x to maxNorm * x/||x||
+        // Per-coordinate clamp is insufficient — must enforce the L2 norm constraint.
+        double maxNorm = Math.Sqrt(0.99 / NumOps.ToDouble(c));
+        var normSq = Engine.ReduceSum(Engine.TensorMultiply(output, output), new[] { 1 }, keepDims: true); // [batch, 1]
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8))); // [batch, 1]
+        // projScale = min(1, maxNorm / ||x||) — clamp via TensorClamp upper bound of 1.0
+        var maxNormTensor = Engine.TensorAddScalar(new Tensor<T>(norm._shape), NumOps.FromDouble(maxNorm));
+        var projScale = Engine.TensorDivide(maxNormTensor, Engine.TensorAddScalar(norm, NumOps.FromDouble(1e-8)));
+        projScale = Engine.TensorClamp(projScale, NumOps.Zero, NumOps.One); // clamp to [0, 1]
+        output = Engine.TensorBroadcastMultiply(projScale, output); // [batch, outputFeatures]
 
         _lastOutput = output;
 

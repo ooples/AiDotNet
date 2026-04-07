@@ -387,6 +387,14 @@ public abstract class TimeSeriesModelTestBase
         {
             Assert.True(parameterizable.GetParameters().Length > 0, "Trained parameterizable model should have parameters.");
         }
+        else
+        {
+            // Non-parameterizable models should still produce valid predictions after training
+            var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(5, ModelTestHelpers.CreateSeededRandom(99));
+            var prediction = model.Predict(testX);
+            Assert.NotNull(prediction);
+            Assert.True(prediction.Length > 0, "Non-parameterizable model should still produce predictions after training.");
+        }
     }
 
     // =====================================================
