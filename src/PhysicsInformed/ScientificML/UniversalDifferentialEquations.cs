@@ -390,7 +390,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentException($"Expected output shape [batch, {_stateDim}].", nameof(expectedOutput));
             }
 
-            TrainWithTape(input, expectedOutput);
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expectedOutput);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>

@@ -306,7 +306,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            TrainWithTape(input, expectedOutput);
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expectedOutput);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>
