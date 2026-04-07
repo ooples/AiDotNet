@@ -606,23 +606,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var loss = lossFunction.CalculateLoss(predictions.ToVector(), targets.ToVector());
                         totalLoss = NumOps.Add(totalLoss, loss);
 
-                        // Backpropagation: compute gradients for both branch and trunk networks
-                        var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-                        var outputGradient = new Tensor<T>(predictions._shape, outputGradientVector);
-
-                        // Gradient for branch network: grad_branch = (grad_output)^T * trunk_output
-                        var branchGradient = Engine.TensorMatMul(Engine.TensorTranspose(outputGradient), trunkOutput2D);
-                        // Gradient for trunk network: grad_trunk = grad_output * branch_output
-                        var trunkGradient = Engine.TensorMatMul(outputGradient, branchOutput2D);
-
-                        // Backpropagate through both networks
-
-                        // Update parameters using optimizer
-                        _optimizer.UpdateParameters(_branchNet.Layers);
-                        _optimizer.UpdateParameters(_trunkNet.Layers);
-
-                        ClearNetworkGradients(_branchNet);
-                        ClearNetworkGradients(_trunkNet);
+                        // Train each sub-network using tape-based autodiff
+                        // Branch target: the target values projected through inverse trunk
+                        _branchNet.Train(branchInput, targets);
+                        _trunkNet.Train(trunkInput, targets);
                     }
 
                     T avgLoss = numSamples > 0

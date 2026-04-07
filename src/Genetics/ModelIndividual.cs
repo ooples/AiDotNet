@@ -51,7 +51,8 @@ namespace AiDotNet.Genetics;
     [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ModelIndividual<T, TInput, TOutput, TGene> :
     IEvolvable<TGene, T>,
-    IFullModel<T, TInput, TOutput>
+    IFullModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>
     where TGene : class
 {
     private List<TGene> _genes = new List<TGene>();

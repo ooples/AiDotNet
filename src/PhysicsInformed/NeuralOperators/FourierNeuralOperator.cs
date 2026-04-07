@@ -346,25 +346,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                     for (int i = 0; i < inputFunctions.Length; i++)
                     {
-                        var prediction = ForwardWithMemory(inputFunctions[i]);
-                        var target = outputFunctions[i];
-
-                        var loss = lossFunction.CalculateLoss(prediction.ToVector(), target.ToVector());
-                        totalLoss = NumOps.Add(totalLoss, loss);
-
-                        var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
-                        var outputGradient = new Tensor<T>(prediction._shape, outputGradientVector);
-
-
-                        var gradients = GetGradients();
-                        var parameters = GetParameters();
-                        if (parameters.Length > 0)
-                        {
-                            var updatedParameters = _optimizer.UpdateParameters(parameters, gradients);
-                            UpdateParameters(updatedParameters);
-                        }
-
-                        ClearGradients();
+                        Train(inputFunctions[i], outputFunctions[i]);
+                        totalLoss = NumOps.Add(totalLoss, LastLoss ?? NumOps.Zero);
                     }
 
                     T avgLoss = inputFunctions.Length > 0

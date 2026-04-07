@@ -306,30 +306,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            IsTrainingMode = true;
-
-            var prediction = Forward(input);
-
-            var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-            var primaryLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            // Check for auxiliary losses from layers that support them
-            T auxiliaryLoss = NumOps.Zero;
-            foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
-            {
-                var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-                var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-                auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-            }
-
-            LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
-
-            var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction._shape);
-
-            _optimizer.UpdateParameters(Layers);
-
-            IsTrainingMode = false;
+            TrainWithTape(input, expectedOutput);
         }
 
         /// <summary>

@@ -1327,24 +1327,29 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         int batchSize = weights.Shape[0];
         int numExperts = weights.Shape[1];
 
-        // VECTORIZED: Use TensorTopK to get top-k values and indices
-        var topKValues = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
-        // topKValues shape: [batchSize, k]
-        // topKIndicesTensor shape: [batchSize, k]
+        // Step 1: Use TensorTopK ONLY for index selection (non-differentiable, indices only)
+        _ = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
 
-        // VECTORIZED: Compute row sums for normalization
-        var sumPerRow = Engine.ReduceSum(topKValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
+        // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant)
+        // This is the straight-through estimator approach per Shazeer et al. §3.2:
+        // forward uses discrete selection, backward passes gradients through softmax weights
+        var mask = new Tensor<T>(weights.Shape.ToArray());
+        mask.Fill(NumOps.Zero);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < k; i++)
+            {
+                mask[b, topKIndicesTensor[b, i]] = NumOps.One;
+            }
+        }
 
-        // VECTORIZED: Normalize top-k values (with broadcasting for shape [batchSize, k] / [batchSize, 1])
-        var normalizedTopK = Engine.TensorBroadcastDivide(topKValues, sumPerRow); // [batchSize, k]
+        // Step 3: Multiply original weights by mask using tape-tracked Engine operation
+        // This preserves gradient flow through the softmax weights for selected experts
+        var maskedWeights = Engine.TensorBroadcastMultiply(weights, mask); // [batchSize, numExperts]
 
-        // VECTORIZED: Scatter normalized values back to full expert dimension
-        // Create zero tensor for sparse weights
-        var sparseWeights = new Tensor<T>(weights.Shape.ToArray());
-        sparseWeights.Fill(NumOps.Zero);
-
-        // Use TensorScatter to place normalized values at correct positions
-        sparseWeights = Engine.TensorScatter(sparseWeights, topKIndicesTensor, normalizedTopK, axis: 1);
+        // Step 4: Renormalize using tape-tracked operations
+        var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
+        var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, sumPerRow); // [batchSize, numExperts]
 
         // Convert topKIndicesTensor to int[,] for backward compatibility
         var topKIndices = new int[batchSize, k];
@@ -1396,24 +1401,21 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             throw new ArgumentException("Must have at least one expert output.", nameof(expertOutputs));
         }
 
-        // Initialize combined output with zeros
-        var combined = new Tensor<T>(expertOutputs[0].Shape.ToArray());
-        combined.Fill(NumOps.Zero);
-
-        // Vectorized: For each expert, multiply its output by routing weights and accumulate
+        // All operations must use Engine for tape-tracked gradient flow.
         // expertOutputs[i] shape: [batchSize, outputDim]
         // routingWeights shape: [batchSize, numExperts]
-        // We need weight for expert i: routingWeights[:, i] with shape [batchSize, 1] for broadcasting
+
+        Tensor<T>? combined = null;
 
         for (int i = 0; i < expertOutputs.Count; i++)
         {
             var expertOutput = expertOutputs[i];
 
-            // Extract routing weight for expert i as a vector [batchSize]
-            // GetSliceAlongDimension(index, dimension) - get slice at index i along dimension 1 (expert dim)
-            var weightVector = routingWeights.GetSliceAlongDimension(i, 1);
+            // Extract routing weight for expert i using tape-tracked Engine slice
+            // TensorSliceAxis returns shape [batchSize] from [batchSize, numExperts] at axis=1, index=i
+            var weightVector = Engine.TensorSliceAxis(routingWeights, 1, i);
 
-            // Reshape for broadcasting across any-rank expert outputs
+            // Reshape for broadcasting across any-rank expert outputs: [batchSize] -> [batchSize, 1, ...]
             var broadcastShape = new int[expertOutput.Shape.Length];
             broadcastShape[0] = weightVector.Shape[0];
             for (int d = 1; d < broadcastShape.Length; d++)
@@ -1421,16 +1423,23 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
                 broadcastShape[d] = 1;
             }
 
-            var weightColumn = weightVector.Reshape(broadcastShape);
+            var weightColumn = Engine.Reshape(weightVector, broadcastShape);
 
-            // Multiply expert output by weight (broadcasts across output dimensions)
+            // Multiply expert output by weight (broadcasts across output dimensions) — tape-tracked
             var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn);
 
-            // Accumulate
-            combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
+            // Accumulate — first iteration sets combined, subsequent ones add
+            if (combined == null)
+            {
+                combined = weightedOutput;
+            }
+            else
+            {
+                combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
+            }
         }
 
-        return combined;
+        return combined!;
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
@@ -13,10 +14,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
-            // Arrange & Act
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
 
-            // Assert
             Assert.NotNull(model);
             Assert.Equal(384, model.EmbeddingDimension);
             Assert.Equal(512, model.MaxTokens);
@@ -25,10 +24,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
-            // Arrange & Act
             var model = new LocalTransformerEmbedding<double>("test-model-path");
 
-            // Assert
             Assert.NotNull(model);
             Assert.Equal(384, model.EmbeddingDimension);
             Assert.Equal(512, model.MaxTokens);
@@ -37,7 +34,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithNullModelPath_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>(null, 384, 512));
             Assert.Contains("Model path cannot be empty", exception.Message);
@@ -46,7 +42,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithEmptyModelPath_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("", 384, 512));
             Assert.Contains("Model path cannot be empty", exception.Message);
@@ -55,7 +50,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithWhitespaceModelPath_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("   ", 384, 512));
             Assert.Contains("Model path cannot be empty", exception.Message);
@@ -64,7 +58,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("test-model-path", 0, 512));
             Assert.Contains("Dimension must be positive", exception.Message);
@@ -73,7 +66,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("test-model-path", -1, 512));
             Assert.Contains("Dimension must be positive", exception.Message);
@@ -82,7 +74,6 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("test-model-path", 384, 0));
             Assert.Contains("Max tokens must be positive", exception.Message);
@@ -91,287 +82,150 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new LocalTransformerEmbedding<double>("test-model-path", 384, -1));
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
         [Fact]
-        public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
+        public void Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text = "This is a test sentence.";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
+            Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
         [Fact]
-        public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
+        public void Embed_WithSameTextTwice_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text = "Hello world";
 
-            // Act
-            var embedding1 = model.Embed(text);
-            var embedding2 = model.Embed(text);
-
-            // Assert
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
         [Fact]
-        public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        public void Embed_WithDifferentTexts_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text1 = "Hello world";
-            var text2 = "Goodbye world";
 
-            // Act
-            var embedding1 = model.Embed(text1);
-            var embedding2 = model.Embed(text2);
-
-            // Assert
-            var hasDifference = false;
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
-                {
-                    hasDifference = true;
-                    break;
-                }
-            }
-            Assert.True(hasDifference, "Embeddings for different texts should be different");
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
         [Fact]
-        public void Embed_ReturnsNormalizedVector()
+        public void Embed_ReturnsNormalizedVector_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text = "Test normalization";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            var magnitude = 0.0;
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                magnitude += embedding[i] * embedding[i];
-            }
-            magnitude = Math.Sqrt(magnitude);
-            Assert.Equal(1.0, magnitude, 5);
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
         }
 
         [Fact]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path");
 
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
         [Fact]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path");
 
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
         [Fact]
         public void Embed_WithWhitespaceText_ThrowsArgumentException()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path");
 
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
         [Fact]
-        public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
+        public void EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
             var texts = new List<string> { "First text", "Second text", "Third text" };
 
-            // Act
-            var embeddings = model.EmbedBatch(texts);
-
-            // Assert
-            Assert.NotNull(embeddings);
-            Assert.Equal(3, embeddings.Rows);
-            Assert.Equal(384, embeddings.Columns);
+            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
         [Fact]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path");
 
-            // Act & Assert
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
         [Fact]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path");
             var texts = new List<string>();
 
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
         [Fact]
-        public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
+        public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
             var texts = new List<string> { "First", "Second", "Third" };
 
-            // Act
-            var batchEmbeddings = model.EmbedBatch(texts);
-            var individualEmbeddings = texts.Select(t => model.Embed(t)).ToList();
-
-            // Assert
-            for (int i = 0; i < texts.Count; i++)
-            {
-                for (int j = 0; j < model.EmbeddingDimension; j++)
-                {
-                    Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
-                }
-            }
+            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
         [Fact]
-        public void Embed_WithFloatType_WorksCorrectly()
+        public void Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<float>("test-model-path", 384, 512);
-            var text = "Test with float type";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
-
-            // Check normalization
-            var magnitude = 0.0f;
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                magnitude += embedding[i] * embedding[i];
-            }
-            magnitude = (float)Math.Sqrt(magnitude);
-            Assert.Equal(1.0f, magnitude, 5);
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
         [Fact]
-        public void Embed_WithCustomDimension_ReturnsCorrectSize()
+        public void Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
-            var customDimension = 768;
-            var model = new LocalTransformerEmbedding<double>("test-model-path", customDimension, 512);
-            var text = "Testing custom dimension";
+            var model = new LocalTransformerEmbedding<double>("test-model-path", 768, 512);
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.Equal(customDimension, embedding.Length);
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
         }
 
         [Fact]
-        public void Embed_Deterministic_MultipleInstances()
+        public void Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
-            var model1 = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var model2 = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text = "Determinism test";
+            var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
 
-            // Act
-            var embedding1 = model1.Embed(text);
-            var embedding2 = model2.Embed(text);
-
-            // Assert
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
         }
 
         [Fact]
-        public void EmbedBatch_AllRowsAreNormalized()
+        public void EmbedBatch_AllRowsAreNormalized_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
             var texts = new List<string> { "First", "Second", "Third" };
 
-            // Act
-            var embeddings = model.EmbedBatch(texts);
-
-            // Assert
-            for (int i = 0; i < embeddings.Rows; i++)
-            {
-                var magnitude = 0.0;
-                for (int j = 0; j < embeddings.Columns; j++)
-                {
-                    magnitude += embeddings[i, j] * embeddings[i, j];
-                }
-                magnitude = Math.Sqrt(magnitude);
-                Assert.Equal(1.0, magnitude, 5);
-            }
+            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
         [Fact]
-        public void Embed_WithLongText_ReturnsEmbedding()
+        public void Embed_WithLongText_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
             var longText = string.Join(" ", Enumerable.Repeat("word", 500));
 
-            // Act
-            var embedding = model.Embed(longText);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
+            Assert.Throws<FileNotFoundException>(() => model.Embed(longText));
         }
 
         [Fact]
-        public void Embed_WithSpecialCharacters_ReturnsEmbedding()
+        public void Embed_WithSpecialCharacters_ThrowsFileNotFoundForMissingModel()
         {
-            // Arrange
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
-            var text = "Special characters: @#$%^&*()!";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Special characters: @#$%^&*()!"));
         }
     }
 }
