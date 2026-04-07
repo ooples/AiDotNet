@@ -296,7 +296,14 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 
             protected override Vector<double> EmbedCore(string text)
             {
-                var hash = text.ToLowerInvariant().GetHashCode();
+                // Use stable FNV-1a hash instead of GetHashCode (randomized per process in .NET 6+)
+                uint hash = 2166136261;
+                foreach (char c in text.ToLowerInvariant())
+                {
+                    hash ^= c;
+                    hash *= 16777619;
+                }
+
                 var values = new double[_dimension];
                 for (int i = 0; i < _dimension; i++)
                     values[i] = Math.Sin(hash * 0.0001 + i * 0.1) * 0.5;

@@ -1348,11 +1348,9 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Step 3: Multiply original weights by mask using tape-tracked Engine operation
         var maskedWeights = Engine.TensorBroadcastMultiply(weights, mask); // [batchSize, numExperts]
 
-        // Step 4: Renormalize using tape-tracked operations (epsilon for numerical stability)
+        // Step 4: Renormalize using tape-tracked operations (epsilon scalar for numerical stability)
         var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
-        var epsilon = new Tensor<T>(sumPerRow.Shape.ToArray());
-        epsilon.Fill(NumOps.FromDouble(1e-10));
-        var safeSumPerRow = Engine.TensorBroadcastAdd(sumPerRow, epsilon);
+        var safeSumPerRow = Engine.TensorAddScalar(sumPerRow, NumOps.FromDouble(1e-10));
         var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
 
         // Convert topKIndicesTensor to int[,] for backward compatibility
@@ -1410,21 +1408,23 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // routingWeights shape: [batchSize, numExperts]
 
         Tensor<T>? combined = null;
+        int batchSize = routingWeights.Shape[0];
+
+        // Pre-allocate index tensors for all experts (constant per forward pass)
+        var indexTensors = new Tensor<int>[expertOutputs.Count];
+        for (int i = 0; i < expertOutputs.Count; i++)
+        {
+            indexTensors[i] = new Tensor<int>(new[] { batchSize, 1 });
+            for (int b = 0; b < batchSize; b++)
+                indexTensors[i][b, 0] = i;
+        }
 
         for (int i = 0; i < expertOutputs.Count; i++)
         {
             var expertOutput = expertOutputs[i];
 
-            // Extract routing weight for expert i using tape-tracked Engine gather
-            // routingWeights shape: [batchSize, numExperts]
-            // Create index tensor filled with expert index i, shape [batchSize, 1]
-            int batchSize = routingWeights.Shape[0];
-            var indexTensor = new Tensor<int>(new[] { batchSize, 1 });
-            for (int b = 0; b < batchSize; b++)
-                indexTensor[b, 0] = i;
-
             // Gather along axis=1 gives [batchSize, 1] — tape-tracked
-            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensor, axis: 1);
+            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensors[i], axis: 1);
 
             // Reshape for broadcasting across any-rank expert outputs: [batchSize, 1] -> [batchSize, 1, ...]
             var broadcastShape = new int[expertOutput.Shape.Length];

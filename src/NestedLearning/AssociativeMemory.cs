@@ -154,6 +154,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
     {
         _memories.Clear();
         _cachedAssociationMatrix = null;
+        _cachedValuesTensor = null;
     }
 
     /// <summary>
