@@ -245,16 +245,24 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         T sqrtC = NumOps.Sqrt(c);
         T eps = NumOps.FromDouble(1e-7);
 
-        // Step 1: Linear projection Mx = x @ W^T  [batch, outputFeatures * inputFeatures -> batch, outputFeatures]
-        // _weights is [outputFeatures, inputFeatures], transpose for matmul
-        // Cache transpose only during inference — tape-based training updates weights in-place
+        // Step 0: Project Euclidean input into Poincaré ball via exp_0.
+        // The Möbius matmul M⊗_c x requires x to be inside the ball (√c·||x|| < 1).
+        // exp_0(v) = tanh(√c·||v||) * v / (√c·||v||) — maps any Euclidean vector into the ball.
+        var rawNormSq = Engine.ReduceSum(Engine.TensorMultiply(inputTensor, inputTensor), new[] { 1 }, keepDims: true);
+        var rawNorm = Engine.TensorSqrt(Engine.TensorAddScalar(rawNormSq, eps));
+        var sqrtCraw = Engine.TensorMultiplyScalar(rawNorm, sqrtC);
+        var tanhFactor0 = Engine.TensorTanh(sqrtCraw); // tanh(√c·||v||)
+        var projScale0 = Engine.TensorDivide(tanhFactor0, Engine.TensorAddScalar(sqrtCraw, eps));
+        var ballInput = Engine.TensorBroadcastMultiply(projScale0, inputTensor); // now inside ball
+
+        // Step 1: Linear projection Mx = x_ball @ W^T
         var weightsT = IsTrainingMode
             ? Engine.TensorTranspose(_weights)
             : (_weightsTCache ??= Engine.TensorTranspose(_weights));
-        var mx = Engine.TensorMatMul(inputTensor, weightsT); // [batch, outputFeatures]
+        var mx = Engine.TensorMatMul(ballInput, weightsT); // [batch, outputFeatures]
 
-        // Step 2: Compute ||x|| per sample (L2 norm of input rows)
-        var xSq = Engine.TensorMultiply(inputTensor, inputTensor); // [batch, inputFeatures]
+        // Step 2: Compute ||x_ball|| per sample (already inside ball, so √c·||x|| < 1)
+        var xSq = Engine.TensorMultiply(ballInput, ballInput); // [batch, inputFeatures]
         var xNormSq = Engine.ReduceSum(xSq, new[] { 1 }, keepDims: true); // [batch, 1]
         var xNorm = Engine.TensorSqrt(Engine.TensorAddScalar(xNormSq, eps)); // [batch, 1]
 
