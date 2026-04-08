@@ -195,7 +195,29 @@ public class OrthogonalRegression<T> : RegressionBase<T>
                     // Unscale: multiply by scaleY/scaleX[j] to return to original units
                     Coefficients[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
                 }
-                svdSucceeded = true;
+
+                // Compute intercept to validate the TLS solution
+                T tlsIntercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
+
+                // Validate TLS solution: check training MSE vs variance
+                // If TLS produces worse-than-mean predictions, the SVD may be inaccurate
+                T ssTot = NumOps.Zero;
+                T ssRes = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    T predicted = tlsIntercept;
+                    for (int j = 0; j < p; j++)
+                        predicted = NumOps.Add(predicted, NumOps.Multiply(Coefficients[j], x[i, j]));
+                    T residual = NumOps.Subtract(y[i], predicted);
+                    ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
+                    T diff = NumOps.Subtract(y[i], meanY);
+                    ssTot = NumOps.Add(ssTot, NumOps.Multiply(diff, diff));
+                }
+
+                // R2 = 1 - ssRes/ssTot; accept TLS only if R2 > 0
+                bool tlsIsValid = NumOps.GreaterThan(ssTot, NumOps.Zero)
+                    && NumOps.LessThan(ssRes, ssTot);
+                svdSucceeded = tlsIsValid;
             }
         }
         catch (Exception)

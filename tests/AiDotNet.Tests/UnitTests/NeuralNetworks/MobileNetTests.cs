@@ -116,42 +116,48 @@ public class MobileNetTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MobileNetV2_Forward_ProducesCorrectOutputShape()
+    public async Task MobileNetV2_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange - use factory method
-        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+        await Task.Run(() =>
+        {
+            // Arrange - use factory method
+            var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
-        // Use standard 224x224 resolution expected by MobileNetV2
-        var input = new Tensor<double>([1, 3, 224, 224]);
-        var random = new Random(123);
-        for (int i = 0; i < input.Length; i++)
-            input[i] = random.NextDouble() * 0.5 + 0.1;
+            // Use standard 224x224 resolution expected by MobileNetV2
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
 
-        // Act
-        var output = network.Predict(input);
+            // Act
+            var output = network.Predict(input);
 
-        // Assert - output should have values for 10 classes
-        Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+            // Assert - output should have values for 10 classes
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MobileNetV2_Forward_ReturnsNonZeroOutput()
+    public async Task MobileNetV2_Forward_ReturnsNonZeroOutput()
     {
-        // Arrange
-        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+        await Task.Run(() =>
+        {
+            // Arrange
+            var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 224, 224]);
-        var random = new Random(42);
-        for (int i = 0; i < input.Length; i++)
-            input[i] = random.NextDouble();
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(42);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble();
 
-        // Act
-        var output = network.Predict(input);
+            // Act
+            var output = network.Predict(input);
 
-        // Assert
-        bool hasNonZero = output.ToArray().Any(v => Math.Abs(v) > 1e-10);
-        Assert.True(hasNonZero, "Output should have at least some non-zero values");
+            // Assert
+            bool hasNonZero = output.ToArray().Any(v => Math.Abs(v) > 1e-10);
+            Assert.True(hasNonZero, "Output should have at least some non-zero values");
+        });
     }
 
     #endregion
@@ -251,42 +257,48 @@ public class MobileNetTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MobileNetV3Large_Forward_ProducesCorrectOutputShape()
+    public async Task MobileNetV3Large_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange - Use factory method
-        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
+        await Task.Run(() =>
+        {
+            // Arrange - Use factory method
+            var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
 
-        // Use standard 224x224 resolution expected by MobileNetV3
-        var input = new Tensor<double>([1, 3, 224, 224]);
-        var random = new Random(123);
-        for (int i = 0; i < input.Length; i++)
-            input[i] = random.NextDouble() * 0.5 + 0.1;
+            // Use standard 224x224 resolution expected by MobileNetV3
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
 
-        // Act
-        var output = network.Predict(input);
+            // Act
+            var output = network.Predict(input);
 
-        // Assert
-        Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+            // Assert
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MobileNetV3Small_Forward_ProducesCorrectOutputShape()
+    public async Task MobileNetV3Small_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange - Use factory method
-        var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
+        await Task.Run(() =>
+        {
+            // Arrange - Use factory method
+            var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
 
-        // Use standard 224x224 resolution expected by MobileNetV3
-        var input = new Tensor<double>([1, 3, 224, 224]);
-        var random = new Random(123);
-        for (int i = 0; i < input.Length; i++)
-            input[i] = random.NextDouble() * 0.5 + 0.1;
+            // Use standard 224x224 resolution expected by MobileNetV3
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
 
-        // Act
-        var output = network.Predict(input);
+            // Act
+            var output = network.Predict(input);
 
-        // Assert
-        Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+            // Assert
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
     }
 
     #endregion

@@ -27,73 +27,76 @@ public class PlaygroundExampleCompilationTests
     /// </summary>
     [Fact(Timeout = 120000)]
     [Trait("Category", "Playground")]
-    public void AllPlaygroundExamples_ShouldCompile()
+    public async Task AllPlaygroundExamples_ShouldCompile()
     {
-        // Get the path to ExampleService.cs
-        var exampleServicePath = FindExampleServicePath();
-        if (string.IsNullOrEmpty(exampleServicePath))
+        await Task.Run(() =>
         {
-            // In CI environments, fail the test if the file is not found
-            // This prevents silent pass when paths are misconfigured
-            var isCi = Environment.GetEnvironmentVariable("CI") is not null ||
-                       Environment.GetEnvironmentVariable("TF_BUILD") is not null ||
-                       Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is not null;
-            if (isCi)
+            // Get the path to ExampleService.cs
+            var exampleServicePath = FindExampleServicePath();
+            if (string.IsNullOrEmpty(exampleServicePath))
             {
-                Assert.Fail("Could not find ExampleService.cs - this should not happen in CI");
-            }
-            _output.WriteLine("WARNING: Could not find ExampleService.cs - skipping test in local environment");
-            return;
-        }
-
-        var content = File.ReadAllText(exampleServicePath);
-        var examples = ExtractCodeExamples(content);
-
-        _output.WriteLine($"Found {examples.Count} code examples to test");
-
-        var failures = new List<(string Id, List<string> Errors)>();
-        var successes = 0;
-
-        foreach (var (id, code) in examples)
-        {
-            var errors = CompileCode(id, code);
-            if (errors.Count > 0)
-            {
-                failures.Add((id, errors));
-                _output.WriteLine($"FAIL: {id}");
-                foreach (var error in errors.Take(3)) // Show first 3 errors
+                // In CI environments, fail the test if the file is not found
+                // This prevents silent pass when paths are misconfigured
+                var isCi = Environment.GetEnvironmentVariable("CI") is not null ||
+                           Environment.GetEnvironmentVariable("TF_BUILD") is not null ||
+                           Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is not null;
+                if (isCi)
                 {
-                    _output.WriteLine($"  - {error}");
+                    Assert.Fail("Could not find ExampleService.cs - this should not happen in CI");
+                }
+                _output.WriteLine("WARNING: Could not find ExampleService.cs - skipping test in local environment");
+                return;
+            }
+
+            var content = File.ReadAllText(exampleServicePath);
+            var examples = ExtractCodeExamples(content);
+
+            _output.WriteLine($"Found {examples.Count} code examples to test");
+
+            var failures = new List<(string Id, List<string> Errors)>();
+            var successes = 0;
+
+            foreach (var (id, code) in examples)
+            {
+                var errors = CompileCode(id, code);
+                if (errors.Count > 0)
+                {
+                    failures.Add((id, errors));
+                    _output.WriteLine($"FAIL: {id}");
+                    foreach (var error in errors.Take(3)) // Show first 3 errors
+                    {
+                        _output.WriteLine($"  - {error}");
+                    }
+                }
+                else
+                {
+                    successes++;
+                    _output.WriteLine($"PASS: {id}");
                 }
             }
-            else
-            {
-                successes++;
-                _output.WriteLine($"PASS: {id}");
-            }
-        }
 
-        _output.WriteLine($"\nResults: {successes}/{examples.Count} passed, {failures.Count} failed");
+            _output.WriteLine($"\nResults: {successes}/{examples.Count} passed, {failures.Count} failed");
 
-        if (failures.Count > 0)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"{failures.Count} playground examples failed to compile:");
-            foreach (var (id, errors) in failures.Take(10)) // Show first 10 failures
+            if (failures.Count > 0)
             {
-                sb.AppendLine($"\n  {id}:");
-                foreach (var error in errors.Take(3))
+                var sb = new StringBuilder();
+                sb.AppendLine($"{failures.Count} playground examples failed to compile:");
+                foreach (var (id, errors) in failures.Take(10)) // Show first 10 failures
                 {
-                    sb.AppendLine($"    - {error}");
+                    sb.AppendLine($"\n  {id}:");
+                    foreach (var error in errors.Take(3))
+                    {
+                        sb.AppendLine($"    - {error}");
+                    }
                 }
-            }
-            if (failures.Count > 10)
-            {
-                sb.AppendLine($"\n  ... and {failures.Count - 10} more failures");
-            }
+                if (failures.Count > 10)
+                {
+                    sb.AppendLine($"\n  ... and {failures.Count - 10} more failures");
+                }
 
-            Assert.Fail(sb.ToString());
-        }
+                Assert.Fail(sb.ToString());
+            }
+        });
     }
 
     /// <summary>

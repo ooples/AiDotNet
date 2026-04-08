@@ -2443,14 +2443,38 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
             // These models use their own internal optimizers and don't benefit from the outer
             // optimizer's clone-evaluate-select loop. Train directly on the full training data.
-            // For clustering/density models, train on the full preprocessed dataset (not the
+            // For clustering/density models, train on the full dataset (not the
             // train/test split) since cluster structure depends on having all data points.
-            // Note: preprocessedX/preprocessedY contain ALL preprocessed samples.
+            // Note: preprocessedX/preprocessedY may only contain the training split in the
+            // standard (non-federated) path. For clustering we need the complete dataset.
             bool useFullData = model is Clustering.Base.ClusteringBase<T>;
-            // Use preprocessed data (not raw x/y) so models operate in the same
-            // coordinate space as the validation/test predictions
-            var directX = useFullData ? preprocessedX : XTrain;
-            var directY = useFullData ? preprocessedY : yTrain;
+            // Clustering models need ALL data points for correct density estimation.
+            // Use preparedX/preparedY (the full dataset before train/test split) when
+            // the preprocessing pipeline is not configured. When it IS configured,
+            // apply the (already-fitted) pipeline to the full data so models operate
+            // in the same coordinate space as predictions.
+            TInput fullX;
+            TOutput fullY;
+            if (useFullData)
+            {
+                if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
+                {
+                    fullX = _preprocessingPipeline.Transform(preparedX);
+                    fullY = preparedY;
+                }
+                else
+                {
+                    fullX = preparedX;
+                    fullY = preparedY;
+                }
+            }
+            else
+            {
+                fullX = XTrain;
+                fullY = yTrain;
+            }
+            var directX = fullX;
+            var directY = fullY;
             model.Train(directX, directY);
 
             // Compute evaluation metrics

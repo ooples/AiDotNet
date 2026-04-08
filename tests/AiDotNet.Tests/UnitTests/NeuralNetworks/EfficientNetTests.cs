@@ -31,48 +31,54 @@ public class EfficientNetTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EfficientNetB0_Forward_ProducesCorrectOutputShape()
+    public async Task EfficientNetB0_Forward_ProducesCorrectOutputShape()
     {
+        await Task.Run(() =>
+        {
 #if NET471
-        // Skip on .NET Framework - BlasProvider requires MKL.NET which isn't available
-        return;
+            // Skip on .NET Framework - BlasProvider requires MKL.NET which isn't available
+            return;
 #else
-        // Arrange
-        var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 10);
-        // Input: [batch=1, channels=3, height=224, width=224]
-        var input = new Tensor<float>([1, 3, 224, 224]);
-        InitializeWithRandomValues(input);
+            // Arrange
+            var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 10);
+            // Input: [batch=1, channels=3, height=224, width=224]
+            var input = new Tensor<float>([1, 3, 224, 224]);
+            InitializeWithRandomValues(input);
 
-        // Act
-        var output = network.Forward(input);
+            // Act
+            var output = network.Forward(input);
 
-        // Assert
-        Assert.Equal(2, output.Shape.Length);
-        Assert.Equal(1, output.Shape[0]); // batch size
-        Assert.Equal(10, output.Shape[1]); // num classes
+            // Assert
+            Assert.Equal(2, output.Shape.Length);
+            Assert.Equal(1, output.Shape[0]); // batch size
+            Assert.Equal(10, output.Shape[1]); // num classes
 #endif
+        });
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EfficientNetB0_ForwardSmallInput_ProducesCorrectShape()
+    public async Task EfficientNetB0_ForwardSmallInput_ProducesCorrectShape()
     {
+        await Task.Run(() =>
+        {
 #if NET471
-        // Skip on .NET Framework - BlasProvider requires MKL.NET which isn't available
-        return;
+            // Skip on .NET Framework - BlasProvider requires MKL.NET which isn't available
+            return;
 #else
-        // Arrange - Use the static factory method
-        var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 5);
-        // We still need to use the expected resolution
-        var input = new Tensor<float>([1, 3, 224, 224]);
-        InitializeWithRandomValues(input);
+            // Arrange - Use the static factory method
+            var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 5);
+            // We still need to use the expected resolution
+            var input = new Tensor<float>([1, 3, 224, 224]);
+            InitializeWithRandomValues(input);
 
-        // Act
-        var output = network.Forward(input);
+            // Act
+            var output = network.Forward(input);
 
-        // Assert
-        Assert.Equal(5, output.Shape[1]); // num classes
+            // Assert
+            Assert.Equal(5, output.Shape[1]); // num classes
 #endif
+        });
     }
 
     #endregion

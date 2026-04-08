@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
 public partial class SparseLinearLayer<T> : LayerBase<T>
 {
     private readonly ISparseEngine _engine;
@@ -101,11 +101,12 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports tape-based training.
-    /// Returns false because SparseTensor is incompatible with dense ParameterBuffer.
-    /// Use UpdateParameters() with manually accumulated gradients from Backward() instead.
+    /// Gets whether this layer supports training.
+    /// Returns true because SparseLinearLayer has trainable weights and biases,
+    /// and handles its own weight updates via UpdateParameters() with manually
+    /// accumulated gradients from Backward().
     /// </summary>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.

@@ -914,14 +914,17 @@ public class PagedAttentionServerTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "Integration")]  // Skip on net471 - 4GB allocation exceeds .NET Framework array size limits
-    public void PagedAttentionServer_ForModel_CreatesValidServer()
+    public async Task PagedAttentionServer_ForModel_CreatesValidServer()
     {
-        // Act
-        using var server = PagedAttentionServer<float>.ForModel("llama-7b", 4L * 1024 * 1024 * 1024);
+        await Task.Run(() =>
+        {
+            // Act
+            using var server = PagedAttentionServer<float>.ForModel("llama-7b", 4L * 1024 * 1024 * 1024);
 
-        // Assert
-        Assert.NotNull(server.KVCache);
-        Assert.NotNull(server.Kernel);
+            // Assert
+            Assert.NotNull(server.KVCache);
+            Assert.NotNull(server.Kernel);
+        });
     }
 }
 

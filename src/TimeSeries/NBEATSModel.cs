@@ -64,6 +64,10 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     private readonly List<NBEATSBlock<T>> _blocks;
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
+    // Normalization statistics computed during training
+    private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
+    private T _normStd = MathHelper.GetNumericOperations<T>().One;
+
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
     /// </summary>
@@ -199,7 +203,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the N-BEATS model using mini-batch gradient descent.
+    /// Trains the N-BEATS model using mini-batch gradient descent with proper backpropagation.
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -210,7 +214,36 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = NumOps.FromDouble(y.Length);
 
+        // Normalize the input series to zero mean / unit variance for stable gradient flow.
+        // Store shift/scale for de-normalization in Predict.
+        T yMean = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++)
+            yMean = NumOps.Add(yMean, y[i]);
+        yMean = NumOps.Divide(yMean, NumOps.FromDouble(y.Length));
+
+        T yVar = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++)
+        {
+            T diff = NumOps.Subtract(y[i], yMean);
+            yVar = NumOps.Add(yVar, NumOps.Multiply(diff, diff));
+        }
+        yVar = NumOps.Divide(yVar, NumOps.FromDouble(y.Length));
+        T yStd = NumOps.Sqrt(yVar);
+        if (NumOps.LessThanOrEquals(yStd, NumOps.FromDouble(1e-10)))
+            yStd = NumOps.One;
+
+        _normMean = yMean;
+        _normStd = yStd;
+
+        // Create normalized copies
+        Vector<T> yNorm = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
+
+        // Use a moderately aggressive learning rate for normalized data.
+        // With normalization, inputs and targets are O(1), so gradients are well-scaled.
         T learningRate = NumOps.FromDouble(_options.LearningRate);
+        T gradClipThreshold = NumOps.FromDouble(1.0);
         int numSamples = x.Rows;
         var random = new Random(42);
 
@@ -229,8 +262,8 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 {
                     if (bi % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int idx = indices[batchStart + bi];
-                    var lookback = ExtractLookbackWindow(x, y, idx);
-                    T target = y[idx];
+                    var lookback = ExtractNormalizedLookbackWindow(x, yNorm, idx);
+                    T target = yNorm[idx];
 
                     // Forward pass through all blocks
                     Vector<T> residual = lookback.Clone();
@@ -243,20 +276,69 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                         aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
                     }
 
-                    // Compute gradient of MSE loss on first forecast step
+                    // Compute gradient of MSE loss: dL/dpred = 2*(pred - target)
                     T prediction = aggregatedForecast[0];
                     T error = NumOps.Subtract(prediction, target);
-                    T gradScale = NumOps.Multiply(NumOps.FromDouble(2.0 / batchSize), error);
 
-                    // Update each block with scaled learning rate
-                    T scaledLr = NumOps.Multiply(learningRate, gradScale);
+                    // dL/d_aggregatedForecast: only element [0] has non-zero gradient
+                    Vector<T> dForecast = new Vector<T>(_options.ForecastHorizon);
+                    T rawGrad = NumOps.Multiply(NumOps.FromDouble(2.0), error);
+
+                    // Gradient clipping to prevent explosion
+                    T gradAbs = NumOps.Abs(rawGrad);
+                    if (NumOps.GreaterThan(gradAbs, gradClipThreshold))
+                        rawGrad = NumOps.Multiply(NumOps.Divide(gradClipThreshold, gradAbs), rawGrad);
+                    dForecast[0] = rawGrad;
+
+                    // Backward pass through blocks in reverse order
+                    Vector<T> dResidual = new Vector<T>(_options.LookbackWindow);
+
+                    for (int blockIdx = _blocks.Count - 1; blockIdx >= 0; blockIdx--)
+                    {
+                        Vector<T> dBackcast = new Vector<T>(_options.LookbackWindow);
+                        for (int i = 0; i < _options.LookbackWindow; i++)
+                            dBackcast[i] = NumOps.Negate(dResidual[i]);
+
+                        Vector<T> dInput = _blocks[blockIdx].Backward(dBackcast, dForecast);
+
+                        Vector<T> newDResidual = new Vector<T>(_options.LookbackWindow);
+                        for (int i = 0; i < _options.LookbackWindow; i++)
+                            newDResidual[i] = NumOps.Add(dResidual[i], dInput[i]);
+                        dResidual = newDResidual;
+                    }
+
+                    // Update parameters using computed gradients
                     for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                     {
-                        _blocks[blockIdx].UpdateParameters(scaledLr);
+                        _blocks[blockIdx].UpdateParameters(learningRate);
                     }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts a normalized lookback window for training.
+    /// </summary>
+    private Vector<T> ExtractNormalizedLookbackWindow(Matrix<T> x, Vector<T> yNorm, int sampleIdx)
+    {
+        var input = new Vector<T>(_options.LookbackWindow);
+        if (x.Columns >= _options.LookbackWindow)
+        {
+            // Multi-variate: normalize each element
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                input[j] = NumOps.Divide(NumOps.Subtract(x[sampleIdx, j], _normMean), _normStd);
+        }
+        else
+        {
+            // Univariate: use preceding normalized y values
+            for (int j = 0; j < _options.LookbackWindow; j++)
+            {
+                int yIdx = sampleIdx - _options.LookbackWindow + j;
+                input[j] = yIdx >= 0 ? yNorm[yIdx] : NumOps.Zero;
+            }
+        }
+        return input;
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -366,7 +448,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 nameof(input));
         }
 
-        Vector<T> residual = input.Clone();
+        // Normalize input using training statistics
+        Vector<T> normalizedInput = new Vector<T>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+            normalizedInput[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
+
+        Vector<T> residual = normalizedInput;
         Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
 
         // Forward pass through all blocks
@@ -381,8 +468,8 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
 
-        // Return the first forecast step
-        return aggregatedForecast[0];
+        // Denormalize the forecast and return the first step
+        return NumOps.Add(NumOps.Multiply(aggregatedForecast[0], _normStd), _normMean);
     }
 
     /// <summary>
@@ -407,7 +494,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 nameof(input));
         }
 
-        Vector<T> residual = input.Clone();
+        // Normalize input
+        Vector<T> normalizedInput = new Vector<T>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+            normalizedInput[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
+
+        Vector<T> residual = normalizedInput;
         Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
 
         // Forward pass through all blocks
@@ -421,6 +513,10 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             // Accumulate forecast - vectorized with Engine.Add
             aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
+
+        // Denormalize forecast
+        for (int i = 0; i < aggregatedForecast.Length; i++)
+            aggregatedForecast[i] = NumOps.Add(NumOps.Multiply(aggregatedForecast[i], _normStd), _normMean);
 
         return aggregatedForecast;
     }
@@ -637,6 +733,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // Copy model parameters
         if (ModelParameters is not null && ModelParameters.Length > 0)
             clone.ModelParameters = new Vector<T>(ModelParameters);
+        // Copy normalization parameters
+        clone._normMean = _normMean;
+        clone._normStd = _normStd;
         return clone;
     
 

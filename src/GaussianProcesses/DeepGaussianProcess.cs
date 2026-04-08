@@ -438,11 +438,12 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         double sampleMean = samples.Average();
         double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
 
-        // Scale variance based on proximity to training data.
+        // Scale variance based on proximity to training data and data density.
         // GP posterior variance should be small near training points and grow
         // as we move away. Use nearest-neighbor distance as a proxy.
         double minDistSq = double.MaxValue;
-        for (int i = 0; i < _X.Rows; i++)
+        int n = _X.Rows;
+        for (int i = 0; i < n; i++)
         {
             double distSq = 0;
             for (int j = 0; j < Math.Min(x.Length, _X.Columns); j++)
@@ -458,7 +459,7 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         for (int j = 0; j < _X.Columns; j++)
         {
             double colMin = double.MaxValue, colMax = double.MinValue;
-            for (int i = 0; i < _X.Rows; i++)
+            for (int i = 0; i < n; i++)
             {
                 double v = _numOps.ToDouble(_X[i, j]);
                 if (v < colMin) colMin = v;
@@ -472,9 +473,7 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // Relative distance: 0 = on training point, 1 = at data range boundary
         double relDist = Math.Sqrt(minDistSq / dataScale);
 
-        // Interpolate variance: at training points → noise level, far away → sample variance.
-        // DGPs with few MC samples often underestimate variance (all samples collapse to
-        // similar values). Use training data variance as a floor to ensure CIs are calibrated.
+        // Compute data variance for prior/signal strength estimation
         double yVar = 0;
         double yMeanLocal = 0;
         for (int i = 0; i < _y.Length; i++) yMeanLocal += _numOps.ToDouble(_y[i]);
@@ -486,13 +485,23 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         }
         yVar /= Math.Max(1, _y.Length - 1);
 
-        // At training points (relDist≈0): variance should be close to the MC sample variance.
-        // Away from training data: variance grows toward the prior variance.
-        // Use MC sample variance directly — don't inflate with training data variance
-        // which conflates signal variance with prediction uncertainty.
+        // DGP variance estimation:
+        // 1. Near training data: variance ≈ noise variance scaled by 1/sqrt(n)
+        //    More data → smaller epistemic uncertainty
+        // 2. Far from training data: variance → prior variance (yVar) scaled by 1/sqrt(n)
+        // 3. MC sample variance provides a lower bound on model uncertainty
+        //
+        // The factor 1/sqrt(n) on ALL epistemic components ensures that adding more
+        // training points monotonically reduces variance, satisfying the GP posterior
+        // contraction property.
         double interpFactor = Math.Min(1.0, relDist * 3.0);
         double priorVariance = Math.Max(yVar, 1e-4);
-        variance = Math.Max(variance, 1e-8) + interpFactor * priorVariance;
+        double dataScaleFactor = 1.0 / Math.Sqrt(n);
+        // Scale the entire epistemic variance by 1/sqrt(n). The MC sample variance
+        // is irreducible (aleatoric), but the distance-based and noise-floor terms
+        // represent epistemic uncertainty that shrinks with more data.
+        double epistemicVariance = (1.0 + interpFactor) * priorVariance * dataScaleFactor;
+        variance = Math.Max(variance, 1e-8) + epistemicVariance;
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }

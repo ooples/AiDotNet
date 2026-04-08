@@ -295,6 +295,132 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         _biasGradients = null;
     }
 
+    /// <summary>
+    /// Computes gradients for all weights and biases given loss gradients w.r.t. backcast and forecast.
+    /// Must be called after ForwardInternal so that cached activations are available.
+    /// </summary>
+    /// <param name="dBackcast">Gradient of loss w.r.t. backcast output (length = lookbackWindow).</param>
+    /// <param name="dForecast">Gradient of loss w.r.t. forecast output (length = forecastHorizon).</param>
+    /// <returns>Gradient of loss w.r.t. the block input (for chaining to previous blocks).</returns>
+    public Vector<T> Backward(Vector<T> dBackcast, Vector<T> dForecast)
+    {
+        if (_lastInput is null || _lastHiddenOutput is null || _postActivations.Count == 0)
+            throw new InvalidOperationException("Backward requires a preceding ForwardInternal call.");
+
+        int totalLayers = _fcWeights.Count; // numHidden + 2 (backcast theta + forecast theta)
+
+        // Initialize gradient accumulators
+        _weightGradients = new List<Matrix<T>>(totalLayers);
+        _biasGradients = new List<Vector<T>>(totalLayers);
+        for (int l = 0; l < totalLayers; l++)
+        {
+            _weightGradients.Add(new Matrix<T>(_fcWeights[l].Rows, _fcWeights[l].Columns));
+            _biasGradients.Add(new Vector<T>(_fcBiases[l].Length));
+        }
+
+        // --- Step 1: Backprop through basis expansion ---
+        // forecast = B_forecast @ thetaForecast, so dL/d_thetaForecast = B_forecast^T @ dForecast
+        Matrix<T> basisForecast = ComputeBasisMatrix(_thetaSizeForecast, _forecastHorizon);
+        Vector<T> dThetaForecast = new Vector<T>(_thetaSizeForecast);
+        for (int k = 0; k < _thetaSizeForecast; k++)
+        {
+            T sum = NumOps.Zero;
+            for (int t = 0; t < _forecastHorizon; t++)
+                sum = NumOps.Add(sum, NumOps.Multiply(basisForecast[t, k], dForecast[t]));
+            dThetaForecast[k] = sum;
+        }
+
+        Matrix<T> basisBackcast = ComputeBasisMatrix(_thetaSizeBackcast, _lookbackWindow);
+        Vector<T> dThetaBackcast = new Vector<T>(_thetaSizeBackcast);
+        for (int k = 0; k < _thetaSizeBackcast; k++)
+        {
+            T sum = NumOps.Zero;
+            for (int t = 0; t < _lookbackWindow; t++)
+                sum = NumOps.Add(sum, NumOps.Multiply(basisBackcast[t, k], dBackcast[t]));
+            dThetaBackcast[k] = sum;
+        }
+
+        // --- Step 2: Backprop through forecast theta layer ---
+        int forecastLayerIdx = _numHiddenLayers + 1;
+        Vector<T> hiddenOut = _lastHiddenOutput;
+        // dW_forecast = dThetaForecast (column) * hiddenOut (row)
+        for (int i = 0; i < _thetaSizeForecast; i++)
+            for (int j = 0; j < hiddenOut.Length; j++)
+                _weightGradients[forecastLayerIdx][i, j] = NumOps.Multiply(dThetaForecast[i], hiddenOut[j]);
+        // dBias_forecast = dThetaForecast
+        for (int i = 0; i < _thetaSizeForecast; i++)
+            _biasGradients[forecastLayerIdx][i] = dThetaForecast[i];
+        // dHidden from forecast = W_forecast^T @ dThetaForecast
+        Vector<T> dHiddenFromForecast = new Vector<T>(hiddenOut.Length);
+        for (int j = 0; j < hiddenOut.Length; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < _thetaSizeForecast; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(_fcWeights[forecastLayerIdx][i, j], dThetaForecast[i]));
+            dHiddenFromForecast[j] = sum;
+        }
+
+        // --- Step 3: Backprop through backcast theta layer ---
+        int backcastLayerIdx = _numHiddenLayers;
+        for (int i = 0; i < _thetaSizeBackcast; i++)
+            for (int j = 0; j < hiddenOut.Length; j++)
+                _weightGradients[backcastLayerIdx][i, j] = NumOps.Multiply(dThetaBackcast[i], hiddenOut[j]);
+        for (int i = 0; i < _thetaSizeBackcast; i++)
+            _biasGradients[backcastLayerIdx][i] = dThetaBackcast[i];
+        // dHidden from backcast = W_backcast^T @ dThetaBackcast
+        Vector<T> dHiddenFromBackcast = new Vector<T>(hiddenOut.Length);
+        for (int j = 0; j < hiddenOut.Length; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < _thetaSizeBackcast; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(_fcWeights[backcastLayerIdx][i, j], dThetaBackcast[i]));
+            dHiddenFromBackcast[j] = sum;
+        }
+
+        // Total gradient flowing into last hidden layer output
+        Vector<T> dHidden = new Vector<T>(hiddenOut.Length);
+        for (int i = 0; i < hiddenOut.Length; i++)
+            dHidden[i] = NumOps.Add(dHiddenFromForecast[i], dHiddenFromBackcast[i]);
+
+        // --- Step 4: Backprop through hidden layers (reverse order) ---
+        for (int layer = _numHiddenLayers - 1; layer >= 0; layer--)
+        {
+            // ReLU backward: zero gradient where pre-activation <= 0
+            Vector<T> preAct = _preActivations[layer];
+            for (int i = 0; i < dHidden.Length; i++)
+            {
+                if (!NumOps.GreaterThan(preAct[i], NumOps.Zero))
+                    dHidden[i] = NumOps.Zero;
+            }
+
+            // Input to this layer
+            Vector<T> layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
+
+            // dW[layer] = dHidden (column) * layerInput (row)
+            for (int i = 0; i < _fcWeights[layer].Rows; i++)
+                for (int j = 0; j < _fcWeights[layer].Columns; j++)
+                    _weightGradients[layer][i, j] = NumOps.Multiply(dHidden[i], layerInput[j]);
+
+            // dBias[layer] = dHidden
+            for (int i = 0; i < _fcBiases[layer].Length; i++)
+                _biasGradients[layer][i] = dHidden[i];
+
+            // Propagate gradient to previous layer: dInput = W^T @ dHidden
+            Vector<T> dInput = new Vector<T>(_fcWeights[layer].Columns);
+            for (int j = 0; j < _fcWeights[layer].Columns; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int i = 0; i < _fcWeights[layer].Rows; i++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(_fcWeights[layer][i, j], dHidden[i]));
+                dInput[j] = sum;
+            }
+            dHidden = dInput;
+        }
+
+        // dHidden is now the gradient w.r.t. the block input
+        return dHidden;
+    }
+
     public (Vector<T> backcast, Vector<T> forecast) ForwardInternal(Vector<T> input)
     {
         if (input.Length != _lookbackWindow)

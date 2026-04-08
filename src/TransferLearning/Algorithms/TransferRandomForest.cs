@@ -315,6 +315,55 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
         return BaseModel.Predict(input);
     }
 
+    // --- IParameterizable overrides ---
+    // AsyncDecisionTreeRegressionBase<T> exposes GetParameters/ParameterCount/GetActiveFeatureIndices
+    // as public methods but does NOT implement IParameterizable or IFeatureAware interfaces.
+    // ModelWrapperBase delegates via InterfaceGuard which uses 'as' casts that return null.
+    // Override here to call the concrete methods directly on the tree-based model.
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+            return treeModel.GetParameters();
+        return base.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+                return treeModel.ParameterCount;
+            return base.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsParameterInitialization =>
+        BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel
+            ? treeModel.ParameterCount > 0
+            : base.SupportsParameterInitialization;
+
+    // --- IFeatureAware overrides ---
+
+    /// <inheritdoc/>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+            return treeModel.GetActiveFeatureIndices();
+        return base.GetActiveFeatureIndices();
+    }
+
+    /// <inheritdoc/>
+    public override bool IsFeatureUsed(int featureIndex)
+    {
+        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+            return treeModel.IsFeatureUsed(featureIndex);
+        return base.IsFeatureUsed(featureIndex);
+    }
+
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
