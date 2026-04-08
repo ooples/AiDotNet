@@ -46,7 +46,8 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// The sparse weight matrix.
     /// Shape: [OutputFeatures, InputFeatures]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    // No [TrainableParameter] — SparseTensor is incompatible with dense ParameterBuffer.
+    // Weight updates are handled by SparseLinearLayer.UpdateParameters() directly.
     private SparseTensor<T> _weights;
 
     /// <summary>
@@ -139,7 +140,9 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
 
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        // Note: SparseTensor weights are NOT registered as trainable parameters because
+        // ParameterBuffer requires dense tensors for contiguous buffer views.
+        // SparseLinearLayer handles its own weight updates via UpdateParameters().
     }
 
     /// <summary>
