@@ -84,3 +84,33 @@ if ($optimizeCandidates.Count -gt 0) {
     Write-Host ("  [OPTIMIZE] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Cyan
   }
 }
+
+# Check for blame-hang results (tests killed by --blame-hang-timeout)
+$blameFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "Sequence_*.xml" -ErrorAction SilentlyContinue
+if ($blameFiles.Count -gt 0) {
+  $hungTests = @()
+  foreach ($blame in $blameFiles) {
+    [xml]$blameXml = Get-Content $blame.FullName
+    $tests = $blameXml.SelectNodes("//Test")
+    foreach ($test in $tests) {
+      $name = $test.GetAttribute("name")
+      $isHung = $test.GetAttribute("isHung")
+      if ($isHung -eq "true") {
+        $hungTests += $name
+      }
+    }
+  }
+  if ($hungTests.Count -gt 0) {
+    Write-Host ""
+    Write-Host "=== HUNG TESTS (killed by --blame-hang-timeout 5min) ===" -ForegroundColor Red
+    foreach ($test in $hungTests) {
+      Write-Host ("  [HUNG] {0}" -f $test) -ForegroundColor Red
+    }
+    Write-Host ("Total hung tests: {0}" -f $hungTests.Count) -ForegroundColor Red
+    Write-Host "These tests exceeded the 5-minute individual timeout and were killed." -ForegroundColor Red
+    Write-Host "They indicate infinite loops, deadlocks, or extreme performance issues." -ForegroundColor Red
+  }
+} else {
+  Write-Host ""
+  Write-Host "No blame-hang results found (no tests timed out individually)." -ForegroundColor Green
+}
