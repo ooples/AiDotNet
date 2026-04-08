@@ -486,11 +486,13 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         }
         yVar /= Math.Max(1, _y.Length - 1);
 
-        // Noise floor: 5% of training variance ensures CIs are wide enough to cover
-        // approximation errors even when MC samples collapse.
-        double noiseLevel = Math.Max(yVar * 0.05, 1e-4);
+        // At training points (relDist≈0): variance should be close to the MC sample variance.
+        // Away from training data: variance grows toward the prior variance.
+        // Use MC sample variance directly — don't inflate with training data variance
+        // which conflates signal variance with prediction uncertainty.
         double interpFactor = Math.Min(1.0, relDist * 3.0);
-        variance = noiseLevel + interpFactor * Math.Max(variance, noiseLevel);
+        double priorVariance = Math.Max(yVar, 1e-4);
+        variance = Math.Max(variance, 1e-8) + interpFactor * priorVariance;
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }
@@ -667,43 +669,16 @@ internal class DGPLayer<T>
             Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
         }
 
-        // Compute posterior variance per point: σ²(x) = K(x,x) - Kxu * Kuu^{-1} * Kux
-        // NOTE: This uses the prior conditional p(f|u), not the full variational q(f).
-        // For exact DSVI (Salimbeni & Deisenroth 2017), should incorporate the variational
-        // covariance S: σ²_q = σ²_p + Kxu Kuu^{-1} (S - Kuu) Kuu^{-1} Kux.
-        // Current implementation is a valid approximation when S ≈ Kuu.
-        // Pre-compute Cholesky of Kuu once — reused for all n variance solves + d output solves
-        var kuuCholesky = new CholeskyDecomposition<T>(Kuu);
-
-        var posteriorVar = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            // K(x,x) diagonal = kernel(x_i, x_i)
-            T kxx = _kernel.Calculate(input.GetRow(i), input.GetRow(i));
-            double kxxVal = _numOps.ToDouble(kxx);
-
-            // Kxu[i,:] * Kuu^{-1} * Kux[:,i] = Kxu[i,:] * solve(Kuu, Kxu[i,:])
-            var kxu_i = new Vector<T>(m_points);
-            for (int j = 0; j < m_points; j++)
-                kxu_i[j] = Kxu[i, j];
-
-            var solved = MatrixSolutionHelper.SolveLinearSystem(kxu_i, kuuCholesky);
-            double quadForm = 0;
-            for (int j = 0; j < m_points; j++)
-                quadForm += _numOps.ToDouble(kxu_i[j]) * _numOps.ToDouble(solved[j]);
-
-            posteriorVar[i] = Math.Max(kxxVal - quadForm, 1e-10);
-        }
-
+        // Solve Kuu * alpha_d = m_d for each output dimension
         for (int d = 0; d < _outputDim; d++)
         {
             var m_d = new Vector<T>(m_points);
             for (int j = 0; j < m_points; j++)
                 m_d[j] = _variationalMean[j, d];
 
-            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(m_d, kuuCholesky);
+            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(Kuu, m_d, MatrixDecompositionType.Cholesky);
 
-            // Predict: mean_d = Kxu * alpha_d + sqrt(var) * noise
+            // Predict: mean_d = Kxu * alpha_d
             for (int i = 0; i < n; i++)
             {
                 T sum = _numOps.Zero;
@@ -711,16 +686,7 @@ internal class DGPLayer<T>
                 {
                     sum = _numOps.Add(sum, _numOps.Multiply(Kxu[i, j], alpha_d[j]));
                 }
-
-                // Add posterior noise for MC uncertainty propagation
-                // Box-Muller transform for proper Gaussian sampling: z ~ N(0,1)
-                double u1 = Math.Max(1e-10, random.NextDouble());
-                double u2 = random.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
-                double meanVal = _numOps.ToDouble(sum);
-                double sampledVal = meanVal + Math.Sqrt(posteriorVar[i]) * z;
-                output[i, d] = _numOps.FromDouble(sampledVal);
+                output[i, d] = sum;
             }
         }
 

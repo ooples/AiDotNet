@@ -592,18 +592,26 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 clusterToLabel[cluster] = labelNum++;
             }
 
+            // Build parent lookup for efficient tree walking
+            var parentLookup = new Dictionary<int, int>();
+            foreach (var node in condensedTree)
+            {
+                if (!parentLookup.ContainsKey(node.Child))
+                    parentLookup[node.Child] = node.Parent;
+            }
+
             // Assign points to clusters
             foreach (var node in condensedTree)
             {
                 if (node.Child < n)
                 {
-                    // Find which selected cluster this point belongs to
+                    // Find which selected cluster this point belongs to by walking up the tree
                     int current = node.Parent;
                     while (current >= n && !selectedClusters.Contains(current))
                     {
-                        var parentNode = condensedTree.FirstOrDefault(x => x.Child == current);
-                        if (parentNode.Parent == 0 && parentNode.Child == 0) break;
-                        current = parentNode.Parent;
+                        if (!parentLookup.TryGetValue(current, out int parent) || parent == current)
+                            break;
+                        current = parent;
                     }
 
                     if (clusterToLabel.ContainsKey(current))
