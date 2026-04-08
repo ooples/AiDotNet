@@ -27,7 +27,7 @@ public class LeafFederatedDatasetLoaderTests
   }
 }";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadSplitFromJson_ValidTinyFixture_ParsesClientsAndFlattensFeatures()
     {
         var loader = new LeafFederatedDatasetLoader<double>();
@@ -65,7 +65,7 @@ public class LeafFederatedDatasetLoaderTests
         Assert.Equal(1, clients[1].SampleCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadSplitFromJson_WhenDeclaredNumSamplesMismatch_ThrowsInvalidDataException()
     {
         const string badJson = @"
@@ -81,7 +81,7 @@ public class LeafFederatedDatasetLoaderTests
         Assert.Throws<InvalidDataException>(() => loader.LoadSplitFromJson(badJson));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadSplitFromJson_WhenMaxUsersSpecified_LoadsSubset()
     {
         var loader = new LeafFederatedDatasetLoader<double>();
@@ -95,7 +95,7 @@ public class LeafFederatedDatasetLoaderTests
         Assert.False(split.UserData.ContainsKey("u2"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadSplitFromFile_WhenFileExists_LoadsSplit()
     {
         var path = Path.GetTempFileName();
@@ -115,7 +115,7 @@ public class LeafFederatedDatasetLoaderTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadDatasetFromFiles_WithTrainAndTest_LoadsBothSplits()
     {
         var trainPath = Path.GetTempFileName();
@@ -141,7 +141,7 @@ public class LeafFederatedDatasetLoaderTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadSplitFromJson_WhenMaxUsersIsNonPositive_ThrowsArgumentOutOfRangeException()
     {
         var loader = new LeafFederatedDatasetLoader<double>();

@@ -12,14 +12,14 @@ public class VectorSearchToolTests
 {
     #region PR #756 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNullRetriever()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new VectorSearchTool<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnZeroTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -28,7 +28,7 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNegativeTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -37,7 +37,7 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnExcessiveTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -46,7 +46,7 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: 101));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsMaxAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -57,7 +57,7 @@ public class VectorSearchToolTests
         Assert.Equal("VectorSearch", tool.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsMinAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -67,7 +67,7 @@ public class VectorSearchToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_EmptyInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -79,7 +79,7 @@ public class VectorSearchToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_WhitespaceInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -90,7 +90,7 @@ public class VectorSearchToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_ValidQuery_ReturnsResults()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -102,7 +102,7 @@ public class VectorSearchToolTests
         Assert.Contains("Test content", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_WithTopKParameter_RespectsLimit()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -116,7 +116,7 @@ public class VectorSearchToolTests
         Assert.Contains("Found 1", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_NoResults_ReturnsNoDocumentsMessage()
     {
         var mockRetriever = new MockRetriever<double>(returnEmpty: true);

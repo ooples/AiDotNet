@@ -19,7 +19,7 @@ public class ScoringDeepMathIntegrationTests
     // CRPS - Standard Normal closed-form hand calculations
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_StandardNormal_AtMean_HandValue()
     {
         // CRPS(N(0,1), y=0) = sigma * [z*(2*Phi(z)-1) + 2*phi(z) - 1/sqrt(pi)]
@@ -36,7 +36,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_StandardNormal_At1Sigma_HandValue()
     {
         // z = 1.0, Phi(1) ~ 0.84134, phi(1) ~ 0.24197
@@ -54,7 +54,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_ScaledByVariance_HandValue()
     {
         // N(mu=3, var=4) => sigma=2
@@ -72,7 +72,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_SymmetricAroundMean()
     {
         // CRPS(N(mu, sigma^2), mu+d) == CRPS(N(mu, sigma^2), mu-d)
@@ -84,7 +84,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(scoreAbove, scoreBelow, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_NonNegative()
     {
         var crps = new CRPSScore<double>();
@@ -97,7 +97,7 @@ public class ScoringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_IncreasesWithDistance()
     {
         // CRPS should increase as observation moves away from mean
@@ -112,7 +112,7 @@ public class ScoringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_LargerVariance_LargerScore()
     {
         // For observation at mean, CRPS = sigma * (sqrt(2) - 1) / sqrt(pi)
@@ -127,7 +127,7 @@ public class ScoringDeepMathIntegrationTests
             $"Wider distribution should have larger CRPS at mean: {scoreWide} <= {scoreNarrow}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Normal_SigmaScaling_LinearInSigma()
     {
         // CRPS(N(mu, k^2*sigma^2), mu) = k * CRPS(N(mu, sigma^2), mu)
@@ -143,7 +143,7 @@ public class ScoringDeepMathIntegrationTests
     // CRPS - Laplace closed-form hand calculations
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_AtLocation_HandValue()
     {
         // CRPS(Laplace(mu, b), y=mu) = |mu-mu| + b*exp(0) - 3b/4
@@ -154,7 +154,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(0.25, score, Tolerance);  // b/4 = 1/4 = 0.25
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_ScaleParameter_AtLocation()
     {
         // CRPS(Laplace(0, b), 0) = b/4
@@ -168,7 +168,7 @@ public class ScoringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_AwayFromLocation_HandValue()
     {
         // CRPS(Laplace(0, 1), y=2) = |2| + 1*exp(-2) - 3/4
@@ -181,7 +181,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_SymmetricAroundLocation()
     {
         var crps = new CRPSScore<double>();
@@ -191,7 +191,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(scoreAbove, scoreBelow, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_NonNegative()
     {
         var crps = new CRPSScore<double>();
@@ -204,7 +204,7 @@ public class ScoringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Laplace_IncreasesWithDistance()
     {
         var crps = new CRPSScore<double>();
@@ -222,7 +222,7 @@ public class ScoringDeepMathIntegrationTests
     // LogScore - Normal distribution hand calculations
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_StandardNormal_AtMean_HandValue()
     {
         // LogScore = -log(pdf(0)) = -log(1/sqrt(2*pi)) = 0.5*log(2*pi) ~ 0.91894
@@ -233,7 +233,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_StandardNormal_At1Sigma_HandValue()
     {
         // pdf(1) = exp(-0.5) / sqrt(2*pi)
@@ -245,7 +245,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Normal_GeneralFormula_HandValue()
     {
         // For N(mu, sigma^2), LogScore = (y-mu)^2/(2*sigma^2) + 0.5*log(2*pi*sigma^2)
@@ -257,7 +257,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Normal_MinimizedAtMean()
     {
         // LogScore = (y-mu)^2/(2*sigma^2) + const
@@ -270,7 +270,7 @@ public class ScoringDeepMathIntegrationTests
             $"LogScore should be minimized at mean: {scoreAtMean} >= {scoreAway}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Normal_SymmetricAroundMean()
     {
         var log = new LogScore<double>();
@@ -280,7 +280,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(scorePos, scoreNeg, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Normal_QuadraticInObservation()
     {
         // LogScore increases quadratically with distance from mean
@@ -297,7 +297,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(2.0, s2 - s0, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Normal_LargerVariance_LargerAtMean()
     {
         // At mean: LogScore = 0.5*log(2*pi*sigma^2), which increases with sigma
@@ -315,7 +315,7 @@ public class ScoringDeepMathIntegrationTests
     // LogScore - Laplace distribution
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Laplace_AtLocation_HandValue()
     {
         // Laplace pdf at location: f(mu) = 1/(2b) * exp(0) = 1/(2b)
@@ -327,7 +327,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(Math.Log(2), score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Laplace_AwayFromLocation_HandValue()
     {
         // Laplace pdf: f(y) = 1/(2b) * exp(-|y-mu|/b)
@@ -340,7 +340,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Laplace_LinearInDistance()
     {
         // LogScore for Laplace: log(2b) + |y-mu|/b
@@ -363,7 +363,7 @@ public class ScoringDeepMathIntegrationTests
     // MeanScore - Averaging property
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_MeanScore_IsAverageOfScores()
     {
         var crps = new CRPSScore<double>();
@@ -381,7 +381,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expectedMean, meanScore, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_MeanScore_IsAverageOfScores()
     {
         var log = new LogScore<double>();
@@ -398,7 +398,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expectedMean, meanScore, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanScore_MismatchedLengths_Throws()
     {
         var crps = new CRPSScore<double>();
@@ -409,7 +409,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => crps.MeanScore(distributions, observations));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanScore_EmptyArrays_Throws()
     {
         var crps = new CRPSScore<double>();
@@ -423,7 +423,7 @@ public class ScoringDeepMathIntegrationTests
     // CRPS Gradient - Normal distribution
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Gradient_Normal_AtMean_MeanGradientIsZero()
     {
         // d(CRPS)/d(mu) = -(2*Phi(z)-1)
@@ -435,7 +435,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(0.0, grad[0], Tolerance); // d/dmu = 0 at mean
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Gradient_Normal_MeanGradient_HandValue()
     {
         // d(CRPS)/d(mu) = -(2*Phi(z)-1)
@@ -452,7 +452,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(expected, grad[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Gradient_Normal_MatchesNumericalDifferentiation()
     {
         var crps = new CRPSScore<double>();
@@ -479,7 +479,7 @@ public class ScoringDeepMathIntegrationTests
     // LogScore Gradient - Normal distribution
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Gradient_Normal_MeanGrad_HandValue()
     {
         // LogScore = (y-mu)^2/(2*sigma^2) + 0.5*log(2*pi*sigma^2)
@@ -492,7 +492,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(-2.0, grad[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Gradient_Normal_VarianceGrad_HandValue()
     {
         // d/d(sigma^2) = (y-mu)^2/(2*sigma^4) - 1/(2*sigma^2)
@@ -514,7 +514,7 @@ public class ScoringDeepMathIntegrationTests
         Assert.Equal(-1.5, grad[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Gradient_Normal_AtMean_MeanGradIsZero()
     {
         // d(-logpdf)/d(mu) = -(y-mu)/sigma^2
@@ -529,41 +529,41 @@ public class ScoringDeepMathIntegrationTests
     // Scoring rule properties
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Name_IsCRPS()
     {
         var crps = new CRPSScore<double>();
         Assert.Equal("CRPS", crps.Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_IsMinimized_True()
     {
         var crps = new CRPSScore<double>();
         Assert.True(crps.IsMinimized);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Name_IsLogScore()
     {
         var log = new LogScore<double>();
         Assert.Equal("LogScore", log.Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_IsMinimized_True()
     {
         var log = new LogScore<double>();
         Assert.True(log.IsMinimized);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_InvalidIntegrationPoints_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CRPSScore<double>(numIntegrationPoints: 9));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_MinimumIntegrationPoints_Accepted()
     {
         var crps = new CRPSScore<double>(numIntegrationPoints: 10);
@@ -576,7 +576,7 @@ public class ScoringDeepMathIntegrationTests
     // Properness property: score at true distribution <= wrong distribution
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_Properness_TrueDistribution_BetterThanWrong()
     {
         // Generate observations from N(0,1)
@@ -597,7 +597,7 @@ public class ScoringDeepMathIntegrationTests
             $"True distribution should have lower CRPS: {trueTotal} >= {wrongTotal}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_Properness_TrueDistribution_BetterThanWrong()
     {
         var log = new LogScore<double>();
@@ -620,7 +620,7 @@ public class ScoringDeepMathIntegrationTests
     // CRPS vs LogScore comparison
     // ================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPS_VsLogScore_BothMinimizedAtSameDistribution()
     {
         // Both CRPS and LogScore should prefer the same distribution when it's the true one

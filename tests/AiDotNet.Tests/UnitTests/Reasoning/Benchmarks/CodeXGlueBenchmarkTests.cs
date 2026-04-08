@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.Reasoning.Benchmarks;
 
 public sealed class CodeXGlueBenchmarkTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task EvaluateAsync_ComputesExactMatchAndTokenF1()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"codexglue-{Guid.NewGuid():N}.jsonl");

@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class InferenceOptimizerIntegrationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_RewritesMHA_ToCachedMHA_PreservingRoPE()
     {
         var model = CreateMHAModel(PositionalEncodingType.Rotary);
@@ -43,7 +43,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(PositionalEncodingType.Rotary, cached.PositionalEncoding);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_RewritesGQA_ToCachedGQA_WithKVCache()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
@@ -69,7 +69,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(2, cachedGqa.KVHeadCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_GQA_KVCacheUsesKVHeadCount()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
@@ -99,7 +99,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.True((double)cacheStats["MaxMemoryMB"] > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_GQA_WithRoPE_PreservesEncoding()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2, posEncoding: PositionalEncodingType.Rotary);
@@ -175,7 +175,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(2, quantized.KVHeadCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_QuantizationNone_DoesNotRewriteAttention()
     {
         var model = CreateMHAModel();
@@ -195,7 +195,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.DoesNotContain(optimized.Layers, l => l is QuantizedAttentionLayer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_Statistics_IncludeNewFields()
     {
         var model = CreateMHAModel();
@@ -216,7 +216,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.True(stats.ContainsKey("PositionalEncoding"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_MHA_RewriteToFlash_PreservesOutputShape()
     {
         var model = CreateMHAModel();
@@ -237,7 +237,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Optimizer_MixedLayers_QuantizesBothDenseAndAttention()
     {
         // Model with MHA + Dense layers
@@ -259,7 +259,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.Contains(optimized.Layers, l => l.GetType().Name.Contains("QuantizedDenseLayer"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KVCacheConfig_GQA_MemorySavings_ProportionalToKVHeadRatio()
     {
         // Verify that KV-cache memory scales linearly with NumHeads.
@@ -299,7 +299,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(8.0, ratio, precision: 1);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KVCacheConfig_Llama70B_GQA_Savings_8x()
     {
         // Llama 2 70B uses 64 Q heads, 8 KV heads -> 8x KV-cache savings

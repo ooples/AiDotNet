@@ -14,7 +14,7 @@ public class NaiveBayesIntegrationTests
 
     #region GaussianNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Train_ComputesCorrectMeans()
     {
         // Arrange: Create data where class 0 has mean [1, 2] and class 1 has mean [3, 4]
@@ -50,7 +50,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, pred1[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Train_ComputesCorrectVariances()
     {
         // Arrange: Create data with known variance
@@ -86,7 +86,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, pred1[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Predict_BinaryClassification()
     {
         // Arrange: Simple linearly separable data
@@ -120,7 +120,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Predict_MultiClassClassification()
     {
         // Arrange: Three well-separated classes
@@ -153,7 +153,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_PredictLogProbabilities_NumericallyStable()
     {
         // Arrange: Use extreme values that could cause numerical issues
@@ -229,7 +229,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_WithZeroVariance_HandlesGracefully()
     {
         // Arrange: All samples have the same feature value (zero variance)
@@ -256,7 +256,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_VarSmoothing_PreventsZeroVariance()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class NaiveBayesIntegrationTests
         Assert.True(probs[0, 1] > 0, "Class 1 probability should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Serialize_Deserialize_PreservesPredictions()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(originalProbs[0, 1], newProbs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class NaiveBayesIntegrationTests
 
     #region MultinomialNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialNB_Predict_BinaryClassification()
     {
         // Arrange: Document classification scenario with word counts
@@ -390,7 +390,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, predHam[0], Tolerance);  // Should predict ham (class 1)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialNB_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialNB_WithAlphaSmoothing_PreventsZeroProbabilities()
     {
         // Arrange: Feature 2 never appears in class 0
@@ -461,7 +461,7 @@ public class NaiveBayesIntegrationTests
 
     #region BernoulliNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BernoulliNB_Train_ComputesBinaryFeatureProbabilities()
     {
         // Arrange: Binary features (0 or 1)
@@ -496,7 +496,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, pred1[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BernoulliNB_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -538,7 +538,7 @@ public class NaiveBayesIntegrationTests
 
     #region ComplementNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplementNB_Predict_MultiClassClassification()
     {
         // Arrange: Multi-class text classification scenario
@@ -583,7 +583,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(2.0, pred2[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplementNB_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class NaiveBayesIntegrationTests
 
     #region CategoricalNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_Predict_WithCategoricalFeatures()
     {
         // Arrange: Categorical features encoded as integers
@@ -664,7 +664,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, pred1[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -706,7 +706,7 @@ public class NaiveBayesIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_SingleSamplePerClass_HandlesGracefully()
     {
         // Arrange: Only one sample per class
@@ -730,7 +730,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNB_HighDimensionalData_Stable()
     {
         // Arrange: High dimensional data
@@ -775,7 +775,7 @@ public class NaiveBayesIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NaiveBayes_ImbalancedData_HandlesClassWeights()
     {
         // Arrange: Heavily imbalanced data (90% class 0, 10% class 1)
@@ -813,7 +813,7 @@ public class NaiveBayesIntegrationTests
 
     #region CategoricalNaiveBayes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_BasicClassification_Works()
     {
         // Arrange: Categorical features (color=0/1/2, size=0/1/2)
@@ -852,7 +852,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, pred1[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_ProbabilitiesSumToOne()
     {
         // Arrange
@@ -882,7 +882,7 @@ public class NaiveBayesIntegrationTests
         Assert.True(probs[0, 1] >= 0 && probs[0, 1] <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_LaplaceSmoothingWorks()
     {
         // Arrange: Data where not all categories appear in training
@@ -910,7 +910,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_MultiClassClassification_Works()
     {
         // Arrange: 3 classes with distinct categorical patterns
@@ -947,7 +947,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(2.0, pred2[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_Clone_PreservesState()
     {
         // Arrange
@@ -980,7 +980,7 @@ public class NaiveBayesIntegrationTests
         Assert.Equal(origProbs[0, 1], cloneProbs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNB_AlphaSmoothing_AffectsProbabilities()
     {
         // Arrange

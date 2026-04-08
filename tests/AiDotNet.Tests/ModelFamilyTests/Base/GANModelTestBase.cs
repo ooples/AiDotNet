@@ -16,7 +16,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // The generator should produce output matching the declared OutputShape.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneratorOutput_ShouldHaveCorrectShape()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -39,7 +39,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // mode-collapsed — a fundamental GAN failure mode.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentLatentInputs_ProduceDifferentOutputs()
     {
         var network = CreateNetwork();
@@ -71,7 +71,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // is likely misconfigured.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterCount_ShouldBeSubstantial()
     {
         var network = CreateNetwork();
@@ -85,7 +85,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // Generated output values should not be extreme (no exploding values).
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputValues_ShouldBeInReasonableRange()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

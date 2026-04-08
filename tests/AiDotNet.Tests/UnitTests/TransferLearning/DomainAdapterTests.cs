@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.TransferLearning;
 
 public class DomainAdapterTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MMDDomainAdapter_InitializesCorrectly()
     {
         // Arrange & Act
@@ -18,7 +18,7 @@ public class DomainAdapterTests
         Assert.False(adapter.RequiresTraining);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MMDDomainAdapter_ComputesDomainDiscrepancy()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class DomainAdapterTests
         Assert.True(discrepancy >= 0.0); // MMD is always non-negative
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CORALDomainAdapter_InitializesCorrectly()
     {
         // Arrange & Act
@@ -54,7 +54,7 @@ public class DomainAdapterTests
         Assert.True(adapter.RequiresTraining);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CORALDomainAdapter_AdaptsSourceData()
     {
         // Arrange

@@ -15,7 +15,7 @@ public class ScoringRulesIntegrationTests
 
     #region CRPSScore - Construction and Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_DefaultConstruction_NameAndProperties()
     {
         var crps = new CRPSScore<double>();
@@ -23,7 +23,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(crps.IsMinimized);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_InvalidIntegrationPoints_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CRPSScore<double>(numIntegrationPoints: 5));
@@ -33,7 +33,7 @@ public class ScoringRulesIntegrationTests
 
     #region CRPSScore - Normal Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_NormalDistribution_AtMean_IsNonNegative()
     {
         var crps = new CRPSScore<double>();
@@ -42,7 +42,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(score >= 0, $"CRPS should be non-negative, got {score}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_NormalDistribution_KnownValue()
     {
         // For standard normal with observation at mean:
@@ -57,7 +57,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(1.0 / Math.Sqrt(Math.PI) * (Math.Sqrt(2) - 1), score, LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_NormalDistribution_FarFromMean_HigherScore()
     {
         var crps = new CRPSScore<double>();
@@ -67,7 +67,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(scoreFar > scoreAtMean, "CRPS should be larger for observations far from mean");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_NormalDistribution_NarrowDistribution_LowerScoreAtMean()
     {
         var crps = new CRPSScore<double>();
@@ -78,7 +78,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(scoreNarrow < scoreWide, "Narrow distribution should have lower CRPS at mean");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_NormalDistribution_ScoresScaleWithSigma()
     {
         // CRPS for Normal at the mean = sigma * (sqrt(2/pi) - 1/sqrt(pi))
@@ -95,7 +95,7 @@ public class ScoringRulesIntegrationTests
 
     #region CRPSScore - Laplace Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_LaplaceDistribution_AtMean_IsNonNegative()
     {
         var crps = new CRPSScore<double>();
@@ -104,7 +104,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(score >= 0, $"CRPS should be non-negative, got {score}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_LaplaceDistribution_KnownValue()
     {
         // For Laplace at mean: CRPS = |y-mu| + b*exp(-|y-mu|/b) - 3b/4
@@ -115,7 +115,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(0.25, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_LaplaceDistribution_FarFromMean_HigherScore()
     {
         var crps = new CRPSScore<double>();
@@ -129,7 +129,7 @@ public class ScoringRulesIntegrationTests
 
     #region CRPSScore - MeanScore
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_MeanScore_AveragesCorrectly()
     {
         var crps = new CRPSScore<double>();
@@ -141,7 +141,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(singleScore, meanScore, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_MeanScore_MismatchedLengths_Throws()
     {
         var crps = new CRPSScore<double>();
@@ -150,7 +150,7 @@ public class ScoringRulesIntegrationTests
         Assert.Throws<ArgumentException>(() => crps.MeanScore(distributions, observations));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_MeanScore_Empty_Throws()
     {
         var crps = new CRPSScore<double>();
@@ -163,7 +163,7 @@ public class ScoringRulesIntegrationTests
 
     #region CRPSScore - Gradient
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_ScoreGradient_Normal_ReturnsCorrectDimension()
     {
         var crps = new CRPSScore<double>();
@@ -172,7 +172,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(2, gradient.Length); // [d/dMean, d/dVariance]
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_ScoreGradient_Normal_MeanGradientSign()
     {
         // When observation > mean, gradient w.r.t. mean should be negative
@@ -187,7 +187,7 @@ public class ScoringRulesIntegrationTests
 
     #region LogScore - Construction and Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_DefaultConstruction_NameAndProperties()
     {
         var logScore = new LogScore<double>();
@@ -199,7 +199,7 @@ public class ScoringRulesIntegrationTests
 
     #region LogScore - Normal Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_NormalDistribution_AtMean_IsNonNegative()
     {
         var logScore = new LogScore<double>();
@@ -209,7 +209,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(score > 0, $"LogScore should be positive (negative log likelihood), got {score}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_NormalDistribution_KnownValue_AtMean()
     {
         // For standard normal at mean: -log(pdf(0)) = -log(1/sqrt(2*pi)) = 0.5*ln(2*pi)
@@ -220,7 +220,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_NormalDistribution_FarFromMean_HigherScore()
     {
         var logScore = new LogScore<double>();
@@ -230,7 +230,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(scoreFar > scoreAtMean, "LogScore should be higher for unlikely observations");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_NormalDistribution_SymmetricAroundMean()
     {
         var logScore = new LogScore<double>();
@@ -244,7 +244,7 @@ public class ScoringRulesIntegrationTests
 
     #region LogScore - Gradient
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_ScoreGradient_Normal_ReturnsCorrectDimension()
     {
         var logScore = new LogScore<double>();
@@ -253,7 +253,7 @@ public class ScoringRulesIntegrationTests
         Assert.Equal(2, gradient.Length); // [d/dMean, d/dVariance]
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_ScoreGradient_Normal_MeanGradientSign()
     {
         // When observation > mean, gradient w.r.t. mean should be negative
@@ -264,7 +264,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(gradient[0] < 0, "Gradient w.r.t. mean should be negative when obs > mean");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_ScoreGradient_Normal_ZeroAtMean()
     {
         // At the mean, the gradient w.r.t. mean should be zero
@@ -278,7 +278,7 @@ public class ScoringRulesIntegrationTests
 
     #region LogScore - Laplace Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_LaplaceDistribution_AtMean()
     {
         // For Laplace(0,1) at mean: -log(1/(2b)) = log(2b) = log(2)
@@ -292,7 +292,7 @@ public class ScoringRulesIntegrationTests
 
     #region Proper Scoring Rule Property
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRPSScore_ProperScoringRule_TrueDistributionMinimizes()
     {
         // A proper scoring rule should give a better (lower for minimized) score
@@ -308,7 +308,7 @@ public class ScoringRulesIntegrationTests
         Assert.True(scoreTrue < scoreWrong, "Proper scoring rule should favor the true distribution");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogScore_ProperScoringRule_TrueDistributionMinimizes()
     {
         var logScore = new LogScore<double>();

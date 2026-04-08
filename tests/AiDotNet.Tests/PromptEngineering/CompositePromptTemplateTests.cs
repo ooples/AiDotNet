@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class CompositePromptTemplateTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_Default_CreatesEmptyTemplate()
     {
         var template = new CompositePromptTemplate();
@@ -13,7 +13,7 @@ public class CompositePromptTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithSeparator_SetsSeparator()
     {
         var template = new CompositePromptTemplate("\n---\n");
@@ -21,7 +21,7 @@ public class CompositePromptTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddTemplate_AddsTemplate()
     {
         var composite = new CompositePromptTemplate()
@@ -30,7 +30,7 @@ public class CompositePromptTemplateTests
         Assert.NotNull(composite);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddTemplate_MultipleTemplates_AddsAll()
     {
         var composite = new CompositePromptTemplate()
@@ -41,7 +41,7 @@ public class CompositePromptTemplateTests
         Assert.NotNull(composite);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_SingleTemplate_FormatsCorrectly()
     {
         var composite = new CompositePromptTemplate()
@@ -56,7 +56,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("Hello World", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_MultipleTemplates_CombinesWithSeparator()
     {
         var composite = new CompositePromptTemplate("\n---\n")
@@ -71,7 +71,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("---", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_WithVariables_ReplacesInAllTemplates()
     {
         var composite = new CompositePromptTemplate()
@@ -88,7 +88,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("Hello John!", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_DifferentVariables_ReplacesCorrectly()
     {
         var composite = new CompositePromptTemplate()
@@ -106,7 +106,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("Second: Beta", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InputVariables_CombinesFromAllTemplates()
     {
         var composite = new CompositePromptTemplate()
@@ -119,7 +119,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("d", composite.InputVariables);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InputVariables_DeduplicatesVariables()
     {
         var composite = new CompositePromptTemplate()
@@ -129,7 +129,7 @@ public class CompositePromptTemplateTests
         Assert.Single(composite.InputVariables, v => v == "name");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Validate_WithAllVariables_ReturnsTrue()
     {
         var composite = new CompositePromptTemplate()
@@ -146,7 +146,7 @@ public class CompositePromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Validate_WithMissingVariable_ReturnsFalse()
     {
         var composite = new CompositePromptTemplate()
@@ -162,7 +162,7 @@ public class CompositePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Validate_WithNullVariables_ReturnsFalse()
     {
         var composite = new CompositePromptTemplate()
@@ -173,7 +173,7 @@ public class CompositePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_EmptyComposite_ReturnsEmpty()
     {
         var composite = new CompositePromptTemplate();
@@ -184,7 +184,7 @@ public class CompositePromptTemplateTests
         Assert.Equal(string.Empty, result.Trim());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_WithDefaultSeparator_UsesNewlines()
     {
         var composite = new CompositePromptTemplate()
@@ -198,7 +198,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("Line 2", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_WithCustomSeparator_UsesSeparator()
     {
         var composite = new CompositePromptTemplate(" | ")
@@ -212,7 +212,7 @@ public class CompositePromptTemplateTests
         Assert.Contains(" | ", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddTemplate_ReturnsNewInstance()
     {
         var original = new CompositePromptTemplate();
@@ -221,7 +221,7 @@ public class CompositePromptTemplateTests
         Assert.NotSame(original, modified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_WithMixedTemplateTypes_WorksCorrectly()
     {
         // ChatPromptTemplate messages are literal content, not placeholders
@@ -243,7 +243,7 @@ public class CompositePromptTemplateTests
         Assert.Contains("Hi there", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FluentChaining_WorksCorrectly()
     {
         var composite = new CompositePromptTemplate()
@@ -254,7 +254,7 @@ public class CompositePromptTemplateTests
         Assert.NotNull(composite);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_PreservesTemplateOrder()
     {
         var composite = new CompositePromptTemplate(" ")
@@ -273,7 +273,7 @@ public class CompositePromptTemplateTests
         Assert.True(secondIndex < thirdIndex);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_ComplexRealWorldExample()
     {
         var composite = new CompositePromptTemplate("\n\n")

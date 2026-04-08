@@ -15,7 +15,7 @@ public class HallucinationDetectionIntegrationTests
 {
     #region ReferenceBasedHallucinationDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReferenceBased_WithReferences_ProcessesText()
     {
         var references = new[] { "Paris is the capital of France.", "The Eiffel Tower is in Paris." };
@@ -25,7 +25,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReferenceBased_FabricatedFacts_DetectsHallucination()
     {
         var references = new[] { "Water boils at 100 degrees Celsius at sea level." };
@@ -36,7 +36,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReferenceBased_WithReferencesMethod_CreatesNewDetector()
     {
         var detector = new ReferenceBasedHallucinationDetector<double>();
@@ -46,7 +46,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReferenceBased_EmptyText_NoFindings()
     {
         var detector = new ReferenceBasedHallucinationDetector<double>(
@@ -60,7 +60,7 @@ public class HallucinationDetectionIntegrationTests
 
     #region SelfConsistencyHallucinationDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfConsistency_Contradictions_DetectsHallucination()
     {
         var detector = new SelfConsistencyHallucinationDetector<double>();
@@ -71,7 +71,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfConsistency_ConsistentText_ProcessesCleanly()
     {
         var detector = new SelfConsistencyHallucinationDetector<double>();
@@ -81,7 +81,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfConsistency_CustomThreshold_Works()
     {
         var detector = new SelfConsistencyHallucinationDetector<double>(
@@ -92,7 +92,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfConsistency_ShortText_HandlesGracefully()
     {
         var detector = new SelfConsistencyHallucinationDetector<double>();
@@ -105,7 +105,7 @@ public class HallucinationDetectionIntegrationTests
 
     #region KnowledgeTripletHallucinationDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KnowledgeTriplet_WithReferences_ProcessesText()
     {
         var references = new[] { "Albert Einstein developed the theory of relativity." };
@@ -116,7 +116,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KnowledgeTriplet_NoReferences_ProcessesText()
     {
         var detector = new KnowledgeTripletHallucinationDetector<double>();
@@ -126,7 +126,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KnowledgeTriplet_WithReferencesMethod_Works()
     {
         var detector = new KnowledgeTripletHallucinationDetector<double>();
@@ -141,7 +141,7 @@ public class HallucinationDetectionIntegrationTests
 
     #region EntailmentHallucinationDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entailment_WithReferences_ProcessesText()
     {
         var references = new[] { "The speed of light is approximately 300,000 km/s." };
@@ -151,7 +151,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entailment_ContradictingReferences_DetectsIssue()
     {
         var references = new[] { "The Moon orbits the Earth." };
@@ -162,7 +162,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entailment_WithReferencesMethod_Works()
     {
         var detector = new EntailmentHallucinationDetector<double>();
@@ -173,7 +173,7 @@ public class HallucinationDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entailment_EmptyText_NoFindings()
     {
         var detector = new EntailmentHallucinationDetector<double>(
@@ -187,7 +187,7 @@ public class HallucinationDetectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDetectors_ProcessSameText_NoExceptions()
     {
         var text = "The Eiffel Tower, located in Berlin, was built by Thomas Edison in 1920.";

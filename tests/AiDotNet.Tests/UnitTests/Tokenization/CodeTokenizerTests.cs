@@ -30,7 +30,7 @@ public class CodeTokenizerTests
         _codeTokenizer = new CodeTokenizer(_baseTokenizer, ProgrammingLanguage.Python, splitIdentifiers: true);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidBaseTokenizer_Succeeds()
     {
         // Arrange & Act
@@ -40,7 +40,7 @@ public class CodeTokenizerTests
         Assert.NotNull(tokenizer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_PythonCode_ReturnsTokens()
     {
         // Arrange
@@ -53,7 +53,7 @@ public class CodeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyCode_ReturnsEmpty()
     {
         // Act
@@ -63,7 +63,7 @@ public class CodeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_CamelCaseIdentifier_SplitsIdentifier()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class CodeTokenizerTests
         // Should split camelCase identifier
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_SnakeCaseIdentifier_SplitsIdentifier()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class CodeTokenizerTests
         // Should split snake_case identifier
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_Keywords_PreservesKeywords()
     {
         // Arrange
@@ -106,7 +106,7 @@ public class CodeTokenizerTests
         Assert.Contains("class", tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsValidTokenIds()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class CodeTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_ReconstructsCode()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class CodeTokenizerTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_WithCSharpLanguage_UsesCorrectKeywords()
     {
         // Arrange
@@ -150,7 +150,7 @@ public class CodeTokenizerTests
         Assert.Contains("class", tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_WithJavaScriptLanguage_UsesCorrectKeywords()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class CodeTokenizerTests
         Assert.Contains("return", tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_StringLiteral_PreservesString()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class CodeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_Numbers_PreservesNumbers()
     {
         // Arrange

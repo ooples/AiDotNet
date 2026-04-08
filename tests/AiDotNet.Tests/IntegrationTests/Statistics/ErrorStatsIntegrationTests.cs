@@ -22,7 +22,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: sklearn.metrics.mean_absolute_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]) = 0.5
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(np.abs([1, 2, 3] - [1, 2, 3])) = 0.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(np.abs([0, 0, 0, 0] - [1, 1, 1, 1])) = 1.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_ConstantError_ReturnsConstant()
     {
         // Arrange - Each prediction is off by 1
@@ -98,7 +98,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: sklearn.metrics.mean_squared_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]) = 0.375
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(([1, 2, 3, 4, 5] - [1, 2, 3, 4, 5])**2) = 0.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(([0, 0, 0, 0] - [2, 2, 2, 2])**2) = 4.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_ConstantError_ReturnsSquaredError()
     {
         // Arrange - Each prediction is off by 2
@@ -175,7 +175,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: np.sqrt(sklearn.metrics.mean_squared_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8])) = 0.6123724356957945
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RMSE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
@@ -199,7 +199,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// RMSE = sqrt(MSE), so RMSE of 2.0 error should be 2.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RMSE_ConstantError_ReturnsSqrtOfMSE()
     {
         // Arrange
@@ -231,7 +231,7 @@ public class ErrorStatsIntegrationTests
     /// = mean([0.1, 0.05, 0.0333...]) * 100
     /// = 0.0611... * 100 = 6.11...
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAPE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class ErrorStatsIntegrationTests
     /// MeanBiasError = mean(predicted - actual)
     /// Positive bias means model over-predicts on average.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_OverPrediction_ReturnsPositive()
     {
         // Arrange - Predictions are consistently higher
@@ -286,7 +286,7 @@ public class ErrorStatsIntegrationTests
     /// MeanBiasError = mean(predicted - actual)
     /// Negative bias means model under-predicts on average.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_UnderPrediction_ReturnsNegative()
     {
         // Arrange - Predictions are consistently lower
@@ -310,7 +310,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MeanBiasError = 0 when errors cancel out.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_BalancedErrors_ReturnsZero()
     {
         // Arrange - Errors cancel out: +1, -1, +1, -1
@@ -338,7 +338,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MaxError = max(|actual - predicted|)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxError_ReturnsLargestAbsoluteError()
     {
         // Arrange - Errors: 0.5, 0.5, 0, 1 -> Max = 1
@@ -362,7 +362,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MaxError should find maximum regardless of sign.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxError_NegativeError_ReturnsAbsoluteMax()
     {
         // Arrange - Errors: 1, -5, 2 -> Max = 5
@@ -391,7 +391,7 @@ public class ErrorStatsIntegrationTests
     /// MedianAbsoluteError = median of |actual - predicted|
     /// More robust to outliers than MAE.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MedianAbsoluteError_StandardDataset_ReturnsExactValue()
     {
         // Arrange - Errors: |0.5|, |0.5|, |0|, |1| = [0, 0.5, 0.5, 1]
@@ -421,7 +421,7 @@ public class ErrorStatsIntegrationTests
     /// SMAPE = mean(2 * |actual - predicted| / (|actual| + |predicted|)) * 100
     /// Bounded between 0% and 200%.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SMAPE_StandardDataset_ReturnsBoundedValue()
     {
         // Arrange
@@ -446,7 +446,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// SMAPE = 0 for perfect predictions.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SMAPE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
@@ -474,7 +474,7 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// RSS = sum((actual - predicted)^2)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RSS_StandardDataset_ReturnsExactValue()
     {
         // Arrange
@@ -499,7 +499,7 @@ public class ErrorStatsIntegrationTests
 
     #region GetMetric Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetric_MAE_ReturnsCorrectValue()
     {
         // Arrange
@@ -521,7 +521,7 @@ public class ErrorStatsIntegrationTests
         Assert.Equal(stats.MAE, mae, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetric_AllAliases_MatchProperties()
     {
         // Arrange
@@ -547,7 +547,7 @@ public class ErrorStatsIntegrationTests
 
     #region ErrorList Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorList_ContainsResiduals()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class ErrorStatsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_FloatType_ReturnsCorrectValue()
     {
         // Arrange

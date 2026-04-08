@@ -14,7 +14,7 @@ public class PsiIntegrationTests
 
     // ========== DiffieHellmanPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_ComputeIntersection_FindsCommonElements()
     {
         var psi = new DiffieHellmanPsi();
@@ -29,7 +29,7 @@ public class PsiIntegrationTests
         Assert.Contains("eve", result.IntersectionIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_ComputeCardinality_ReturnsCorrectCount()
     {
         var psi = new DiffieHellmanPsi();
@@ -40,7 +40,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, cardinality);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_EmptySets_ReturnsEmptyIntersection()
     {
         var psi = new DiffieHellmanPsi();
@@ -52,7 +52,7 @@ public class PsiIntegrationTests
         Assert.Equal(0, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_DisjointSets_ReturnsEmpty()
     {
         var psi = new DiffieHellmanPsi();
@@ -65,7 +65,7 @@ public class PsiIntegrationTests
         Assert.Equal(0, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_IdenticalSets_ReturnsAll()
     {
         var psi = new DiffieHellmanPsi();
@@ -77,7 +77,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_ProtocolName_IsCorrect()
     {
         var psi = new DiffieHellmanPsi();
@@ -86,7 +86,7 @@ public class PsiIntegrationTests
 
     // ========== ObliviousTransferPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ObliviousTransferPsi_ComputeIntersection_FindsCommonElements()
     {
         var psi = new ObliviousTransferPsi();
@@ -97,7 +97,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ObliviousTransferPsi_ProtocolName_IsCorrect()
     {
         var psi = new ObliviousTransferPsi();
@@ -106,7 +106,7 @@ public class PsiIntegrationTests
 
     // ========== CircuitBasedPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CircuitBasedPsi_ComputeIntersection_FindsCommonElements()
     {
         var psi = new CircuitBasedPsi();
@@ -117,7 +117,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CircuitBasedPsi_ProtocolName_IsCorrect()
     {
         var psi = new CircuitBasedPsi();
@@ -126,7 +126,7 @@ public class PsiIntegrationTests
 
     // ========== BloomFilterPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BloomFilterPsi_ComputeIntersection_FindsElements()
     {
         var psi = new BloomFilterPsi();
@@ -143,7 +143,7 @@ public class PsiIntegrationTests
             $"BloomFilter should find at least the 3 real intersecting elements, found {result.IntersectionSize}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BloomFilterPsi_ComputeCardinality_ReturnsReasonableCount()
     {
         var psi = new BloomFilterPsi();
@@ -158,7 +158,7 @@ public class PsiIntegrationTests
         Assert.True(cardinality >= 3, $"Expected at least 3, got {cardinality}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BloomFilterPsi_ProtocolName_IsCorrect()
     {
         var psi = new BloomFilterPsi();
@@ -167,7 +167,7 @@ public class PsiIntegrationTests
 
     // ========== UnbalancedPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UnbalancedPsi_ComputeIntersection_HandlesAsymmetricSets()
     {
         var psi = new UnbalancedPsi();
@@ -184,7 +184,7 @@ public class PsiIntegrationTests
 
     // ========== MultiPartyPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiPartyPsi_ComputeMultiPartyIntersection_FindsCommon()
     {
         var multiPsi = new MultiPartyPsi();
@@ -201,7 +201,7 @@ public class PsiIntegrationTests
         Assert.Contains("eve", result.IntersectionIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiPartyPsi_ParameterlessConstructor_UsesDiffieHellman()
     {
         var multiPsi = new MultiPartyPsi();
@@ -216,20 +216,20 @@ public class PsiIntegrationTests
 
     // ========== FuzzyPsi Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_ProtocolName_ContainsFuzzy()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
         Assert.Contains("Fuzzy", fuzzyPsi.ProtocolName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_NullInnerProtocol_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new FuzzyPsi(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_ExactMatch_FindsIntersection()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -240,7 +240,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, result.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_EditDistance_FindsFuzzyMatches()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -266,7 +266,7 @@ public class PsiIntegrationTests
             $"Expected at least 1 fuzzy match, got {result.IntersectionSize}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_NGram_FindsFuzzyMatches()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -289,7 +289,7 @@ public class PsiIntegrationTests
         Assert.True(result.IntersectionSize >= 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_Jaccard_FindsFuzzyMatches()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -310,7 +310,7 @@ public class PsiIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_Phonetic_FindsSimilarSoundingMatches()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -332,7 +332,7 @@ public class PsiIntegrationTests
         Assert.True(result.IntersectionSize >= 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyPsi_FuzzyMatchResult_HasConfidences()
     {
         var fuzzyPsi = new FuzzyPsi(new DiffieHellmanPsi());
@@ -356,7 +356,7 @@ public class PsiIntegrationTests
 
     // ========== EntityAligner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_AlignEntities_ReturnsAlignment()
     {
         var aligner = new EntityAligner();
@@ -369,7 +369,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, result.PsiResult.IntersectionSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_AlignEntities_HasValidMappings()
     {
         var aligner = new EntityAligner();
@@ -382,7 +382,7 @@ public class PsiIntegrationTests
         Assert.Equal(result.PsiResult.IntersectionSize, result.PsiResult.LocalToSharedIndexMap.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_AlignEntities_NullLocal_Throws()
     {
         var aligner = new EntityAligner();
@@ -391,7 +391,7 @@ public class PsiIntegrationTests
             aligner.AlignEntities(null, PartyB));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_AlignEntities_NullRemote_Throws()
     {
         var aligner = new EntityAligner();
@@ -400,7 +400,7 @@ public class PsiIntegrationTests
             aligner.AlignEntities(PartyA, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_ComputeOverlapCount_ReturnsCorrect()
     {
         var aligner = new EntityAligner();
@@ -410,7 +410,7 @@ public class PsiIntegrationTests
         Assert.Equal(3, count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_CheckOverlapSufficiency_SufficientOverlap()
     {
         var aligner = new EntityAligner();
@@ -423,7 +423,7 @@ public class PsiIntegrationTests
         Assert.True(overlapRatio > 0.5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_CheckOverlapSufficiency_InsufficientOverlap()
     {
         var aligner = new EntityAligner();
@@ -437,7 +437,7 @@ public class PsiIntegrationTests
         Assert.Equal(1, overlapCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_AlignMultipleParties_Works()
     {
         var aligner = new EntityAligner();
@@ -450,7 +450,7 @@ public class PsiIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntityAligner_CardinalityOnly_ReturnsCountWithoutIds()
     {
         var aligner = new EntityAligner();
@@ -463,7 +463,7 @@ public class PsiIntegrationTests
 
     // ========== PsiResult Fields ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PsiResult_OverlapRatios_AreReasonable()
     {
         var psi = new DiffieHellmanPsi();
@@ -477,7 +477,7 @@ public class PsiIntegrationTests
         Assert.Equal(0.6, result.RemoteOverlapRatio, 2); // 3/5
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PsiResult_ExecutionTime_IsPositive()
     {
         var psi = new DiffieHellmanPsi();
@@ -490,7 +490,7 @@ public class PsiIntegrationTests
 
     // ========== PsiOptions Defaults ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PsiOptions_DefaultValues()
     {
         var options = new PsiOptions();
@@ -505,7 +505,7 @@ public class PsiIntegrationTests
         Assert.Null(options.FuzzyMatch);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyMatchOptions_DefaultValues()
     {
         var options = new FuzzyMatchOptions();
@@ -517,7 +517,7 @@ public class PsiIntegrationTests
         Assert.True(options.NormalizeWhitespace);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PsiProtocol_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(PsiProtocol), PsiProtocol.DiffieHellman));
@@ -526,7 +526,7 @@ public class PsiIntegrationTests
         Assert.True(Enum.IsDefined(typeof(PsiProtocol), PsiProtocol.BloomFilter));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FuzzyMatchStrategy_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(FuzzyMatchStrategy), FuzzyMatchStrategy.Exact));
@@ -538,7 +538,7 @@ public class PsiIntegrationTests
 
     // ========== Large Set Performance ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffieHellman_LargeSet_CompletesInReasonableTime()
     {
         var psi = new DiffieHellmanPsi();

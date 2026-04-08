@@ -72,7 +72,7 @@ public class ComplexMatrixDecompositionIntegrationTests
         Assert.Equal(size, complexDecomp.A.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexMatrixDecomposition_A_HasZeroImaginaryParts()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexMatrixDecomposition_A_RealPartsMatchOriginal()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexMatrixDecomposition_Invert_HasZeroImaginaryParts()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexMatrixDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange

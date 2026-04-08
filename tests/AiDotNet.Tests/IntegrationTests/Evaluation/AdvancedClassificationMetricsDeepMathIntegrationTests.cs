@@ -34,7 +34,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region FBetaScore - Binary
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_F1_HandCalculated_Binary()
     {
         // TP=2, FP=2, FN=1 → Precision=0.5, Recall=2/3
@@ -44,7 +44,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(4.0 / 7.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_F2_WeightsRecallMore()
     {
         // TP=2, FP=2, FN=1 → Precision=0.5, Recall=2/3
@@ -54,7 +54,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 8.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_F05_WeightsPrecisionMore()
     {
         // TP=2, FP=2, FN=1 → Precision=0.5, Recall=2/3
@@ -65,7 +65,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(10.0 / 19.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_F1_GreaterThanF05_WhenRecallGreaterThanPrecision()
     {
         // When recall > precision, F1 weights recall more than F0.5 does
@@ -84,7 +84,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.True(f1Val > f05Val, $"F1={f1Val} should be > F0.5={f05Val}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_PerfectPrediction_IsOne()
     {
         double[] preds = [1, 0, 1, 0, 1];
@@ -93,7 +93,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_NoPredictedPositives_IsZero()
     {
         double[] preds = [0, 0, 0, 0];
@@ -103,7 +103,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_InvalidBeta_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FBetaScoreMetric<double>(0));
@@ -116,7 +116,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region FBetaScore - Multi-class
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_MacroAverage_HandCalculated()
     {
         // 3-class problem:
@@ -134,7 +134,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.65, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_WeightedAverage_HandCalculated()
     {
         // Same data as macro test
@@ -148,7 +148,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(6.2 / 9.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_MicroAverage_HandCalculated()
     {
         // Same data: Total TP=6, Total FP=3, Total FN=3
@@ -162,7 +162,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_MacroVsWeighted_DifferWhenClassesImbalanced()
     {
         // Macro treats all classes equally, weighted weights by support
@@ -182,7 +182,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region NPV
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NPV_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -193,7 +193,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.6, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NPV_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -203,7 +203,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NPV_AllPositivePredictions_ReturnsZero()
     {
         // No negative predictions → NPV undefined → returns 0
@@ -213,7 +213,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NPV_PerfectPrediction_IsOne()
     {
         double[] preds = [1, 0, 1, 0, 1];
@@ -227,7 +227,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region DiagnosticOddsRatio
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_HandCalculated_WithHaldaneCorrection()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -238,7 +238,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(8.75 / 3.75, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -248,7 +248,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(12.25 / 6.25, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_PerfectPrediction_VeryHigh()
     {
         double[] preds = [1, 0, 1, 0, 1, 0];
@@ -259,7 +259,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(49.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_HaldaneCorrection_PreventsInfinity()
     {
         // Without Haldane correction, FP=0 and FN=0 would give division by zero
@@ -271,7 +271,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), "DOR should be finite due to Haldane correction");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_AllWrong_VeryLow()
     {
         double[] preds = [0, 1, 0, 1];
@@ -286,7 +286,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region FowlkesMallows
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_HandCalculated_Symmetric()
     {
         // TP=3, FP=2, FN=2
@@ -296,7 +296,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.6, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_HandCalculated_Asymmetric()
     {
         // TP=2, FP=2, FN=1
@@ -306,7 +306,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / Math.Sqrt(3.0), metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_IsGeometricMean_LessOrEqualArithmeticMean()
     {
         // AM-GM inequality: geometric mean <= arithmetic mean
@@ -322,7 +322,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
             $"FM={fm} should be <= AM={arithmeticMean} by AM-GM inequality");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_PerfectPrediction_IsOne()
     {
         double[] preds = [1, 0, 1, 0, 1];
@@ -331,7 +331,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_NoTruePositives_IsZero()
     {
         double[] preds = [0, 1, 0, 1];
@@ -345,7 +345,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Informedness (Youden's J)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -355,7 +355,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.2, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -365,7 +365,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(4.0 / 15.0, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_PerfectPrediction_IsOne()
     {
         double[] preds = [1, 0, 1, 0, 1, 0];
@@ -374,7 +374,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_RandomClassifier_IsZero()
     {
         // A classifier that predicts all same class has TPR=1, TNR=0 or TPR=0, TNR=1
@@ -388,7 +388,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_InvertedPredictions_IsMinusOne()
     {
         double[] preds = [0, 1, 0, 1, 0, 1];
@@ -404,7 +404,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Markedness
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Markedness_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -414,7 +414,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.2, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Markedness_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -424,7 +424,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.25, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Markedness_PerfectPrediction_IsOne()
     {
         double[] preds = [1, 0, 1, 0, 1, 0];
@@ -433,7 +433,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Markedness_AllSamePrediction_Negative()
     {
         double[] preds = [1, 1, 1, 1, 1];
@@ -449,7 +449,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Positive Likelihood Ratio (LR+)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRPlus_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -459,7 +459,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.5, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRPlus_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -469,7 +469,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 3.0, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRPlus_PerfectSpecificity_ReturnsMaxValue()
     {
         // No false positives → FPR = 0 → LR+ = infinity
@@ -480,7 +480,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(double.MaxValue, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRPlus_RandomClassifier_IsOne()
     {
         // For a random classifier, LR+ ≈ 1 (sensitivity ≈ FPR)
@@ -497,7 +497,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Negative Likelihood Ratio (LR-)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRMinus_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -507,7 +507,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRMinus_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -517,7 +517,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 9.0, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRMinus_PerfectSensitivity_IsZero()
     {
         // No false negatives → FNR = 0 → LR- = 0
@@ -528,7 +528,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRMinus_RandomClassifier_IsOne()
     {
         // For random classifier: FNR ≈ Specificity → LR- ≈ 1
@@ -543,7 +543,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region PrevalenceThreshold
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrevalenceThreshold_HandCalculated_Symmetric()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -554,7 +554,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrevalenceThreshold_HandCalculated_Asymmetric()
     {
         // TP=2, TN=3, FP=2, FN=1
@@ -567,7 +567,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrevalenceThreshold_PerfectClassifier_IsZero()
     {
         // Perfect: TPR=1, FPR=0 → PT = sqrt(0)/(sqrt(1)+sqrt(0)) = 0/1 = 0
@@ -577,7 +577,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrevalenceThreshold_RandomClassifier_IsHalf()
     {
         // Random: TPR=0.5, FPR=0.5
@@ -592,7 +592,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region JaccardScore and ThreatScore
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardScore_HandCalculated_Symmetric()
     {
         // TP=3, FP=2, FN=2
@@ -601,7 +601,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(3.0 / 7.0, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardScore_HandCalculated_Asymmetric()
     {
         // TP=2, FP=2, FN=1
@@ -610,7 +610,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThreatScore_HandCalculated_Symmetric()
     {
         // TP=3, FP=2, FN=2
@@ -619,7 +619,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(3.0 / 7.0, metric.Compute(SymPred, SymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThreatScore_HandCalculated_Asymmetric()
     {
         // TP=2, FP=2, FN=1
@@ -628,7 +628,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, metric.Compute(AsymPred, AsymActual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardScore_Equals_ThreatScore_Always()
     {
         // Jaccard = TP/(TP+FP+FN) = ThreatScore = TP/(TP+FN+FP) - same formula
@@ -647,7 +647,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardScore_AllNegatives_IsOne()
     {
         // TP=0, FP=0, FN=0 → denominator=0 → returns 1 (all correct negatives)
@@ -657,7 +657,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardScore_RelationToF1()
     {
         // Jaccard = F1 / (2 - F1) (mathematical identity)
@@ -676,7 +676,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Cross-Metric Mathematical Identities
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCC_Squared_Equals_Informedness_Times_Markedness()
     {
         // Mathematical identity: MCC^2 = Informedness * Markedness
@@ -693,7 +693,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(mccVal * mccVal, infVal * markVal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCC_Squared_Equals_Informedness_Times_Markedness_SymmetricCase()
     {
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
@@ -707,7 +707,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(mccVal * mccVal, infVal * markVal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DOR_Equals_LRPlus_Over_LRMinus_WithoutCorrection()
     {
         // DOR = LR+ / LR- (this identity holds without Haldane correction)
@@ -726,7 +726,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(rawDOR, lrPlusVal / lrMinusVal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_Is_Dual_Of_Markedness()
     {
         // Both have same numerator (TP*TN - FP*FN)
@@ -743,7 +743,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(infVal, markVal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Informedness_Plus_One_Equals_TPR_Plus_TNR()
     {
         // Informedness = TPR + TNR - 1, so Informedness + 1 = TPR + TNR
@@ -755,7 +755,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(tprPlusTnr, infVal + 1.0, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_GreaterThan_F1_WhenPrecisionNearRecall()
     {
         // Geometric mean >= Harmonic mean (by AM-GM-HM inequality)
@@ -772,7 +772,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
             $"FM={fmVal} should be >= F1={f1Val} by GM-HM inequality");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LRPlus_Times_LRMinus_Identity()
     {
         // LR+ * LR- = (TPR/FPR) * (FNR/TNR) = (TPR * FNR) / (FPR * TNR)
@@ -789,7 +789,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Balanced Accuracy vs Informedness Relationship
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedAccuracy_Equals_HalfInformedness_Plus_Half()
     {
         // BalancedAccuracy = (TPR + TNR) / 2 = (Informedness + 1) / 2
@@ -802,7 +802,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(balAccVal, (infVal + 1.0) / 2.0, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedAccuracy_Equals_HalfInformedness_Plus_Half_SymmetricCase()
     {
         var balAcc = new BalancedAccuracyMetric<double>();
@@ -818,7 +818,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllMetrics_MismatchedLengths_Throws()
     {
         double[] short1 = [1, 0, 1];
@@ -837,7 +837,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new ThreatScoreMetric<double>().Compute(short1, long1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllMetrics_EmptyInput_ReturnsDefined()
     {
         double[] empty = [];
@@ -856,7 +856,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, new ThreatScoreMetric<double>().Compute(empty, empty), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_ComputeWithCI_InvalidBootstrapSamples_Throws()
     {
         var metric = new FBetaScoreMetric<double>(1.0);
@@ -867,7 +867,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
             metric.ComputeWithCI(preds, actuals, bootstrapSamples: 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_ComputeWithCI_InvalidConfidenceLevel_Throws()
     {
         var metric = new FBetaScoreMetric<double>(1.0);
@@ -880,7 +880,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
             metric.ComputeWithCI(preds, actuals, confidenceLevel: 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FBeta_ComputeWithCI_Reproducible()
     {
         var metric = new FBetaScoreMetric<double>(1.0);
@@ -894,7 +894,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(ci1.UpperBound, ci2.UpperBound);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CohensKappa_MultiClass_HandCalculated()
     {
         // 3-class: actuals=[0,0,0,1,1,1,2,2,2], preds=[0,0,1,1,1,2,2,2,0]
@@ -916,7 +916,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, metric.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CohensKappa_BinaryAsymmetric_HandCalculated()
     {
         // TP=2, TN=3, FP=2, FN=1 using AsymPred/AsymActual

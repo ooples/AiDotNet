@@ -27,14 +27,14 @@ public class UnigramTokenizerTests
         _tokenizer = UnigramTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_CreatesVocabulary()
     {
         // Assert
         Assert.True(_tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_UsesViterbiSegmentation()
     {
         // Arrange
@@ -48,7 +48,7 @@ public class UnigramTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_HandlesSpaces_WithSentencePieceMarker()
     {
         // Arrange
@@ -63,7 +63,7 @@ public class UnigramTokenizerTests
         Assert.Contains("\u2581", joinedTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyText_ReturnsEmpty()
     {
         // Act
@@ -73,7 +73,7 @@ public class UnigramTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsValidResult()
     {
         // Arrange
@@ -87,7 +87,7 @@ public class UnigramTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_RemovesSentencePieceMarker()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class UnigramTokenizerTests
         Assert.DoesNotContain("\u2581", decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Roundtrip_PreservesContent()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class UnigramTokenizerTests
         Assert.Contains("learning", normalizedDecoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithPositionIds_ReturnsSequential()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class UnigramTokenizerTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithSmallVocab_Works()
     {
         // Arrange & Act
@@ -145,7 +145,7 @@ public class UnigramTokenizerTests
         Assert.True(smallTokenizer.VocabularySize <= 60); // vocab + special tokens
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_LongWord_BreaksIntoSubwords()
     {
         // Arrange

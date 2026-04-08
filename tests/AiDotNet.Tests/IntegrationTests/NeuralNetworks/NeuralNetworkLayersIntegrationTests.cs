@@ -18,7 +18,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region DenseLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]); // output features
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_ForwardPass_BatchProcessing_ProducesCorrectShape()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class NeuralNetworkLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_WithActivation_AppliesActivationFunction()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class NeuralNetworkLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_GetParameters_ReturnsWeightsAndBiases()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(outputDepth, output.Shape[1]); // depth
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_ForwardPass_WithStride2_ReducesDimensions()
     {
         // Arrange
@@ -187,7 +187,7 @@ public class NeuralNetworkLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_BatchProcessing_HandlesMultipleSamples()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region LSTMLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class NeuralNetworkLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_GetParameters_ReturnsGateWeights()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region BatchNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_ForwardPass_NormalizesOutput()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(input.Shape[1], output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_TrainingVsInference_ProducesDifferentBehavior()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class NeuralNetworkLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region DropoutLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_Construction_WithValidDropoutRate_SupportsTraining()
     {
         // Arrange & Act
@@ -366,7 +366,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_Construction_InvalidDropoutRate_ThrowsException()
     {
         // Act & Assert
@@ -374,7 +374,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Throws<ArgumentException>(() => new DropoutLayer<double>(-0.1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_InferenceMode_PassesThroughUnchanged()
     {
         // Arrange
@@ -399,7 +399,7 @@ public class NeuralNetworkLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_TrainingMode_AppliesDropout()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region MultiHeadAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -457,7 +457,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(embeddingDimension, output.Shape[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_HeadDimensionValidation()
     {
         // Arrange
@@ -478,7 +478,7 @@ public class NeuralNetworkLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_BatchProcessing_HandlesMultipleSamples()
     {
         // Arrange
@@ -499,7 +499,7 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(batchSize, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
@@ -513,14 +513,14 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_ZeroOutput_ThrowsArgumentOutOfRange()
     {
         // Arrange, Act & Assert - zero output size is invalid
         Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(5, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_SmallInput_HandlesGracefully()
     {
         // Arrange - Input smaller than kernel
@@ -539,7 +539,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_LargeValues_RemainsNumericallyStable()
     {
         // Arrange
@@ -558,7 +558,7 @@ public class NeuralNetworkLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_SmallValues_RemainsNumericallyStable()
     {
         // Arrange
@@ -576,7 +576,7 @@ public class NeuralNetworkLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_ZeroVariance_HandlesGracefully()
     {
         // Arrange
@@ -607,7 +607,7 @@ public class NeuralNetworkLayersIntegrationTests
 
     #region Clone Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange

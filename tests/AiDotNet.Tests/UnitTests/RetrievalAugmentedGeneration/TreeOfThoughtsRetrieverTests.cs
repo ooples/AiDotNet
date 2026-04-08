@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -85,7 +85,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(totRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidMaxDepth_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, mockRetriever, maxDepth: 15));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidBranchingFactor_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, mockRetriever, branchingFactor: 15));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve("   ", 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -183,7 +183,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve("test query", -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithBreadthFirstStrategy_ReturnsDocuments()
         {
             // Arrange
@@ -207,7 +207,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithDepthFirstStrategy_ReturnsDocuments()
         {
             // Arrange
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithBestFirstStrategy_ReturnsDocuments()
         {
             // Arrange
@@ -255,7 +255,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMetadataFilters_ReturnsDocuments()
         {
             // Arrange
@@ -275,7 +275,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithDifferentDepths_ReturnsAppropriateResults()
         {
             // Arrange

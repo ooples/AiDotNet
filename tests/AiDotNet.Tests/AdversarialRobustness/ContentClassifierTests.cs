@@ -11,7 +11,7 @@ public class ContentClassifierTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RuleBasedContentClassifier_DefaultConstructor_InitializesCorrectly()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -20,7 +20,7 @@ public class ContentClassifierTests
         Assert.NotEmpty(classifier.GetSupportedCategories());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RuleBasedContentClassifier_WithThreshold_SetsThreshold()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.7);
@@ -28,7 +28,7 @@ public class ContentClassifierTests
         Assert.True(classifier.IsReady());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RuleBasedContentClassifier_WithCustomPatterns_UsesPatterns()
     {
         var patterns = new Dictionary<string, List<string>>
@@ -42,7 +42,7 @@ public class ContentClassifierTests
         Assert.Contains("Custom", categories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RuleBasedContentClassifier_WithNullPatterns_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -53,7 +53,7 @@ public class ContentClassifierTests
 
     #region ClassifyText Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_NullOrEmpty_ReturnsSafeResult()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -67,7 +67,7 @@ public class ContentClassifierTests
         Assert.Equal("Allow", resultEmpty.RecommendedAction);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_SafeContent_ReturnsNotHarmful()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -78,7 +78,7 @@ public class ContentClassifierTests
         Assert.Equal("Allow", result.RecommendedAction);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_ToxicContent_DetectsToxicity()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -89,7 +89,7 @@ public class ContentClassifierTests
         Assert.Contains("Toxic", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_ViolentContent_DetectsViolence()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.2);
@@ -100,7 +100,7 @@ public class ContentClassifierTests
         Assert.Contains("Violence", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_HateSpeech_DetectsHateSpeech()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -111,7 +111,7 @@ public class ContentClassifierTests
         Assert.Contains("HateSpeech", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_PrivateInformation_DetectsPrivateInfo()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -122,7 +122,7 @@ public class ContentClassifierTests
         Assert.Contains("PrivateInformation", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_CreditCardPattern_DetectsPrivateInfo()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -133,7 +133,7 @@ public class ContentClassifierTests
         Assert.Contains("PrivateInformation", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_SelfHarmContent_DetectsSelfHarm()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -144,7 +144,7 @@ public class ContentClassifierTests
         Assert.Contains("SelfHarm", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_HarassmentContent_DetectsHarassment()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -155,7 +155,7 @@ public class ContentClassifierTests
         Assert.Contains("Harassment", result.DetectedCategories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_MultipleCategories_DetectsAll()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.2);
@@ -185,7 +185,7 @@ public class ContentClassifierTests
 
     #region Pattern Management Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddPattern_AddsNewCategory()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.5);
@@ -196,7 +196,7 @@ public class ContentClassifierTests
         Assert.Contains("CustomCategory", categories);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddPattern_NullCategory_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -204,7 +204,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentException>(() => classifier.AddPattern(null!, @"\btest\b"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddPattern_EmptyPattern_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -212,7 +212,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentException>(() => classifier.AddPattern("Test", string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClearCategory_RemovesPatternsButKeepsCategory()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -233,7 +233,7 @@ public class ContentClassifierTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_ReturnsNonEmptyBytes()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -244,7 +244,7 @@ public class ContentClassifierTests
         Assert.NotEmpty(bytes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_RestoresState()
     {
         var original = new RuleBasedContentClassifier<double>(threshold: 0.7);
@@ -259,7 +259,7 @@ public class ContentClassifierTests
         Assert.Contains("CustomCategory", restored.GetSupportedCategories());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_NullData_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -267,7 +267,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentNullException>(() => classifier.Deserialize(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SerializeDeserialize_PreservesClassification()
     {
         var original = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -288,7 +288,7 @@ public class ContentClassifierTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_NullPath_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -296,7 +296,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentException>(() => classifier.SaveModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_EmptyPath_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -304,7 +304,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentException>(() => classifier.SaveModel(string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_NullPath_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -312,7 +312,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentException>(() => classifier.LoadModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_NonExistentFile_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -320,7 +320,7 @@ public class ContentClassifierTests
         Assert.Throws<FileNotFoundException>(() => classifier.LoadModel("nonexistent_file.json"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveAndLoadModel_PreservesState()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"classifier_test_{Guid.NewGuid()}.json");
@@ -349,7 +349,7 @@ public class ContentClassifierTests
 
     #region Classify Vector Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Classify_NullVector_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -357,7 +357,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentNullException>(() => classifier.Classify(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Classify_EmptyVector_ReturnsResult()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -372,7 +372,7 @@ public class ContentClassifierTests
 
     #region ClassifyBatch Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyBatch_NullMatrix_ThrowsException()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -380,7 +380,7 @@ public class ContentClassifierTests
         Assert.Throws<ArgumentNullException>(() => classifier.ClassifyBatch(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyBatch_ValidMatrix_ReturnsResults()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -396,7 +396,7 @@ public class ContentClassifierTests
 
     #region ContentClassificationResult Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ContentClassificationResult_DefaultValues()
     {
         var result = new ContentClassificationResult<double>();
@@ -413,7 +413,7 @@ public class ContentClassifierTests
 
     #region Edge Cases and Regex Timeout Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_CaseInsensitive_DetectsPatterns()
     {
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -426,7 +426,7 @@ public class ContentClassifierTests
         Assert.Equal(resultLower.IsHarmful, resultMixed.IsHarmful);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_VeryLongText_DoesNotTimeout()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -438,7 +438,7 @@ public class ContentClassifierTests
         Assert.False(result.IsHarmful);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassifyText_SpecialCharacters_HandlesGracefully()
     {
         var classifier = new RuleBasedContentClassifier<double>();
@@ -453,7 +453,7 @@ public class ContentClassifierTests
 
     #region Default Categories Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSupportedCategories_ReturnsDefaultCategories()
     {
         var classifier = new RuleBasedContentClassifier<double>();

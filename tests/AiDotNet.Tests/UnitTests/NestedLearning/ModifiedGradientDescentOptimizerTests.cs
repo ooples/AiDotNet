@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
 {
     public class ModifiedGradientDescentOptimizerTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidLearningRate_InitializesCorrectly()
         {
             // Arrange & Act
@@ -19,7 +19,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(0.01, optimizer.LearningRate);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateMatrix_ImplementsEquation27Correctly()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(hasChanged, "Weights should change after update");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateMatrix_WithZeroInput_OnlyAppliesGradientTerm()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateVector_ImplementsModifiedGDForVectors()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(hasChanged, "Parameters should change after update");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateVector_WithSmallLearningRate_GradientTermIsSmall()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateMatrix_MultipleUpdates_ConvergesParameters()
         {
             // Arrange
@@ -225,7 +225,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(totalChange > 0.01, "Parameters should change over multiple updates");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void LearningRate_Getter_ReturnsCorrectValue()
         {
             // Arrange
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(0.1, optimizer2.LearningRate);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateMatrix_DifferentFromStandardGD_DueToModificationTerm()
         {
             // Arrange

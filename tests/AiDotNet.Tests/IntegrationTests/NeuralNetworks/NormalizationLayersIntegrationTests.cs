@@ -32,7 +32,7 @@ public class NormalizationLayersIntegrationTests
 
     #region BatchNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_ForwardPass_ProducesNormalizedOutput()
     {
         // Arrange
@@ -50,7 +50,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_ForwardPass_TrainingVsInference()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class NormalizationLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_Clone_CreatesIdenticalLayer()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_WithCustomMomentum_Works()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_ParameterCount_IncludesGammaAndBeta()
     {
         // Arrange
@@ -130,7 +130,7 @@ public class NormalizationLayersIntegrationTests
 
     #region LayerNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_ForwardPass_ProducesNormalizedOutput()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class NormalizationLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_Clone_CreatesIdenticalLayer()
     {
         // Arrange
@@ -168,7 +168,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_WithCustomEpsilon_Works()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_ParameterCount_IncludesGammaAndBeta()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(featureSize * 2, paramCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_3DInput_Works()
     {
         // Arrange - simulate sequence data [batch, seq, features]
@@ -222,7 +222,7 @@ public class NormalizationLayersIntegrationTests
 
     #region GroupNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_ForwardPass_ProducesNormalizedOutput()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class NormalizationLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_Clone_CreatesIdenticalLayer()
     {
         // Arrange
@@ -262,7 +262,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_DifferentGroupSizes_Work()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class NormalizationLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_Getters_ReturnCorrectValues()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotNull(layer.GetBetaTensor());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_4DInput_Works()
     {
         // Arrange - simulate convolutional feature maps [batch, channels, height, width]
@@ -324,7 +324,7 @@ public class NormalizationLayersIntegrationTests
 
     #region InstanceNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InstanceNormalizationLayer_ForwardPass_ProducesNormalizedOutput()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class NormalizationLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InstanceNormalizationLayer_Clone_CreatesIdenticalLayer()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InstanceNormalizationLayer_WithAffineTrue_HasLearnableParams()
     {
         // Arrange
@@ -376,7 +376,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(numChannels * 2, paramCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InstanceNormalizationLayer_WithAffineFalse_NoLearnableParams()
     {
         // Arrange
@@ -390,7 +390,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(0, paramCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InstanceNormalizationLayer_4DInput_Works()
     {
         // Arrange - simulate convolutional feature maps [batch, channels, height, width]
@@ -413,7 +413,7 @@ public class NormalizationLayersIntegrationTests
 
     #region SpectralNormalizationLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNormalizationLayer_ForwardPass_ProducesOutput()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class NormalizationLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNormalizationLayer_Clone_CreatesIdenticalLayer()
     {
         // Arrange
@@ -454,7 +454,7 @@ public class NormalizationLayersIntegrationTests
         Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNormalizationLayer_WithMultiplePowerIterations_Works()
     {
         // Arrange
@@ -472,7 +472,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNormalizationLayer_WrapsConvolutionalLayer()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class NormalizationLayersIntegrationTests
 
     #region Cross-Normalization Comparison Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllNormalizationLayers_ProduceFiniteOutputs()
     {
         // Arrange
@@ -525,7 +525,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(instanceOutput));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllNormalizationLayers_HandleZeroVarianceGracefully()
     {
         // Arrange - constant input (zero variance)
@@ -560,7 +560,7 @@ public class NormalizationLayersIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNormalizationLayer_SingleSample_Works()
     {
         // Arrange
@@ -577,7 +577,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNormalizationLayer_SingleFeature_Works()
     {
         // Arrange
@@ -594,7 +594,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_OneGroupPerChannel_EquivalentToInstanceNorm()
     {
         // Arrange - when numGroups = numChannels, it's equivalent to instance norm
@@ -611,7 +611,7 @@ public class NormalizationLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupNormalizationLayer_SingleGroup_EquivalentToLayerNorm()
     {
         // Arrange - when numGroups = 1, it's equivalent to layer norm

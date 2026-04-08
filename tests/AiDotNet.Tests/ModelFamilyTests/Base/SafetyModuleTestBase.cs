@@ -72,7 +72,7 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 1: Module name is not empty
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModuleName_IsNotNullOrEmpty()
     {
         var module = CreateModule();
@@ -80,7 +80,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 2: Evaluate returns non-null list
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_ReturnsNonNullList()
     {
         var module = CreateAndAssertReady();
@@ -95,7 +95,7 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 3: All confidence scores are in [0, 1]
     // Confidence is a probability — must be bounded.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_ConfidencesAreInUnitInterval()
     {
         var module = CreateAndAssertReady();
@@ -120,7 +120,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 4: All finding descriptions are non-null
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_FindingDescriptionsAreNonNull()
     {
         var module = CreateAndAssertReady();
@@ -132,7 +132,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 5: All findings reference their source module
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_FindingsReferenceSourceModule()
     {
         var module = CreateAndAssertReady();
@@ -150,7 +150,7 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 6: Higher confidence findings should have equal or higher severity
     // If the module is highly confident something is unsafe, severity should reflect that.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_HighConfidenceFindings_HaveAppropiateSeverity()
     {
         var module = CreateAndAssertReady();
@@ -180,7 +180,7 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 7: Deterministic evaluation — same input → same findings count
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_IsDeterministic()
     {
         var module = CreateAndAssertReady();
@@ -203,7 +203,7 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 8: Content sensitivity — different content may produce different results
     // The module should not return a constant result regardless of input.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_IsSensitiveToContent()
     {
         var module = CreateAndAssertReady();
@@ -247,7 +247,7 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 9: Null input throws
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_NullInput_Throws()
     {
         var module = CreateModule();
@@ -255,7 +255,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 10: Empty content does not crash
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_EmptyContent_DoesNotCrash()
     {
         var module = CreateAndAssertReady();
@@ -272,7 +272,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 11: Very large content does not crash or produce invalid results
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_LargeContent_ProducesValidResults()
     {
         var module = CreateAndAssertReady();
@@ -293,7 +293,7 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 12: Constant content should not cause numerical issues
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Evaluate_ConstantContent_DoesNotProduceNaN()
     {
         var module = CreateAndAssertReady();

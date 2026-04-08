@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringStreamingIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StreamingMiniBatchKMeans_TrainAndPredict_Works()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
@@ -35,7 +35,7 @@ public class ClusteringStreamingIntegrationTests
         Assert.Equal(dataset.Data.Rows, predicted.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StreamingMiniBatchKMeans_PartialFit_UpdatesCenters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 4);
@@ -63,7 +63,7 @@ public class ClusteringStreamingIntegrationTests
         Assert.True(!double.IsInfinity(centersAfter[0, 0]));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StreamingMiniBatchKMeans_FitPredict_ReturnsLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);

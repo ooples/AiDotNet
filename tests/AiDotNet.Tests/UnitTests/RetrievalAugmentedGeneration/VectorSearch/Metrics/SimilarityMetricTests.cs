@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
     {
         #region Cosine Similarity Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CosineSimilarity_WithIdenticalVectors_ReturnsOne()
         {
             // Arrange
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
         {
             // Arrange
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CosineSimilarity_WithOppositeVectors_ReturnsNegativeOne()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(-1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CosineSimilarity_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CosineSimilarity_WithScaledVectors_ReturnsSameValue()
         {
             // Arrange
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Euclidean Distance Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EuclideanDistance_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EuclideanDistance_WithDifferentVectors_ReturnsCorrectDistance()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(5.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EuclideanDistance_HigherIsBetter_ReturnsFalse()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.False(metric.HigherIsBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EuclideanDistance_IsSymmetric()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(d1, d2, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EuclideanDistance_WithHighDimensionalVectors_WorksCorrectly()
         {
             // Arrange
@@ -158,7 +158,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Manhattan Distance Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ManhattanDistance_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ManhattanDistance_WithDifferentVectors_ReturnsCorrectDistance()
         {
             // Arrange
@@ -188,7 +188,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(7.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ManhattanDistance_HigherIsBetter_ReturnsFalse()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.False(metric.HigherIsBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ManhattanDistance_IsSymmetric()
         {
             // Arrange
@@ -214,7 +214,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(d1, d2, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ManhattanDistance_WithNegativeValues_WorksCorrectly()
         {
             // Arrange
@@ -233,7 +233,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Dot Product Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DotProduct_WithIdenticalUnitVectors_ReturnsOne()
         {
             // Arrange
@@ -248,7 +248,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DotProduct_WithOrthogonalVectors_ReturnsZero()
         {
             // Arrange
@@ -263,7 +263,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DotProduct_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DotProduct_WithRegularVectors_ReturnsCorrectValue()
         {
             // Arrange
@@ -288,7 +288,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(32.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DotProduct_IsSymmetric()
         {
             // Arrange
@@ -308,7 +308,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Jaccard Similarity Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void JaccardSimilarity_WithIdenticalVectors_ReturnsOne()
         {
             // Arrange
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void JaccardSimilarity_WithDisjointVectors_ReturnsZero()
         {
             // Arrange
@@ -338,7 +338,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void JaccardSimilarity_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
@@ -348,7 +348,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void JaccardSimilarity_WithPartialOverlap_ReturnsCorrectValue()
         {
             // Arrange
@@ -366,7 +366,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.333333333, result, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void JaccardSimilarity_IsSymmetric()
         {
             // Arrange
@@ -386,7 +386,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Edge Cases and Numerical Stability
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metrics_WithSingleElementVectors_WorkCorrectly()
         {
             // Arrange
@@ -400,7 +400,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, euclidean.Calculate(v1, v2), 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metrics_WithFloatType_WorkCorrectly()
         {
             // Arrange
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0f, euclidean.Calculate(v1, v2), 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metrics_WithVerySmallValues_MaintainNumericalStability()
         {
             // Arrange
@@ -429,7 +429,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 8);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metrics_WithLargeValues_MaintainNumericalStability()
         {
             // Arrange

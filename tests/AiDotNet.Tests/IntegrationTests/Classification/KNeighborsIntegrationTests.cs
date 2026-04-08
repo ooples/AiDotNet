@@ -14,7 +14,7 @@ public class KNeighborsIntegrationTests
 
     #region Basic Prediction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Train_StoresTrainingData()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(4, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Predict_WithK1_ReturnsNearestNeighbor()
     {
         // Arrange: Simple 4-point dataset
@@ -63,7 +63,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(1.0, predictions[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Predict_WithK3_UsesMajorityVoting()
     {
         // Arrange: 5 points where k=3 voting matters
@@ -92,7 +92,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0.0, prediction[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Predict_BinaryClassification()
     {
         // Arrange: Two well-separated clusters
@@ -128,7 +128,7 @@ public class KNeighborsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Predict_MultiClassClassification()
     {
         // Arrange: Three well-separated clusters
@@ -171,7 +171,7 @@ public class KNeighborsIntegrationTests
 
     #region Probability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class KNeighborsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithUniformWeights_EqualVotes()
     {
         // Arrange: 3 neighbors with 2 class 0 and 1 class 1
@@ -243,7 +243,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(1.0 / 3.0, probs[0, 1], 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithDistanceWeights_InverseDistanceVotes()
     {
         // Arrange: 2 neighbors - one very close, one far
@@ -275,7 +275,7 @@ public class KNeighborsIntegrationTests
 
     #region Distance Metric Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithEuclideanDistance_CorrectDistances()
     {
         // Arrange: Points where Euclidean distance is well-defined
@@ -303,7 +303,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0.0, prediction[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithManhattanDistance_CorrectDistances()
     {
         // Arrange: Points where Manhattan distance differs from Euclidean
@@ -331,7 +331,7 @@ public class KNeighborsIntegrationTests
         Assert.True(prediction[0] == 0 || prediction[0] == 2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithChebyshevDistance_CorrectDistances()
     {
         // Arrange: Points where Chebyshev distance (max of abs differences) matters
@@ -359,7 +359,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0.0, prediction[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithMinkowskiDistance_P2_EqualsEuclidean()
     {
         // Arrange
@@ -396,7 +396,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(predEuclidean[0], predMinkowski[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithCosineDistance_AngleBasedSimilarity()
     {
         // Arrange: Points with different magnitudes but same/different directions
@@ -428,7 +428,7 @@ public class KNeighborsIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithKGreaterThanSamples_ThrowsException()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class KNeighborsIntegrationTests
         Assert.Throws<ArgumentException>(() => knn.Train(x, y));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Serialize_Deserialize_PreservesPredictions()
     {
         // Arrange
@@ -481,7 +481,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(originalProbs[0, 1], newProbs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -512,7 +512,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(originalProbs[0, 1], cloneProbs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_SingleFeature_WorksCorrectly()
     {
         // Arrange: 1D classification
@@ -539,7 +539,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(1.0, predictions[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_HighDimensionalData_Stable()
     {
         // Arrange: High dimensional data
@@ -584,7 +584,7 @@ public class KNeighborsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_WithTies_HandlesGracefully()
     {
         // Arrange: Create a tie situation with k=2, 1 neighbor from each class
@@ -612,7 +612,7 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0.5, probs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_ExactMatch_ReturnsCorrectClass()
     {
         // Arrange

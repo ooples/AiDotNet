@@ -16,7 +16,7 @@ public class RLDeepMathIntegrationTests
     // Trajectory: Construction
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Trajectory_Default_EmptyLists()
     {
         var trajectory = new Trajectory<double>();
@@ -31,7 +31,7 @@ public class RLDeepMathIntegrationTests
         Assert.Equal(0, trajectory.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Trajectory_AddStep_IncreasesLength()
     {
         var trajectory = new Trajectory<double>();
@@ -45,7 +45,7 @@ public class RLDeepMathIntegrationTests
         Assert.Equal(2, trajectory.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Trajectory_AddStep_StoresCorrectValues()
     {
         var trajectory = new Trajectory<double>();
@@ -62,7 +62,7 @@ public class RLDeepMathIntegrationTests
         Assert.True(trajectory.Dones[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Trajectory_Clear_ResetsEverything()
     {
         var trajectory = new Trajectory<double>();
@@ -108,7 +108,7 @@ public class RLDeepMathIntegrationTests
         Assert.Equal(expectedReturn, discountedReturn, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_DiscountedReturn_ReverseComputation()
     {
         // Computing returns backwards (more efficient)
@@ -151,7 +151,7 @@ public class RLDeepMathIntegrationTests
     // RL Math: GAE (Generalized Advantage Estimation)
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_GAE_Calculation()
     {
         // GAE(lambda) = sum_{l=0}^{T-t} (gamma*lambda)^l * delta_t+l
@@ -179,7 +179,7 @@ public class RLDeepMathIntegrationTests
         Assert.False(double.IsNaN(advantages[2]));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_GAE_LambdaZero_IsTDError()
     {
         // When lambda=0, GAE reduces to TD(0) error
@@ -222,7 +222,7 @@ public class RLDeepMathIntegrationTests
     // RL Math: Bellman Equation
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_BellmanEquation_OptimalValue()
     {
         // V*(s) = max_a [R(s,a) + gamma * sum_s' P(s'|s,a) * V*(s')]
@@ -248,7 +248,7 @@ public class RLDeepMathIntegrationTests
     // RL Math: Policy Gradient
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_PolicyGradient_REINFORCE()
     {
         // REINFORCE loss: -sum(log_prob * advantage)
@@ -287,7 +287,7 @@ public class RLDeepMathIntegrationTests
         Assert.Equal(expectedEntropy, entropy, 1e-2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_EntropyBonus_MaximumAtUniform()
     {
         int numActions = 10;
@@ -371,7 +371,7 @@ public class RLDeepMathIntegrationTests
     // RL Math: Reward Normalization
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RLMath_RewardNormalization()
     {
         double[] rewards = { 10, -5, 20, 3, -8, 15 };

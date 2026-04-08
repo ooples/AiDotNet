@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderErrorTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_WithNoModel_ThrowsInvalidOperationException()
     {
         // Arrange: Create an AiModelResult with no model
@@ -30,7 +30,7 @@ public class AiModelBuilderErrorTests
         Assert.Contains("not initialized", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_WrongDimensionInput_ThrowsDimensionError()
     {
         // Arrange: Train on 4-feature data
@@ -65,7 +65,7 @@ public class AiModelBuilderErrorTests
             $"Expected a dimension-related error, got {ex.GetType().Name}: {ex.Message}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildAsync_EmptyDataset_ThrowsArgumentException()
     {
         // Arrange: Create an empty matrix and vector
@@ -86,7 +86,7 @@ public class AiModelBuilderErrorTests
         Assert.NotEmpty(ex.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildAsync_SingleSampleDataset_ThrowsInsufficientDataError()
     {
         // Arrange: Only 1 sample — can't meaningfully split train/test

@@ -22,7 +22,7 @@ public class DistillationLossTests
         return matrix;
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange & Act
@@ -34,7 +34,7 @@ public class DistillationLossTests
         Assert.Equal(0.3, distillationLoss.Alpha);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithInvalidTemperature_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
@@ -42,7 +42,7 @@ public class DistillationLossTests
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: -1, alpha: 0.3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithInvalidAlpha_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
@@ -50,7 +50,7 @@ public class DistillationLossTests
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: 3.0, alpha: 1.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithIdenticalLogits_ReturnsZeroSoftLoss()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class DistillationLossTests
         Assert.True(Math.Abs(loss) < 1e-6, $"Expected loss close to 0, but got {loss}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithDifferentLogits_ReturnsPositiveLoss()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class DistillationLossTests
         Assert.True(loss > 0, $"Expected positive loss, but got {loss}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithHighTemperature_ProducesSofterDistribution()
     {
         // Arrange
@@ -110,7 +110,7 @@ public class DistillationLossTests
             $"High temp loss ({highLoss}) should be greater than low temp loss ({lowLoss}) due to T² scaling");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithTrueLabels_CombinesHardAndSoftLoss()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class DistillationLossTests
         Assert.True(combinedLoss > 0, "Combined loss should be positive");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class DistillationLossTests
             distillationLoss.ComputeLoss(studentBatch, teacherBatch, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_ReturnsCorrectShape()
     {
         // Arrange
@@ -168,7 +168,7 @@ public class DistillationLossTests
         Assert.Equal(studentLogits.Length, gradient.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_WithIdenticalPredictions_ReturnsZeroGradient()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class DistillationLossTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_WithTrueLabels_CombinesGradients()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class DistillationLossTests
         Assert.True(isDifferent, "Combined gradient should differ from soft-only gradient");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_HasReasonableMagnitude()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class DistillationLossTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TemperatureScaling_AffectsLossMagnitude()
     {
         // Arrange

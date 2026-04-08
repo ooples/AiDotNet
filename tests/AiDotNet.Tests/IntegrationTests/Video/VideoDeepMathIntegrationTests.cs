@@ -15,7 +15,7 @@ public class VideoDeepMathIntegrationTests
     // VideoModelOptions: Defaults (all null)
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoModelOptions_Defaults_AllNull()
     {
         var options = new VideoModelOptions<double>();
@@ -37,7 +37,7 @@ public class VideoDeepMathIntegrationTests
         Assert.Null(options.RandomSeed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoModelOptions_SetProperties()
     {
         var options = new VideoModelOptions<double>
@@ -74,21 +74,21 @@ public class VideoDeepMathIntegrationTests
     // VideoEnhancementOptions: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoEnhancementOptions_InheritsVideoModelOptions()
     {
         var options = new VideoEnhancementOptions<double>();
         Assert.IsAssignableFrom<VideoModelOptions<double>>(options);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoEnhancementOptions_Defaults_ScaleFactorNull()
     {
         var options = new VideoEnhancementOptions<double>();
         Assert.Null(options.ScaleFactor);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoEnhancementOptions_SetScaleFactor()
     {
         var options = new VideoEnhancementOptions<double> { ScaleFactor = 4 };

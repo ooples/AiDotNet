@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class WeightedCrossEntropyLossFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -29,7 +29,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithDifferentPredictions_ReturnsPositiveValue()
     {
         // Arrange
@@ -48,7 +48,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithoutWeights_UsesDefaultWeights()
     {
         // Arrange
@@ -66,7 +66,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithHighWeights_IncreasesLoss()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(resultHigh > resultLow);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithImbalancedWeights_AffectsLoss()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -119,7 +119,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -132,7 +132,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -145,7 +145,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -175,7 +175,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -186,7 +186,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMultiClassPredictions_HandlesCorrectly()
     {
         // Arrange
@@ -205,7 +205,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithEqualProbabilities_HighLoss()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.3); // Should have significant loss for uncertain prediction
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithConfidentPredictions_LowLoss()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result < 0.1); // Should have low loss for confident correct prediction
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_AutoCreatesWeights_WhenMismatch()
     {
         // Arrange

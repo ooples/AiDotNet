@@ -39,7 +39,7 @@ public class ScalerIntegrationTests
 
     #region StandardScaler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_DefaultParameters_CentersAndScalesData()
     {
         // Arrange
@@ -74,7 +74,7 @@ public class ScalerIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_WithMeanOnly_CentersButDoesNotScale()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 2.0) < 1e-10);    // 5 - 3 = 2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_WithStdOnly_ScalesButDoesNotCenter()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 2.0) < 1e-10); // 20 / 10 = 2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_InverseTransform_RecoversOriginalData()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class ScalerIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class ScalerIntegrationTests
         Assert.True(scaler.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_ConstantColumn_HandlesGracefully()
     {
         // Arrange
@@ -151,7 +151,7 @@ public class ScalerIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_SpecificColumns_TransformsOnlySpecifiedColumns()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(col1Mean) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_Mean_ReturnsCorrectValues()
     {
         // Arrange
@@ -187,7 +187,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(scaler.Mean[1] - 20.0) < 1e-10); // Mean of [10,20,30] = 20
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_StandardDeviation_ReturnsCorrectValues()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class ScalerIntegrationTests
 
     #region MinMaxScaler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_DefaultRange_ScalesToZeroOne()
     {
         // Arrange
@@ -238,7 +238,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 1] - 1.0) < 1e-10); // 300 -> 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_CustomRange_ScalesToSpecifiedRange()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 1.0) < 1e-10);    // 10 -> 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_InverseTransform_RecoversOriginalData()
     {
         // Arrange
@@ -269,7 +269,7 @@ public class ScalerIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_CustomRange_InverseTransformWorks()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class ScalerIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_ConstantColumn_MapsToMiddleOfRange()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 0.5) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_InvalidRange_ThrowsArgumentException()
     {
         // Act & Assert - min >= max should throw
@@ -308,7 +308,7 @@ public class ScalerIntegrationTests
         Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(1.0, 1.0)); // max == min
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -318,7 +318,7 @@ public class ScalerIntegrationTests
         Assert.True(scaler.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_SpecificColumns_TransformsOnlySpecifiedColumns()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class ScalerIntegrationTests
         Assert.Equal(300, result[2, 1]); // Unchanged
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_DataMin_ReturnsCorrectValues()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(scaler.DataMin[1] - 10.0) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_DataMax_ReturnsCorrectValues()
     {
         // Arrange
@@ -368,7 +368,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(scaler.DataMax[1] - 30.0) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_NegativeValues_ScalesCorrectly()
     {
         // Arrange
@@ -388,7 +388,7 @@ public class ScalerIntegrationTests
 
     #region Cross-Scaler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scalers_TransformNewData_UseFittedParameters()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(mmResult[0, 0] - 2.0) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scalers_EmptyColumnIndices_ProcessesAllColumns()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class ScalerIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_SingleRow_TransformsGracefully()
     {
         // Arrange
@@ -450,7 +450,7 @@ public class ScalerIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_LargeValues_TransformsWithoutOverflow()
     {
         // Arrange
@@ -468,7 +468,7 @@ public class ScalerIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_SmallValues_TransformsWithoutUnderflow()
     {
         // Arrange
@@ -482,7 +482,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[0, 0] - result[2, 0]) > 1e-10, "Values should be different");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_TransformWithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class ScalerIntegrationTests
         Assert.Throws<InvalidOperationException>(() => scaler.Transform(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_InverseTransformWithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -504,7 +504,7 @@ public class ScalerIntegrationTests
         Assert.Throws<InvalidOperationException>(() => scaler.InverseTransform(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_InvalidColumnIndex_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -515,7 +515,7 @@ public class ScalerIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => scaler.Fit(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_NegativeColumnIndex_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -530,7 +530,7 @@ public class ScalerIntegrationTests
 
     #region RobustScaler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_DefaultParameters_CentersAndScalesData()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0]) < 0.5, "Median value should be centered close to 0");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_WithCenteringOnly_CentersButDoesNotScale()
     {
         // Arrange
@@ -567,7 +567,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[4, 0] - 2) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_InverseTransform_RecoversOriginalData()
     {
         // Arrange
@@ -582,7 +582,7 @@ public class ScalerIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_MedianProperty_ReturnsCorrectValues()
     {
         // Arrange
@@ -597,7 +597,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(scaler.Median![0] - 3.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -611,7 +611,7 @@ public class ScalerIntegrationTests
 
     #region MaxAbsScaler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxAbsScaler_DefaultParameters_ScalesToNegativeOneToOne()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 1.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxAbsScaler_PreservesSparsity()
     {
         // Arrange
@@ -644,7 +644,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[2, 0]) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxAbsScaler_InverseTransform_RecoversOriginalData()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class ScalerIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxAbsScaler_MaxAbsoluteProperty_ReturnsCorrectValues()
     {
         // Arrange
@@ -675,7 +675,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(scaler.MaxAbsolute![1] - 20.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxAbsScaler_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -689,7 +689,7 @@ public class ScalerIntegrationTests
 
     #region Normalizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalizer_L2Norm_NormalizesRowsToUnitLength()
     {
         // Arrange
@@ -707,7 +707,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[1, 1] - 0.8) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalizer_L1Norm_NormalizesRowsToSumOne()
     {
         // Arrange
@@ -723,7 +723,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[0, 1] - 0.6) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalizer_MaxNorm_NormalizesRowsByMaxValue()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(result[0, 1] - 1.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalizer_SupportsInverseTransform_ReturnsFalse()
     {
         // Arrange
@@ -749,7 +749,7 @@ public class ScalerIntegrationTests
         Assert.False(normalizer.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalizer_InverseTransform_ThrowsNotSupportedException()
     {
         // Arrange
@@ -765,7 +765,7 @@ public class ScalerIntegrationTests
 
     #region Additional Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_SingleFeature_TransformsCorrectly()
     {
         // Arrange
@@ -784,7 +784,7 @@ public class ScalerIntegrationTests
         Assert.True(Math.Abs(mean) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_SingleSample_HandlesGracefully()
     {
         // Arrange
@@ -799,7 +799,7 @@ public class ScalerIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_AllSameValues_HandlesConstantFeature()
     {
         // Arrange
@@ -819,7 +819,7 @@ public class ScalerIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Scaler_NullData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -829,7 +829,7 @@ public class ScalerIntegrationTests
         Assert.Throws<ArgumentNullException>(() => scaler.Fit(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_WithOutliers_IsRobust()
     {
         // Arrange

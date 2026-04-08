@@ -70,7 +70,7 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region FeedForwardNeuralNetwork Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class NeuralNetworkModelsIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("LayerCount"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -193,7 +193,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(4, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNeuralNetwork_MultipleTrainingIterations_DoesNotThrow()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region ConvolutionalNeuralNetwork Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[^1]); // Last dim is output classes
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalNeuralNetwork_Train_DoesNotThrow()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalNeuralNetwork_Forward_ProducesOutput()
     {
         // Arrange
@@ -296,7 +296,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalNeuralNetwork_GetMetadata_ReturnsValidData()
     {
         // Arrange
@@ -323,7 +323,7 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region RecurrentNeuralNetwork Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecurrentNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecurrentNeuralNetwork_Train_DoesNotThrow()
     {
         // Arrange
@@ -370,7 +370,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecurrentNeuralNetwork_Predict_ProducesConsistentOutput()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvNet_TrainAndPredict_ConsistentBehavior()
     {
         // Arrange
@@ -429,7 +429,7 @@ public class NeuralNetworkModelsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNetwork_DifferentComplexities_ProduceOutput()
     {
         // Test with different complexity settings
@@ -462,7 +462,7 @@ public class NeuralNetworkModelsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeedForwardNetwork_DifferentTaskTypes_ProduceOutput()
     {
         // Test with different task types

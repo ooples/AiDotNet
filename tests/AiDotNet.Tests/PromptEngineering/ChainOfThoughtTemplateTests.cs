@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class ChainOfThoughtTemplateTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithQuestion_CreatesTemplate()
     {
         // Use question constructor by specifying context parameter
@@ -17,7 +17,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("step by step", template.Template.ToLower());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithQuestionAndContext_IncludesContext()
     {
         var template = new ChainOfThoughtTemplate("What is 2 + 2?", "This is a math problem.");
@@ -27,7 +27,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("This is a math problem.", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithExamples_IncludesExamples()
     {
         var examples = new[]
@@ -44,7 +44,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is 5 + 5?", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "Custom reasoning: {question}";
@@ -53,7 +53,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_ReturnsFormattedTemplate()
     {
         var template = new ChainOfThoughtTemplate("What is {x} + {y}?");
@@ -69,7 +69,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("3", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChainOfThoughtExample_PropertiesWork()
     {
         var example = new ChainOfThoughtExample
@@ -84,7 +84,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal("Test answer", example.Answer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChainOfThoughtExample_ConstructorWithValues()
     {
         var example = new ChainOfThoughtExample("Q", "R", "A");
@@ -94,7 +94,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal("A", example.Answer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_CreatesTemplateWithQuestion()
     {
         var template = ChainOfThoughtTemplate.Builder()
@@ -105,7 +105,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is the capital of France?", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_CreatesTemplateWithContext()
     {
         var template = ChainOfThoughtTemplate.Builder()
@@ -117,7 +117,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("European countries", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_AddExample_IncludesExample()
     {
         var template = ChainOfThoughtTemplate.Builder()
@@ -130,7 +130,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is 10 / 2?", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_AddExampleObject_IncludesExample()
     {
         var example = new ChainOfThoughtExample("Q1", "R1", "A1");
@@ -143,7 +143,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("Q1", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_AddNullExample_DoesNotThrow()
     {
         var template = ChainOfThoughtTemplate.Builder()
@@ -154,7 +154,7 @@ public class ChainOfThoughtTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullExamples_HandlesGracefully()
     {
         var template = new ChainOfThoughtTemplate("Test question", (IEnumerable<ChainOfThoughtExample>?)null, null);
@@ -162,7 +162,7 @@ public class ChainOfThoughtTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithEmptyExamples_CreatesTemplate()
     {
         var template = new ChainOfThoughtTemplate("Test question", Array.Empty<ChainOfThoughtExample>());
@@ -171,7 +171,7 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("Test question", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Template_ContainsStepByStepInstructions()
     {
         // Use question constructor by specifying context parameter

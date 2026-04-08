@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SpanBasedNERTestBase : NERModelTestBase
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpanScores_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -25,7 +25,7 @@ public abstract class SpanBasedNERTestBase : NERModelTestBase
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpanOutput_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

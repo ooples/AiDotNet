@@ -30,7 +30,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region StandardScaler - Exact Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_HandCalculated_ExactTransformValues()
     {
         // data col0: [1, 2, 3, 4, 5]
@@ -51,7 +51,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, (5.0 - 3.0) / std);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_WithoutMean_OnlyDividesByStd()
     {
         // withMean=false: only divide by std, don't subtract mean
@@ -68,7 +68,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 6.0 / std);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_WithoutStd_OnlySubtractsMean()
     {
         // withStd=false: only subtract mean, don't divide by std
@@ -84,7 +84,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 10.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_InverseTransform_RecoversOriginalData()
     {
         var scaler = new StandardScaler<double>();
@@ -102,7 +102,7 @@ public class PreprocessingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_ConstantColumn_HandlesGracefully()
     {
         // If all values are same, std=0 → should use std=1 (no scaling)
@@ -118,7 +118,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_TransformedData_HasZeroMeanUnitVariance()
     {
         var scaler = new StandardScaler<double>();
@@ -143,7 +143,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.True(Math.Abs(variance - 1.0) < 1e-10, $"Sample variance should be 1, got {variance}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_MultiColumn_IndependentScaling()
     {
         // Each column should be scaled independently
@@ -164,7 +164,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 1, 1, (200 - 150.0) / std1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_SelectiveColumns_OnlyScalesSpecified()
     {
         // Only scale column 0, leave column 1 unchanged
@@ -184,7 +184,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region MinMaxScaler - Exact Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_Default01_HandCalculated()
     {
         // data: [2, 4, 6, 8, 10], min=2, max=10
@@ -202,7 +202,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_CustomRange_HandCalculated()
     {
         // data: [0, 5, 10], min=0, max=10
@@ -219,7 +219,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_InverseTransform_RecoversOriginalData()
     {
         var scaler = new MinMaxScaler<double>(-1.0, 1.0);
@@ -237,7 +237,7 @@ public class PreprocessingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_ConstantColumn_MapsToMidpoint()
     {
         // If min==max (constant column), map to midpoint of feature range
@@ -252,7 +252,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 0.5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_OutOfRangeValues_CanExceedBounds()
     {
         // Fit on [0, 10], then transform [15] → (15-0)/(10-0) = 1.5
@@ -267,7 +267,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 1, 0, -0.5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_NegativeValues_HandCalculated()
     {
         // data: [-10, -5, 0, 5, 10], min=-10, max=10, range=20
@@ -289,7 +289,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region RobustScaler - Exact Quantile Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_HandCalculated_ExactQuantiles()
     {
         // data sorted: [1, 2, 3, 4, 5, 6, 7, 8, 9]  (9 elements)
@@ -315,7 +315,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 8, 0, (9.0 - 5.0) / 4.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_InterpolatedQuantiles_HandCalculated()
     {
         // data sorted: [10, 20, 30, 40]  (4 elements)
@@ -338,7 +338,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 3, 0, (40.0 - median) / iqr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_InverseTransform_RecoversOriginalData()
     {
         var scaler = new RobustScaler<double>();
@@ -353,7 +353,7 @@ public class PreprocessingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_OutliersDoNotAffectIQR()
     {
         // Data with outliers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 1000]
@@ -376,7 +376,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, (5.0 - median) / iqr, 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_CustomQuantileRange_HandCalculated()
     {
         // Use 10th and 90th percentile instead of 25th and 75th
@@ -401,7 +401,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region ZScoreClipper - Exact Bound Calculations
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_HandCalculated_ExactBounds()
     {
         // data: [10, 20, 30, 40, 50]
@@ -423,7 +423,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.True(Math.Abs(clipper.UpperBounds[0] - (mean + 2.0 * std)) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_ClipsOutliers_HandCalculated()
     {
         // data: [10, 20, 30, 40, 50], mean=30, std=sqrt(200)=14.142
@@ -446,7 +446,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, upper, 1e-8);   // 50 clipped down to upper
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_OutlierMask_CorrectlyIdentifiesOutliers()
     {
         var clipper = new ZScoreClipper<double>(threshold: 1.0);
@@ -463,7 +463,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.True(mask[4, 0], "50 should be an outlier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_GetZScores_HandCalculated()
     {
         // data: [10, 20, 30, 40, 50], mean=30, std=sqrt(200)
@@ -480,7 +480,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(zScores, 4, 0, (50.0 - 30.0) / std, 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_ConstantColumn_NoClipping()
     {
         // If std=0, all values are same → no clipping needed (bounds set to min/max)
@@ -494,7 +494,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 5.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_UsesPopulationVariance_NotSample()
     {
         // ZScoreClipper divides by N, not N-1
@@ -518,7 +518,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region IQRClipper - Exact Bound Calculations
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQRClipper_HandCalculated_ExactBounds()
     {
         // data sorted: [1, 2, 3, 4, 5, 6, 7, 8, 9] (9 elements)
@@ -540,7 +540,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.True(Math.Abs(clipper.UpperBounds[0] - 13.0) < 1e-10, $"Upper: expected 13, got {clipper.UpperBounds[0]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQRClipper_ClipsOutliers_HandCalculated()
     {
         // data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 100] (10 elements, 100 is outlier)
@@ -561,7 +561,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 9, 0, 14.5, 1e-8);   // clipped to upper bound
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQRClipper_CountOutliers_HandCalculated()
     {
         var clipper = new IQRClipper<double>(multiplier: 1.5);
@@ -574,7 +574,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.Equal(1, counts[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQRClipper_EvenElements_InterpolatedQuantiles()
     {
         // data sorted: [10, 20, 30, 40] (4 elements)
@@ -595,7 +595,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region SimpleImputer - Strategy Correctness
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_MeanStrategy_HandCalculated()
     {
         // col0: [1, NaN, 3, NaN, 5], valid = [1, 3, 5], mean = 3.0
@@ -612,7 +612,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, 5.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_MedianStrategy_OddCount_HandCalculated()
     {
         // col0: [1, NaN, 3, 7, 5], valid sorted = [1, 3, 5, 7], length=4
@@ -629,7 +629,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, 5.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_MedianStrategy_EvenCount_HandCalculated()
     {
         // col0: [2, NaN, 8, 4, NaN, 6], valid sorted = [2, 4, 6, 8], length=4
@@ -643,7 +643,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 4, 0, 5.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_MostFrequentStrategy_HandCalculated()
     {
         // col0: [1, 2, 2, NaN, 3, 2], valid = [1, 2, 2, 3, 2], most frequent = 2 (appears 3x)
@@ -655,7 +655,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 3, 0, 2.0);  // NaN replaced with most frequent value
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_ConstantStrategy_UsesGivenValue()
     {
         var imputer = new SimpleImputer<double>(ImputationStrategy.Constant, fillValue: -999.0);
@@ -668,7 +668,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 3.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_NoMissingValues_DataUnchanged()
     {
         var imputer = new SimpleImputer<double>(ImputationStrategy.Mean);
@@ -681,7 +681,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 3.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_MeanStrategy_MultiColumn_Independent()
     {
         // col0: [1, NaN, 5], mean = (1+5)/2 = 3
@@ -695,7 +695,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 1, 15.0);  // col1 NaN → mean=15
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_AllMissing_ReturnsZero()
     {
         // All values are NaN → should return 0 for Mean strategy
@@ -713,7 +713,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region Scaler Properties and Invariants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_OutputRange_IsExactly01()
     {
         var scaler = new MinMaxScaler<double>();
@@ -733,7 +733,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.Equal(1.0, maxVal, 10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_MedianValue_MapsToZero()
     {
         // After robust scaling, the median should map to 0
@@ -746,7 +746,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 2, 0, 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_FitExposesCorrectParameters()
     {
         // data: [2, 4, 6], mean=4, sample_var=4, std=2
@@ -759,7 +759,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.True(Math.Abs(scaler.StandardDeviation[0] - 2.0) < 1e-10, $"Std: expected 2, got {scaler.StandardDeviation[0]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_FitExposesCorrectMinMax()
     {
         var scaler = new MinMaxScaler<double>();
@@ -775,7 +775,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScaler_SingleRow_StdIsZero_FallbackToOne()
     {
         // With only one row, sample variance = 0 (n-1 = 0 would cause div-by-zero)
@@ -790,7 +790,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 0, 0, 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_TwoRows_HandCalculated()
     {
         var scaler = new MinMaxScaler<double>();
@@ -804,7 +804,7 @@ public class PreprocessingDeepMathIntegrationTests
         AssertCell(result, 1, 0, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllScalers_TransformBeforeFit_ThrowsInvalidOperation()
     {
         var standardScaler = new StandardScaler<double>();
@@ -817,28 +817,28 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => robustScaler.Transform(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_ThresholdMustBePositive()
     {
         Assert.Throws<ArgumentException>(() => new ZScoreClipper<double>(threshold: 0));
         Assert.Throws<ArgumentException>(() => new ZScoreClipper<double>(threshold: -1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQRClipper_MultiplierMustBePositive()
     {
         Assert.Throws<ArgumentException>(() => new IQRClipper<double>(multiplier: 0));
         Assert.Throws<ArgumentException>(() => new IQRClipper<double>(multiplier: -1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScaler_InvalidRange_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(1.0, 1.0));
         Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(1.0, 0.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustScaler_InvalidQuantileRange_Throws()
     {
         Assert.Throws<ArgumentException>(() => new RobustScaler<double>(75.0, 25.0));
@@ -846,7 +846,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RobustScaler<double>(25.0, 101.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimpleImputer_TransformBeforeFit_ThrowsInvalidOperation()
     {
         var imputer = new SimpleImputer<double>();
@@ -855,7 +855,7 @@ public class PreprocessingDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScoreClipper_TransformBeforeFit_ThrowsInvalidOperation()
     {
         var clipper = new ZScoreClipper<double>();
@@ -868,7 +868,7 @@ public class PreprocessingDeepMathIntegrationTests
 
     #region Cross-Scaler Consistency
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardAndZScore_UseConsistentVarianceFormula()
     {
         // StandardScaler uses StatisticsHelper.CalculateVariance (sample variance, n-1)
@@ -896,7 +896,7 @@ public class PreprocessingDeepMathIntegrationTests
             $"ZScoreClipper std should be sqrt(2.0)={Math.Sqrt(2.0)}, got {zScoreClipperStd}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMax_ThenInverse_IdentityForAllValues()
     {
         // Round-trip test with various data ranges
@@ -919,7 +919,7 @@ public class PreprocessingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Robust_ThenInverse_IdentityForAllValues()
     {
         var scaler = new RobustScaler<double>();

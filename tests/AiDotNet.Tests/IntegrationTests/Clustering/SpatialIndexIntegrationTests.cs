@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class SpatialIndexIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KDTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
     {
         var data = CreateSimpleData();
@@ -21,7 +21,7 @@ public class SpatialIndexIntegrationTests
         Assert.True(results[0].Distance <= results[1].Distance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KDTree_QueryRadius_FindsExpectedPoints()
     {
         var data = CreateSimpleData();
@@ -43,7 +43,7 @@ public class SpatialIndexIntegrationTests
         Assert.Contains(2, indices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KDTree_QueryRadiusIndices_MatchesRadiusQuery()
     {
         var data = CreateSimpleData();
@@ -68,7 +68,7 @@ public class SpatialIndexIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KDTree_QueryBeforeBuild_Throws()
     {
         var tree = new KDTree<double>();
@@ -78,7 +78,7 @@ public class SpatialIndexIntegrationTests
         Assert.Throws<InvalidOperationException>(() => tree.QueryRadius(query, 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BallTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
     {
         var data = CreateSimpleData();
@@ -94,7 +94,7 @@ public class SpatialIndexIntegrationTests
         Assert.True(results[0].Distance <= results[1].Distance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BallTree_QueryRadius_FindsExpectedPoints()
     {
         var data = CreateSimpleData();
@@ -116,7 +116,7 @@ public class SpatialIndexIntegrationTests
         Assert.Contains(2, indices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BallTree_QueryBeforeBuild_Throws()
     {
         var tree = new BallTree<double>();

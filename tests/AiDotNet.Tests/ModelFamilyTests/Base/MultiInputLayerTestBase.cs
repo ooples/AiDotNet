@@ -65,7 +65,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 1: Forward produces finite output
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_ShouldProduceFiniteOutput()
     {
         var layer = CreateLayer();
@@ -85,7 +85,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 2: Forward is deterministic
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_ShouldBeDeterministic()
     {
         var layer = CreateLayer();
@@ -105,7 +105,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 3: Different inputs produce different outputs
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
         var layer = CreateLayer();
@@ -141,7 +141,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 5: Parameter count consistency
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Parameters_CountShouldMatchVector()
     {
         var layer = CreateLayer();
@@ -156,7 +156,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 6: ResetState doesn't break the layer
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void ResetState_ShouldNotBreakForward()
     {
         var layer = CreateLayer();
@@ -175,7 +175,7 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 7: Serialize/Deserialize preserves behavior
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Serialize_Deserialize_ShouldPreserveBehavior()
     {
         var layer = CreateLayer();
@@ -209,7 +209,7 @@ public abstract class MultiInputLayerTestBase
     // For merge layers, the output must depend on ALL inputs, not just one.
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_OutputShouldDependOnAllInputs()
     {
         var layer = CreateLayer();

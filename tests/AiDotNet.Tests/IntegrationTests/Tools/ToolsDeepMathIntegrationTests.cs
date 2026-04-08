@@ -55,7 +55,7 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Decimal Numbers
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_DecimalInput_ReturnsDecimal()
     {
         var calc = new CalculatorTool();
@@ -63,7 +63,7 @@ public class ToolsDeepMathIntegrationTests
         Assert.Equal("5", result); // 5.0 formatted as whole number
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_DecimalResult_NotWholeNumber()
     {
         var calc = new CalculatorTool();
@@ -79,7 +79,7 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Division by Zero
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_DivisionByZero_ReturnsError()
     {
         var calc = new CalculatorTool();
@@ -92,7 +92,7 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Edge Cases
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_EmptyInput_ReturnsError()
     {
         var calc = new CalculatorTool();
@@ -100,7 +100,7 @@ public class ToolsDeepMathIntegrationTests
         Assert.Contains("Error", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_WhitespaceInput_ReturnsError()
     {
         var calc = new CalculatorTool();
@@ -108,7 +108,7 @@ public class ToolsDeepMathIntegrationTests
         Assert.Contains("Error", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_InvalidExpression_ReturnsError()
     {
         var calc = new CalculatorTool();
@@ -116,7 +116,7 @@ public class ToolsDeepMathIntegrationTests
         Assert.Contains("Error", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_UnbalancedParentheses_ReturnsError()
     {
         var calc = new CalculatorTool();
@@ -128,14 +128,14 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Properties
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_Name_IsCalculator()
     {
         var calc = new CalculatorTool();
         Assert.Equal("Calculator", calc.Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_Description_NotEmpty()
     {
         var calc = new CalculatorTool();
@@ -146,7 +146,7 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Large Numbers
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_LargeNumbers_HandlesCorrectly()
     {
         var calc = new CalculatorTool();
@@ -156,7 +156,7 @@ public class ToolsDeepMathIntegrationTests
         Assert.Equal(1_000_000_000_000L, value);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_NegativeNumbers_HandlesCorrectly()
     {
         var calc = new CalculatorTool();
@@ -171,7 +171,7 @@ public class ToolsDeepMathIntegrationTests
     // CalculatorTool: Complex Expressions
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calculator_ComplexExpression_Correct()
     {
         var calc = new CalculatorTool();

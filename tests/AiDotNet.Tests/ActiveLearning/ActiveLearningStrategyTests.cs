@@ -12,7 +12,7 @@ public class ActiveLearningStrategyTests
 {
     #region UncertaintySampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_Constructor_DefaultParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -24,7 +24,7 @@ public class ActiveLearningStrategyTests
         Assert.False(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_Constructor_CustomMeasure_ReflectedInName()
     {
         // Arrange & Act
@@ -34,7 +34,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Entropy", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class ActiveLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null!, pool, 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class ActiveLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null!, 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_SelectSamples_ReturnsCorrectCount()
     {
         // Arrange
@@ -74,7 +74,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(selected.Distinct().Count(), selected.Length); // All unique
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_SelectSamples_BatchSizeLargerThanPool_ReturnsPoolSize()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_ComputeInformativenessScores_ReturnsVectorWithCorrectLength()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_GetSelectionStatistics_ReturnsExpectedKeys()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("MeanScore", stats.Keys);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UncertaintySampling_UseBatchDiversity_CanBeSetAndGet()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class ActiveLearningStrategyTests
 
     #region MarginSampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MarginSampling_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -150,7 +150,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Margin", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MarginSampling_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MarginSampling_ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class ActiveLearningStrategyTests
 
     #region EntropySampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntropySampling_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -191,7 +191,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Entropy", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EntropySampling_SelectSamples_ValidInput_ReturnsUniqueIndices()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class ActiveLearningStrategyTests
 
     #region LeastConfidenceSampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LeastConfidenceSampling_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -222,7 +222,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("LeastConfidence", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LeastConfidenceSampling_SelectSamples_SingleSample_ReturnsOneIndex()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class ActiveLearningStrategyTests
 
     #region RandomSampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RandomSampling_Constructor_DefaultSeed_CreatesInstance()
     {
         // Arrange & Act
@@ -252,7 +252,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Random", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RandomSampling_Constructor_WithSeed_CreatesInstance()
     {
         // Arrange & Act
@@ -262,7 +262,7 @@ public class ActiveLearningStrategyTests
         Assert.NotNull(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RandomSampling_SelectSamples_DifferentCallsSameSeed_ReturnsSameSelection()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(selected1, selected2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RandomSampling_SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class ActiveLearningStrategyTests
 
     #region BALD Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BALD_Constructor_DefaultParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -310,7 +310,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("BALD", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BALD_Constructor_CustomParameters_ReflectedInInstance()
     {
         // Arrange & Act
@@ -320,7 +320,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("MC20", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BALD_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(3, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BALD_SelectSamples_WithDiversity_ReturnsCorrectCount()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class ActiveLearningStrategyTests
 
     #region BatchBALD Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BatchBALD_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -366,7 +366,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("BatchBALD", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BatchBALD_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -385,7 +385,7 @@ public class ActiveLearningStrategyTests
 
     #region QueryByCommittee Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_Constructor_ValidCommittee_CreatesInstance()
     {
         // Arrange
@@ -404,14 +404,14 @@ public class ActiveLearningStrategyTests
         Assert.Equal(2, strategy.Committee.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_Constructor_NullCommittee_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new QueryByCommittee<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_Constructor_SingleMember_ThrowsArgumentException()
     {
         // Arrange
@@ -424,7 +424,7 @@ public class ActiveLearningStrategyTests
         Assert.Throws<ArgumentException>(() => new QueryByCommittee<double>(committee));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_GetSelectionStatistics_IncludesCommitteeSize()
     {
         // Arrange
@@ -468,7 +468,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(3.0, stats["CommitteeSize"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QueryByCommittee_Constructor_DifferentMeasures_ReflectedInName()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class ActiveLearningStrategyTests
 
     #region DiversitySampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiversitySampling_Constructor_DefaultParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -501,7 +501,7 @@ public class ActiveLearningStrategyTests
         Assert.True(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiversitySampling_Constructor_DifferentMethods_ReflectedInName()
     {
         // Arrange & Act
@@ -513,7 +513,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("DensityPeaks", strategy2.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiversitySampling_SelectSamples_ValidInput_ReturnsUniqueIndices()
     {
         // Arrange
@@ -529,7 +529,7 @@ public class ActiveLearningStrategyTests
         Assert.Equal(selected.Distinct().Count(), selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiversitySampling_GetSelectionStatistics_IncludesCoverageRadius()
     {
         // Arrange
@@ -545,7 +545,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("CoverageRadius", stats.Keys);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiversitySampling_CoverageRadius_UpdatedAfterSelection()
     {
         // Arrange
@@ -566,7 +566,7 @@ public class ActiveLearningStrategyTests
 
     #region HybridSampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HybridSampling_Constructor_DefaultParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -582,7 +582,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Hybrid", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HybridSampling_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -606,7 +606,7 @@ public class ActiveLearningStrategyTests
 
     #region ExpectedModelChange Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExpectedModelChange_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -617,7 +617,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("ExpectedModelChange", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExpectedModelChange_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -636,7 +636,7 @@ public class ActiveLearningStrategyTests
 
     #region VariationRatios Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationRatios_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -647,7 +647,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("Variation", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationRatios_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -666,7 +666,7 @@ public class ActiveLearningStrategyTests
 
     #region CoreSetSelection Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CoreSetSelection_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -677,7 +677,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("CoreSet", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CoreSetSelection_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -696,7 +696,7 @@ public class ActiveLearningStrategyTests
 
     #region DensityWeightedSampling Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DensityWeightedSampling_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -707,7 +707,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("DensityWeighted", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DensityWeightedSampling_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange
@@ -726,7 +726,7 @@ public class ActiveLearningStrategyTests
 
     #region InformationDensity Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InformationDensity_Constructor_CreatesInstance()
     {
         // Arrange & Act
@@ -737,7 +737,7 @@ public class ActiveLearningStrategyTests
         Assert.Contains("InformationDensity", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InformationDensity_SelectSamples_ValidInput_ReturnsCorrectCount()
     {
         // Arrange

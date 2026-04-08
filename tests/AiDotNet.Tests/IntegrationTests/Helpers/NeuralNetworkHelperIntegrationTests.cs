@@ -17,7 +17,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region EuclideanDistance Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_IdenticalVectors_ReturnsZero()
     {
         var v1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -28,7 +28,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(distance) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_UnitVectors_ReturnsCorrectDistance()
     {
         var v1 = new Vector<double>(new[] { 0.0, 0.0 });
@@ -39,7 +39,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(distance - 5.0) < Tolerance); // 3-4-5 triangle
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_OneDimensional_ReturnsAbsoluteDifference()
     {
         var v1 = new Vector<double>(new[] { 5.0 });
@@ -50,7 +50,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(distance - 3.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_NegativeValues_WorksCorrectly()
     {
         var v1 = new Vector<double>(new[] { -1.0, -2.0 });
@@ -62,7 +62,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(distance - 5.0) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_Float_WorksCorrectly()
     {
         var v1 = new Vector<float>(new[] { 0.0f, 0.0f, 0.0f });
@@ -74,7 +74,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(distance - 3.0f) < FloatTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_LargeVectors_WorksCorrectly()
     {
         var v1 = new Vector<double>(100);
@@ -96,7 +96,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region GetDefaultLossFunction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_BinaryClassification_ReturnsBinaryCrossEntropy()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.BinaryClassification);
@@ -105,7 +105,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<BinaryCrossEntropyLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_MultiClassClassification_ReturnsCategoricalCrossEntropy()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
@@ -114,7 +114,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<CategoricalCrossEntropyLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_Regression_ReturnsMeanSquaredError()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression);
@@ -123,7 +123,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_ImageSegmentation_ReturnsDiceLoss()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageSegmentation);
@@ -132,7 +132,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<DiceLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_TimeSeriesForecasting_ReturnsMSE()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.TimeSeriesForecasting);
@@ -141,7 +141,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_Custom_ReturnsMSE()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.Custom);
@@ -150,7 +150,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_AllTaskTypes_ReturnsNonNull()
     {
         foreach (NeuralNetworkTaskType taskType in Enum.GetValues(typeof(NeuralNetworkTaskType)))
@@ -164,7 +164,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region GetDefaultActivationFunction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_BinaryClassification_ReturnsSigmoid()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.BinaryClassification);
@@ -173,7 +173,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<SigmoidActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_MultiClassClassification_ReturnsSoftmax()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.MultiClassClassification);
@@ -182,7 +182,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<SoftmaxActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_Regression_ReturnsIdentity()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.Regression);
@@ -191,7 +191,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<IdentityActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_ReinforcementLearning_ReturnsTanh()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.ReinforcementLearning);
@@ -200,7 +200,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<TanhActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_AllTaskTypes_ReturnsNonNull()
     {
         foreach (NeuralNetworkTaskType taskType in Enum.GetValues(typeof(NeuralNetworkTaskType)))
@@ -214,7 +214,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region GetDefaultVectorActivationFunction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultVectorActivationFunction_BinaryClassification_ReturnsSigmoid()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultVectorActivationFunction(NeuralNetworkTaskType.BinaryClassification);
@@ -223,7 +223,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<SigmoidActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultVectorActivationFunction_MultiClassClassification_ReturnsSoftmax()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultVectorActivationFunction(NeuralNetworkTaskType.MultiClassClassification);
@@ -232,7 +232,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<SoftmaxActivation<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultVectorActivationFunction_AllTaskTypes_ReturnsNonNull()
     {
         foreach (NeuralNetworkTaskType taskType in Enum.GetValues(typeof(NeuralNetworkTaskType)))
@@ -246,7 +246,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region ApplyActivation Tests - Vector
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_NoActivation_ReturnsIdentity()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -259,7 +259,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(3.0, output[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_WithSigmoid_AppliesSigmoid()
     {
         var input = new Vector<double>(new[] { 0.0 });
@@ -271,7 +271,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(output[0] - 0.5) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_WithIdentity_ReturnsOriginal()
     {
         var input = new Vector<double>(new[] { -1.0, 0.0, 1.0 });
@@ -284,7 +284,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(1.0, output[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_WithTanh_AppliesTanh()
     {
         var input = new Vector<double>(new[] { 0.0 });
@@ -296,7 +296,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(output[0]) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_WithVectorActivation_AppliesVectorActivation()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -313,7 +313,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(sum - 1.0) < 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_VectorActivationTakesPrecedence()
     {
         var input = new Vector<double>(new[] { 0.0 });
@@ -331,7 +331,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region ApplyActivation Tests - Tensor
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Tensor_Rank1_NoActivation_ReturnsIdentity()
     {
         var input = new Tensor<double>(new[] { 3 });
@@ -345,7 +345,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(3, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Tensor_Rank2_ThrowsArgumentException()
     {
         var input = new Tensor<double>(new[] { 2, 3 }); // Rank 2
@@ -354,7 +354,7 @@ public class NeuralNetworkHelperIntegrationTests
             NeuralNetworkHelper<double>.ApplyActivation(input));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Tensor_WithSigmoid_AppliesSigmoid()
     {
         var input = new Tensor<double>(new[] { 1 });
@@ -371,7 +371,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region ApplyOutputActivation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyOutputActivation_BinaryClassification_AppliesSigmoid()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -391,7 +391,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Math.Abs(Convert.ToDouble(output[1, 0]) - 0.5) < 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyOutputActivation_MultiClassClassification_AppliesSoftmax()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -416,7 +416,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.True(Convert.ToDouble(output[0, 1]) > Convert.ToDouble(output[0, 0]));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyOutputActivation_Regression_NoChange()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -436,7 +436,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(-3.2, Convert.ToDouble(output[1, 0]));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyOutputActivation_ReinforcementLearning_AppliesTanh()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -458,7 +458,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultLossFunction_Float_WorksCorrectly()
     {
         var lossFunction = NeuralNetworkHelper<float>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression);
@@ -467,7 +467,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<MeanSquaredErrorLoss<float>>(lossFunction);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDefaultActivationFunction_Float_WorksCorrectly()
     {
         var activation = NeuralNetworkHelper<float>.GetDefaultActivationFunction(NeuralNetworkTaskType.BinaryClassification);
@@ -476,7 +476,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.IsType<SigmoidActivation<float>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Float_Vector_WorksCorrectly()
     {
         var input = new Vector<float>(new[] { 0.0f });
@@ -491,7 +491,7 @@ public class NeuralNetworkHelperIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_EmptyVectors_ReturnsZero()
     {
         var v1 = new Vector<double>(0);
@@ -502,7 +502,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(0.0, distance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Vector_EmptyInput_ReturnsEmpty()
     {
         var input = new Vector<double>(0);
@@ -512,7 +512,7 @@ public class NeuralNetworkHelperIntegrationTests
         Assert.Equal(0, output.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyActivation_Tensor_SingleElement_WorksCorrectly()
     {
         var input = new Tensor<double>(new[] { 1 });

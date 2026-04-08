@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PriorityQueueTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldEnqueueAndDequeue()
     {
         // Arrange
@@ -23,7 +23,7 @@ public class PriorityQueueTests
         Assert.Equal(3, queue.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldDequeueHigherPriorityFirst()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class PriorityQueueTests
         Assert.Equal("low", item4);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldImplementFairScheduling()
     {
         // Arrange
@@ -75,7 +75,7 @@ public class PriorityQueueTests
         Assert.Contains(firstFiveItems, item => item!.StartsWith("high"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldHandleBackpressure()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class PriorityQueueTests
         Assert.True(queue.IsFull);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldReturnPriorityCounts()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class PriorityQueueTests
         Assert.Equal(1, counts[RequestPriority.Critical]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PriorityQueue_ShouldClearAllItems()
     {
         // Arrange

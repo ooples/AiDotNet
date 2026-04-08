@@ -25,7 +25,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Bidiagonal Decomposition
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_A_Equals_UBVt()
     {
         var A = Create3x3();
@@ -37,7 +37,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], UBVt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_U_IsOrthogonal()
     {
         var A = Create3x3();
@@ -52,7 +52,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_V_IsOrthogonal()
     {
         var A = Create3x3();
@@ -67,7 +67,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_B_IsBidiagonal()
     {
         // B should have non-zero only on main diagonal and superdiagonal
@@ -80,7 +80,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                     Assert.Equal(0.0, bidiag.B[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_Identity_B_IsIdentity()
     {
         // Identity matrix: U = I, B = I, V = I (or signed versions)
@@ -97,7 +97,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_SPD_Factorization()
     {
         var A = CreateSPD3x3();
@@ -113,7 +113,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region LQ Decomposition
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_A_Equals_LQ()
     {
         var A = Create3x3();
@@ -125,7 +125,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], LQ[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_L_IsLowerTriangular()
     {
         var A = Create3x3();
@@ -136,7 +136,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(0.0, lq.L[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_Q_IsOrthogonal()
     {
         var A = Create3x3();
@@ -151,7 +151,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_Q_RowsHaveUnitNorm()
     {
         var A = Create3x3();
@@ -166,7 +166,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_Identity_Factorization()
     {
         var I = CreateIdentity3();
@@ -181,7 +181,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_SPD_Factorization()
     {
         var A = CreateSPD3x3();
@@ -193,7 +193,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], LQ[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LQ_Transpose_Equals_QR_Of_Transpose()
     {
         // LQ(A) is related to QR(A^T): if A = LQ, then A^T = Q^T * L^T = QR
@@ -221,7 +221,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cramer_Invert_TimesA_Equals_Identity()
     {
         var A = Create2x2();
@@ -237,7 +237,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cramer_Invert_2x2_HandCalculated()
     {
         // A = [[4,3],[6,3]], det = -6
@@ -257,7 +257,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
     #region Cross-Decomposition Solve Consistency
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllInverters_ConsistentResults_3x3()
     {
         var A = CreateSPD3x3();
@@ -278,7 +278,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bidiagonal_And_SVD_SameMatrixIdentity()
     {
         // Both Bidiagonal and SVD decompose A into three factors
@@ -309,7 +309,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Hessenberg Algorithm Variants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hessenberg_Givens_Factorization()
     {
         var A = Create3x3();
@@ -321,7 +321,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QHQt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hessenberg_Givens_H_IsUpperHessenberg()
     {
         var A = CreateSPD3x3();
@@ -332,7 +332,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(0.0, hess.HessenbergMatrix[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hessenberg_Lanczos_Factorization()
     {
         var A = Create3x3();
@@ -344,7 +344,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QHQt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hessenberg_AllAlgorithms_PreserveTrace()
     {
         // Hessenberg reduction preserves trace (similar matrices have same trace)
@@ -374,7 +374,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Schur Algorithm Variants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Schur_QR_Algorithm_Factorization()
     {
         var A = Create3x3();
@@ -386,7 +386,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QSQt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Schur_QR_DiagonalContainsEigenvalues()
     {
         var A = Create3x3();
@@ -405,7 +405,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             Assert.Equal(eigenvals[i], schurDiag[i], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Schur_AllAlgorithms_PreserveTrace()
     {
         var A = Create3x3();
@@ -433,7 +433,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Tridiagonal Algorithm Variants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tridiagonal_Givens_Factorization()
     {
         var A = CreateSPD3x3();
@@ -445,7 +445,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QTQt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tridiagonal_Lanczos_Factorization()
     {
         var A = CreateSPD3x3();
@@ -457,7 +457,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QTQt[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tridiagonal_AllAlgorithms_PreserveTrace()
     {
         var A = CreateSPD3x3();
@@ -482,7 +482,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tridiagonal_Symmetric_T_IsSymmetric()
     {
         // For symmetric input, tridiagonal T should also be symmetric
@@ -499,7 +499,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region GramSchmidt Algorithm Variants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GramSchmidt_Modified_A_Equals_QR()
     {
         var A = Create3x3();
@@ -511,7 +511,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QR[i, j], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GramSchmidt_Modified_Q_IsOrthogonal()
     {
         var A = CreateSPD3x3();
@@ -526,7 +526,7 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GramSchmidt_Classical_Vs_Modified_SameResult()
     {
         var A = CreateSPD3x3();

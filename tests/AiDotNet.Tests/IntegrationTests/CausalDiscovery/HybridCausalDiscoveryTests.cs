@@ -27,7 +27,7 @@ public class HybridCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MMHC_FindsCausalStructure()
     {
         var algo = new MMHCAlgorithm<double>();
@@ -36,7 +36,7 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GFCI_FindsCausalStructure()
     {
         var algo = new GFCIAlgorithm<double>();
@@ -45,7 +45,7 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void H2PC_FindsCausalStructure()
     {
         var algo = new H2PCAlgorithm<double>();
@@ -54,7 +54,7 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PCNOTEARS_FindsCausalStructure()
     {
         var algo = new PCNOTEARSAlgorithm<double>();
@@ -63,7 +63,7 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RSMAX2_FindsCausalStructure()
     {
         var algo = new RSMAX2Algorithm<double>();

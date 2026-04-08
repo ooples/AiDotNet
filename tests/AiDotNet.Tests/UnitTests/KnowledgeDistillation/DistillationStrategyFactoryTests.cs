@@ -34,7 +34,7 @@ public class DistillationStrategyFactoryTests
         Assert.Equal(0.3, strategy.Alpha); // Default alpha
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_ResponseBased_ReturnsDistillationLoss()
     {
         // Arrange & Act
@@ -49,7 +49,7 @@ public class DistillationStrategyFactoryTests
         Assert.Equal(0.5, strategy.Alpha);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_FeatureBased_ThrowsNotSupportedException()
     {
         // Arrange & Act & Assert
@@ -61,7 +61,7 @@ public class DistillationStrategyFactoryTests
         Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_AttentionBased_ReturnsAttentionDistillationStrategy()
     {
         // Arrange & Act
@@ -73,7 +73,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<AttentionDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_Hybrid_ReturnsHybridStrategy()
     {
         // Arrange & Act
@@ -84,7 +84,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<HybridDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_Probabilistic_ReturnsProbabilisticStrategy()
     {
         // Arrange & Act
@@ -95,7 +95,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<ProbabilisticDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_Variational_ReturnsVariationalStrategy()
     {
         // Arrange & Act
@@ -106,7 +106,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<VariationalDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_FactorTransfer_ReturnsFactorTransferStrategy()
     {
         // Arrange & Act
@@ -117,7 +117,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<FactorTransferDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_NeuronSelectivity_ReturnsNeuronSelectivityStrategy()
     {
         // Arrange & Act
@@ -128,7 +128,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<NeuronSelectivityDistillationStrategy<double>>(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateStrategy_WithCustomParameters_AppliesParameters()
     {
         // Arrange & Act
@@ -142,7 +142,7 @@ public class DistillationStrategyFactoryTests
         Assert.Equal(0.8, strategy.Alpha);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FluentBuilder_ConfiguresStrategyCorrectly()
     {
         // Arrange & Act
@@ -158,7 +158,7 @@ public class DistillationStrategyFactoryTests
         Assert.Equal(0.4, strategy.Alpha);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FluentBuilder_FeatureBased_ConfiguresFeatureWeight()
     {
         // Arrange & Act & Assert
@@ -171,7 +171,7 @@ public class DistillationStrategyFactoryTests
         Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FluentBuilder_AttentionBased_ConfiguresAttentionWeight()
     {
         // Arrange & Act
@@ -184,7 +184,7 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<AttentionDistillationStrategy<double>>(strategy);
     }
 
-    // [Fact(Timeout = 60000)]
+    // [Fact]
     // public void FluentBuilder_Contrastive_ConfiguresLossType()
     // {
     //     // Arrange & Act

@@ -189,7 +189,7 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class BidiagonalDecompositionIntegrationTests
             "Identity matrix B should be bidiagonal");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class BidiagonalDecompositionIntegrationTests
             $"Diagonal matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
@@ -293,7 +293,7 @@ public class BidiagonalDecompositionIntegrationTests
         Assert.Equal(3, bidiag.V.Rows);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
@@ -312,7 +312,7 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidiagonalDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange

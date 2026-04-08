@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class MultivectorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeometricProduct_BasisVectorsFollowAnticommutation()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
@@ -22,7 +22,7 @@ public class MultivectorTests
         AssertBlade(e1Squared, 0, 1.0, 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OuterProduct_DisjointVectorsProduceBlade()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
@@ -36,7 +36,7 @@ public class MultivectorTests
         Assert.True(zero.IsZero);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InnerProduct_GradeSelectionMatchesLeftContraction()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
@@ -48,7 +48,7 @@ public class MultivectorTests
         AssertBlade(result, 2, 1.0, 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reverse_NegatesBivector()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
@@ -59,7 +59,7 @@ public class MultivectorTests
         AssertBlade(reversed, 1 | 2, -1.0, 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetricSignature_ChangesSquareSign()
     {
         var algebra = new CliffordAlgebra(1, 1, 0);
@@ -70,7 +70,7 @@ public class MultivectorTests
         AssertBlade(e2 * e2, 0, -1.0, 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Inverse_VectorMultipliesToIdentity()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);

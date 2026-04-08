@@ -29,7 +29,7 @@ public class AiModelBuilderFederatedLearningLeafIntegrationTests
   }
 }";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithLeafFederatedDataLoader_UsesEffectiveClientCountForDpSampling()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");

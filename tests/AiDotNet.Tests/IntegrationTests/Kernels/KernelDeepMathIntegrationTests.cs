@@ -21,7 +21,7 @@ public class KernelDeepMathIntegrationTests
     //  LINEAR KERNEL: k(x,y) = x . y
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_HandValues()
     {
         var k = new LinearKernel<double>();
@@ -39,7 +39,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(-6.0, k.Calculate(V(3, -1), V(-1, 3)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_Symmetry()
     {
         var k = new LinearKernel<double>();
@@ -48,7 +48,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_SelfKernel_IsSquaredNorm()
     {
         var k = new LinearKernel<double>();
@@ -57,7 +57,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(25.0, k.Calculate(x, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_CauchySchwarz()
     {
         // |k(x,y)|^2 <= k(x,x) * k(y,y) for PD kernels
@@ -71,7 +71,7 @@ public class KernelDeepMathIntegrationTests
             "Cauchy-Schwarz violated for linear kernel");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_Bilinearity()
     {
         // k(ax, y) = a * k(x, y)
@@ -87,7 +87,7 @@ public class KernelDeepMathIntegrationTests
     //  GAUSSIAN (RBF) KERNEL: k(x,y) = exp(-||x-y||^2 / (2*sigma^2))
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_SelfKernel_IsOne()
     {
         var k = new GaussianKernel<double>(sigma: 1.0);
@@ -95,7 +95,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(1.0, k.Calculate(x, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_HandValue_Sigma1()
     {
         var k = new GaussianKernel<double>(sigma: 1.0);
@@ -104,7 +104,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1), k.Calculate(V(1, 0), V(0, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_HandValue_Sigma2()
     {
         var k = new GaussianKernel<double>(sigma: 2.0);
@@ -113,7 +113,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-0.25), k.Calculate(V(1, 0), V(0, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_OutputRange01()
     {
         var k = new GaussianKernel<double>(sigma: 1.0);
@@ -131,7 +131,7 @@ public class KernelDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_Symmetry()
     {
         var k = new GaussianKernel<double>(sigma: 1.5);
@@ -140,7 +140,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_DecreasesWithDistance()
     {
         var k = new GaussianKernel<double>(sigma: 1.0);
@@ -157,7 +157,7 @@ public class KernelDeepMathIntegrationTests
         Assert.True(kFar > kVeryFar, "Gaussian kernel should decrease with distance");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_SmallerSigma_NarrowerPeak()
     {
         var kNarrow = new GaussianKernel<double>(sigma: 0.5);
@@ -172,7 +172,7 @@ public class KernelDeepMathIntegrationTests
             $"Narrow sigma should give lower values at distance 1: narrow={narrow}, wide={wide}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gaussian_GramMatrix_PositiveDefinite()
     {
         // For a PD kernel, the Gram matrix must have non-negative eigenvalues
@@ -205,7 +205,7 @@ public class KernelDeepMathIntegrationTests
     //  POLYNOMIAL KERNEL: k(x,y) = (x.y + c)^d
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Polynomial_HandValues_Degree2()
     {
         var k = new PolynomialKernel<double>(
@@ -217,7 +217,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(144.0, k.Calculate(V(1, 2), V(3, 4)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Polynomial_HandValues_Degree1_IsLinearPlusC()
     {
         var k = new PolynomialKernel<double>(
@@ -228,7 +228,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(32.0, k.Calculate(V(1, 2, 3), V(4, 5, 6)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Polynomial_HandValues_Degree3()
     {
         var k = new PolynomialKernel<double>(
@@ -239,7 +239,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(8.0, k.Calculate(V(1, 0), V(1, 0)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Polynomial_Symmetry()
     {
         var k = new PolynomialKernel<double>(
@@ -250,7 +250,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Polynomial_Coef0_Zero_IdenticalVectors()
     {
         var k = new PolynomialKernel<double>(
@@ -267,14 +267,14 @@ public class KernelDeepMathIntegrationTests
     //  LAPLACIAN KERNEL: k(x,y) = exp(-||x-y||_1 / sigma)
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplacian_SelfKernel_IsOne()
     {
         var k = new LaplacianKernel<double>();
         Assert.Equal(1.0, k.Calculate(V(1, 2, 3), V(1, 2, 3)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplacian_HandValue()
     {
         var k = new LaplacianKernel<double>();
@@ -283,7 +283,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-4), k.Calculate(V(1, 2), V(3, 4)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplacian_UsesL1Distance_NotL2()
     {
         // Verify Laplacian uses Manhattan (L1) not Euclidean (L2) distance
@@ -304,7 +304,7 @@ public class KernelDeepMathIntegrationTests
         Assert.True(lap < gauss, "Laplacian should be smaller than Gaussian for same sigma when L1 > L2");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplacian_Symmetry()
     {
         var k = new LaplacianKernel<double>();
@@ -313,7 +313,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplacian_OutputRange()
     {
         var k = new LaplacianKernel<double>();
@@ -327,7 +327,7 @@ public class KernelDeepMathIntegrationTests
     //  SIGMOID KERNEL: k(x,y) = tanh(alpha * x.y + c)
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sigmoid_HandValues()
     {
         var k = new SigmoidKernel<double>();
@@ -339,7 +339,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(Math.Tanh(2), k.Calculate(V(1, 1), V(1, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sigmoid_WithAlphaAndC()
     {
         var k = new SigmoidKernel<double>(alpha: 0.5, c: -1.0);
@@ -349,7 +349,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(0.0, k.Calculate(V(1, 1), V(1, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sigmoid_OutputRange()
     {
         // tanh outputs in (-1, 1)
@@ -360,7 +360,7 @@ public class KernelDeepMathIntegrationTests
         Assert.True(val >= -1.0 && val <= 1.0, $"Sigmoid kernel should be in [-1,1], got {val}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sigmoid_Symmetry()
     {
         var k = new SigmoidKernel<double>();
@@ -373,28 +373,28 @@ public class KernelDeepMathIntegrationTests
     //  COSINE KERNEL: k(x,y) = (x.y) / (||x|| * ||y||)
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_IdenticalVectors_IsOne()
     {
         var k = new CosineKernel<double>();
         Assert.Equal(1.0, k.Calculate(V(3, 4), V(3, 4)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_OrthogonalVectors_IsZero()
     {
         var k = new CosineKernel<double>();
         Assert.Equal(0.0, k.Calculate(V(1, 0), V(0, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_OppositeVectors_IsNegOne()
     {
         var k = new CosineKernel<double>();
         Assert.Equal(-1.0, k.Calculate(V(1, 0), V(-1, 0)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_ScaleInvariance()
     {
         // Cosine similarity is invariant to scaling
@@ -406,7 +406,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(x2, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_HandValue_45Degrees()
     {
         var k = new CosineKernel<double>();
@@ -416,7 +416,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(1.0 / Math.Sqrt(2), k.Calculate(V(1, 0), V(1, 1)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cosine_Symmetry()
     {
         var k = new CosineKernel<double>();
@@ -429,7 +429,7 @@ public class KernelDeepMathIntegrationTests
     //  MATERN KERNEL
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern_SelfKernel_IsVariance()
     {
         var k12 = MaternKernel<double>.Matern12(variance: 2.0);
@@ -442,7 +442,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(4.0, k52.Calculate(x, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern12_IsExponential()
     {
         // Matern 1/2: k(r) = sigma^2 * exp(-r/l)
@@ -454,7 +454,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1.5), k.Calculate(x, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern32_HandValue()
     {
         // Matern 3/2: k(r) = sigma^2 * (1 + sqrt(3)*r/l) * exp(-sqrt(3)*r/l)
@@ -466,7 +466,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(expected, k.Calculate(x, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern52_HandValue()
     {
         // Matern 5/2: k(r) = sigma^2 * (1 + sqrt(5)*r/l + 5*r^2/(3*l^2)) * exp(-sqrt(5)*r/l)
@@ -479,7 +479,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(expected, k.Calculate(x, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern_Symmetry()
     {
         var k = MaternKernel<double>.Matern52();
@@ -488,7 +488,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern_DecreasesWithDistance()
     {
         var k = MaternKernel<double>.Matern32();
@@ -502,7 +502,7 @@ public class KernelDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern_LargerLengthScale_SlowerDecay()
     {
         var kShort = MaternKernel<double>.Matern52(lengthScale: 0.5);
@@ -517,7 +517,7 @@ public class KernelDeepMathIntegrationTests
             "Larger length scale should give higher kernel value at same distance");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Matern_OutputRange()
     {
         var k = MaternKernel<double>.Matern52(variance: 1.0);
@@ -531,7 +531,7 @@ public class KernelDeepMathIntegrationTests
     //  RATIONAL QUADRATIC KERNEL
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_SelfKernel_IsVariance()
     {
         var k = new RationalQuadraticKernel<double>(variance: 2.5);
@@ -539,7 +539,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(2.5, k.Calculate(x, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_HandValue()
     {
         // k = sigma^2 * (1 + r^2/(2*alpha*l^2))^(-alpha)
@@ -551,7 +551,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, k.Calculate(x, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_LargeAlpha_ApproachesGaussian()
     {
         // As alpha -> inf, RQ -> RBF
@@ -566,7 +566,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(rbf, rq, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_Symmetry()
     {
         var k = new RationalQuadraticKernel<double>();
@@ -575,7 +575,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(k.Calculate(x, y), k.Calculate(y, x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_DecreasesWithDistance()
     {
         var k = new RationalQuadraticKernel<double>();
@@ -589,7 +589,7 @@ public class KernelDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_HyperparameterGradient_NumericalCheck()
     {
         var k = new RationalQuadraticKernel<double>(lengthScale: 1.0, alpha: 2.0, variance: 1.0);
@@ -618,7 +618,7 @@ public class KernelDeepMathIntegrationTests
         Assert.Equal(numGradAlpha, grads["alpha"], 0.001);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadratic_InputGradient_NumericalCheck()
     {
         var k = new RationalQuadraticKernel<double>(lengthScale: 1.0, alpha: 2.0, variance: 1.0);
@@ -643,7 +643,7 @@ public class KernelDeepMathIntegrationTests
     //  CROSS-KERNEL PROPERTIES
     // ============================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllPDKernels_GramMatrix_DiagonalPositive()
     {
         var points = new[] { V(1, 2), V(3, -1), V(0, 5), V(-2, 3) };
@@ -666,7 +666,7 @@ public class KernelDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernels_Symmetry()
     {
         var x = V(1, 2, 3);

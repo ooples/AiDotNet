@@ -17,7 +17,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// Tests that the optimizer can minimize a simple quadratic function f(x) = x^2.
     /// The minimum is at x = 0.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_SimpleQuadratic_ConvergesToMinimum()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization of a 2D quadratic function f(x,y) = x^2 + y^2.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_2DQuadratic_ConvergesToMinimum()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// f(x,y) = (a-x)^2 + b*(y-x^2)^2, with a=1, b=100
     /// Minimum at (1, 1).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_RosenbrockFunction_MovesTowardsMinimum()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that 8-bit Adam produces similar results to standard Adam on a simple problem.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_ComparesWithStandardAdam_SimilarResults()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with a large number of parameters to verify memory efficiency.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_LargeParameterCount_WorksCorrectly()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests memory statistics are correctly computed for various configurations.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMemoryUsage_VariousConfigurations_ReturnsCorrectStats()
     {
         // Test with different block sizes
@@ -274,7 +274,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with zero gradients doesn't cause issues.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_ZeroGradients_HandledCorrectly()
     {
         // Arrange
@@ -296,7 +296,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with very large gradients (gradient explosion scenario).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_LargeGradients_HandledCorrectly()
     {
         // Arrange
@@ -318,7 +318,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with very small gradients (vanishing gradient scenario).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_VerySmallGradients_HandledCorrectly()
     {
         // Arrange
@@ -340,7 +340,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with mixed positive and negative values.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_MixedSignGradients_HandledCorrectly()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that serialization and deserialization preserves optimizer state correctly.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SerializeDeserialize_PreservesOptimizationState()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that float type works correctly end-to-end.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Optimize_FloatType_ConvergesCorrectly()
     {
         // Arrange

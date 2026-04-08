@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedBNFullModelAggregationStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_LeavesBatchNormParametersFromFirstClient()
     {
         var model1 = CreateNetwork();

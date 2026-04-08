@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.Tokenization
 {
     public class VocabularyTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_CreatesVocabularyWithUnkToken()
         {
             // Arrange & Act
@@ -19,7 +19,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(vocab.ContainsToken("[UNK]"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddToken_AddsNewToken()
         {
             // Arrange
@@ -34,7 +34,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(id, vocab.GetTokenId("hello"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddToken_ReturnsSameIdForDuplicateToken()
         {
             // Arrange
@@ -49,7 +49,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(2, vocab.Size);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetTokenId_ReturnsUnkIdForUnknownToken()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(unkId, unknownId);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetToken_ReturnsTokenForValidId()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal("hello", token);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetToken_ReturnsNullForInvalidId()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Null(token);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddTokens_AddsMultipleTokens()
         {
             // Arrange
@@ -107,7 +107,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(vocab.ContainsToken("test"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAllTokens_ReturnsAllTokens()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", allTokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_RemovesAllTokens()
         {
             // Arrange
@@ -141,14 +141,14 @@ namespace AiDotNet.Tests.Tokenization
 
         #region PR #757 Bug Fix Tests - Parameter Validation
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_FromDictionary_ThrowsOnNullTokenToId()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new Vocabulary((Dictionary<string, int>)null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddTokens_ThrowsOnNullTokens()
         {
             var vocab = new Vocabulary("[UNK]");

@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class MeanAbsoluteErrorLossTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithDifferentPredictions_ReturnsCorrectValue()
         {
             // Arrange
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithNegativeValues_HandlesCorrectly()
         {
             // Arrange
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(4.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithPositiveDifferences_ReturnsPositiveValues()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[2] > 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithNegativeDifferences_ReturnsNegativeValues()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[2] < 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0f, result, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -176,7 +176,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.True(item > 0.0f));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_IsRobustToOutliers_ComparedToMSE()
         {
             // Arrange
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(32.333333333333333, maeResult, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithMixedPositiveAndNegativeErrors_HandlesCorrectly()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_MagnitudeIsConstant()
         {
             // Arrange

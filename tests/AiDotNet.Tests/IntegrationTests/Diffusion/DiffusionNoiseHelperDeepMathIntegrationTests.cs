@@ -19,7 +19,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Box-Muller Gaussian Sampling ───────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_Tensor_ReturnsCorrectShape()
     {
         var shape = new[] { 3, 4 };
@@ -30,7 +30,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(4, result.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_Tensor_MeanApproximatelyZero()
     {
         // Box-Muller generates N(0,1) samples. With enough samples, mean should be ~0.
@@ -46,7 +46,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"Mean of 1000 Gaussian samples should be ~0, got {mean}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_Tensor_VarianceApproximatelyOne()
     {
         // Standard normal: variance should be ~1.
@@ -66,7 +66,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"Variance of 2000 Gaussian samples should be ~1.0, got {variance}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_SeededReproducibility()
     {
         // Same seed should produce identical samples
@@ -79,7 +79,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             Assert.Equal(span1[i], span2[i], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_DifferentSeedsProduceDifferentSamples()
     {
         var result1 = DiffusionNoiseHelper<double>.SampleGaussian(new[] { 10 }, seed: 1);
@@ -99,7 +99,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.True(anyDifferent, "Different seeds should produce different samples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_OddLength_HandlesCorrectly()
     {
         // Box-Muller generates pairs; odd length needs special handling
@@ -111,14 +111,14 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             Assert.True((!double.IsNaN(span[i]) && !double.IsInfinity(span[i])), $"Sample[{i}] = {span[i]} should be finite");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussianVector_Length_Correct()
     {
         var result = DiffusionNoiseHelper<double>.SampleGaussianVector(20, seed: 42);
         Assert.Equal(20, result.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussianVector_MeanApproximatelyZero()
     {
         var result = DiffusionNoiseHelper<double>.SampleGaussianVector(1000, seed: 789);
@@ -132,14 +132,14 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"Mean of 1000 Gaussian vector samples should be ~0, got {mean}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussian_EmptyShape_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             DiffusionNoiseHelper<double>.SampleGaussian(Array.Empty<int>(), seed: 42));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleGaussianVector_ZeroLength_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -148,7 +148,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── ScaleNoise ─────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleNoise_HandCalculated_ScaleByTwo()
     {
         // noise = [1.0, -2.0, 3.0], scale = 2.0
@@ -162,7 +162,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(6.0, span[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleNoise_ScaleByZero_AllZeros()
     {
         var noise = MakeTensor(5.0, -3.0, 7.0);
@@ -173,7 +173,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             Assert.Equal(0.0, span[i], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleNoise_ScaleByNegative_FlipsSigns()
     {
         // noise = [2.0, -3.0], scale = -1.5
@@ -188,7 +188,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── AddNoise (forward diffusion formula) ───────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddNoise_HandCalculated_Midpoint()
     {
         // signal = [1.0, 2.0], noise = [0.5, -1.0]
@@ -206,7 +206,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(1.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddNoise_PureSignal_SqrtAlphaOne()
     {
         // sqrtAlphaCumprod=1.0, sqrtOneMinusAlphaCumprod=0.0 => pure signal
@@ -221,7 +221,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(7.0, span[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddNoise_PureNoise_SqrtAlphaZero()
     {
         // sqrtAlphaCumprod=0.0, sqrtOneMinusAlphaCumprod=1.0 => pure noise
@@ -235,7 +235,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(3.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddNoise_EnergyConservation()
     {
         // For valid schedule: sqrtAlpha^2 + sqrtOneMinusAlpha^2 = 1
@@ -258,7 +258,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Sinusoidal Timestep Embeddings ─────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_HandCalculated_Dim4()
     {
         // embeddingDim=4, halfDim=2
@@ -278,7 +278,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(Math.Cos(100 * freq1), result[3], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_Dim6_VerifyFrequencies()
     {
         // embeddingDim=6, halfDim=3
@@ -300,7 +300,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_Timestep0_AllSinZeroAllCosOne()
     {
         // At timestep=0, all angles are 0: sin(0) = 0, cos(0) = 1
@@ -313,7 +313,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_UnitNorm_SinCosProperty()
     {
         // For each frequency i: sin^2(angle_i) + cos^2(angle_i) = 1
@@ -329,7 +329,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbeddings_Batch_MatchesSingleEmbedding()
     {
         int[] timesteps = { 0, 100, 500, 999 };
@@ -345,7 +345,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_DifferentTimesteps_DifferentEmbeddings()
     {
         var emb100 = DiffusionNoiseHelper<double>.ComputeTimestepEmbedding(100, 8);
@@ -363,7 +363,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.True(anyDifferent, "Different timesteps should produce different embeddings");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_HighFrequencyVariesFaster()
     {
         var emb0 = DiffusionNoiseHelper<double>.ComputeTimestepEmbedding(0, 8);
@@ -376,14 +376,14 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"High freq change ({changeHighFreq}) should exceed low freq change ({changeLowFreq})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_OddDim_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             DiffusionNoiseHelper<double>.ComputeTimestepEmbedding(100, 5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbeddings_EmptyTimesteps_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -392,7 +392,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── SNR Computation ────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_HandCalculated_AlphaCumprod0_9()
     {
         // SNR = alpha / (1 - alpha) = 0.9 / 0.1 = 9.0
@@ -400,7 +400,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(9.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_HandCalculated_AlphaCumprod0_5()
     {
         // SNR = 0.5 / 0.5 = 1.0
@@ -408,7 +408,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_HandCalculated_AlphaCumprod0_1()
     {
         // SNR = 0.1 / 0.9 ≈ 0.11111
@@ -416,21 +416,21 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(0.1 / 0.9, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_HighAlpha_HighSNR()
     {
         var result = DiffusionNoiseHelper<double>.ComputeSNR(0.999);
         Assert.True(result > 100, $"SNR for alpha=0.999 should be >100, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_LowAlpha_LowSNR()
     {
         var result = DiffusionNoiseHelper<double>.ComputeSNR(0.001);
         Assert.True(result < 0.01, $"SNR for alpha=0.001 should be <0.01, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeSNR_AlphaOne_ReturnsLargeValue()
     {
         // alpha=1.0 => 1/(1-1) => sentinel value 1e10
@@ -440,7 +440,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Lerp (Linear Interpolation) ────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_HandCalculated_MidpointInterpolation()
     {
         // noise1 = [2.0, 4.0], noise2 = [6.0, 8.0], t = 0.5
@@ -455,7 +455,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(6.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_T0_ReturnsNoise1()
     {
         var noise1 = MakeTensor(1.0, 2.0, 3.0);
@@ -469,7 +469,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(3.0, span[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_T1_ReturnsNoise2()
     {
         var noise1 = MakeTensor(1.0, 2.0);
@@ -482,7 +482,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(20.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_T0_25_HandCalculated()
     {
         // noise1 = [0.0, 8.0], noise2 = [4.0, 0.0], t = 0.25
@@ -497,7 +497,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(6.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_ClampsTBelowZero()
     {
         // t < 0 clamped to 0 => returns noise1
@@ -511,7 +511,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(6.0, span[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LerpNoise_ClampsTAboveOne()
     {
         // t > 1 clamped to 1 => returns noise2
@@ -527,7 +527,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Slerp (Spherical Linear Interpolation) ─────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_T0_ReturnsNoise1()
     {
         var noise1 = MakeTensor(1.0, 0.0, 0.0);
@@ -541,7 +541,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(0.0, span[2], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_T1_ReturnsNoise2()
     {
         var noise1 = MakeTensor(1.0, 0.0, 0.0);
@@ -555,7 +555,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(0.0, span[2], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_OrthogonalVectors_Midpoint_HandCalculated()
     {
         // noise1 = [1,0], noise2 = [0,1] (orthogonal, theta=pi/2)
@@ -572,7 +572,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         Assert.Equal(expected, span[1], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_PreservesNorm()
     {
         // Slerp between unit vectors should produce unit-norm results
@@ -593,7 +593,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_ParallelVectors_FallsBackToLerp()
     {
         // Nearly parallel vectors (theta ≈ 0) => slerp falls back to lerp
@@ -607,7 +607,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"Parallel slerp at t=0.5: result[0] should be ~1.0, got {span[0]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlerpNoise_OrthogonalVectors_QuarterPoint()
     {
         // noise1 = [1,0], noise2 = [0,1] (theta=pi/2)
@@ -629,7 +629,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Cross-Method Consistency ───────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lerp_Slerp_ParallelVectors_SameResult()
     {
         // For parallel vectors, slerp falls back to lerp
@@ -643,7 +643,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             Assert.Equal(lerp.AsSpan()[i], slerp.AsSpan()[i], 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddNoise_SameAsManualComputation()
     {
         double sqrtA = 0.7;
@@ -663,7 +663,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleNoise_ThenAddNoise_EquivalentToDirectScaling()
     {
         var signal = MakeTensor(1.0, 2.0);
@@ -683,7 +683,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
     // ─── Embedding Orthogonality and Properties ─────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_NearbyTimesteps_HigherSimilarity()
     {
         var emb100 = DiffusionNoiseHelper<double>.ComputeTimestepEmbedding(100, 16);
@@ -707,7 +707,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
             $"Nearby timesteps should have higher cosine similarity ({cosNear}) than distant ({cosFar})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeTimestepEmbedding_EmbeddingDim_AllValuesInRange()
     {
         var result = DiffusionNoiseHelper<double>.ComputeTimestepEmbedding(999, 32);

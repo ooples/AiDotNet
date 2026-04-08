@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class VideoBenchmarkTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Kinetics400Options_DefaultValues()
     {
         var options = new Kinetics400DataLoaderOptions();
@@ -19,7 +19,7 @@ public class VideoBenchmarkTests
         Assert.True(options.Normalize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hmdb51Options_DefaultValues()
     {
         var options = new Hmdb51DataLoaderOptions();
@@ -27,7 +27,7 @@ public class VideoBenchmarkTests
         Assert.Equal(1, options.SplitNumber);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ucf101Options_DefaultValues()
     {
         var options = new Ucf101DataLoaderOptions();
@@ -35,7 +35,7 @@ public class VideoBenchmarkTests
         Assert.Equal(1, options.SplitNumber);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SomethingSomethingV2Options_DefaultValues()
     {
         var options = new SomethingSomethingV2DataLoaderOptions();
@@ -43,7 +43,7 @@ public class VideoBenchmarkTests
         Assert.Equal(224, options.FrameWidth);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task Kinetics400DataLoader_LoadsFrameData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "k400_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -88,7 +88,7 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemporalSegmentSampler_SamplesCorrectCount()
     {
         var sampler = new TemporalSegmentSampler(seed: 42);
@@ -101,7 +101,7 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseSampler_SamplesUniformly()
     {
         var sampler = new DenseSampler();
@@ -116,7 +116,7 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlowFastSampler_ProducesDualRateIndices()
     {
         var sampler = new SlowFastSampler(alpha: 4);
@@ -131,7 +131,7 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemporalJitterAugmentation_TypeExists()
     {
         var type = typeof(AiDotNet.Data.Transforms.TemporalJitterAugmentation<double>);

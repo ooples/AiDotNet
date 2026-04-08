@@ -16,7 +16,7 @@ public class RealESRGANIntegrationTests
 
     #region Native Mode Construction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_WithValidArchitectures_CreatesModel()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_WithNullGeneratorArchitecture_ThrowsArgumentNullException()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class RealESRGANIntegrationTests
             InputType.ThreeDimensional));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_WithNullDiscriminatorArchitecture_ThrowsArgumentNullException()
     {
         // Arrange
@@ -107,7 +107,7 @@ public class RealESRGANIntegrationTests
             InputType.ThreeDimensional));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_WithInvalidScaleFactor_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class RealESRGANIntegrationTests
 
     #region Tensor Rank Support Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_With4DTensor_BatchChannelHeightWidth_ReturnsCorrectShape()
     {
         // Arrange - 4D tensor: [batch, channels, height, width]
@@ -147,7 +147,7 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_With5DTensor_BatchFramesChannelsHeightWidth_ReturnsCorrectShape()
     {
         // Arrange - [batch, frames, channels, height, width] for video
@@ -172,7 +172,7 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_With2DTensor_HeightWidth_ReturnsCorrectShape()
     {
         // Arrange - [height, width] grayscale (using ThreeDimensional architecture)
@@ -196,7 +196,7 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_WithBatchOf4Images_ProcessesAllImages()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class RealESRGANIntegrationTests
 
     #region Training Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrainStep_NativeMode_ReturnsLossValues()
     {
         // Arrange - Uses the proper RRDBNetGenerator architecture that outputs spatial tensors
@@ -249,7 +249,7 @@ public class RealESRGANIntegrationTests
         Assert.Equal(generatorLoss, model.LastGeneratorLoss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_NativeMode_MultipleBatches_UpdatesLoss()
     {
         // Arrange - Uses the proper RRDBNetGenerator architecture that outputs spatial tensors
@@ -282,7 +282,7 @@ public class RealESRGANIntegrationTests
 
     #region Upscale Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Upscale_NativeMode_ReturnsUpscaledTensor()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Upscale_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -323,7 +323,7 @@ public class RealESRGANIntegrationTests
 
     #region Metadata Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelMetadata_NativeMode_ReturnsCorrectMetadata()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class RealESRGANIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithFloatType_CreatesModel()
     {
         // Arrange
@@ -388,7 +388,7 @@ public class RealESRGANIntegrationTests
         Assert.True(model.UseNativeMode);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_WithFloatType_ReturnsCorrectType()
     {
         // Arrange

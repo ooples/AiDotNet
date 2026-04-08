@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class MambaBlockTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ValidParameters_CreatesBlock()
     {
         int seqLen = 16;
@@ -27,7 +27,7 @@ public class MambaBlockTests
         Assert.Equal((int)Math.Ceiling((double)modelDim / 16), block.DtRank);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var block = new MambaBlock<float>(16);
@@ -40,7 +40,7 @@ public class MambaBlockTests
         Assert.Equal(16, block.DtRank); // ceil(256/16)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_CustomDtRank_UsesProvidedValue()
     {
         var block = new MambaBlock<float>(16, modelDimension: 64, dtRank: 8);
@@ -48,28 +48,28 @@ public class MambaBlockTests
         Assert.Equal(8, block.DtRank);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 64, stateDimension: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenExpandFactorNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 64, expandFactor: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenConvKernelNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -113,7 +113,7 @@ public class MambaBlockTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterCount_MatchesExpectedFormula()
     {
         int modelDim = 32;
@@ -137,7 +137,7 @@ public class MambaBlockTests
         Assert.Equal(expectedParams, block.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -162,7 +162,7 @@ public class MambaBlockTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -171,7 +171,7 @@ public class MambaBlockTests
         Assert.Throws<ArgumentException>(() => block.SetParameters(wrongParams));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResetState_ClearsInternalState()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -186,7 +186,7 @@ public class MambaBlockTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -213,7 +213,7 @@ public class MambaBlockTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterCount_IncreasesWithExpansion()
     {
         int modelDim = 32;
@@ -226,14 +226,14 @@ public class MambaBlockTests
             $"4x expand ({block4x.ParameterCount}) should have more params than 2x ({block2x.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_ReturnsTrue()
     {
         var block = new MambaBlock<float>(4, 32, 8);
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var block = new MambaBlock<float>(8, 64, 16, expandFactor: 2, convKernelSize: 4);
@@ -251,7 +251,7 @@ public class MambaBlockTests
         Assert.Equal("128", metadata["InnerDimension"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetWeightAccessors_ReturnCorrectShapes()
     {
         int modelDim = 64;
@@ -274,7 +274,7 @@ public class MambaBlockTests
         Assert.Equal(new[] { innerDim }, dParam.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

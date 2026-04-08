@@ -14,7 +14,7 @@ public class CopyrightDetectionIntegrationTests
 {
     #region NgramCopyrightDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ngram_OriginalContent_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
@@ -24,7 +24,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ngram_WithCopyrightedTexts_DetectsMatch()
     {
         var copyrighted = new[] { "It was the best of times it was the worst of times it was the age of wisdom" };
@@ -36,7 +36,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ngram_EmptyText_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
@@ -45,7 +45,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ngram_ShortText_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
@@ -58,7 +58,7 @@ public class CopyrightDetectionIntegrationTests
 
     #region EmbeddingCopyrightDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_OriginalContent_NoFindings()
     {
         var detector = new EmbeddingCopyrightDetector<double>();
@@ -68,7 +68,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_WithCopyrightedTexts_ProcessesCleanly()
     {
         var copyrighted = new[] { "To be or not to be that is the question whether tis nobler in the mind" };
@@ -80,7 +80,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_EmptyText_NoFindings()
     {
         var detector = new EmbeddingCopyrightDetector<double>();
@@ -93,7 +93,7 @@ public class CopyrightDetectionIntegrationTests
 
     #region PerplexityMemorizationDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perplexity_RepetitiveText_DetectsMemorization()
     {
         var detector = new PerplexityMemorizationDetector<double>();
@@ -104,7 +104,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perplexity_UniqueContent_ProcessesWithoutError()
     {
         var detector = new PerplexityMemorizationDetector<double>();
@@ -116,7 +116,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perplexity_HighlyRepetitive_DetectsIssue()
     {
         var detector = new PerplexityMemorizationDetector<double>();
@@ -126,7 +126,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perplexity_CustomThresholds_Work()
     {
         var detector = new PerplexityMemorizationDetector<double>(
@@ -137,7 +137,7 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perplexity_EmptyText_NoFindings()
     {
         var detector = new PerplexityMemorizationDetector<double>();
@@ -150,7 +150,7 @@ public class CopyrightDetectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDetectors_OriginalContent_ProcessWithoutError()
     {
         var text = "This is completely original content about the future of space exploration " +

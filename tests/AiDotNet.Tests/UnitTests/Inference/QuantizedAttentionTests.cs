@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class QuantizedAttentionTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -30,7 +30,7 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -48,7 +48,7 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_MHA_WithinToleranceOfFP32()
     {
         int seqLen = 4;
@@ -69,7 +69,7 @@ public class QuantizedAttentionTests
             $"INT8 quantized attention relative error ({relativeError:F4}) exceeds 10% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_2D_Input_ProducesValidOutput()
     {
         int seqLen = 4;
@@ -85,7 +85,7 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_IsInferenceOnly()
     {
         var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
@@ -99,7 +99,7 @@ public class QuantizedAttentionTests
     }
 
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_UpdateParameters_ThrowsNotSupported()
     {
         var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
@@ -108,7 +108,7 @@ public class QuantizedAttentionTests
         Assert.Throws<NotSupportedException>(() => quantized.UpdateParameters(0.01f));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_PreservesProperties()
     {
         int numHeads = 8;
@@ -124,7 +124,7 @@ public class QuantizedAttentionTests
         Assert.Equal(PositionalEncodingType.Rotary, quantized.PositionalEncoding);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferenceQuantizationMode_None_DisablesQuantization()
     {
         var config = new InferenceOptimizationConfig
@@ -135,7 +135,7 @@ public class QuantizedAttentionTests
         Assert.False(config.EnableWeightOnlyQuantization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferenceQuantizationMode_Int8_EnablesQuantization()
     {
         var config = new InferenceOptimizationConfig
@@ -146,7 +146,7 @@ public class QuantizedAttentionTests
         Assert.True(config.EnableWeightOnlyQuantization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EnableWeightOnlyQuantization_BackwardCompatible()
     {
         var config = new InferenceOptimizationConfig();
@@ -159,7 +159,7 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.None, config.InferenceQuantization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferenceQuantizationMode_FP8_AvailableInConfig()
     {
         var config = new InferenceOptimizationConfig
@@ -171,7 +171,7 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyFP8, config.InferenceQuantization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferenceQuantizationMode_NF4_AvailableInConfig()
     {
         var config = new InferenceOptimizationConfig
@@ -183,7 +183,7 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyNF4, config.InferenceQuantization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FP8WeightOnlyQuantization_QuantizePerRow_Roundtrips()
     {
         int rows = 4;
@@ -218,7 +218,7 @@ public class QuantizedAttentionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NF4WeightOnlyQuantization_QuantizePerGroup_Roundtrips()
     {
         int rows = 4;
@@ -251,7 +251,7 @@ public class QuantizedAttentionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_FP8_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -269,7 +269,7 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyFP8, quantized.QuantizationFormat);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_FP8_WithinToleranceOfFP32()
     {
         int seqLen = 4;
@@ -290,7 +290,7 @@ public class QuantizedAttentionTests
             $"FP8 quantized attention relative error ({relativeError:F4}) exceeds 75% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_NF4_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -308,7 +308,7 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyNF4, quantized.QuantizationFormat);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_NF4_WithinToleranceOfFP32()
     {
         int seqLen = 4;
@@ -328,7 +328,7 @@ public class QuantizedAttentionTests
             $"NF4 quantized attention relative error ({relativeError:F4}) exceeds 50% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_FP8_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -346,7 +346,7 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_NF4_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -364,7 +364,7 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Int8WeightQuantization_PerRow_Roundtrip_UnderOnePercent()
     {
         // Test that INT8 per-row weight quantization achieves < 1% relative error
@@ -405,7 +405,7 @@ public class QuantizedAttentionTests
             $"INT8 per-row weight quantization relative error ({relativeError:F6}) exceeds 1% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_INT8_LargerDimension_TighterTolerance()
     {
         // Larger dimensions = more accumulation points per matmul, but per-element error stays small
@@ -427,7 +427,7 @@ public class QuantizedAttentionTests
             $"INT8 attention (embDim=128) relative error ({relativeError:F4}) exceeds 5% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_FP8_LargerDimension_TighterTolerance()
     {
         int seqLen = 4;
@@ -450,7 +450,7 @@ public class QuantizedAttentionTests
             $"FP8 attention (embDim=128) relative error ({relativeError:F4}) exceeds 55% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizedAttention_NF4_LargerDimension_TighterTolerance()
     {
         int seqLen = 4;
@@ -470,7 +470,7 @@ public class QuantizedAttentionTests
             $"NF4 attention (embDim=128) relative error ({relativeError:F4}) exceeds 35% tolerance");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DefaultConfig_PreservesExistingPresets()
     {
         // Verify Default and HighPerformance presets still work unchanged

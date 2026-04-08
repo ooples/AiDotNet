@@ -10,7 +10,7 @@ public class LSTMVAETests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new LSTMVAE<double>();
@@ -18,7 +18,7 @@ public class LSTMVAETests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new LSTMVAEOptions<double>
@@ -40,7 +40,7 @@ public class LSTMVAETests
 
     #region Training Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new LSTMVAEOptions<double>
@@ -61,7 +61,7 @@ public class LSTMVAETests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new LSTMVAEOptions<double>
@@ -86,7 +86,7 @@ public class LSTMVAETests
 
     #region Prediction Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new LSTMVAEOptions<double>
@@ -115,7 +115,7 @@ public class LSTMVAETests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new LSTMVAEOptions<double>
@@ -148,7 +148,7 @@ public class LSTMVAETests
 
     #region Anomaly Detection Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DetectAnomalies_AfterTraining_ReturnsValidResults()
     {
         var options = new LSTMVAEOptions<double>
@@ -181,7 +181,7 @@ public class LSTMVAETests
         Assert.Equal(testData.Rows, anomalies.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeAnomalyScores_AfterTraining_ReturnsNonNegativeValues()
     {
         var options = new LSTMVAEOptions<double>
@@ -224,7 +224,7 @@ public class LSTMVAETests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new LSTMVAEOptions<double>
@@ -264,7 +264,7 @@ public class LSTMVAETests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new LSTMVAEOptions<float>

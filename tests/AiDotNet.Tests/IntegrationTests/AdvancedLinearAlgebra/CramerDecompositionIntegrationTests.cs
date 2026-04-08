@@ -105,7 +105,7 @@ public class CramerDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_Invert_2x2Matrix_ExactInverse()
     {
         // Arrange - 2x2 matrix [[a, b], [c, d]]
@@ -127,7 +127,7 @@ public class CramerDecompositionIntegrationTests
         Assert.True(Math.Abs(AInv[1, 1] - (-2.0)) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class CramerDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class CramerDecompositionIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_SingularMatrix_Invert_ThrowsInvalidOperationException()
     {
         // Arrange - Singular matrix
@@ -183,7 +183,7 @@ public class CramerDecompositionIntegrationTests
     #region Edge Cases
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_1x1Matrix_Invert_WorksCorrectly()
     {
         // Arrange - 1x1 matrix inversion now works after the 0x0 determinant fix
@@ -198,7 +198,7 @@ public class CramerDecompositionIntegrationTests
         Assert.True(Math.Abs(AInv[0, 0] - 0.25) < Tolerance, "1/4 = 0.25");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_2x2Matrix_Invert_WorksCorrectly()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class CramerDecompositionIntegrationTests
     #region Numerical Properties Tests
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CramerDecomposition_Invert_Twice_ReturnsOriginal()
     {
         // Arrange

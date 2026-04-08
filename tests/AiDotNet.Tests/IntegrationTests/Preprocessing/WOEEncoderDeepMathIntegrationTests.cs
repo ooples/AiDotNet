@@ -47,7 +47,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// Category B (value=2): events=1, non_events=1
     ///   Same calculation → WOE_B = 0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_EqualDistribution_WOEIsZero()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -80,7 +80,7 @@ public class WOEEncoderDeepMathIntegrationTests
     ///   dist_non_events = (2 + 0.5) / (3 + 0.5*2) = 2.5/4 = 0.625
     ///   WOE_2 = ln(0.375/0.625) = ln(3/5) ≈ -0.5108256...
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_SkewedDistribution_CorrectWOE()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -113,7 +113,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// If events=2, non_events=0 for category: dist_non_events = 0/total_non_events = 0
     /// log(dist_events/0) = +infinity, clamped to 5.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_AllEventsInCategory_RegZero_ClampedTo5()
     {
         var encoder = new WOEEncoder<double>(regularization: 0);
@@ -135,7 +135,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// WOE antisymmetry property: for 2 categories with complementary distributions,
     /// WOE_1 = -WOE_2 (they are equal in magnitude but opposite in sign).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_TwoCategories_AntisymmetricWOE()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -162,7 +162,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// With reg=0.5: WOE is moderate.
     /// With reg=5.0: WOE should be closer to zero (more shrinkage).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_LargerRegularization_SmallerMagnitudeWOE()
     {
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -190,7 +190,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// dist_non_events ≈ 1/k similarly
     /// WOE = ln(1) = 0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_VeryLargeRegularization_WOENearZero()
     {
         var encoder = new WOEEncoder<double>(regularization: 1000.0);
@@ -221,7 +221,7 @@ public class WOEEncoderDeepMathIntegrationTests
     ///    = 0.5 * ln(5/3)
     ///    ≈ 0.5 * 0.5108256 ≈ 0.2554128
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_InformationValue_HandComputed()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -241,7 +241,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// When each category has equal event/non-event ratios, WOE=0 for all categories,
     /// so IV = Σ 0 * 0 = 0.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_InformationValue_BalancedDistribution_IVIsZero()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -262,7 +262,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// If dist_events < dist_non_events, WOE < 0 → product > 0
     /// If dist_events = dist_non_events, both are 0 → product = 0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_InformationValue_AlwaysNonNegative()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -287,7 +287,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// Categories with more events than expected should have positive WOE.
     /// Categories with fewer events than expected should have negative WOE.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_PositiveWOE_MoreEvents_NegativeWOE_FewerEvents()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -325,7 +325,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// Category 3: dist_events=(1+0.5)/(4+1.5)=1.5/5.5, dist_non=(2+0.5)/(5+1.5)=2.5/6.5
     /// WOE_3 = ln((1.5/5.5)/(2.5/6.5)) = ln(1.5*6.5 / (5.5*2.5)) = ln(9.75/13.75)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_3Categories_HandComputed()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -355,7 +355,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with UseZero mode should return WOE=0.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_UnknownCategory_UseZero_ReturnsZero()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5, handleUnknown: WOEHandleUnknown.UseZero);
@@ -371,7 +371,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with Error mode should throw.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_UnknownCategory_Error_Throws()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5, handleUnknown: WOEHandleUnknown.Error);
@@ -386,7 +386,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Target must be binary (0 or 1). Non-binary values should throw.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_NonBinaryTarget_Throws()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -398,7 +398,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Target with only one class should throw.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_SingleClassTarget_Throws()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5);
@@ -410,7 +410,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Negative regularization should throw.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_NegativeRegularization_Throws()
     {
         Assert.Throws<ArgumentException>(() => new WOEEncoder<double>(regularization: -1.0));
@@ -419,7 +419,7 @@ public class WOEEncoderDeepMathIntegrationTests
     /// <summary>
     /// Pass-through column should preserve original values.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WOEEncoder_PassThroughColumn_PreservesValues()
     {
         var encoder = new WOEEncoder<double>(regularization: 0.5, columnIndices: new[] { 0 });

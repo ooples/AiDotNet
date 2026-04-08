@@ -16,7 +16,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryTracker.EstimateTensorMemory Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_1DShape_HandComputed()
     {
         // Shape [100], elementSize=4 => 100 * 4 = 400 bytes
@@ -25,7 +25,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(400L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_2DShape_HandComputed()
     {
         // Shape [32, 64], elementSize=4 => 32 * 64 * 4 = 8192 bytes
@@ -34,7 +34,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(8192L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_3DShape_HandComputed()
     {
         // Shape [3, 224, 224], elementSize=4 => 3 * 224 * 224 * 4 = 602,112 bytes
@@ -43,7 +43,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(602112L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_4DShape_BatchedImages_HandComputed()
     {
         // Shape [16, 3, 224, 224], elementSize=4 => 16 * 3 * 224 * 224 * 4 = 9,633,792 bytes
@@ -52,7 +52,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(9633792L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_DefaultElementSize_Is4()
     {
         // Default element size is 4 (float32)
@@ -61,7 +61,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(40L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_DoubleElementSize_Is8()
     {
         // Shape [10], elementSize=8 (float64) => 10 * 8 = 80 bytes
@@ -70,7 +70,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(80L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_HalfPrecision_Is2()
     {
         // Shape [1000], elementSize=2 (float16) => 1000 * 2 = 2000 bytes
@@ -79,7 +79,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(2000L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_SingleElement_HandComputed()
     {
         // Scalar: shape [1], elementSize=4 => 1 * 4 = 4 bytes
@@ -88,7 +88,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(4L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTensorMemory_LargeModel_HandComputed()
     {
         // GPT-2 style weight matrix: [768, 3072], float32
@@ -102,7 +102,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryTracker.EstimateKVCacheMemory Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateKVCacheMemory_SingleLayer_HandComputed()
     {
         // numLayers=1, numHeads=8, headDim=64, maxSeqLen=512, batchSize=1, bytesPerElement=4
@@ -115,7 +115,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(2097152L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateKVCacheMemory_GPT2Style_HandComputed()
     {
         // GPT-2: 12 layers, 12 heads, headDim=64, maxSeqLen=1024, batch=1, float32
@@ -128,7 +128,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(75497472L, bytes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateKVCacheMemory_BatchEffect_IsLinear()
     {
         // Doubling batch size should double memory
@@ -143,7 +143,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(bytes1 * 2, bytes2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateKVCacheMemory_LayerEffect_IsLinear()
     {
         // Doubling layers should double memory
@@ -158,7 +158,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(bytes6 * 2, bytes12);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateKVCacheMemory_HalfPrecision_IsHalfOfFloat32()
     {
         var fp32 = MemoryTracker.EstimateKVCacheMemory(
@@ -176,7 +176,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryTracker Enable/Disable/Reset Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryTracker_EnableDisable_TracksState()
     {
         // Save original state and restore after test
@@ -196,7 +196,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryTracker_Reset_ClearsHistory()
     {
         var wasEnabled = MemoryTracker.IsEnabled;
@@ -219,7 +219,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryTracker_Snapshot_RecordsWhenEnabled()
     {
         var wasEnabled = MemoryTracker.IsEnabled;
@@ -242,7 +242,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryTracker_Snapshot_DoesNotRecordWhenDisabled()
     {
         var wasEnabled = MemoryTracker.IsEnabled;
@@ -267,7 +267,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryTracker_MaxHistorySize_ClampsToMinimum1()
     {
         var original = MemoryTracker.MaxHistorySize;
@@ -289,7 +289,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemorySnapshot Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemorySnapshot_HasPositiveMetrics()
     {
         var snapshot = MemoryTracker.Snapshot("test");
@@ -298,7 +298,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(snapshot.WorkingSet > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemorySnapshot_LabelIsSet()
     {
         var snapshot = MemoryTracker.Snapshot("my_label");
@@ -306,7 +306,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal("my_label", snapshot.Label);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemorySnapshot_DefaultLabel_IsSequential()
     {
         var wasEnabled = MemoryTracker.IsEnabled;
@@ -327,7 +327,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemorySnapshot_GCCollections_NonNegative()
     {
         var snapshot = MemoryTracker.Snapshot();
@@ -337,7 +337,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(snapshot.Gen2Collections >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemorySnapshot_ToString_ContainsLabel()
     {
         var snapshot = MemoryTracker.Snapshot("test_label");
@@ -353,7 +353,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryDiff Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryDiff_CompareTo_ComputesDelta()
     {
         var before = MemoryTracker.Snapshot("before");
@@ -373,7 +373,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Same(after, diff.To);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryDiff_GCCollectionDeltas_NonNegative()
     {
         var before = MemoryTracker.Snapshot("before");
@@ -385,7 +385,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(diff.Gen2CollectionsDelta >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryDiff_AllocationRate_ZeroDuration_ReturnsZero()
     {
         // Create two snapshots with timestamps very close together
@@ -407,7 +407,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(0.0, diff.AllocationRatePerSecond);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryDiff_ToString_ContainsDeltaInfo()
     {
         var before = MemoryTracker.Snapshot("before");
@@ -423,7 +423,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfilerSession Basic Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_DefaultConfig_DisabledByDefault()
     {
         var config = new ProfilingConfig { Enabled = false, AutoEnableInDebug = false };
@@ -433,7 +433,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.NotNull(session.Config);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_EnableDisable_Works()
     {
         var config = new ProfilingConfig { Enabled = false, AutoEnableInDebug = false };
@@ -446,7 +446,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.False(session.IsEnabled);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_Reset_ClearsEntries()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -463,7 +463,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(0, session.OperationCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_Scope_RecordsTiming()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -481,7 +481,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.TotalMs > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_MultipleScopes_SameOperation_Aggregates()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -500,7 +500,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(5, stats.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_DifferentOperations_TrackedSeparately()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -518,7 +518,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Contains("op_c", names);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSession_DisabledSession_DoesNotRecord()
     {
         var config = new ProfilingConfig { Enabled = false, AutoEnableInDebug = false };
@@ -537,7 +537,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfilerSession Timer Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSessionTimer_ManualStartStop_RecordsTiming()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -553,7 +553,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.TotalMs >= 5); // At least some ms
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSessionTimer_DoubleStop_DoesNotDuplicate()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -569,7 +569,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(1, stats.Count); // Only counted once
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSessionTimer_Elapsed_IncreasesOverTime()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -584,7 +584,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(late > early);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerSessionTimer_Dispose_StopsTimer()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -604,7 +604,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfilerStats Math Tests (Welford's Algorithm)
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_SingleSample_MeanEqualsValue()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -624,7 +624,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(stats.MeanMs, stats.MinMs, 0.001);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_MinLessThanOrEqualMax()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -643,7 +643,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.MinMs <= stats.MaxMs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_MeanBetweenMinAndMax()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -663,7 +663,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.MeanMs <= stats.MaxMs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_TotalEquals_CountTimesMean()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -685,7 +685,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(expected, stats.TotalMs, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_StdDev_NonNegative()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -704,7 +704,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.StdDevMs >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_Percentiles_OrderedCorrectly()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -726,7 +726,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(stats.P95Ms <= stats.P99Ms + 0.001);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_OpsPerSecond_HandComputed()
     {
         // OpsPerSecond = Count / (TotalMs / 1000.0)
@@ -754,7 +754,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(expected, stats.OpsPerSecond, 0.001);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_ZeroSamples_ReturnsZeros()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -770,7 +770,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfileReport Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetAllStats_SortedByTotalTimeDescending()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -791,7 +791,7 @@ public class DiagnosticsDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetTopOperations_LimitsCount()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -808,7 +808,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(3, top3.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_TotalOperations_MatchesEntryCount()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -821,7 +821,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(2, report.TotalOperations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_ToString_ContainsHeader()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -838,7 +838,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Contains("Operations Tracked:", str);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_ToDictionary_HasRequiredKeys()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -856,7 +856,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(dict.ContainsKey("operations"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_Elapsed_IsPositive()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -871,7 +871,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfileReport Comparison Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileComparison_NoRegressions_WhenIdentical()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -894,7 +894,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal(50.0, comparison.ThresholdPercent);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileComparison_ToString_ContainsThreshold()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -914,7 +914,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfileReport Export Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_ToJson_ValidStructure()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -931,7 +931,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Contains("\"json_test\"", json);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_ToCsv_HasHeader()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -946,7 +946,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Contains("csv_test", csv);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_ToMarkdown_HasHeader()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -965,7 +965,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfilingConfig Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilingConfig_Defaults_AreCorrect()
     {
         var config = new ProfilingConfig();
@@ -980,7 +980,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(config.AutoEnableInDebug);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilingConfig_TraceExecution_AliasForTrackCallHierarchy()
     {
         var config = new ProfilingConfig();
@@ -992,7 +992,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(config.TraceExecution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilingConfig_MeasureMemory_AliasForTrackAllocations()
     {
         var config = new ProfilingConfig();
@@ -1004,7 +1004,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(config.MeasureMemory);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilingConfig_CustomTags_EmptyByDefault()
     {
         var config = new ProfilingConfig();
@@ -1013,7 +1013,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Empty(config.CustomTags);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilingConfig_CustomTags_IncludedInReport()
     {
         var config = new ProfilingConfig
@@ -1041,7 +1041,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryScope Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryScope_CapturesBeforeSnapshot()
     {
         using var scope = MemoryTracker.TrackScope("scope_test");
@@ -1050,7 +1050,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal("scope_test_before", scope.Before.Label);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryScope_DisposeTakesAfterSnapshot()
     {
         var wasEnabled = MemoryTracker.IsEnabled;
@@ -1087,7 +1087,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // MemoryPressureLevel Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetPressureLevel_ReturnsValidLevel()
     {
         var level = MemoryTracker.GetPressureLevel();
@@ -1104,7 +1104,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // ProfilerStats ToString Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfilerStats_ToString_ContainsNameAndCounts()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -1129,7 +1129,7 @@ public class DiagnosticsDeepMathIntegrationTests
     // Profile Hotspots Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetHotspots_ReturnsTopByTotalTime()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -1147,7 +1147,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.True(hotspots[0].TotalMs >= hotspots[1].TotalMs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetSlowOperations_FiltersAboveThreshold()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -1164,7 +1164,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.All(slow, s => Assert.True(s.P95Ms > 20));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetStats_ByName_ReturnsCorrectEntry()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };
@@ -1180,7 +1180,7 @@ public class DiagnosticsDeepMathIntegrationTests
         Assert.Equal("specific_op", stats.Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProfileReport_GetStats_NonExistent_ReturnsNull()
     {
         var config = new ProfilingConfig { Enabled = true, AutoEnableInDebug = false };

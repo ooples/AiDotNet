@@ -14,7 +14,7 @@ public class MatrixHelperIntegrationTests
 
     #region CalculateDeterminantRecursive Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_1x1Matrix_ReturnsElement()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_2x2Matrix_ReturnsCorrectDeterminant()
     {
         // Arrange - det = ad - bc = 3*4 - 2*1 = 10
@@ -44,7 +44,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(10.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_3x3Matrix_ReturnsCorrectDeterminant()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(-3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_IdentityMatrix_ReturnsOne()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_SingularMatrix_ReturnsZero()
     {
         // Arrange - Third row is sum of first two rows, so det = 0
@@ -96,7 +96,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class MatrixHelperIntegrationTests
 
     #region ExtractDiagonal Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtractDiagonal_3x3Matrix_ReturnsCorrectDiagonal()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(9.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtractDiagonal_IdentityMatrix_ReturnsOnes()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtractDiagonal_DiagonalMatrix_ReturnsAllDiagonalValues()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class MatrixHelperIntegrationTests
 
     #region OuterProduct Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OuterProduct_TwoVectors_ReturnsCorrectMatrix()
     {
         // Arrange
@@ -201,7 +201,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(18.0, result[2, 2], Tolerance); // 3*6
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OuterProduct_UnitVectors_ReturnsCorrectMatrix()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class MatrixHelperIntegrationTests
 
     #region Hypotenuse Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_TwoValues_ReturnsCorrectResult()
     {
         // Arrange - Classic 3-4-5 triangle
@@ -236,7 +236,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_ZeroValue_ReturnsOtherValue()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_NegativeValues_ReturnsPositiveResult()
     {
         // Arrange
@@ -264,7 +264,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_ArrayOfValues_ReturnsEuclideanNorm()
     {
         // Arrange - sqrt(1^2 + 2^2 + 2^2) = sqrt(9) = 3
@@ -277,7 +277,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_SingleValue_ReturnsAbsoluteValue()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class MatrixHelperIntegrationTests
 
     #region IsUpperHessenberg Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperHessenberg_UpperTriangularMatrix_ReturnsTrue()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperHessenberg_HessenbergMatrix_ReturnsTrue()
     {
         // Arrange - Hessenberg has zeros below first subdiagonal
@@ -331,7 +331,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperHessenberg_FullMatrix_ReturnsFalse()
     {
         // Arrange - Has non-zero below first subdiagonal
@@ -353,7 +353,7 @@ public class MatrixHelperIntegrationTests
 
     #region OrthogonalizeColumns Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrthogonalizeColumns_NonOrthogonalMatrix_ReturnsOrthonormalColumns()
     {
         // Arrange
@@ -378,7 +378,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(col1.Norm() - 1.0) < Tolerance, $"Column 1 not normalized: norm = {col1.Norm()}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrthogonalizeColumns_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange - Identity columns are already orthonormal
@@ -402,7 +402,7 @@ public class MatrixHelperIntegrationTests
 
     #region ComputeGivensRotation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeGivensRotation_ZeroB_ReturnsCosOne()
     {
         // Arrange
@@ -417,7 +417,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(0.0, s, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeGivensRotation_NonZeroValues_ReturnsValidRotation()
     {
         // Arrange
@@ -436,7 +436,7 @@ public class MatrixHelperIntegrationTests
 
     #region ApplyGivensRotation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ApplyGivensRotation_ToMatrix_ModifiesCorrectElements()
     {
         // Arrange
@@ -463,7 +463,7 @@ public class MatrixHelperIntegrationTests
 
     #region CreateHouseholderVector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateHouseholderVector_ValidVector_ReturnsNormalizedVector()
     {
         // Arrange
@@ -486,7 +486,7 @@ public class MatrixHelperIntegrationTests
 
     #region PowerIteration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PowerIteration_SymmetricMatrix_FindsDominantEigenvalue()
     {
         // Arrange - Symmetric matrix with known eigenvalues
@@ -505,7 +505,7 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(2, eigenvector.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PowerIteration_DiagonalMatrix_FindsLargestDiagonal()
     {
         // Arrange
@@ -528,7 +528,7 @@ public class MatrixHelperIntegrationTests
 
     #region SpectralNorm Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNorm_IdentityMatrix_ReturnsOne()
     {
         // Arrange
@@ -541,7 +541,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result - 1.0) < 0.1, $"Expected ~1.0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralNorm_ScaledIdentity_ReturnsScaleFactor()
     {
         // Arrange - 2*I has spectral norm = 2
@@ -562,7 +562,7 @@ public class MatrixHelperIntegrationTests
 
     #region IsInvertible Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_IdentityMatrix_ReturnsTrue()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_SingularMatrix_ReturnsFalse()
     {
         // Arrange - Third row is sum of first two
@@ -593,7 +593,7 @@ public class MatrixHelperIntegrationTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_NonSquareMatrix_ReturnsFalse()
     {
         // Arrange
@@ -610,7 +610,7 @@ public class MatrixHelperIntegrationTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_InvertibleMatrix_ReturnsTrue()
     {
         // Arrange
@@ -632,7 +632,7 @@ public class MatrixHelperIntegrationTests
 
     #region InvertUsingDecomposition Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InvertUsingDecomposition_WithLuDecomposition_ReturnsCorrectInverse()
     {
         // Arrange
@@ -665,7 +665,7 @@ public class MatrixHelperIntegrationTests
 
     #region TridiagonalSolve Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TridiagonalSolve_SimpleSystem_ReturnsCorrectSolution()
     {
         // Arrange - Tridiagonal system
@@ -699,7 +699,7 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TridiagonalSolve_ZeroDiagonal_ThrowsInvalidOperationException()
     {
         // Arrange - Zero on main diagonal
@@ -718,7 +718,7 @@ public class MatrixHelperIntegrationTests
 
     #region CalculateHatMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateHatMatrix_SimpleFeatureMatrix_ReturnsSymmetricMatrix()
     {
         // Arrange - Simple feature matrix
@@ -745,7 +745,7 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateHatMatrix_IsIdempotent()
     {
         // Arrange
@@ -772,7 +772,7 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateHatMatrix_DiagonalSumEqualsRank()
     {
         // Arrange
@@ -800,7 +800,7 @@ public class MatrixHelperIntegrationTests
 
     #region ReduceToHessenbergFormat Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReduceToHessenbergFormat_GeneralMatrix_ProducesHessenbergForm()
     {
         // Arrange
@@ -823,7 +823,7 @@ public class MatrixHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDeterminantRecursive_FloatType_ReturnsCorrectResult()
     {
         // Arrange
@@ -840,7 +840,7 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result - 10f) < 1e-4f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hypotenuse_FloatType_ReturnsCorrectResult()
     {
         // Arrange

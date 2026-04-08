@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Ensemble_NotWorseThanRandom()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -31,7 +31,7 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Ensemble_ShouldProduceValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

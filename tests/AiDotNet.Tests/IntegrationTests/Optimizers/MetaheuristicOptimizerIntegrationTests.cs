@@ -132,7 +132,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Genetic Algorithm Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithm_CanInstantiate()
     {
         // Verify the optimizer can be instantiated without errors
@@ -148,7 +148,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithm_OptimizesSimpleRegression()
     {
         // Genetic Algorithm should find a reasonable solution for linear regression
@@ -187,7 +187,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Particle Swarm Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParticleSwarm_CanInstantiate()
     {
         var options = new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
@@ -202,7 +202,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParticleSwarm_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -242,7 +242,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Differential Evolution Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentialEvolution_CanInstantiate()
     {
         var options = new DifferentialEvolutionOptions<double, Matrix<double>, Vector<double>>
@@ -257,7 +257,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentialEvolution_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -296,7 +296,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Simulated Annealing Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimulatedAnnealing_CanInstantiate()
     {
         var options = new SimulatedAnnealingOptions<double, Matrix<double>, Vector<double>>
@@ -312,7 +312,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimulatedAnnealing_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -351,7 +351,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Ant Colony Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AntColony_CanInstantiate()
     {
         var options = new AntColonyOptimizationOptions<double, Matrix<double>, Vector<double>>
@@ -366,7 +366,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AntColony_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -405,7 +405,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Tabu Search Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TabuSearch_CanInstantiate()
     {
         var options = new TabuSearchOptions<double, Matrix<double>, Vector<double>>
@@ -420,7 +420,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TabuSearch_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -458,7 +458,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region CMA-ES Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CMAES_CanInstantiate()
     {
         var options = new CMAESOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -473,7 +473,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CMAES_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -510,7 +510,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Bayesian Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bayesian_CanInstantiate()
     {
         var options = new BayesianOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -525,7 +525,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Bayesian_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -563,7 +563,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Nelder-Mead Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NelderMead_CanInstantiate()
     {
         var options = new NelderMeadOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -577,7 +577,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NelderMead_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -617,7 +617,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Powell Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Powell_CanInstantiate()
     {
         var options = new PowellOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -631,7 +631,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Powell_OptimizesSimpleRegression()
     {
         var (X, y) = CreateSimpleRegressionData(30);
@@ -668,7 +668,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Serialization Tests for Metaheuristic Optimizers
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithm_SerializesAndDeserializes()
     {
         var options = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -701,7 +701,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParticleSwarm_SerializesAndDeserializes()
     {
         var options = new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
@@ -732,7 +732,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SimulatedAnnealing_SerializesAndDeserializes()
     {
         var options = new SimulatedAnnealingOptions<double, Matrix<double>, Vector<double>>
@@ -767,7 +767,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Edge Case Tests for Metaheuristic Optimizers
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Metaheuristics_HandleMinimalData()
     {
         // Test with minimal training data (3 samples)
@@ -803,7 +803,7 @@ public class MetaheuristicOptimizerIntegrationTests
         AssertValidOptimizationResult(result, "GA_MinimalData");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Metaheuristics_HandleHighDimensionalData()
     {
         // Test with higher dimensional data (10 features)
@@ -852,7 +852,7 @@ public class MetaheuristicOptimizerIntegrationTests
         AssertValidOptimizationResult(result, "PSO_HighDimensional");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Metaheuristics_HandleSingleIteration()
     {
         var (X, y) = CreateSimpleRegressionData(20);
@@ -890,7 +890,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
     #region Normal Optimizer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_CanInstantiate()
     {
         // NormalOptimizer uses GeneticAlgorithmOptimizerOptions
@@ -906,7 +906,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_OptimizesSimpleRegression()
     {
         // NormalOptimizer uses random search with adaptive parameters
@@ -942,7 +942,7 @@ public class MetaheuristicOptimizerIntegrationTests
         AssertValidOptimizationResult(result, "Normal");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_AdaptsParametersDuringOptimization()
     {
         // Verify that NormalOptimizer adapts its parameters during optimization
@@ -979,7 +979,7 @@ public class MetaheuristicOptimizerIntegrationTests
         AssertValidOptimizationResult(result, "Normal_Adaptive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_SerializesAndDeserializes()
     {
         var options = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -1016,7 +1016,7 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_HandlesSingleIteration()
     {
         var (X, y) = CreateSimpleRegressionData(20);

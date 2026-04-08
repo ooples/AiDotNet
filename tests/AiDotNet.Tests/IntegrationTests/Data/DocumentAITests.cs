@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class DocumentAITests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocVqaOptions_DefaultValues()
     {
         var options = new DocVqaDataLoaderOptions();
@@ -21,7 +21,7 @@ public class DocumentAITests
         Assert.Equal(128, options.MaxAnswerLength);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PubLayNetOptions_DefaultValues()
     {
         var options = new PubLayNetDataLoaderOptions();
@@ -30,7 +30,7 @@ public class DocumentAITests
         Assert.Equal(5, options.NumClasses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ade20kOptions_DefaultValues()
     {
         var options = new Ade20kDataLoaderOptions();
@@ -39,7 +39,7 @@ public class DocumentAITests
         Assert.True(options.Normalize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CelebAOptions_DefaultValues()
     {
         var options = new CelebADataLoaderOptions();
@@ -49,7 +49,7 @@ public class DocumentAITests
         Assert.True(options.Normalize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task DocVqaDataLoader_LoadsImageDataWithAnswers()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "docvqa_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -118,7 +118,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task CelebADataLoader_LoadsFaceImages()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "celeba_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -172,7 +172,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task Ade20kDataLoader_LoadsSegmentationData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "ade20k_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -215,7 +215,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task PubLayNetDataLoader_LoadsLayoutData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "publaynet_test_" + Guid.NewGuid().ToString("N")[..8]);

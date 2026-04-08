@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsAssignableFrom<ILossFunction<double>>(lossFunction);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_HuberWithCustomDelta_ProducesDifferentLoss()
         {
             // Arrange - different deltas should produce different losses
@@ -77,7 +77,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotEqual(defaultLoss, customLoss);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_FocalWithCustomParams_ProducesDifferentLoss()
         {
             // Arrange - different gamma values should produce different losses
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.True(loss5 >= 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_QuantileWithCustomValue_ProducesDifferentLoss()
         {
             // Arrange - different quantiles should produce different losses for asymmetric errors
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<QuantileLoss<double>>(q90);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_ByNameString_ReturnsLossFunction()
         {
             // Act
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_ByNameString_CaseInsensitive()
         {
             // Act
@@ -150,7 +150,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithInvalidName_ThrowsArgumentException()
         {
             // Act & Assert
@@ -158,7 +158,7 @@ namespace AiDotNetTests.UnitTests.Training
                 LossFunctionFactory<double>.Create("NonExistentLoss"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithEmptyName_ThrowsArgumentException()
         {
             // Act & Assert
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.Training
                 LossFunctionFactory<double>.Create(""));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithNullName_ThrowsArgumentException()
         {
             // Act & Assert
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.Training
                 LossFunctionFactory<double>.Create((string)null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_ElasticNetWithCustomParams_ProducesDifferentLoss()
         {
             // Arrange - different L1 ratios should produce different losses
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.True(lossL2 >= 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_MarginWithCustomParams_ReturnsCorrectType()
         {
             // Arrange
@@ -219,7 +219,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MarginLoss<double>>(lossFunction);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithStringParams_ConvertsCorrectly()
         {
             // Arrange - YAML deserializer may produce strings for numeric values

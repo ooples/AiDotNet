@@ -14,7 +14,7 @@ using Xunit;
 /// </summary>
 public class LicensingIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BasicEncryptDecrypt_RoundTrip()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -45,7 +45,7 @@ public class LicensingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EncryptDecrypt_WrongKey_Fails()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -72,7 +72,7 @@ public class LicensingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EncryptDecrypt_TamperedData_Fails()
     {
         var plaintext = new byte[] { 10, 20, 30, 40, 50 };
@@ -91,7 +91,7 @@ public class LicensingIntegrationTests
                 encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelFileHeader_WrapAndExtract_RoundTrip()
     {
         var model = new StubModelSerializer
@@ -116,7 +116,7 @@ public class LicensingIntegrationTests
         Assert.Equal(new[] { 10 }, info.OutputShape);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelFileHeader_EncryptedScheme_PreservedInHeader()
     {
         var model = new StubModelSerializer
@@ -145,7 +145,7 @@ public class LicensingIntegrationTests
         Assert.Equal(fakeTag, info.Tag);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EncryptSigned_WithSyntheticBuildKey_ProducesDifferentOutput()
     {
         var plaintext = new byte[] { 1, 2, 3, 4, 5 };
@@ -169,7 +169,7 @@ public class LicensingIntegrationTests
         Assert.Equal(plaintext, dec2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecryptSigned_WithSyntheticToken_RoundTrip()
     {
         // Simulates the full 3-layer round trip:

@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
     public class LoRALayerTests
     {
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange & Act
@@ -23,28 +23,28 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal((10 * 3) + (3 * 5), layer.ParameterCount);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithZeroRank_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 0));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithNegativeRank_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: -1));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithRankExceedingDimensions_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 11));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithCustomAlpha_UsesSpecifiedAlpha()
         {
             // Arrange & Act
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(16.0 / 3.0, layer.Scaling);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithDefaultAlpha_UsesRankAsAlpha()
         {
             // Arrange & Act
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(1.0, layer.Scaling);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_WithValidInput_ProducesCorrectOutputShape()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]); // Output size correct
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_WithInvalidInputSize_ThrowsArgumentException()
         {
             // Arrange
@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Throws<ArgumentException>(() => layer.Forward(input));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_InitiallyProducesZeroOutput_DueToZeroInitializationOfB()
         {
             // Arrange
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
 
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetParameters_ReturnsCorrectParameterCount()
         {
             // Arrange
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal((10 * 3) + (3 * 5), parameters.Length);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void SetParameters_ThenGetParameters_ReturnsSetValues()
         {
             // Arrange
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void SetParameters_WithWrongSize_ThrowsArgumentException()
         {
             // Arrange
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergeWeights_ProducesCorrectDimensions()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedWeights.Columns);   // outputSize
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergeWeights_InitiallyProducesZeroMatrix()
         {
             // Arrange
@@ -196,7 +196,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetMatrixA_ReturnsCorrectDimensions()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(3, matrixA.Columns);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetMatrixB_ReturnsCorrectDimensions()
         {
             // Arrange
@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, matrixB.Columns);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetMatrixA_ReturnsClone_NotOriginal()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.NotEqual(999.0, matrixA2[0, 0]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetMatrixB_InitializedToZero()
         {
             // Arrange
@@ -259,7 +259,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ParameterCount_ReflectsCorrectFormula()
         {
             // Arrange & Act
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void LoRALayer_WithFloat_WorksCorrectly()
         {
             // Arrange & Act

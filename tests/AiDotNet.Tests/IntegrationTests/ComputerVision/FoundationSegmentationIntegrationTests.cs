@@ -29,7 +29,7 @@ public class FoundationSegmentationIntegrationTests
 
     #region SAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_Construction_NativeMode_Succeeds()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -37,7 +37,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_Predict_ReturnsOutput()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -46,7 +46,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_Train_DoesNotThrow()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -56,7 +56,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_Metadata_ReturnsCorrectModelType()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -64,14 +64,14 @@ public class FoundationSegmentationIntegrationTests
         Assert.Equal("SAM", meta.AdditionalInfo["ModelName"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_Dispose_DoesNotThrow()
     {
         var model = new SAM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_PromptableSegmentation_SetImageAndSegmentFromPoints()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -87,7 +87,7 @@ public class FoundationSegmentationIntegrationTests
 
     #region SAM 2.1
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM21_Construction_NativeMode_Succeeds()
     {
         var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
@@ -95,7 +95,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM21_Predict_ReturnsOutput()
     {
         var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
@@ -104,7 +104,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM21_Train_DoesNotThrow()
     {
         var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
@@ -114,7 +114,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM21_Dispose_DoesNotThrow()
     {
         var model = new SAM21<double>(Arch());
@@ -125,7 +125,7 @@ public class FoundationSegmentationIntegrationTests
 
     #region SAM-HQ
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAMHQ_Construction_NativeMode_Succeeds()
     {
         var model = new SAMHQ<double>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
@@ -133,7 +133,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAMHQ_Predict_ReturnsOutput()
     {
         var model = new SAMHQ<double>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
@@ -142,7 +142,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAMHQ_Dispose_DoesNotThrow()
     {
         var model = new SAMHQ<double>(Arch());
@@ -153,7 +153,7 @@ public class FoundationSegmentationIntegrationTests
 
     #region Mask2Former
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_Construction_Succeeds()
     {
         var model = new Mask2Former<double>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
@@ -161,7 +161,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_Predict_ReturnsOutput()
     {
         var model = new Mask2Former<double>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
@@ -170,7 +170,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_Dispose_DoesNotThrow()
     {
         var model = new Mask2Former<double>(Arch());
@@ -181,14 +181,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region OneFormer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneFormer_Construction_Succeeds()
     {
         var model = new OneFormer<double>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneFormer_Predict_ReturnsOutput()
     {
         var model = new OneFormer<double>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
@@ -197,7 +197,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneFormer_Dispose_DoesNotThrow()
     {
         var model = new OneFormer<double>(Arch());
@@ -208,14 +208,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region MaskDINO
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaskDINO_Construction_Succeeds()
     {
         var model = new MaskDINO<double>(Arch(), modelSize: MaskDINOModelSize.R50);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaskDINO_Predict_ReturnsOutput()
     {
         var model = new MaskDINO<double>(Arch(), modelSize: MaskDINOModelSize.R50);
@@ -224,7 +224,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaskDINO_Dispose_DoesNotThrow()
     {
         var model = new MaskDINO<double>(Arch());
@@ -235,14 +235,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region OMGSeg
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OMGSeg_Construction_Succeeds()
     {
         var model = new OMGSeg<double>(Arch(), modelSize: OMGSegModelSize.Large);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OMGSeg_Predict_ReturnsOutput()
     {
         var model = new OMGSeg<double>(Arch(), modelSize: OMGSegModelSize.Large);
@@ -251,7 +251,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OMGSeg_Dispose_DoesNotThrow()
     {
         var model = new OMGSeg<double>(Arch());
@@ -262,14 +262,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region EoMT
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EoMT_Construction_Succeeds()
     {
         var model = new EoMT<double>(Arch(), modelSize: EoMTModelSize.Base);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EoMT_Predict_ReturnsOutput()
     {
         var model = new EoMT<double>(Arch(), modelSize: EoMTModelSize.Base);
@@ -278,7 +278,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EoMT_Dispose_DoesNotThrow()
     {
         var model = new EoMT<double>(Arch());
@@ -289,14 +289,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region QueryMeldNet
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QueryMeldNet_Construction_Succeeds()
     {
         var model = new QueryMeldNet<double>(Arch(), modelSize: QueryMeldNetModelSize.R50);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QueryMeldNet_Predict_ReturnsOutput()
     {
         var model = new QueryMeldNet<double>(Arch(), modelSize: QueryMeldNetModelSize.R50);
@@ -305,7 +305,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QueryMeldNet_Dispose_DoesNotThrow()
     {
         var model = new QueryMeldNet<double>(Arch());
@@ -316,14 +316,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region UNINEXT
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UNINEXT_Construction_Succeeds()
     {
         var model = new UNINEXT<double>(Arch(), modelSize: UNINEXTModelSize.R50);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UNINEXT_Predict_ReturnsOutput()
     {
         var model = new UNINEXT<double>(Arch(), modelSize: UNINEXTModelSize.R50);
@@ -332,7 +332,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UNINEXT_Dispose_DoesNotThrow()
     {
         var model = new UNINEXT<double>(Arch());
@@ -343,14 +343,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region U2Seg
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void U2Seg_Construction_Succeeds()
     {
         var model = new U2Seg<double>(Arch());
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void U2Seg_Predict_ReturnsOutput()
     {
         var model = new U2Seg<double>(Arch());
@@ -359,7 +359,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void U2Seg_Dispose_DoesNotThrow()
     {
         var model = new U2Seg<double>(Arch());
@@ -370,14 +370,14 @@ public class FoundationSegmentationIntegrationTests
 
     #region XDecoder
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void XDecoder_Construction_Succeeds()
     {
         var model = new XDecoder<double>(Arch(), modelSize: XDecoderModelSize.Tiny);
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void XDecoder_Predict_ReturnsOutput()
     {
         var model = new XDecoder<double>(Arch(), modelSize: XDecoderModelSize.Tiny);
@@ -386,7 +386,7 @@ public class FoundationSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void XDecoder_Dispose_DoesNotThrow()
     {
         var model = new XDecoder<double>(Arch());

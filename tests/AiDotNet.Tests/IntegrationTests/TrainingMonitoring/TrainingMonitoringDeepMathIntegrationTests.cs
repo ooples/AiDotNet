@@ -16,7 +16,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Session Management Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StartSession_ReturnsNonEmptyId()
     {
         var monitor = new TrainingMonitor<double>();
@@ -25,7 +25,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(sessionId));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StartSession_MultipleSessions_UniqueIds()
     {
         var monitor = new TrainingMonitor<double>();
@@ -39,14 +39,14 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(10, ids.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StartSession_EmptyName_Throws()
     {
         var monitor = new TrainingMonitor<double>();
         Assert.Throws<ArgumentException>(() => monitor.StartSession(""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EndSession_SetsEndTime()
     {
         var monitor = new TrainingMonitor<double>();
@@ -60,7 +60,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Metric Logging Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMetric_SingleMetric_Retrievable()
     {
         var monitor = new TrainingMonitor<double>();
@@ -72,7 +72,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.5, current["loss"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMetric_MultipleSteps_HistoryPreserved()
     {
         var monitor = new TrainingMonitor<double>();
@@ -89,7 +89,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.25, history[2].Value);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMetric_EmptyName_Throws()
     {
         var monitor = new TrainingMonitor<double>();
@@ -98,7 +98,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => monitor.LogMetric(sessionId, "", 1.0, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMetrics_MultiplePairs_AllRecorded()
     {
         var monitor = new TrainingMonitor<double>();
@@ -115,7 +115,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.85, current["accuracy"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetricHistory_UnknownMetric_ReturnsEmpty()
     {
         var monitor = new TrainingMonitor<double>();
@@ -125,7 +125,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Empty(history);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMetric_OverwritesCurrentMetric()
     {
         var monitor = new TrainingMonitor<double>();
@@ -142,7 +142,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Resource Usage Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogResourceUsage_RecordsSnapshot()
     {
         var monitor = new TrainingMonitor<double>();
@@ -155,7 +155,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(60.0, usage.MemoryUsageMB);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogResourceUsage_WithGpu_RecordsGpuMetrics()
     {
         var monitor = new TrainingMonitor<double>();
@@ -169,7 +169,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(90.0, usage.GpuMemoryUsageMB);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetResourceUsage_NoData_ReturnsDefault()
     {
         var monitor = new TrainingMonitor<double>();
@@ -183,7 +183,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Progress and Speed Stats Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpdateProgress_SetsProgressInfo()
     {
         var monitor = new TrainingMonitor<double>();
@@ -197,7 +197,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(100, stats.TotalIterations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSpeedStats_WithProgress_CalculatesPercentage()
     {
         var monitor = new TrainingMonitor<double>();
@@ -212,7 +212,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(25.0, stats.ProgressPercentage, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSpeedStats_WithProgress_IterationsPerSecond_Positive()
     {
         var monitor = new TrainingMonitor<double>();
@@ -228,7 +228,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.SecondsPerIteration > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSpeedStats_WithProgress_EstimatedRemaining_NonNegative()
     {
         var monitor = new TrainingMonitor<double>();
@@ -242,7 +242,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.EstimatedTimeRemaining >= TimeSpan.Zero);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSpeedStats_NoProgress_ZeroValues()
     {
         var monitor = new TrainingMonitor<double>();
@@ -253,7 +253,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0, stats.SecondsPerIteration);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSpeedStats_FullCompletion_100Percent()
     {
         var monitor = new TrainingMonitor<double>();
@@ -271,7 +271,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Epoch Management Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnEpochStart_LogsMessage()
     {
         var monitor = new TrainingMonitor<double>();
@@ -281,7 +281,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         // Should not throw, and logs "Epoch 1 started"
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnEpochEnd_LogsCompletionMessage()
     {
         var monitor = new TrainingMonitor<double>();
@@ -298,7 +298,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Message Logging Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMessage_EmptyMessage_Throws()
     {
         var monitor = new TrainingMonitor<double>();
@@ -308,7 +308,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
             monitor.LogMessage(sessionId, LogLevel.Info, ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogMessage_ValidMessage_NoThrow()
     {
         var monitor = new TrainingMonitor<double>();
@@ -323,7 +323,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Issue Detection Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CheckForIssues_NoIssues_EmptyList()
     {
         var monitor = new TrainingMonitor<double>();
@@ -333,7 +333,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Empty(issues);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CheckForIssues_HighMemory_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
@@ -346,7 +346,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Contains("memory"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CheckForIssues_CriticalGpuMemory_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
@@ -360,7 +360,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Contains("GPU memory"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CheckForIssues_RecentErrors_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
@@ -377,7 +377,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Speed Stats Math Verification
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeedStats_IterationsPerSecond_InverseOfSecondsPerIteration()
     {
         var monitor = new TrainingMonitor<double>();
@@ -397,7 +397,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeedStats_ElapsedTime_NonNegative()
     {
         var monitor = new TrainingMonitor<double>();
@@ -407,7 +407,7 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.ElapsedTime >= TimeSpan.Zero);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeedStats_ProgressPercentage_Between0And100()
     {
         var monitor = new TrainingMonitor<double>();

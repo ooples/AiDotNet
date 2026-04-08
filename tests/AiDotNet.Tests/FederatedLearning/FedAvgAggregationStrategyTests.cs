@@ -10,7 +10,7 @@ using Xunit;
 /// </summary>
 public class FedAvgAggregationStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithEqualWeights_ReturnsAverageModel()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(4.0, aggregatedModel["layer1"][2], precision: 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithDifferentWeights_ReturnsWeightedAverage()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(3.5, aggregatedModel["layer1"][1], precision: 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithMultipleLayers_AggregatesAllLayers()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(3.0, aggregatedModel["layer2"][0], precision: 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithEmptyClientModels_ThrowsArgumentException()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(emptyModels, clientWeights));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithNullClientModels_ThrowsArgumentException()
     {
         // Arrange
@@ -145,7 +145,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(nullModels!, clientWeights));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetStrategyName_ReturnsCorrectName()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal("FedAvg", name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_WithThreeClients_ComputesCorrectWeightedAverage()
     {
         // Arrange

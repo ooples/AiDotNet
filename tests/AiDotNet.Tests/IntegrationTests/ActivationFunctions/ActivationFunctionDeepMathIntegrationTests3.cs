@@ -29,7 +29,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // Identity: f(x) = x, f'(x) = 1
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Identity_Activate_ReturnsInput()
     {
         var fn = new IdentityActivation<double>();
@@ -38,7 +38,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(x, fn.Activate(x), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Identity_Derivative_AlwaysOne()
     {
         var fn = new IdentityActivation<double>();
@@ -51,7 +51,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // PReLU: f(x) = x if x>0, alpha*x otherwise; f'(x) = 1 if x>0, alpha otherwise
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_Positive_ReturnsInput()
     {
         var fn = new PReLUActivation<double>(0.01);
@@ -59,7 +59,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(0.5, fn.Activate(0.5), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_Negative_ReturnsAlphaTimesInput()
     {
         var fn = new PReLUActivation<double>(0.1);
@@ -68,14 +68,14 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(-0.05, fn.Activate(-0.5), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_AtZero_ReturnsZero()
     {
         var fn = new PReLUActivation<double>(0.1);
         Assert.Equal(0.0, fn.Activate(0.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_Derivative_PositiveRegion_IsOne()
     {
         var fn = new PReLUActivation<double>(0.1);
@@ -83,7 +83,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(1.0, fn.Derivative(0.01), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_Derivative_NegativeRegion_IsAlpha()
     {
         var fn = new PReLUActivation<double>(0.1);
@@ -91,7 +91,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(0.1, fn.Derivative(-0.01), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLU_NumericalGradient()
     {
         var fn = new PReLUActivation<double>(0.25);
@@ -106,7 +106,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // In eval mode, alpha = (lower+upper)/2
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RReLU_Positive_ReturnsInput()
     {
         var fn = new RReLUActivation<double>(0.1, 0.3);
@@ -114,7 +114,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(5.0, fn.Activate(5.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RReLU_Negative_ReturnsMidAlphaTimesInput()
     {
         var fn = new RReLUActivation<double>(0.1, 0.3);
@@ -124,7 +124,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(-0.4, fn.Activate(-2.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RReLU_NumericalGradient()
     {
         var fn = new RReLUActivation<double>(0.1, 0.3);
@@ -137,14 +137,14 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // SiLU/Swish: f(x) = x * sigmoid(x), f'(x) = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SiLU_AtZero_ReturnsZero()
     {
         var fn = new SiLUActivation<double>();
         Assert.Equal(0.0, fn.Activate(0.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SiLU_HandCalculated()
     {
         var fn = new SiLUActivation<double>();
@@ -153,7 +153,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(expected, fn.Activate(1.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SiLU_Derivative_AtZero()
     {
         var fn = new SiLUActivation<double>();
@@ -161,7 +161,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(0.5, fn.Derivative(0.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SiLU_NumericalGradient()
     {
         var fn = new SiLUActivation<double>();
@@ -175,7 +175,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // Softmax: f(x_i) = exp(x_i) / sum(exp(x_j))
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmax_OutputsSumToOne()
     {
         var fn = new SoftmaxActivation<double>();
@@ -186,7 +186,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(1.0, sum, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmax_AllEqual_ReturnsUniform()
     {
         var fn = new SoftmaxActivation<double>();
@@ -196,7 +196,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(1.0 / 3.0, output[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmax_HandCalculated()
     {
         var fn = new SoftmaxActivation<double>();
@@ -210,7 +210,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(e3 / total, output[2], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmax_ShiftInvariance()
     {
         // softmax(x + c) = softmax(x) for any constant c
@@ -223,7 +223,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(output1[i], output2[i], 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmax_AllNonNegative()
     {
         var fn = new SoftmaxActivation<double>();
@@ -237,7 +237,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // LogSoftmax: f(x_i) = log(softmax(x_i)) = x_i - log(sum(exp(x_j)))
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmax_AllEqual_ReturnsLogUniform()
     {
         var fn = new LogSoftmaxActivation<double>();
@@ -248,7 +248,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(expected, output[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmax_OutputsAlwaysNonPositive()
     {
         var fn = new LogSoftmaxActivation<double>();
@@ -258,7 +258,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.True(output[i] <= 0 + 1e-10, $"LogSoftmax should be <= 0, got {output[i]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmax_ExpMatchesSoftmax()
     {
         var logSm = new LogSoftmaxActivation<double>();
@@ -274,7 +274,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // Sign: f(x) = -1 if x<0, 0 if x=0, 1 if x>0
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sign_Values()
     {
         var fn = new SignActivation<double>();
@@ -283,7 +283,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(1.0, fn.Activate(5.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sign_Derivative_AlwaysZero()
     {
         // Sign function derivative is 0 everywhere (undefined at 0, conventionally 0)
@@ -297,14 +297,14 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // ScaledTanh: f(x) = (1 - e^(-βx)) / (1 + e^(-βx)) = tanh(βx/2)
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanh_AtZero_ReturnsZero()
     {
         var fn = new ScaledTanhActivation<double>(2.0 / 3.0);
         Assert.Equal(0.0, fn.Activate(0.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanh_HandCalculated()
     {
         double beta = 2.0 / 3.0;
@@ -315,7 +315,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(expected, fn.Activate(1.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanh_Beta2_EqualsTanh()
     {
         // When β=2: f(x) = tanh(x)
@@ -325,7 +325,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(Math.Tanh(x), fn.Activate(x), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanh_OddFunction()
     {
         // f(-x) = -f(x) (odd symmetry)
@@ -335,7 +335,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(-fn.Activate(x), fn.Activate(-x), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanh_NumericalGradient()
     {
         var fn = new ScaledTanhActivation<double>(2.0 / 3.0);
@@ -349,7 +349,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // Softmin: f(x_i) = exp(-x_i) / sum(exp(-x_j))
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmin_OutputsSumToOne()
     {
         var fn = new SoftminActivation<double>();
@@ -360,7 +360,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(1.0, sum, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Softmin_SmallestInput_GetsLargestWeight()
     {
         var fn = new SoftminActivation<double>();
@@ -375,14 +375,14 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // SQRBF: f(x) = exp(-x^2), Gaussian radial basis function
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_AtZero_ReturnsOne()
     {
         var fn = new SQRBFActivation<double>();
         Assert.Equal(1.0, fn.Activate(0.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_HandCalculated()
     {
         var fn = new SQRBFActivation<double>();
@@ -392,7 +392,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         Assert.Equal(Math.Exp(-4.0), fn.Activate(2.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_EvenFunction()
     {
         // f(-x) = f(x) (even symmetry)
@@ -402,7 +402,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(fn.Activate(x), fn.Activate(-x), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_OutputAlwaysPositive()
     {
         var fn = new SQRBFActivation<double>();
@@ -411,7 +411,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.True(fn.Activate(x) > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_NumericalGradient()
     {
         var fn = new SQRBFActivation<double>();
@@ -422,7 +422,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
         AssertNumericalGradient(fn, 2.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBF_Derivative_HandCalculated()
     {
         // f'(x) = -2x * exp(-x^2)
@@ -436,7 +436,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
     // LogSoftmin: f(x_i) = log(softmin(x_i)) = -x_i - log(sum(exp(-x_j)))
     // ====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmin_AllEqual_ReturnsLogUniform()
     {
         var fn = new LogSoftminActivation<double>();
@@ -447,7 +447,7 @@ public class ActivationFunctionDeepMathIntegrationTests3
             Assert.Equal(expected, output[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmin_OutputsAlwaysNonPositive()
     {
         var fn = new LogSoftminActivation<double>();

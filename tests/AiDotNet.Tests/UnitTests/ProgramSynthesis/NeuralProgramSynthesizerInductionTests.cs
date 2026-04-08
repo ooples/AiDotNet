@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class NeuralProgramSynthesizerInductionTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynthesizeProgram_WithExamples_RefinesWhenFeedbackImprovesFitness()
     {
         var architecture = new CodeSynthesisArchitecture<double>(

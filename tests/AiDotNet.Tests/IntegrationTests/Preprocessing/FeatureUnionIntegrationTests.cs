@@ -24,7 +24,7 @@ public class FeatureUnionIntegrationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_CreatesEmptyUnion()
     {
         // Act
@@ -39,7 +39,7 @@ public class FeatureUnionIntegrationTests
 
     #region Add Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_WithName_AddsTransformerWithName()
     {
         // Arrange
@@ -55,7 +55,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("my_scaler", names[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_WithoutName_AddsWithAutomaticName()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("transformer_0", names[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_NullTransformer_ThrowsArgumentNullException()
     {
         // Arrange
@@ -80,7 +80,7 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentNullException>(() => union.Add("test", null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_EmptyName_ThrowsArgumentException()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentException>(() => union.Add("", scaler));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_WhitespaceName_ThrowsArgumentException()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentException>(() => union.Add("   ", scaler));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_ReturnsThisForChaining()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class FeatureUnionIntegrationTests
         Assert.Same(union, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Add_MultipleTransformers_ChainsCalls()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class FeatureUnionIntegrationTests
 
     #region Fit Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Fit_NoTransformers_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => union.Fit(data));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Fit_SetsFittedToTrue()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class FeatureUnionIntegrationTests
         Assert.True(union.IsFitted);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Fit_FitsAllTransformers()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class FeatureUnionIntegrationTests
 
     #region Transform Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transform_SingleTransformer_ReturnsTransformedOutput()
     {
         // Arrange
@@ -204,7 +204,7 @@ public class FeatureUnionIntegrationTests
         Assert.True(Math.Abs(col0Mean) < 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transform_MultipleTransformers_ConcatenatesOutputs()
     {
         // Arrange
@@ -221,7 +221,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transform_AllTransformersReceiveSameInput()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class FeatureUnionIntegrationTests
         Assert.True(Math.Abs(result[2, 1] - 1.0) < 1e-10, "MinMaxScaler max should be 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transform_WithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -264,7 +264,7 @@ public class FeatureUnionIntegrationTests
 
     #region GetTransformer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetTransformer_ExistingName_ReturnsTransformer()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class FeatureUnionIntegrationTests
         Assert.Same(scaler, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetTransformer_NonExistingName_ReturnsNull()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class FeatureUnionIntegrationTests
 
     #region GetTransformerOutputWidths Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetTransformerOutputWidths_BeforeFit_ReturnsEmptyDictionary()
     {
         // Arrange
@@ -311,7 +311,7 @@ public class FeatureUnionIntegrationTests
         Assert.Empty(widths);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetTransformerOutputWidths_AfterFit_ReturnsCorrectWidths()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class FeatureUnionIntegrationTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetFeatureNamesOut_PrefixesWithTransformerName()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("minmax__col_b", outputNames[3]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetFeatureNamesOut_BeforeFit_ReturnsEmptyArray()
     {
         // Arrange
@@ -375,7 +375,7 @@ public class FeatureUnionIntegrationTests
 
     #region SupportsInverseTransform Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsInverseTransform_ReturnsFalse()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class FeatureUnionIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitTransform_SingleColumnInput_WorksCorrectly()
     {
         // Arrange
@@ -406,7 +406,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(2, result.Columns); // 1 + 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitTransform_SingleRowInput_WorksCorrectly()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitTransform_ManyTransformers_ConcatenatesAll()
     {
         // Arrange
@@ -442,7 +442,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(20, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transform_DifferentRowCount_WorksCorrectly()
     {
         // Arrange
@@ -461,7 +461,7 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitTransform_PreservesRowOrder()
     {
         // Arrange

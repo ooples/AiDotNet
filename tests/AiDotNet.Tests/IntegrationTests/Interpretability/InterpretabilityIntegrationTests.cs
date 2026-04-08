@@ -17,7 +17,7 @@ public class InterpretabilityIntegrationTests
 {
     #region InterpretationMethod Enum Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretationMethod_ContainsExpectedValues()
     {
         var values = (InterpretationMethod[])Enum.GetValues(typeof(InterpretationMethod));
@@ -49,7 +49,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(InterpretationMethod.NoiseTunnel, values);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretationMethod_HasExpectedCount()
     {
         var values = (InterpretationMethod[])Enum.GetValues(typeof(InterpretationMethod));
@@ -120,7 +120,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(expected, method.ToString());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretationMethod_CanBeUsedInHashSet()
     {
         var enabledMethods = new HashSet<InterpretationMethod>
@@ -147,7 +147,7 @@ public class InterpretabilityIntegrationTests
 
     #region FairnessMetric Enum Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetric_ContainsExpectedValues()
     {
         var values = (FairnessMetric[])Enum.GetValues(typeof(FairnessMetric));
@@ -160,7 +160,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(FairnessMetric.StatisticalParityDifference, values);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetric_HasExpectedCount()
     {
         var values = (FairnessMetric[])Enum.GetValues(typeof(FairnessMetric));
@@ -179,7 +179,7 @@ public class InterpretabilityIntegrationTests
         Assert.True(Enum.IsDefined(typeof(FairnessMetric), metric));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetric_CanBeUsedInList()
     {
         var metrics = new List<FairnessMetric>
@@ -197,7 +197,7 @@ public class InterpretabilityIntegrationTests
 
     #region BiasDetectionResult Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_DefaultConstructor_InitializesProperties()
     {
         var result = new BiasDetectionResult<double>();
@@ -209,7 +209,7 @@ public class InterpretabilityIntegrationTests
         Assert.Empty(result.GroupSizes);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetHasBias()
     {
         var result = new BiasDetectionResult<double>
@@ -220,7 +220,7 @@ public class InterpretabilityIntegrationTests
         Assert.True(result.HasBias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetMessage()
     {
         var result = new BiasDetectionResult<double>
@@ -231,7 +231,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal("Bias detected: Demographic parity difference exceeds threshold", result.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetGroupPositiveRates()
     {
         var result = new BiasDetectionResult<double>();
@@ -242,7 +242,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.6, result.GroupPositiveRates["Group2"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetGroupSizes()
     {
         var result = new BiasDetectionResult<double>();
@@ -253,7 +253,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(150, result.GroupSizes["Group2"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetDisparateImpactRatio()
     {
         var result = new BiasDetectionResult<double>
@@ -264,7 +264,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.75, result.DisparateImpactRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetStatisticalParityDifference()
     {
         var result = new BiasDetectionResult<double>
@@ -275,7 +275,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.15, result.StatisticalParityDifference);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetEqualOpportunityDifference()
     {
         var result = new BiasDetectionResult<double>
@@ -286,7 +286,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.12, result.EqualOpportunityDifference);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetGroupTruePositiveRates()
     {
         var result = new BiasDetectionResult<double>();
@@ -297,7 +297,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.7, result.GroupTruePositiveRates["Group2"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetGroupFalsePositiveRates()
     {
         var result = new BiasDetectionResult<double>();
@@ -308,7 +308,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.2, result.GroupFalsePositiveRates["Group2"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetectionResult_CanSetGroupPrecisions()
     {
         var result = new BiasDetectionResult<double>();
@@ -323,7 +323,7 @@ public class InterpretabilityIntegrationTests
 
     #region FairnessMetrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetrics_Constructor_InitializesAllProperties()
     {
         var metrics = new FairnessMetrics<double>(
@@ -344,7 +344,7 @@ public class InterpretabilityIntegrationTests
         Assert.Empty(metrics.AdditionalMetrics);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetrics_CanSetSensitiveFeatureIndex()
     {
         var metrics = new FairnessMetrics<double>(0, 0, 0, 0, 1, 0)
@@ -355,7 +355,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(5, metrics.SensitiveFeatureIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetrics_CanAddAdditionalMetrics()
     {
         var metrics = new FairnessMetrics<double>(0, 0, 0, 0, 1, 0);
@@ -366,7 +366,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.6, metrics.AdditionalMetrics["Group_B_PositiveRate"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairnessMetrics_CanUpdateProperties()
     {
         var metrics = new FairnessMetrics<double>(0, 0, 0, 0, 1, 0);
@@ -390,7 +390,7 @@ public class InterpretabilityIntegrationTests
 
     #region AnchorExplanation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_DefaultConstructor_InitializesProperties()
     {
         var explanation = new AnchorExplanation<double>();
@@ -406,7 +406,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, explanation.Threshold);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanSetPrecision()
     {
         var explanation = new AnchorExplanation<double>
@@ -417,7 +417,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.95, explanation.Precision);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanSetCoverage()
     {
         var explanation = new AnchorExplanation<double>
@@ -428,7 +428,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.3, explanation.Coverage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanSetThreshold()
     {
         var explanation = new AnchorExplanation<double>
@@ -439,7 +439,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.9, explanation.Threshold);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanAddAnchorRules()
     {
         var explanation = new AnchorExplanation<double>();
@@ -450,7 +450,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal((0.0, 0.8), explanation.AnchorRules[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanAddAnchorFeatures()
     {
         var explanation = new AnchorExplanation<double>();
@@ -464,7 +464,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(5, explanation.AnchorFeatures);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AnchorExplanation_CanSetDescription()
     {
         var explanation = new AnchorExplanation<double>
@@ -479,7 +479,7 @@ public class InterpretabilityIntegrationTests
 
     #region LimeExplanation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_DefaultConstructor_InitializesProperties()
     {
         var explanation = new LimeExplanation<double>();
@@ -492,7 +492,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0, explanation.NumFeatures);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_CanSetIntercept()
     {
         var explanation = new LimeExplanation<double>
@@ -503,7 +503,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.5, explanation.Intercept);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_CanSetPredictedValue()
     {
         var explanation = new LimeExplanation<double>
@@ -514,7 +514,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.85, explanation.PredictedValue);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_CanSetLocalModelScore()
     {
         var explanation = new LimeExplanation<double>
@@ -525,7 +525,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.92, explanation.LocalModelScore);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_CanSetNumFeatures()
     {
         var explanation = new LimeExplanation<double>
@@ -536,7 +536,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(10, explanation.NumFeatures);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LimeExplanation_CanAddFeatureImportance()
     {
         var explanation = new LimeExplanation<double>();
@@ -553,7 +553,7 @@ public class InterpretabilityIntegrationTests
 
     #region CounterfactualExplanation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_DefaultConstructor_InitializesProperties()
     {
         var explanation = new CounterfactualExplanation<double>();
@@ -568,7 +568,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0, explanation.MaxChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_CanSetOriginalInput()
     {
         var explanation = new CounterfactualExplanation<double>();
@@ -578,7 +578,7 @@ public class InterpretabilityIntegrationTests
         Assert.NotNull(explanation.OriginalInput);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_CanSetCounterfactualInput()
     {
         var explanation = new CounterfactualExplanation<double>();
@@ -588,7 +588,7 @@ public class InterpretabilityIntegrationTests
         Assert.NotNull(explanation.CounterfactualInput);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_CanSetDistance()
     {
         var explanation = new CounterfactualExplanation<double>
@@ -599,7 +599,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.75, explanation.Distance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_CanSetMaxChanges()
     {
         var explanation = new CounterfactualExplanation<double>
@@ -610,7 +610,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(5, explanation.MaxChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CounterfactualExplanation_CanAddFeatureChanges()
     {
         var explanation = new CounterfactualExplanation<double>();
@@ -625,7 +625,7 @@ public class InterpretabilityIntegrationTests
 
     #region PartialDependenceData Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependenceData_DefaultConstructor_InitializesProperties()
     {
         var data = new PartialDependenceData<double>();
@@ -639,7 +639,7 @@ public class InterpretabilityIntegrationTests
         Assert.Empty(data.IceCurves);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependenceData_CanSetGridResolution()
     {
         var data = new PartialDependenceData<double>
@@ -650,7 +650,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(50, data.GridResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependenceData_CanSetFeatureIndices()
     {
         var data = new PartialDependenceData<double>
@@ -661,7 +661,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(3, data.FeatureIndices.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependenceData_CanAddGridValues()
     {
         var data = new PartialDependenceData<double>();
@@ -672,7 +672,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(3, data.GridValues[0].Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependenceData_CanAddIceCurves()
     {
         var data = new PartialDependenceData<double>();
@@ -686,7 +686,7 @@ public class InterpretabilityIntegrationTests
 
     #region DemographicParityBiasDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_Constructor_DefaultThreshold()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -694,7 +694,7 @@ public class InterpretabilityIntegrationTests
         Assert.True(detector.IsLowerBiasBetter);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_Constructor_CustomThreshold()
     {
         var detector = new DemographicParityBiasDetector<double>(0.05);
@@ -711,7 +711,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DemographicParityBiasDetector<double>(threshold));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_NullPredictions_ThrowsException()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -720,7 +720,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_NullSensitiveFeature_ThrowsException()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -729,7 +729,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentNullException>(() => detector.DetectBias(predictions, null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_LengthMismatch_ThrowsException()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -739,7 +739,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentException>(() => detector.DetectBias(predictions, sensitiveFeature));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_SingleGroup_NoBias()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -752,7 +752,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains("Insufficient groups", result.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_EqualRates_NoBias()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -768,7 +768,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(2, result.GroupSizes.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_DetectBias_UnequalRates_DetectsBias()
     {
         var detector = new DemographicParityBiasDetector<double>(0.1);
@@ -783,7 +783,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains("Bias detected", result.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityBiasDetector_IsBetterBiasScore_LowerIsBetter()
     {
         var detector = new DemographicParityBiasDetector<double>();
@@ -796,7 +796,7 @@ public class InterpretabilityIntegrationTests
 
     #region DisparateImpactBiasDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_Constructor_DefaultThreshold()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -804,7 +804,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(detector.IsLowerBiasBetter); // Higher DI ratio is better (closer to 1)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_Constructor_CustomThreshold()
     {
         var detector = new DisparateImpactBiasDetector<double>(0.7);
@@ -821,7 +821,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DisparateImpactBiasDetector<double>(threshold));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_DetectBias_NullPredictions_ThrowsException()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -830,7 +830,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_DetectBias_SingleGroup_NoBias()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -842,7 +842,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(result.HasBias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_DetectBias_AllZeroPredictions_NoBias()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -855,7 +855,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, result.DisparateImpactRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_DetectBias_WithActualLabels_ComputesAdditionalMetrics()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -870,7 +870,7 @@ public class InterpretabilityIntegrationTests
         Assert.NotNull(result.GroupPrecisions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DisparateImpactBiasDetector_IsBetterBiasScore_HigherIsBetter()
     {
         var detector = new DisparateImpactBiasDetector<double>();
@@ -883,7 +883,7 @@ public class InterpretabilityIntegrationTests
 
     #region EqualOpportunityBiasDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_Constructor_DefaultThreshold()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -891,7 +891,7 @@ public class InterpretabilityIntegrationTests
         Assert.True(detector.IsLowerBiasBetter);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_Constructor_CustomThreshold()
     {
         var detector = new EqualOpportunityBiasDetector<double>(0.05);
@@ -908,7 +908,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new EqualOpportunityBiasDetector<double>(threshold));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_DetectBias_NullPredictions_ThrowsException()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -917,7 +917,7 @@ public class InterpretabilityIntegrationTests
         Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_DetectBias_SingleGroup_NoBias()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -930,7 +930,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(result.HasBias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_DetectBias_NoActualLabels_CannotCompute()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -943,7 +943,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains("Cannot compute equal opportunity without actual labels", result.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_DetectBias_WithActualLabels_ComputesTPRs()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -957,7 +957,7 @@ public class InterpretabilityIntegrationTests
         Assert.NotNull(result.EqualOpportunityDifference);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualOpportunityBiasDetector_IsBetterBiasScore_LowerIsBetter()
     {
         var detector = new EqualOpportunityBiasDetector<double>();
@@ -970,7 +970,7 @@ public class InterpretabilityIntegrationTests
 
     #region BasicFairnessEvaluator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BasicFairnessEvaluator_Constructor_InitializesCorrectly()
     {
         var evaluator = new BasicFairnessEvaluator<double>();
@@ -978,7 +978,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(evaluator.IsHigherFairnessBetter);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BasicFairnessEvaluator_IsBetterFairnessScore_LowerIsBetter()
     {
         var evaluator = new BasicFairnessEvaluator<double>();
@@ -991,7 +991,7 @@ public class InterpretabilityIntegrationTests
 
     #region ComprehensiveFairnessEvaluator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComprehensiveFairnessEvaluator_Constructor_InitializesCorrectly()
     {
         var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -999,7 +999,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(evaluator.IsHigherFairnessBetter);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComprehensiveFairnessEvaluator_IsBetterFairnessScore_LowerIsBetter()
     {
         var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -1012,7 +1012,7 @@ public class InterpretabilityIntegrationTests
 
     #region GroupFairnessEvaluator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupFairnessEvaluator_Constructor_InitializesCorrectly()
     {
         var evaluator = new GroupFairnessEvaluator<double>();
@@ -1020,7 +1020,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(evaluator.IsHigherFairnessBetter);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroupFairnessEvaluator_IsBetterFairnessScore_LowerIsBetter()
     {
         var evaluator = new GroupFairnessEvaluator<double>();
@@ -1033,7 +1033,7 @@ public class InterpretabilityIntegrationTests
 
     #region InterpretabilityMetricsHelper Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetUniqueGroups_ReturnsUniqueValues()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 2.0 });
@@ -1046,7 +1046,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(2.0, groups);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetUniqueGroups_EmptyVector_ReturnsEmptyList()
     {
         var sensitiveFeature = new Vector<double>(Array.Empty<double>());
@@ -1056,7 +1056,7 @@ public class InterpretabilityIntegrationTests
         Assert.Empty(groups);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetUniqueGroups_SingleValue_ReturnsSingleGroup()
     {
         var sensitiveFeature = new Vector<double>(new[] { 1.0, 1.0, 1.0 });
@@ -1067,7 +1067,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, groups[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetGroupIndices_ReturnsCorrectIndices()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
@@ -1080,7 +1080,7 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(4, indices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetGroupIndices_NoMatches_ReturnsEmptyList()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -1090,7 +1090,7 @@ public class InterpretabilityIntegrationTests
         Assert.Empty(indices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetSubset_ReturnsCorrectSubset()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
@@ -1104,7 +1104,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(50.0, subset[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetSubset_EmptyIndices_ReturnsEmptyVector()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -1115,7 +1115,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0, subset.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePositiveRate_AllPositive_ReturnsOne()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 1.0, 1.0 });
@@ -1125,7 +1125,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, rate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePositiveRate_AllNegative_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
@@ -1135,7 +1135,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, rate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePositiveRate_MixedValues_ReturnsCorrectRate()
     {
         var predictions = new Vector<double>(new[] { 1.0, 0.0, 1.0, 0.0 });
@@ -1145,7 +1145,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.5, rate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePositiveRate_EmptyVector_ReturnsZero()
     {
         var predictions = new Vector<double>(Array.Empty<double>());
@@ -1155,7 +1155,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, rate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_PerfectRecall_ReturnsOne()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 0.0, 0.0 });
@@ -1166,7 +1166,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, tpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ZeroRecall_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -1177,7 +1177,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, tpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_NoActualPositives_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 0.0, 0.0 });
@@ -1188,7 +1188,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, tpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_EmptyVectors_ReturnsZero()
     {
         var predictions = new Vector<double>(Array.Empty<double>());
@@ -1199,7 +1199,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, tpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_NoFalsePositives_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 0.0, 0.0 });
@@ -1210,7 +1210,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, fpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_AllFalsePositives_ReturnsOne()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0 });
@@ -1221,7 +1221,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, fpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_NoActualNegatives_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0 });
@@ -1232,7 +1232,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, fpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_EmptyVectors_ReturnsZero()
     {
         var predictions = new Vector<double>(Array.Empty<double>());
@@ -1243,7 +1243,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, fpr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_PerfectPrecision_ReturnsOne()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 0.0, 0.0 });
@@ -1254,7 +1254,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(1.0, precision);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_ZeroPrecision_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 1.0, 1.0 });
@@ -1265,7 +1265,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, precision);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_NoPredictedPositives_ReturnsZero()
     {
         var predictions = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
@@ -1276,7 +1276,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, precision);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_EmptyVectors_ReturnsZero()
     {
         var predictions = new Vector<double>(Array.Empty<double>());
@@ -1287,7 +1287,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, precision);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_PartialMatch_ReturnsCorrectValue()
     {
         // Predictions: [1, 1, 0, 0] - predicts positive for indices 0,1
@@ -1306,7 +1306,7 @@ public class InterpretabilityIntegrationTests
 
     #region InterpretableModelHelper Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task InterpretableModelHelper_GetFeatureInteractionAsync_FeatureInteractionNotEnabled_ThrowsException()
     {
         var enabledMethods = new HashSet<InterpretationMethod> { InterpretationMethod.SHAP };
@@ -1317,7 +1317,7 @@ public class InterpretabilityIntegrationTests
 #pragma warning restore CS0618
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task InterpretableModelHelper_GetFeatureInteractionAsync_FeatureInteractionEnabled_ReturnsZero()
     {
         var enabledMethods = new HashSet<InterpretationMethod> { InterpretationMethod.FeatureInteraction };
@@ -1329,7 +1329,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.0, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task InterpretableModelHelper_ValidateFairnessAsync_ReturnsExpectedDefaults()
     {
         var fairnessMetrics = new List<FairnessMetric>
@@ -1355,7 +1355,7 @@ public class InterpretabilityIntegrationTests
 
     #region Integration Tests - End-to-End Bias Detection Scenarios
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_EndToEnd_DemographicParityScenario()
     {
         // Create a scenario with two demographic groups
@@ -1385,7 +1385,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.4, result.GroupPositiveRates["1"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_EndToEnd_DisparateImpactScenario()
     {
         // Create a scenario violating the 80% rule
@@ -1410,7 +1410,7 @@ public class InterpretabilityIntegrationTests
         Assert.Equal(0.4, result.DisparateImpactRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_EndToEnd_EqualOpportunityScenario()
     {
         // Create a scenario with unequal true positive rates
@@ -1441,7 +1441,7 @@ public class InterpretabilityIntegrationTests
         Assert.NotNull(result.EqualOpportunityDifference);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_EndToEnd_NoBiasScenario()
     {
         // Create a scenario with equal treatment across groups
@@ -1473,7 +1473,7 @@ public class InterpretabilityIntegrationTests
 
     #region Integration Tests - Multiple Groups Scenario
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_MultipleGroups_ThreeGroups()
     {
         // Create a scenario with three demographic groups
@@ -1509,7 +1509,7 @@ public class InterpretabilityIntegrationTests
 
     #region Concurrent Access Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetector_ConcurrentAccess_ThreadSafe()
     {
         var detector = new DemographicParityBiasDetector<double>(0.1);
@@ -1530,7 +1530,7 @@ public class InterpretabilityIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetricsHelper_ConcurrentAccess_ThreadSafe()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 2.0 });
@@ -1552,7 +1552,7 @@ public class InterpretabilityIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_VerySmallDifference_BelowThreshold()
     {
         var predictions = new Vector<double>(new[]
@@ -1576,7 +1576,7 @@ public class InterpretabilityIntegrationTests
         Assert.False(result.HasBias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiasDetection_LargeDataset_PerformsCorrectly()
     {
         // Create a large dataset

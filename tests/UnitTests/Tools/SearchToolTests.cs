@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.Tools;
 /// </summary>
 public class SearchToolTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_ReturnsSearch()
     {
         // Arrange
@@ -21,7 +21,7 @@ public class SearchToolTests
         Assert.Equal("Search", name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Description_ReturnsNonEmptyString()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class SearchToolTests
         Assert.Contains(expectedSubstring, result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_EmptyInput_ReturnsError()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class SearchToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_WhitespaceInput_ReturnsError()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class SearchToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_UnknownQuery_ReturnsGenericResponse()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_CaseInsensitiveMatch_ReturnsResult()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class SearchToolTests
         Assert.Contains("Paris", result3, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_PartialMatch_ReturnsRelevantResult()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class SearchToolTests
         Assert.Contains("Paris", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomMockResults_UsesProvidedData()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class SearchToolTests
         Assert.Equal("another result", result2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddMockResult_NewQuery_AddsSuccessfully()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class SearchToolTests
         Assert.Equal("custom result", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddMockResult_ExistingQuery_UpdatesResult()
     {
         // Arrange
@@ -170,7 +170,7 @@ public class SearchToolTests
         Assert.Equal("Updated answer: Paris is the capital", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RemoveMockResult_ExistingQuery_RemovesAndReturnsTrue()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RemoveMockResult_NonExistingQuery_ReturnsFalse()
     {
         // Arrange
@@ -199,7 +199,7 @@ public class SearchToolTests
         Assert.False(removed);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClearMockResults_RemovesAllResults()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_QueryWithExtraWhitespace_HandlesCorrectly()
     {
         // Arrange

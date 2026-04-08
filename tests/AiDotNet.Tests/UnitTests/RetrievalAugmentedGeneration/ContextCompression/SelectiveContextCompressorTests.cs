@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(compressor);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroMaxSentences_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new SelectiveContextCompressor<double>(maxSentences: 0, relevanceThreshold: 0.3));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeMaxSentences_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -38,7 +38,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new SelectiveContextCompressor<double>(maxSentences: -5, relevanceThreshold: 0.3));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDifferentThresholds_CreatesInstance()
         {
             // Arrange & Act
@@ -54,7 +54,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Basic Functionality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidDocuments_ReturnsCompressedDocuments()
         {
             // Arrange
@@ -70,7 +70,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result.Count <= documents.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullDocuments_ThrowsArgumentNullException()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(null, query));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocumentList_ReturnsEmptyList()
         {
             // Arrange
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Compression Quality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_SelectsRelevantSentences()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 content.Contains("neural"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_RespectsMaxSentences()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithHighThreshold_FiltersMoreSentences()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 "Higher threshold should produce shorter or equal output");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesMetadata()
         {
             // Arrange
@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesRelevanceScores()
         {
             // Arrange
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesDocumentIds()
         {
             // Arrange
@@ -263,7 +263,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Edge Cases Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocument_FiltersOutDocument()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result.Count <= documents.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNoRelevantSentences_MayReturnEmpty()
         {
             // Arrange
@@ -301,7 +301,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             // May be empty or have minimal content due to high threshold
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSingleSentence_HandlesCorrectly()
         {
             // Arrange
@@ -318,7 +318,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithVeryLargeDocument_CompressesSuccessfully()
         {
             // Arrange
@@ -338,7 +338,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithUnicodeContent_HandlesCorrectly()
         {
             // Arrange
@@ -358,7 +358,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSpecialCharacters_HandlesCorrectly()
         {
             // Arrange
@@ -378,7 +378,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithMultipleDocuments_ProcessesAll()
         {
             // Arrange
@@ -402,7 +402,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Relevance Filtering Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithZeroThreshold_IncludesAllSentences()
         {
             // Arrange
@@ -420,7 +420,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_OrdersSentencesByRelevance()
         {
             // Arrange
@@ -447,7 +447,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Integration Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithDifferentMaxSentences_ProducesDifferentLengths()
         {
             // Arrange
@@ -472,7 +472,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_MultipleInvocations_ProducesSameResults()
         {
             // Arrange
@@ -492,7 +492,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange

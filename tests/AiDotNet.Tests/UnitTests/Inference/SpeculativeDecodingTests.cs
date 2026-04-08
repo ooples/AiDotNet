@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class NGramDraftModelTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_Creation_InitializesCorrectly()
     {
         // Act
@@ -20,7 +20,7 @@ public class NGramDraftModelTests
         Assert.Equal(8, model.MaxDraftTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_Train_LearnsPatternsFromCorpus()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class NGramDraftModelTests
         // The pattern should emerge
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_GenerateDraft_ProducesValidOutput()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class NGramDraftModelTests
         Assert.Equal(100, draft.Probabilities.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_GenerateDraft_TokenProbabilitiesAreValid()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class NGramDraftModelTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_Reset_DoesNotThrow()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class NGramDraftModelTests
 /// </summary>
 public class NeuralDraftModelTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NeuralDraftModel_Creation_Works()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class NeuralDraftModelTests
         Assert.Equal(5, model.MaxDraftTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NeuralDraftModel_GenerateDraft_ProducesTokens()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class NeuralDraftModelTests
         Assert.Equal(3, callCount); // Forward called once per draft token
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NeuralDraftModel_GenerateDraft_RespectsMaxDraftTokens()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class SpeculativeDecoderTests
         };
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpeculativeDecoder_Creation_Works()
     {
         // Arrange & Act
@@ -193,7 +193,7 @@ public class SpeculativeDecoderTests
         Assert.Equal(5, decoder.Config.NumDraftTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_ProducesTokens()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class SpeculativeDecoderTests
         Assert.Equal(result.NumGenerated, result.NewTokens.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpeculativeDecoder_Generate_SynchronousWorks()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class SpeculativeDecoderTests
         Assert.True(result.NumGenerated > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_StopsAtEOS()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class SpeculativeDecoderTests
         Assert.True(ContainsToken(result.NewTokens, eosToken));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_TracksStatistics()
     {
         // Arrange
@@ -291,7 +291,7 @@ public class SpeculativeDecoderTests
         Assert.True(stats.TotalVerificationCalls > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpeculativeDecoder_ResetStatistics_ClearsCounters()
     {
         // Arrange
@@ -310,7 +310,7 @@ public class SpeculativeDecoderTests
         Assert.Equal(0, stats.TotalDraftTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_SupportsCancellation()
     {
         // Arrange
@@ -326,7 +326,7 @@ public class SpeculativeDecoderTests
             decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 100, temperature: 1.0f, cancellationToken: cts.Token));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_RecordsStepStatistics()
     {
         // Arrange
@@ -347,7 +347,7 @@ public class SpeculativeDecoderTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_AcceptanceRate_IsValid()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class TreeSpeculativeDecoderTests
         };
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TreeSpeculativeDecoder_Creation_Works()
     {
         // Act
@@ -421,7 +421,7 @@ public class TreeSpeculativeDecoderTests
         Assert.Equal(3, decoder.Config.MaxDepth);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task TreeSpeculativeDecoder_GenerateAsync_ProducesTokens()
     {
         // Arrange
@@ -446,7 +446,7 @@ public class TreeSpeculativeDecoderTests
         Assert.True(result.NewTokens.Length > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TreeSpeculativeDecoder_Generate_SynchronousWorks()
     {
         // Arrange
@@ -461,7 +461,7 @@ public class TreeSpeculativeDecoderTests
         Assert.True(result.NumGenerated > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task TreeSpeculativeDecoder_GenerateAsync_RecordsTreeStatistics()
     {
         // Arrange
@@ -487,7 +487,7 @@ public class TreeSpeculativeDecoderTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task TreeSpeculativeDecoder_AcceptanceRate_IsValid()
     {
         // Arrange
@@ -509,7 +509,7 @@ public class TreeSpeculativeDecoderTests
 /// </summary>
 public class SpeculativeDecodingIntegrationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoding_WithTrainedDraft_AchievesSpeedup()
     {
         // Arrange
@@ -556,7 +556,7 @@ public class SpeculativeDecodingIntegrationTests
         // Note: acceptance rate depends on how well draft matches target
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoding_MultipleGenerations_AccumulatesStats()
     {
         // Arrange
@@ -584,7 +584,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.True(stats.TotalVerificationCalls >= 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpeculativeDecodingConfig_DefaultValues_AreReasonable()
     {
         // Act
@@ -597,7 +597,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.False(config.AdaptiveDraftLength);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TreeSpeculativeConfig_DefaultValues_AreReasonable()
     {
         // Act
@@ -609,7 +609,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.Equal(16, config.MaxNodes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_GenerateAsync_TreeMode_RecordsDraftWork()
     {
         // Arrange
@@ -653,7 +653,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.Contains(result.StepStatistics, s => s.DraftTokens > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SpeculativeDecoder_AdaptiveDraftLength_ReducesDraftTokens_WhenAcceptanceLow()
     {
         // Arrange

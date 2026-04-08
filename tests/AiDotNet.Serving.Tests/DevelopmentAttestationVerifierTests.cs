@@ -9,7 +9,7 @@ namespace AiDotNet.Serving.Tests;
 
 public class DevelopmentAttestationVerifierTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_Throws_WhenDependenciesNull()
     {
         var environment = new TestHostEnvironment();
@@ -19,7 +19,7 @@ public class DevelopmentAttestationVerifierTests
         Assert.Throws<ArgumentNullException>(() => new DevelopmentAttestationVerifier(environment, options: null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task VerifyAsync_ReturnsFailure_WhenEvidenceNull()
     {
         var environment = new TestHostEnvironment { EnvironmentName = Environments.Production };
@@ -32,7 +32,7 @@ public class DevelopmentAttestationVerifierTests
         Assert.False(string.IsNullOrWhiteSpace(result.FailureReason));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task VerifyAsync_AllowsUnverifiedEvidence_WhenDevelopmentAndEnabled()
     {
         var environment = new TestHostEnvironment { EnvironmentName = Environments.Development };
@@ -44,7 +44,7 @@ public class DevelopmentAttestationVerifierTests
         Assert.True(result.IsSuccess);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task VerifyAsync_AllowsStaticToken_WhenConfigured()
     {
         var environment = new TestHostEnvironment { EnvironmentName = Environments.Production };
@@ -56,7 +56,7 @@ public class DevelopmentAttestationVerifierTests
         Assert.True(result.IsSuccess);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task VerifyAsync_ReturnsFailure_WhenNoRuleMatches()
     {
         var environment = new TestHostEnvironment { EnvironmentName = Environments.Production };

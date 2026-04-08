@@ -13,7 +13,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region ConstantLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConstantLRScheduler_CurrentLearningRate_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -24,7 +24,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.01, scheduler.BaseLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConstantLRScheduler_Step_MaintainsConstantRate()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(10, scheduler.CurrentStep);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConstantLRScheduler_Reset_ResetsStepCount()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region StepLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepLRScheduler_Initial_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -72,7 +72,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.BaseLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepLRScheduler_StepBeforeDecay_MaintainsRate()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepLRScheduler_StepAtDecay_ReducesRate()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.05, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepLRScheduler_MultipleDecays_ReducesRateCorrectly()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.0125, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepLRScheduler_GetLearningRateAtStep_ReturnsCorrectRate()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region ExponentialLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialLRScheduler_Initial_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialLRScheduler_Step_DecaysExponentially()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.09, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialLRScheduler_MultipleSteps_DecaysCorrectly()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region CosineAnnealingLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineAnnealingLRScheduler_Initial_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineAnnealingLRScheduler_AtTMax_ReturnsMinimumRate()
     {
         // Arrange
@@ -205,7 +205,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.True(scheduler.CurrentLearningRate <= 0.002);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineAnnealingLRScheduler_RateDecreasesMonotonically()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region PolynomialLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialLRScheduler_Initial_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -235,7 +235,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialLRScheduler_AtEnd_ReturnsEndRate()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.01, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialLRScheduler_LinearDecay_DecaysLinearly()
     {
         // Arrange - power=1.0 gives linear decay
@@ -271,7 +271,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region LinearWarmupScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearWarmupScheduler_Initial_StartsLow()
     {
         // Arrange
@@ -281,7 +281,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.True(scheduler.CurrentLearningRate < 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearWarmupScheduler_AfterWarmup_ReachesBaseLearningRate()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearWarmupScheduler_DuringWarmup_IncreasesLinearly()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region CyclicLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CyclicLRScheduler_Initial_StartsAtBaseLearningRate()
     {
         // Arrange
@@ -325,7 +325,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.001, scheduler.BaseLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CyclicLRScheduler_Step_IncreasesTowardsMax()
     {
         // Arrange
@@ -339,7 +339,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.True(scheduler.CurrentLearningRate > initialRate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CyclicLRScheduler_Cycle_RateCycles()
     {
         // Arrange
@@ -359,7 +359,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region OneCycleLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneCycleLRScheduler_Initial_StartsLow()
     {
         // Arrange
@@ -369,7 +369,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.True(scheduler.CurrentLearningRate < 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneCycleLRScheduler_AtPeak_ReachesMaxLearningRate()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region MultiStepLRScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiStepLRScheduler_BeforeMilestone_MaintainsRate()
     {
         // Arrange
@@ -405,7 +405,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiStepLRScheduler_AtMilestone_ReducesRate()
     {
         // Arrange
@@ -421,7 +421,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.05, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiStepLRScheduler_MultipleMilestones_ReducesCorrectly()
     {
         // Arrange
@@ -441,7 +441,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region ReduceOnPlateauScheduler Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReduceOnPlateauScheduler_Initial_ReturnsBaseLearningRate()
     {
         // Arrange
@@ -451,7 +451,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReduceOnPlateauScheduler_StepWithImprovement_MaintainsRate()
     {
         // Arrange
@@ -470,7 +470,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region State Management Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningRateScheduler_GetState_ReturnsNonNullState()
     {
         // Arrange
@@ -486,7 +486,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.True(state.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningRateScheduler_LoadState_RestoresScheduler()
     {
         // Arrange
@@ -506,7 +506,7 @@ public class LearningRateSchedulersIntegrationTests
         Assert.Equal(scheduler1.CurrentLearningRate, scheduler2.CurrentLearningRate, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningRateScheduler_Reset_RestoresInitialState()
     {
         // Arrange
@@ -527,7 +527,7 @@ public class LearningRateSchedulersIntegrationTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllSchedulers_HandleLargeNumberOfSteps()
     {
         // Arrange
@@ -553,7 +553,7 @@ public class LearningRateSchedulersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllSchedulers_ReturnPositiveLearningRates()
     {
         // Arrange

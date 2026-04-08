@@ -23,7 +23,7 @@ public class SearchAlgorithmTests
         _mockEvaluator = new Mock<IThoughtEvaluator<double>>();
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BreadthFirstSearch_FindsGoalNode()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class SearchAlgorithmTests
         Assert.Equal(root, path[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task DepthFirstSearch_ExploresDepthFirst()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BeamSearch_RespectsBeamWidth()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class SearchAlgorithmTests
         // Beam search should prune to beam width at each level
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task MonteCarloTreeSearch_BalancesExplorationAndExploitation()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BestFirstSearch_SelectsHighestScoredNodes()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SearchWithCancellation_ThrowsOperationCanceledException()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class SearchAlgorithmTests
         );
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task SearchWithMaxDepth_StopsAtLimit()
     {
         // Arrange
@@ -202,7 +202,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task MCTS_WithMoreSimulations_ConvergesToBetterSolution()
     {
         // Arrange

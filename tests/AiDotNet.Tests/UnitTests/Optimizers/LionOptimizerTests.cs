@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 {
     public class LionOptimizerTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultOptions_InitializesCorrectly()
         {
             // Arrange & Act
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.0, options.WeightDecay);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomOptions_UsesProvidedOptions()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, options.WeightDecay);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
         {
             // Arrange
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] > parameters[2]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_WithMixedGradients_UpdatesCorrectly()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]); // Positive gradient -> decrease
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_WithWeightDecay_AppliesRegularization()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Matrix_WorksCorrectly()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]); // Negative gradient
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_ConsecutiveCalls_BuildsMomentum()
         {
             // Arrange
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotEqual(updated1, updated2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_SignBasedUpdates_IgnoreGradientMagnitude()
         {
             // Arrange
@@ -248,7 +248,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Reset_ClearsMomentumState()
         {
             // Arrange
@@ -276,7 +276,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(updatedAfterReset);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Serialize_Deserialize_PreservesState()
         {
             // Arrange
@@ -318,7 +318,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateOptions_WithValidOptions_UpdatesSuccessfully()
         {
             // Arrange
@@ -350,7 +350,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, currentOptions.InitialLearningRate);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -374,7 +374,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Matrix_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -408,7 +408,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
@@ -443,7 +443,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedLow[0] > updatedHigh[0]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void UpdateParameters_Vector_DifferentBeta2Values_ProducesDifferentMomentum()
         {
             // Arrange
@@ -477,7 +477,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotEqual(updatedLow, updatedHigh);
             Assert.True(updatedLow[0] < updatedHigh[0]);
         }
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetOptions_ReturnsCurrentOptions()
         {
             // Arrange

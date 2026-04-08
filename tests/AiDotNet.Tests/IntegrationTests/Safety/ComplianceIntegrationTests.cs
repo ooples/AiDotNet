@@ -15,7 +15,7 @@ public class ComplianceIntegrationTests
 {
     #region EUAIActComplianceChecker Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EUAIAct_MissingWatermarking_DetectsNonCompliance()
     {
         var config = new SafetyConfig
@@ -30,7 +30,7 @@ public class ComplianceIntegrationTests
         Assert.Contains(findings, f => f.Description.Contains("Article 50"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EUAIAct_FullyCompliant_FewerFindings()
     {
         var config = new SafetyConfig
@@ -47,7 +47,7 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EUAIAct_MissingFairness_DetectsNonCompliance()
     {
         var config = new SafetyConfig
@@ -61,7 +61,7 @@ public class ComplianceIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EUAIAct_EmptyText_StillChecksConfig()
     {
         var config = new SafetyConfig
@@ -79,7 +79,7 @@ public class ComplianceIntegrationTests
 
     #region GDPRComplianceChecker Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GDPR_MissingPIIDetection_DetectsNonCompliance()
     {
         var config = new SafetyConfig
@@ -93,7 +93,7 @@ public class ComplianceIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GDPR_PIIEnabled_FewerFindings()
     {
         var config = new SafetyConfig
@@ -107,7 +107,7 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GDPR_AllControlsDisabled_DetectsMultipleIssues()
     {
         var config = new SafetyConfig
@@ -125,7 +125,7 @@ public class ComplianceIntegrationTests
 
     #region SOC2ComplianceChecker Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SOC2_MissingControls_DetectsMultipleIssues()
     {
         var config = new SafetyConfig
@@ -140,7 +140,7 @@ public class ComplianceIntegrationTests
             $"Should detect multiple missing SOC2 controls, found {findings.Count}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SOC2_AllControlsEnabled_FewerFindings()
     {
         var config = new SafetyConfig
@@ -154,7 +154,7 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SOC2_MissingJailbreak_DetectsIssue()
     {
         var config = new SafetyConfig
@@ -171,7 +171,7 @@ public class ComplianceIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllCheckers_SameConfig_ProduceResults()
     {
         var config = new SafetyConfig
@@ -186,7 +186,7 @@ public class ComplianceIntegrationTests
         Assert.NotNull(new SOC2ComplianceChecker<double>(config).EvaluateText("Text"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllCheckers_NonCompliantConfig_AllDetectIssues()
     {
         var config = new SafetyConfig

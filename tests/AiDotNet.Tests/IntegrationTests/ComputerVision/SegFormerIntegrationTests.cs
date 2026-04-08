@@ -19,7 +19,7 @@ public class SegFormerIntegrationTests
 {
     #region Native Mode Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_CreatesModelWithCorrectProperties()
     {
         // Arrange & Act
@@ -34,7 +34,7 @@ public class SegFormerIntegrationTests
         Assert.Equal(150, model.NumClasses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_WithCustomNumClasses_SetsCorrectly()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -60,7 +60,7 @@ public class SegFormerIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_B0HasFewerLayersThanB5()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -75,7 +75,7 @@ public class SegFormerIntegrationTests
             $"B5 should have more parameters ({b5Params}) than B0 ({b0Params})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NativeMode_InitializesLayers()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -89,7 +89,7 @@ public class SegFormerIntegrationTests
 
     #region ONNX Mode Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_OnnxMode_WithNullPath_ThrowsArgumentException()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -98,7 +98,7 @@ public class SegFormerIntegrationTests
             new SegFormer<double>(architecture, onnxModelPath: ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_OnnxMode_WithNonExistentPath_ThrowsFileNotFoundException()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -107,7 +107,7 @@ public class SegFormerIntegrationTests
             new SegFormer<double>(architecture, onnxModelPath: "/nonexistent/path/model.onnx"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_OnnxMode_WithInvalidOnnxFile_ThrowsInvalidOperationException()
     {
         // Create a temp file that isn't a valid ONNX model
@@ -132,7 +132,7 @@ public class SegFormerIntegrationTests
 
     #region Predict
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_NativeMode_WithBatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
@@ -147,7 +147,7 @@ public class SegFormerIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Predict_NativeMode_WithUnbatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
@@ -166,7 +166,7 @@ public class SegFormerIntegrationTests
 
     #region Train
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_NativeMode_DoesNotThrow()
     {
         var architecture = CreateArchitecture(32, 32, 3);
@@ -186,7 +186,7 @@ public class SegFormerIntegrationTests
 
     #region SupportsTraining
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_NativeMode_ReturnsTrue()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -199,7 +199,7 @@ public class SegFormerIntegrationTests
 
     #region GetModelMetadata
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelMetadata_ReturnsCorrectModelType()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -217,7 +217,7 @@ public class SegFormerIntegrationTests
 
     #region Serialization
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Serialization_RoundTrip_PreservesConfig()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -237,7 +237,7 @@ public class SegFormerIntegrationTests
 
     #region CreateNewInstance
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateNewInstance_NativeMode_CreatesWorkingCopy()
     {
         var architecture = CreateArchitecture(32, 32, 3);
@@ -258,7 +258,7 @@ public class SegFormerIntegrationTests
 
     #region Custom Architecture Layers
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomLayers_UsesProvidedLayers()
     {
         // Create an architecture with custom layers
@@ -293,7 +293,7 @@ public class SegFormerIntegrationTests
 
     #region Dispose
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dispose_NativeMode_DoesNotThrow()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -303,7 +303,7 @@ public class SegFormerIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dispose_CalledTwice_DoesNotThrow()
     {
         var architecture = CreateArchitecture(64, 64, 3);
@@ -318,7 +318,7 @@ public class SegFormerIntegrationTests
 
     #region Options
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetOptions_ReturnsSegFormerOptions()
     {
         var architecture = CreateArchitecture(64, 64, 3);

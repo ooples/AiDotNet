@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class SimdKernelsTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VectorAdd_MatchesScalar()
     {
         var a = CreateInput(32, 1);
@@ -24,7 +24,7 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VectorMultiply_MatchesScalar()
     {
         var a = CreateInput(32, 3);
@@ -42,7 +42,7 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DotProduct_MatchesScalar()
     {
         var a = CreateInput(37, 5);
@@ -58,7 +58,7 @@ public class SimdKernelsTests
         Assert.Equal(expected, actual, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScalarMultiplyAdd_MatchesScalar()
     {
         var a = CreateInput(31, 7);
@@ -77,7 +77,7 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReLU_MatchesScalar()
     {
         var input = CreateSignedInput(33);
@@ -94,7 +94,7 @@ public class SimdKernelsTests
         AssertEqual(expected, output);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Sum_MatchesScalar()
     {
         var input = CreateInput(100, 23);

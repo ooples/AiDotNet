@@ -11,7 +11,7 @@ public class ModelCardTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_InitializesDefaultValues()
     {
         var card = new ModelCard();
@@ -23,7 +23,7 @@ public class ModelCardTests
         Assert.Equal(string.Empty, card.TrainingData);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_SetsDateToUtcNow()
     {
         var before = DateTime.UtcNow;
@@ -33,7 +33,7 @@ public class ModelCardTests
         Assert.InRange(card.Date, before, after);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_InitializesEmptyCollections()
     {
         var card = new ModelCard();
@@ -70,7 +70,7 @@ public class ModelCardTests
 
     #region Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Properties_CanBeSet()
     {
         var card = new ModelCard
@@ -91,7 +91,7 @@ public class ModelCardTests
         Assert.Equal("Test dataset with 10,000 samples", card.TrainingData);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IntendedUses_CanAddItems()
     {
         var card = new ModelCard();
@@ -103,7 +103,7 @@ public class ModelCardTests
         Assert.Contains("Sentiment analysis", card.IntendedUses);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutOfScopeUses_CanAddItems()
     {
         var card = new ModelCard();
@@ -115,7 +115,7 @@ public class ModelCardTests
         Assert.Contains("Legal advice", card.OutOfScopeUses);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Limitations_CanAddItems()
     {
         var card = new ModelCard();
@@ -125,7 +125,7 @@ public class ModelCardTests
         Assert.Equal(2, card.Limitations.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EthicalConsiderations_CanAddItems()
     {
         var card = new ModelCard();
@@ -135,7 +135,7 @@ public class ModelCardTests
         Assert.Equal(2, card.EthicalConsiderations.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Recommendations_CanAddItems()
     {
         var card = new ModelCard();
@@ -145,7 +145,7 @@ public class ModelCardTests
         Assert.Equal(2, card.Recommendations.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Caveats_CanAddItems()
     {
         var card = new ModelCard();
@@ -155,7 +155,7 @@ public class ModelCardTests
         Assert.Equal(2, card.Caveats.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_CanAddDatasets()
     {
         var card = new ModelCard();
@@ -169,7 +169,7 @@ public class ModelCardTests
         Assert.Equal(0.95, card.PerformanceMetrics["TestDataset"]["Accuracy"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FairnessMetrics_CanAddGroups()
     {
         var card = new ModelCard();
@@ -183,7 +183,7 @@ public class ModelCardTests
         Assert.Equal(0.94, card.FairnessMetrics["Gender"]["Male"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RobustnessMetrics_CanAddMetrics()
     {
         var card = new ModelCard();
@@ -198,7 +198,7 @@ public class ModelCardTests
 
     #region Generate Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ReturnsNonEmptyString()
     {
         var card = new ModelCard();
@@ -208,7 +208,7 @@ public class ModelCardTests
         Assert.NotEmpty(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsHeader()
     {
         var card = new ModelCard();
@@ -217,7 +217,7 @@ public class ModelCardTests
         Assert.Contains("# Model Card", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsModelInfo()
     {
         var card = new ModelCard
@@ -235,7 +235,7 @@ public class ModelCardTests
         Assert.Contains("**Model Type:** Regression", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsFormattedDate()
     {
         var card = new ModelCard
@@ -247,7 +247,7 @@ public class ModelCardTests
         Assert.Contains("**Date:** 2024-06-15", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsIntendedUses()
     {
         var card = new ModelCard();
@@ -261,7 +261,7 @@ public class ModelCardTests
         Assert.Contains("- Object detection", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ShowsNotSpecified_WhenNoIntendedUses()
     {
         var card = new ModelCard();
@@ -271,7 +271,7 @@ public class ModelCardTests
         Assert.Contains("Not specified", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsOutOfScopeUses()
     {
         var card = new ModelCard();
@@ -283,7 +283,7 @@ public class ModelCardTests
         Assert.Contains("- Autonomous weapons", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsTrainingData()
     {
         var card = new ModelCard
@@ -296,7 +296,7 @@ public class ModelCardTests
         Assert.Contains("ImageNet dataset with 1M images", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ShowsNotSpecified_WhenNoTrainingData()
     {
         var card = new ModelCard();
@@ -307,7 +307,7 @@ public class ModelCardTests
         Assert.Contains("Not specified", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsPerformanceMetrics()
     {
         var card = new ModelCard();
@@ -325,7 +325,7 @@ public class ModelCardTests
         Assert.Contains("**Precision:** 0.9234", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsRobustnessMetrics_WhenPresent()
     {
         var card = new ModelCard();
@@ -337,7 +337,7 @@ public class ModelCardTests
         Assert.Contains("**FGSMRobustness:** 0.7800", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_OmitsRobustnessSection_WhenEmpty()
     {
         var card = new ModelCard();
@@ -354,7 +354,7 @@ public class ModelCardTests
         Assert.Equal(0, count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsFairnessMetrics_WhenPresent()
     {
         var card = new ModelCard();
@@ -372,7 +372,7 @@ public class ModelCardTests
         Assert.Contains("**Over60:** 0.8700", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsLimitations()
     {
         var card = new ModelCard();
@@ -384,7 +384,7 @@ public class ModelCardTests
         Assert.Contains("- Requires GPU for inference", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsEthicalConsiderations()
     {
         var card = new ModelCard();
@@ -396,7 +396,7 @@ public class ModelCardTests
         Assert.Contains("- Potential for misuse", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsRecommendations()
     {
         var card = new ModelCard();
@@ -408,7 +408,7 @@ public class ModelCardTests
         Assert.Contains("- Use with human oversight", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_ContainsCaveats_WhenPresent()
     {
         var card = new ModelCard();
@@ -422,7 +422,7 @@ public class ModelCardTests
         Assert.Contains("- Subject to change", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_OmitsCaveats_WhenEmpty()
     {
         var card = new ModelCard();
@@ -431,7 +431,7 @@ public class ModelCardTests
         Assert.DoesNotContain("## Caveats and Warnings", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Generate_FullyPopulatedCard_ContainsAllSections()
     {
         var card = CreateFullyPopulatedModelCard();
@@ -454,7 +454,7 @@ public class ModelCardTests
 
     #region SaveToFile Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_NullPath_ThrowsArgumentException()
     {
         var card = new ModelCard();
@@ -462,7 +462,7 @@ public class ModelCardTests
         Assert.Throws<ArgumentException>(() => card.SaveToFile(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_EmptyPath_ThrowsArgumentException()
     {
         var card = new ModelCard();
@@ -470,7 +470,7 @@ public class ModelCardTests
         Assert.Throws<ArgumentException>(() => card.SaveToFile(string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_WhitespacePath_ThrowsArgumentException()
     {
         var card = new ModelCard();
@@ -478,7 +478,7 @@ public class ModelCardTests
         Assert.Throws<ArgumentException>(() => card.SaveToFile("   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_CreatesFile()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"modelcard_test_{Guid.NewGuid()}.md");
@@ -498,7 +498,7 @@ public class ModelCardTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_WritesContent()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"modelcard_test_{Guid.NewGuid()}.md");
@@ -520,7 +520,7 @@ public class ModelCardTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_CreatesDirectory()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"modelcard_dir_{Guid.NewGuid()}");
@@ -542,7 +542,7 @@ public class ModelCardTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveToFile_OverwritesExistingFile()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"modelcard_test_{Guid.NewGuid()}.md");
@@ -573,28 +573,28 @@ public class ModelCardTests
 
     #region CreateFromEvaluation Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithNullModelName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelCard.CreateFromEvaluation(null!, "Classification", null, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithEmptyModelName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelCard.CreateFromEvaluation(string.Empty, "Classification", null, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithWhitespaceModelName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelCard.CreateFromEvaluation("   ", "Classification", null, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_SetsModelName()
     {
         var card = ModelCard.CreateFromEvaluation("MyModel", "Classification", null, null);
@@ -602,7 +602,7 @@ public class ModelCardTests
         Assert.Equal("MyModel", card.ModelName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_SetsModelType()
     {
         var card = ModelCard.CreateFromEvaluation("MyModel", "Regression", null, null);
@@ -610,7 +610,7 @@ public class ModelCardTests
         Assert.Equal("Regression", card.ModelType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithNullModelType_SetsEmptyString()
     {
         var card = ModelCard.CreateFromEvaluation("MyModel", null!, null, null);
@@ -618,7 +618,7 @@ public class ModelCardTests
         Assert.Equal(string.Empty, card.ModelType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_SetsDate()
     {
         var before = DateTime.UtcNow;
@@ -628,7 +628,7 @@ public class ModelCardTests
         Assert.InRange(card.Date, before, after);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_AddsPerformanceMetrics()
     {
         var perfMetrics = new Dictionary<string, double>
@@ -644,7 +644,7 @@ public class ModelCardTests
         Assert.Equal(0.93, card.PerformanceMetrics["Overall"]["F1"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_AddsRobustnessMetrics()
     {
         var robMetrics = new Dictionary<string, double>
@@ -659,7 +659,7 @@ public class ModelCardTests
         Assert.Equal(0.70, card.RobustnessMetrics["PGD_Accuracy"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_AddsStandardRecommendations()
     {
         var card = ModelCard.CreateFromEvaluation("MyModel", "Classification", null, null);
@@ -671,7 +671,7 @@ public class ModelCardTests
         Assert.Contains("Conduct fairness audits across demographic groups", card.Recommendations);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithNullMetrics_DoesNotAddMetrics()
     {
         var card = ModelCard.CreateFromEvaluation("MyModel", "Classification", null, null);
@@ -680,7 +680,7 @@ public class ModelCardTests
         Assert.Empty(card.RobustnessMetrics);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_WithEmptyMetrics_DoesNotAddMetrics()
     {
         var emptyPerf = new Dictionary<string, double>();
@@ -692,7 +692,7 @@ public class ModelCardTests
         Assert.Empty(card.RobustnessMetrics);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_CreatesDefensiveCopy_OfPerformanceMetrics()
     {
         var perfMetrics = new Dictionary<string, double>
@@ -711,7 +711,7 @@ public class ModelCardTests
         Assert.False(card.PerformanceMetrics["Overall"].ContainsKey("NewMetric"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_CreatesDefensiveCopy_OfRobustnessMetrics()
     {
         var robMetrics = new Dictionary<string, double>
@@ -730,7 +730,7 @@ public class ModelCardTests
         Assert.False(card.RobustnessMetrics.ContainsKey("NewMetric"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateFromEvaluation_GeneratesValidMarkdown()
     {
         var perfMetrics = new Dictionary<string, double>
@@ -756,7 +756,7 @@ public class ModelCardTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullWorkflow_CreatePopulateSaveLoad()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"modelcard_workflow_{Guid.NewGuid()}.md");
@@ -793,7 +793,7 @@ public class ModelCardTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiplePerformanceDatasets_GeneratesCorrectly()
     {
         var card = new ModelCard { ModelName = "MultiDatasetModel" };
@@ -823,7 +823,7 @@ public class ModelCardTests
         Assert.Contains("**Accuracy:** 0.9300", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultipleFairnessGroups_GeneratesCorrectly()
     {
         var card = new ModelCard { ModelName = "FairnessModel" };

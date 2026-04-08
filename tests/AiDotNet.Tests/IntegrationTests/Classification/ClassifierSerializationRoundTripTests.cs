@@ -31,7 +31,7 @@ public class ClassifierSerializationRoundTripTests
 {
     #region Linear Classifiers — Weights + Intercept (Fixed in LinearClassifierBase)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RidgeClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
@@ -49,7 +49,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RidgeClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SGDClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 77);
@@ -67,7 +67,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "SGDClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PerceptronClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 55);
@@ -85,7 +85,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "PerceptronClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PassiveAggressiveClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 33);
@@ -107,7 +107,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Naive Bayes Classifiers — LogPriors + class-specific params
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -125,7 +125,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "GaussianNaiveBayes");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         // MultinomialNB needs non-negative features (counts/frequencies)
@@ -144,7 +144,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "MultinomialNaiveBayes");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BernoulliNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         // BernoulliNB expects binary features
@@ -167,7 +167,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region SVM Classifiers — support vectors, weights, bias
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearSVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
@@ -189,7 +189,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Tree Classifiers — tree structure
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTreeClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -211,7 +211,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Accuracy Validation — classifiers must learn, not just serialize
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RidgeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -226,7 +226,7 @@ public class ClassifierSerializationRoundTripTests
             $"RidgeClassifier accuracy {accuracy:P1} too low for linearly separable data (expected > 70%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTreeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 4.0, seed: 42);
@@ -241,7 +241,7 @@ public class ClassifierSerializationRoundTripTests
             $"DecisionTreeClassifier accuracy {accuracy:P1} too low for separable data (expected > 70%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(120, 3, separation: 4.0, seed: 42);
@@ -256,7 +256,7 @@ public class ClassifierSerializationRoundTripTests
             $"GaussianNaiveBayes accuracy {accuracy:P1} too low for Gaussian data (expected > 60%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SGDClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -275,7 +275,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region DeepCopy round-trip — tests the exact path the optimizer uses
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RidgeClassifier_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
@@ -292,7 +292,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RidgeClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -312,7 +312,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Discriminant Analysis — ClassMeans + Covariance + Priors
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LDA_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
@@ -336,7 +336,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LinearDiscriminantAnalysis");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QDA_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
@@ -360,7 +360,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "QuadraticDiscriminantAnalysis");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LDA_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
@@ -379,7 +379,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LDA DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QDA_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
@@ -398,7 +398,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "QDA DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LDA_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
@@ -416,7 +416,7 @@ public class ClassifierSerializationRoundTripTests
             $"LDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QDA_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
@@ -434,7 +434,7 @@ public class ClassifierSerializationRoundTripTests
             $"QDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LDA_PredictProbabilities_SumsToOne()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
@@ -464,7 +464,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Complement & Categorical Naive Bayes — complementLogProbs + categoryLogProbs
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplementNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
@@ -482,7 +482,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "ComplementNaiveBayes");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplementNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
@@ -498,7 +498,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ComplementNB DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
@@ -516,7 +516,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "CategoricalNaiveBayes");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
@@ -536,7 +536,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Full SVM Serialize Round-trips
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
@@ -568,7 +568,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "SupportVectorClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NuSVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
@@ -600,7 +600,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "NuSupportVectorClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVC_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
@@ -627,7 +627,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region SVM Accuracy Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
@@ -649,7 +649,7 @@ public class ClassifierSerializationRoundTripTests
             $"SVC accuracy {accuracy:P1} too low for well-separated data (expected > 70%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NuSVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
@@ -671,7 +671,7 @@ public class ClassifierSerializationRoundTripTests
             $"NuSVC accuracy {accuracy:P1} too low for well-separated data (expected > 60%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearSVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -690,7 +690,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Ensemble Classifiers — Estimators + FeatureImportances + weights
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -718,7 +718,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RandomForestClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -739,7 +739,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RandomForest DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 4.0, seed: 42);
@@ -759,7 +759,7 @@ public class ClassifierSerializationRoundTripTests
             $"RandomForest accuracy {accuracy:P1} too low for separable data (expected > 70%)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaBoost_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
@@ -787,7 +787,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "AdaBoostClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaBoost_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
@@ -808,7 +808,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaBoost DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtraTrees_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -836,7 +836,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "ExtraTreesClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtraTrees_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
@@ -857,7 +857,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ExtraTrees DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientBoosting_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
@@ -887,7 +887,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "GradientBoostingClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientBoosting_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
@@ -909,7 +909,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "GradientBoosting DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -934,7 +934,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Boosting Classifiers — HistTree + BinBoundaries + InitPrediction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HistGradientBoosting_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -956,7 +956,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "HistGradientBoostingClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HistGradientBoosting_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -974,7 +974,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HistGradientBoosting DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HistGradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(120, 3, separation: 5.0, seed: 42);
@@ -995,7 +995,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Multi-class Serialize Round-trips
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LDA_MultiClass_SerializeRoundTrip()
     {
         var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
@@ -1019,7 +1019,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LDA MultiClass");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QDA_MultiClass_SerializeRoundTrip()
     {
         var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
@@ -1047,7 +1047,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Ordinal Classifiers — Coefficients + Thresholds + Bias
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalLogisticRegression_SerializeRoundTrip_PredictionsMatch()
     {
         // Create ordinal data (3 ordered classes: 0, 1, 2)
@@ -1068,7 +1068,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OrdinalLogisticRegression");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalLogisticRegression_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
@@ -1085,7 +1085,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OrdinalLogisticRegression DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRidgeRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
@@ -1103,7 +1103,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OrdinalRidgeRegression");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRidgeRegression_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
@@ -1123,7 +1123,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region ImbalancedEnsemble Classifiers — Internal tree/AdaBoost state
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedRandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         // Create imbalanced binary data (majority:minority = 4:1)
@@ -1142,7 +1142,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "BalancedRandomForestClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedRandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1158,7 +1158,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedRandomForestClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
@@ -1173,7 +1173,7 @@ public class ClassifierSerializationRoundTripTests
             $"BalancedRandomForestClassifier accuracy {accuracy:P1} is below 60% threshold.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedBagging_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1191,7 +1191,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "BalancedBaggingClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedBagging_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1207,7 +1207,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedBaggingClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedBagging_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
@@ -1222,7 +1222,7 @@ public class ClassifierSerializationRoundTripTests
             $"BalancedBaggingClassifier accuracy {accuracy:P1} is below 60% threshold.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EasyEnsemble_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1240,7 +1240,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "EasyEnsembleClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EasyEnsemble_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1256,7 +1256,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "EasyEnsembleClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EasyEnsemble_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
@@ -1275,7 +1275,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region Online Classifiers — Per-class running statistics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
@@ -1294,7 +1294,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OnlineNaiveBayesClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
@@ -1311,7 +1311,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OnlineNaiveBayesClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
@@ -1327,7 +1327,7 @@ public class ClassifierSerializationRoundTripTests
             $"OnlineNaiveBayesClassifier accuracy {accuracy:P1} is below 70% threshold.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoeffdingTree_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
@@ -1346,7 +1346,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "HoeffdingTreeClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoeffdingTree_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
@@ -1363,7 +1363,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HoeffdingTreeClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoeffdingTree_TrainAndPredict_AchievesReasonableAccuracy()
     {
         // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
@@ -1386,7 +1386,7 @@ public class ClassifierSerializationRoundTripTests
             $"HoeffdingTreeClassifier accuracy {accuracy:P1} is below 55% threshold.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveRandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
@@ -1408,7 +1408,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "AdaptiveRandomForestClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveRandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
@@ -1428,7 +1428,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaptiveRandomForestClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
@@ -1454,7 +1454,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region TimeSeries Classifiers — Interval trees, convolutional kernels, biases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesForest_SerializeRoundTrip_PredictionsMatch()
     {
         // TimeSeriesForest wraps Matrix into Tensor internally via Train(Matrix, Vector)
@@ -1474,7 +1474,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "TimeSeriesForestClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
@@ -1491,7 +1491,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "TimeSeriesForestClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(200, 20, separation: 5.0, seed: 42);
@@ -1507,7 +1507,7 @@ public class ClassifierSerializationRoundTripTests
             $"TimeSeriesForestClassifier accuracy {accuracy:P1} is below 55% threshold.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Rocket_SerializeRoundTrip_PredictionsMatch()
     {
         // Use few kernels (100) to keep test fast — default 10000 is too slow for tests
@@ -1527,7 +1527,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RocketClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Rocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
@@ -1544,7 +1544,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RocketClassifier DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MiniRocket_SerializeRoundTrip_PredictionsMatch()
     {
         // MiniRocket uses 84 fixed kernels × dilations × biases — needs enough sequence length
@@ -1564,7 +1564,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "MiniRocketClassifier");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MiniRocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
@@ -1585,7 +1585,7 @@ public class ClassifierSerializationRoundTripTests
 
     #region SemiSupervised Classifiers — Graph-based with training data matrices
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LabelPropagation_SerializeRoundTrip_PredictionsMatch()
     {
         // LabelPropagation stores training data + label distributions for kernel-based prediction
@@ -1604,7 +1604,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LabelPropagation");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LabelPropagation_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
@@ -1620,7 +1620,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LabelPropagation DeepCopy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LabelSpreading_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
@@ -1638,7 +1638,7 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LabelSpreading");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LabelSpreading_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);

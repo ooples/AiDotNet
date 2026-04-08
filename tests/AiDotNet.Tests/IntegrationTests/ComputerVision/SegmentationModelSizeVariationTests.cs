@@ -439,7 +439,7 @@ public class SegmentationModelSizeVariationTests
 
     #region Larger Size Has More Parameters (scaling regression test)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_LargerSizeHasMoreParameters()
     {
         var small = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -448,7 +448,7 @@ public class SegmentationModelSizeVariationTests
             $"SwinLarge ({large.ParameterCount}) should have more params than SwinTiny ({small.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_LargerSizeHasMoreParameters()
     {
         var small = new SegNeXt<double>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
@@ -457,7 +457,7 @@ public class SegmentationModelSizeVariationTests
             $"Large ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_LargerSizeHasMoreParameters()
     {
         var small = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -466,7 +466,7 @@ public class SegmentationModelSizeVariationTests
             $"ViTHuge ({large.ParameterCount}) should have more params than ViTBase ({small.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NnUNet_LargerSizeHasMoreParameters()
     {
         var small = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
@@ -475,7 +475,7 @@ public class SegmentationModelSizeVariationTests
             $"UNet3DCascade ({large.ParameterCount}) should have more params than UNet2D ({small.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_LargerSizeHasMoreParameters()
     {
         var small = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
@@ -484,7 +484,7 @@ public class SegmentationModelSizeVariationTests
             $"Base ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_LargerSizeHasMoreParameters()
     {
         var small = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);

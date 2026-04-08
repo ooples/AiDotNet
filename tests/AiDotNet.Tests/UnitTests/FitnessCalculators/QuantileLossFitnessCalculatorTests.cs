@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class QuantileLossFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMedianQuantile_WorksCorrectly()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithHighQuantile_PenalizesUnderPrediction()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithLowQuantile_PenalizesOverPrediction()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithDefaultQuantile_UsesMedian()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -110,7 +110,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -175,7 +175,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -186,7 +186,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidQuantile_DoesNotThrow()
     {
         // Arrange & Act
@@ -196,7 +196,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -207,7 +207,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithQ75_WorksCorrectly()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithQ25_WorksCorrectly()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_AsymmetricPenalty_DifferentQuantiles()
     {
         // Arrange

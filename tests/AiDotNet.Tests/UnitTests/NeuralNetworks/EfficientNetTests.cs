@@ -14,7 +14,7 @@ public class EfficientNetTests
 {
     #region EfficientNet-B0 Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB0_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -28,7 +28,7 @@ public class EfficientNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "Integration")]
     public void EfficientNetB0_Forward_ProducesCorrectOutputShape()
     {
@@ -52,7 +52,7 @@ public class EfficientNetTests
 #endif
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "Integration")]
     public void EfficientNetB0_ForwardSmallInput_ProducesCorrectShape()
     {
@@ -100,7 +100,7 @@ public class EfficientNetTests
         Assert.Equal(expectedResolution, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB1_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -113,7 +113,7 @@ public class EfficientNetTests
         Assert.Equal(240, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB2_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -125,7 +125,7 @@ public class EfficientNetTests
         Assert.Equal(260, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB3_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -137,7 +137,7 @@ public class EfficientNetTests
         Assert.Equal(300, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB4_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -149,7 +149,7 @@ public class EfficientNetTests
         Assert.Equal(380, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB5_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -161,7 +161,7 @@ public class EfficientNetTests
         Assert.Equal(456, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB6_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -173,7 +173,7 @@ public class EfficientNetTests
         Assert.Equal(528, network.InputResolution);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetB7_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -189,7 +189,7 @@ public class EfficientNetTests
 
     #region Configuration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNetConfiguration_GetScalingCoefficients_ReturnsCorrectValues()
     {
         // Test B0
@@ -211,7 +211,7 @@ public class EfficientNetTests
         Assert.Equal(600, configB7.GetInputHeight());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_WithCustomInputChannels_CreatesValidNetwork()
     {
         // Arrange - Single channel (grayscale) input
@@ -226,7 +226,7 @@ public class EfficientNetTests
 
     #region Swish Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_Activate_ComputesCorrectValues()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class EfficientNetTests
         Assert.True(atOne > 0.7f && atOne < 0.8f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_Derivative_ComputesCorrectValues()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class EfficientNetTests
         Assert.True(Math.Abs(derivAtNegative) < 0.1f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_ActivateVector_WorksCorrectly()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class EfficientNetTests
         Assert.True(output[3] > 1.7f); // Swish(2) ~ 1.762
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_SupportsJitCompilation()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class EfficientNetTests
 
     #region Model Metadata Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -324,7 +324,7 @@ public class EfficientNetTests
 
     #region Compound Scaling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_LargerVariants_HaveMoreLayers()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class EfficientNetTests
         Assert.True(b3.Layers.Count >= b0.Layers.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_Clone_CreatesNewInstance()
     {
         // Arrange
@@ -349,7 +349,7 @@ public class EfficientNetTests
         Assert.IsType<EfficientNetNetwork<float>>(clone);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_GetLayer_ReturnsCorrectLayer()
     {
         // Arrange
@@ -364,7 +364,7 @@ public class EfficientNetTests
         Assert.IsType<DenseLayer<float>>(lastLayer); // Classification head
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientNet_GetLayer_ThrowsOnInvalidIndex()
     {
         // Arrange

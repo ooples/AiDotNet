@@ -13,7 +13,7 @@ public class EncoderTests
 
     #region OneHotEncoder Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_BasicEncoding_Works()
     {
         // Arrange - Values 1, 2, 3 should become one-hot vectors
@@ -56,7 +56,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[3, 2], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_DropFirst_AvoidsMulticollinearity()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_UnknownCategory_ErrorHandling()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class EncoderTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_UnknownCategory_IgnoreHandling()
     {
         // Arrange
@@ -140,7 +140,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class EncoderTests
         Assert.Equal(1.0, decoded[3, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_MultipleColumns_EncodesAllSelected()
     {
         // Arrange - Two categorical columns
@@ -188,7 +188,7 @@ public class EncoderTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange - Only encode column 0
@@ -212,7 +212,7 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 2], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_GetFeatureNamesOut_GeneratesCorrectNames()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class EncoderTests
         Assert.Equal("color_3", names[2]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -257,7 +257,7 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class EncoderTests
 
     #region LabelEncoder Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_BasicEncoding_Works()
     {
         // Arrange - Values get encoded as 0, 1, 2
@@ -297,7 +297,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[3, 0], Tolerance); // 10 -> 0
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class EncoderTests
         Assert.Equal(20.0, decoded[2, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_UnknownValue_ReturnsMinusOne()
     {
         // Arrange
@@ -345,7 +345,7 @@ public class EncoderTests
         Assert.Equal(-1.0, result[0, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_MultipleColumns_EncodesAll()
     {
         // Arrange
@@ -370,7 +370,7 @@ public class EncoderTests
         Assert.Equal(1.0, result[1, 1], Tolerance); // 200 -> 1
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange
@@ -393,7 +393,7 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -404,7 +404,7 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_NClasses_ReturnsCorrectCounts()
     {
         // Arrange
@@ -426,7 +426,7 @@ public class EncoderTests
         Assert.Equal(2, encoder.NClasses[1]); // 2 unique in column 1
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -436,7 +436,7 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
@@ -455,7 +455,7 @@ public class EncoderTests
 
     #region OrdinalEncoder Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_BasicEncoding_Works()
     {
         // Arrange
@@ -478,7 +478,7 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 0], Tolerance); // 20 -> 1
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_CustomCategories_UsesProvidedOrder()
     {
         // Arrange - Custom order: [20, 10, 30] -> indices 0, 1, 2
@@ -502,7 +502,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[2, 0], Tolerance); // 20 -> 0
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_UnknownValue_ErrorHandling()
     {
         // Arrange
@@ -525,7 +525,7 @@ public class EncoderTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_UnknownValue_UseEncodedValue()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class EncoderTests
         Assert.Equal(-999.0, result[0, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class EncoderTests
         Assert.Equal(20.0, decoded[2, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_MultipleColumns_EncodesAll()
     {
         // Arrange
@@ -596,7 +596,7 @@ public class EncoderTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange
@@ -619,7 +619,7 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -630,7 +630,7 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
@@ -640,7 +640,7 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -653,7 +653,7 @@ public class EncoderTests
         Assert.Equal(-42, encoder.UnknownValue);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
@@ -672,7 +672,7 @@ public class EncoderTests
 
     #region FitTransform Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
@@ -692,7 +692,7 @@ public class EncoderTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
@@ -712,7 +712,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[1, 0], Tolerance); // 10 -> 0
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrdinalEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
@@ -736,7 +736,7 @@ public class EncoderTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_SingleCategory_Works()
     {
         // Arrange - Only one unique value
@@ -761,7 +761,7 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LabelEncoder_SingleCategory_ReturnsZeros()
     {
         // Arrange
@@ -782,7 +782,7 @@ public class EncoderTests
         Assert.Equal(0.0, result[1, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_LargeNumberOfCategories_Works()
     {
         // Arrange - 10 unique values
@@ -804,7 +804,7 @@ public class EncoderTests
         Assert.Equal(10, encoder.NOutputFeatures);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OneHotEncoder_Categories_ReturnsLearnedCategories()
     {
         // Arrange

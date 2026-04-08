@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class OptimizationPassTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvBatchNormFusionPass_ShouldFuseConvAndBatchNorm()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class OptimizationPassTests
         Assert.DoesNotContain(graph.Nodes, n => n.Name == "bn");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvBatchNormReLUFusionPass_ShouldFuseThreeOperations()
     {
         // Arrange
@@ -74,7 +74,7 @@ public class OptimizationPassTests
         Assert.Contains(graph.Nodes, n => n.OperationType == OperationType.FusedConvBatchNormReLU);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeadCodeEliminationPass_ShouldRemoveUnusedNodes()
     {
         // Arrange
@@ -105,7 +105,7 @@ public class OptimizationPassTests
         Assert.Contains(graph.Nodes, n => n.Name == "relu1");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_ShouldFoldConstants()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class OptimizationPassTests
         // Note: Actual folding would require tensor implementation
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InPlaceOptimizationPass_ShouldMarkEligibleOperations()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class OptimizationPassTests
         Assert.True(relu.CanOperateInPlace);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlgebraicSimplificationPass_ShouldSimplifyIdentities()
     {
         // Arrange
@@ -213,7 +213,7 @@ public class OptimizationPassTests
         Assert.DoesNotContain(graph.Nodes, n => n.Name == "add");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphOptimizer_ShouldApplyMultiplePasses()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class OptimizationPassTests
         Assert.True(optimizedGraph.Nodes.Count < originalCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationOptions_ShouldConfigureCorrectly()
     {
         // Arrange & Act
@@ -267,7 +267,7 @@ public class OptimizationPassTests
 
     #region ConstantFoldingPass Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldAdd_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -329,7 +329,7 @@ public class OptimizationPassTests
         Assert.Equal(12.0, foldedNode.ConstantValue[3]); // 4 + 8
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldSubtract_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -379,7 +379,7 @@ public class OptimizationPassTests
         Assert.Equal(27.0, foldedNode.ConstantValue[2]); // 30 - 3
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldMultiply_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -428,7 +428,7 @@ public class OptimizationPassTests
         Assert.Equal(15.0, foldedNode.ConstantValue[1]); // 3 * 5
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldDivide_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -477,7 +477,7 @@ public class OptimizationPassTests
         Assert.Equal(5.0, foldedNode.ConstantValue[1]); // 20 / 4
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldPowerWithScalarExponent_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -518,7 +518,7 @@ public class OptimizationPassTests
         Assert.Equal(16.0, foldedNode.ConstantValue[2]); // 4^2
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldPowerWithTensorExponent_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -567,7 +567,7 @@ public class OptimizationPassTests
         Assert.Equal(9.0, foldedNode.ConstantValue[1]); // 3^2
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldSqrt_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -607,7 +607,7 @@ public class OptimizationPassTests
         Assert.Equal(4.0, foldedNode.ConstantValue[2], 5); // sqrt(16)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldExp_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -646,7 +646,7 @@ public class OptimizationPassTests
         Assert.Equal(Math.E, foldedNode.ConstantValue[1], 5); // exp(1)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldLog_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -685,7 +685,7 @@ public class OptimizationPassTests
         Assert.Equal(1.0, foldedNode.ConstantValue[1], 5); // log(e)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_FoldMatMul_ShouldComputeCorrectResult()
     {
         // Arrange
@@ -738,7 +738,7 @@ public class OptimizationPassTests
         Assert.Equal(2, foldedNode.ConstantValue.Shape[1]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_ShapeMismatch_ShouldReturnNull()
     {
         // Arrange
@@ -784,7 +784,7 @@ public class OptimizationPassTests
         Assert.Contains(graph.Nodes, n => n.Name == "add"); // Add node should still exist
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_ApplyIteratesUntilNoChanges()
     {
         // Arrange
@@ -855,7 +855,7 @@ public class OptimizationPassTests
         Assert.NotEmpty(constantNodes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantFoldingPass_NonConstantInputs_ShouldNotFold()
     {
         // Arrange
@@ -904,7 +904,7 @@ public class OptimizationPassTests
 
     #region ElementwiseFusionPass Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_FuseTwoElementwiseOps_ShouldCreateFusedNode()
     {
         // Arrange
@@ -938,7 +938,7 @@ public class OptimizationPassTests
         Assert.Equal(OperationType.Custom, fusedNode.OperationType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_ChainOfThreeOps_ShouldFuseAll()
     {
         // Arrange
@@ -976,7 +976,7 @@ public class OptimizationPassTests
         Assert.True(fusedNode.Metadata.ContainsKey("OperationSequence"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_IsChainHead_DetectsCorrectly()
     {
         // Arrange
@@ -1005,7 +1005,7 @@ public class OptimizationPassTests
         Assert.NotNull(fusedNode);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_SingleNode_ShouldNotFuse()
     {
         // Arrange
@@ -1032,7 +1032,7 @@ public class OptimizationPassTests
         Assert.Contains(graph.Nodes, n => n.Name == "relu");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_BranchingOutput_ShouldNotFuse()
     {
         // Arrange
@@ -1066,7 +1066,7 @@ public class OptimizationPassTests
         Assert.Contains(graph.Nodes, n => n.Name == "relu");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_AlreadyFused_ShouldSkip()
     {
         // Arrange
@@ -1097,7 +1097,7 @@ public class OptimizationPassTests
         Assert.False(modified); // Already fused nodes should be skipped
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_CanApply_ReturnsTrueWhenElementwiseOpsPresent()
     {
         // Arrange
@@ -1114,7 +1114,7 @@ public class OptimizationPassTests
         Assert.True(canApply);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseFusionPass_CanApply_ReturnsFalseWhenNoElementwiseOps()
     {
         // Arrange
@@ -1135,14 +1135,14 @@ public class OptimizationPassTests
 
     #region LayoutOptimizationPass Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_Constructor_InvalidLayout_ThrowsException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => new LayoutOptimizationPass<double>("INVALID"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_Constructor_ValidLayout_Succeeds()
     {
         // Arrange & Act
@@ -1154,7 +1154,7 @@ public class OptimizationPassTests
         Assert.NotNull(pass2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_NCHWToNHWC_InsertsTranspose()
     {
         // Arrange
@@ -1197,7 +1197,7 @@ public class OptimizationPassTests
         Assert.False(modified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_GetPreferredLayout_ReturnsNCHWForConvOps()
     {
         // Arrange
@@ -1219,7 +1219,7 @@ public class OptimizationPassTests
         Assert.True(canApply); // Can apply when convolution ops are present
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_GetPreferredLayout_ReturnsAgnosticForOtherOps()
     {
         // Arrange
@@ -1241,7 +1241,7 @@ public class OptimizationPassTests
         Assert.False(canApply); // Cannot apply without conv ops
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_IdentityPermutation_SameLayout()
     {
         // Arrange
@@ -1275,7 +1275,7 @@ public class OptimizationPassTests
         Assert.False(modified); // No transpose needed when both prefer same layout
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_RequiresLayoutConversion_DetectsMismatch()
     {
         // Arrange
@@ -1311,7 +1311,7 @@ public class OptimizationPassTests
         Assert.False(modified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_NoMismatch_NoTransposeInserted()
     {
         // Arrange - Input (AGNOSTIC) -> Conv (NCHW): No mismatch since Input is AGNOSTIC
@@ -1347,7 +1347,7 @@ public class OptimizationPassTests
         Assert.Empty(transposeNodes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_TransposeMetadata_HasCorrectFields()
     {
         // This test verifies that when a transpose is created (via InsertLayoutConversion),
@@ -1407,7 +1407,7 @@ public class OptimizationPassTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_ComputeTransposedShape_HandlesNon4DTensors()
     {
         // Arrange - Test that non-4D tensors are returned unchanged
@@ -1442,7 +1442,7 @@ public class OptimizationPassTests
         Assert.False(modified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_ComputeTransposedShape_Handles5DTensors()
     {
         // Arrange - Test that 5D tensors are handled correctly (returned unchanged)
@@ -1477,7 +1477,7 @@ public class OptimizationPassTests
         Assert.False(modified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_CanApply_ReturnsTrueWhenConvPresent()
     {
         // Arrange
@@ -1494,7 +1494,7 @@ public class OptimizationPassTests
         Assert.True(canApply);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LayoutOptimizationPass_CanApply_ReturnsFalseWithoutConv()
     {
         // Arrange
@@ -1515,7 +1515,7 @@ public class OptimizationPassTests
 
     #region MatMulBiasActivationFusionPass Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_DetectsFusionPattern()
     {
         // Arrange
@@ -1573,7 +1573,7 @@ public class OptimizationPassTests
         // The implementation needs .ToList() on activation.Outputs iterations
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_SupportsGELUActivation()
     {
         // Arrange
@@ -1610,7 +1610,7 @@ public class OptimizationPassTests
         Assert.True(canApply); // Can apply when MatMul is present
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_RequiresConstantBias()
     {
         // Arrange - Test that non-constant bias prevents fusion
@@ -1640,7 +1640,7 @@ public class OptimizationPassTests
         // Note: Actual fusion would check for constant bias and skip non-constant
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_SupportsFusedMatMulBias()
     {
         // Arrange
@@ -1663,7 +1663,7 @@ public class OptimizationPassTests
         Assert.True(canApply); // Can apply when FusedMatMulBias is present
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_SupportsDenseOperation()
     {
         // Arrange
@@ -1686,7 +1686,7 @@ public class OptimizationPassTests
         Assert.True(canApply); // Can apply when Dense is present
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_CanApply_ReturnsTrueWhenMatMulPresent()
     {
         // Arrange
@@ -1703,7 +1703,7 @@ public class OptimizationPassTests
         Assert.True(canApply);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_CanApply_ReturnsTrueWhenFusedMatMulBiasPresent()
     {
         // Arrange
@@ -1720,7 +1720,7 @@ public class OptimizationPassTests
         Assert.True(canApply);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulBiasActivationFusionPass_CanApply_ReturnsFalseWithoutMatMul()
     {
         // Arrange

@@ -10,7 +10,7 @@ using Xunit;
 
 public class TensorJsonConverterTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CanConvert_ReturnsTrue_ForTensorAndDerivedTensor()
     {
         var converter = new TensorJsonConverter();
@@ -19,7 +19,7 @@ public class TensorJsonConverterTests
         Assert.True(converter.CanConvert(typeof(NoVectorConstructorTensor<double>)));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CanConvert_ReturnsFalse_ForNonTensorType()
     {
         var converter = new TensorJsonConverter();
@@ -27,7 +27,7 @@ public class TensorJsonConverterTests
         Assert.False(converter.CanConvert(typeof(string)));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WriteJson_WritesNull_WhenValueIsNull()
     {
         var converter = new TensorJsonConverter();
@@ -40,7 +40,7 @@ public class TensorJsonConverterTests
         Assert.Equal(JTokenType.Null, writer.Token!.Type);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WriteJson_Throws_WhenMissingRequiredTensorProperties()
     {
         var converter = new TensorJsonConverter();
@@ -50,7 +50,7 @@ public class TensorJsonConverterTests
         Assert.Throws<JsonSerializationException>(() => converter.WriteJson(writer, new object(), serializer));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_ReturnsNull_WhenJsonNull()
     {
         var converter = new TensorJsonConverter();
@@ -64,7 +64,7 @@ public class TensorJsonConverterTests
         Assert.Null(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_Throws_WhenShapeMissing()
     {
         var converter = new TensorJsonConverter();
@@ -77,7 +77,7 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_Throws_WhenDataMissing()
     {
         var converter = new TensorJsonConverter();
@@ -90,7 +90,7 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_Throws_WhenDataLengthMismatch()
     {
         var converter = new TensorJsonConverter();
@@ -103,7 +103,7 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RoundTrip_SerializesAndDeserializesTensor()
     {
         var settings = new JsonSerializerSettings
@@ -128,7 +128,7 @@ public class TensorJsonConverterTests
         Assert.Equal(tensor.ToArray(), roundTrip.ToArray());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_UsesFallbackConstructor_WhenVectorConstructorMissing()
     {
         var settings = new JsonSerializerSettings
@@ -148,7 +148,7 @@ public class TensorJsonConverterTests
         Assert.Equal(tensor.ToArray(), fallback.ToArray());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadJson_Throws_WhenNoSuitableConstructor()
     {
         var converter = new TensorJsonConverter();

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Tokenization;
 /// </summary>
 public class CharacterTokenizerTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateAscii_CreatesValidTokenizer()
     {
         // Act
@@ -22,7 +22,7 @@ public class CharacterTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_SplitsIntoCharacters()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class CharacterTokenizerTests
         Assert.Equal("o", tokens[4]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_WithLowercase_ConvertsToLower()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class CharacterTokenizerTests
         Assert.All(tokens, t => Assert.Equal(t.ToLowerInvariant(), t));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_PreservesWhitespace()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class CharacterTokenizerTests
         Assert.Equal(" ", tokens[2]); // Space between Hi and there
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyText_ReturnsEmpty()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class CharacterTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsCorrectTokenIds()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class CharacterTokenizerTests
         Assert.NotEqual(result.TokenIds[0], result.TokenIds[1]); // A and B have different IDs
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_ReconstructsOriginalText()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class CharacterTokenizerTests
         Assert.Equal(text, decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Roundtrip_IsExact()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class CharacterTokenizerTests
         Assert.Equal(text, decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_FromCorpus_CreatesVocabulary()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class CharacterTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("e"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithMinFrequency_FiltersRareChars()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class CharacterTokenizerTests
         Assert.False(tokenizer.Vocabulary.ContainsToken("c"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_NonAsciiChar_ReturnsUnk()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class CharacterTokenizerTests
         Assert.Equal(tokenizer.SpecialTokens.UnkToken, tokens[5]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithPositionIds_ReturnsSequential()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class CharacterTokenizerTests
         Assert.Equal(new List<int> { 0, 1, 2 }, result.PositionIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VocabularySize_MatchesAsciiPrintable()
     {
         // Arrange
@@ -205,14 +205,14 @@ public class CharacterTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
             CharacterTokenizer.Train(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_InvalidMinFrequency_ThrowsArgumentOutOfRangeException()
     {
         var corpus = new List<string> { "Hello world" };

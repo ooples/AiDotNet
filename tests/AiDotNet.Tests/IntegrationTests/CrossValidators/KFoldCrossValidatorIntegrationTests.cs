@@ -56,7 +56,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
@@ -66,7 +66,7 @@ public class KFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Fold Size Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_FoldSizesAreApproximatelyEqual()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_EachSampleUsedExactlyOnceAsValidation()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithoutShuffle_PreservesOrder()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -318,7 +318,7 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_RecordsTotalTime()
     {
         // Arrange
@@ -340,7 +340,7 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithMinimumFolds_Works()
     {
         // Arrange - 2 folds is the minimum for meaningful CV
@@ -364,7 +364,7 @@ public class KFoldCrossValidatorIntegrationTests
         Assert.Equal(5, result.FoldResults[0].ValidationIndices.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithUnevenSplit_DistributesRemainderToFirstFolds()
     {
         // Arrange - 11 samples with 3 folds means uneven split

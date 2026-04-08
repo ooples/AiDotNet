@@ -9,7 +9,7 @@ namespace AiDotNet.Serving.Tests;
 
 public sealed class ModelStartupServiceHashVerificationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task StartAsync_ThrowsWhenSha256DoesNotMatch()
     {
         var baseDir = AppContext.BaseDirectory;

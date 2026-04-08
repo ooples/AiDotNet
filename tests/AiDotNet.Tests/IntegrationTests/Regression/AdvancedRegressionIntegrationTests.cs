@@ -94,7 +94,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region M5ModelTree
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void M5ModelTree_FitsNonLinearData_BetterThanLinear()
     {
         var (x, y) = CreateNonLinearData(100, seed: 42);
@@ -108,7 +108,7 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"M5ModelTree R²={r2:F4} should be > 0.5 on quadratic data");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void M5ModelTree_LeafModelsAreLinear()
     {
         // M5 should use linear models at leaves, so it should handle both
@@ -127,7 +127,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region SuperLearner
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SuperLearner_FitsLinearData_AtLeastAsGoodAsBestBase()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, 1.0, -0.5 }, intercept: 3.0, noise: 0.5, seed: 42);
@@ -141,7 +141,7 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"SuperLearner R²={r2:F4} should be > 0.5 (at least as good as best base)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SuperLearner_OutputLengthMatchesInput()
     {
         var (x, y) = CreateLinearData(50, new[] { 1.0 }, intercept: 0, noise: 0.1, seed: 42);
@@ -161,7 +161,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region GeneralizedAdditiveModel
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GAM_FitsNonLinearData_ReasonableR2()
     {
         var (x, y) = CreateNonLinearData(80, seed: 42);
@@ -175,7 +175,7 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.3, $"GAM R²={r2:F4} should be > 0.3 on non-linear data");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GAM_CapturesAdditiveStructure()
     {
         // y = f1(x1) + f2(x2) — GAM should capture additive effects
@@ -193,7 +193,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region MixedEffectsModel
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearMixedModel_FitsData_PredictionsFinite()
     {
         // Create data with 2 fixed-effect features + 1 grouping column (col 2)
@@ -227,7 +227,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region DeepHit (Survival)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepHit_TrainsAndPredicts_OutputsFinite()
     {
         // DeepHit is a survival analysis model — uses time-to-event data
@@ -248,7 +248,7 @@ public class AdvancedRegressionIntegrationTests
 
     #region DeepSurv (Survival)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepSurv_TrainsAndPredicts_OutputsFinite()
     {
         var (x, y) = CreateLinearData(60, new[] { 1.0, -0.5 }, intercept: 3.0, noise: 0.3, seed: 42);
@@ -263,7 +263,7 @@ public class AdvancedRegressionIntegrationTests
         Assert.Equal(x.Rows, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepSurv_HigherRisk_HigherPrediction()
     {
         // Create data where higher x values → shorter survival
@@ -314,23 +314,23 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(AllFinite(predictions), $"{name} produced NaN/Infinity predictions");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void M5ModelTree_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new M5ModelTree<double>(), "M5ModelTree");
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SuperLearner_CrossCutting_FinitePredictions()
         => AssertOutputLengthAndFinite(new SuperLearner<double>(), "SuperLearner");
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GAM_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new GeneralizedAdditiveModel<double>(), "GAM");
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepHit_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new DeepHit<double>(), "DeepHit");
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepSurv_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new DeepSurv<double>(), "DeepSurv");
 

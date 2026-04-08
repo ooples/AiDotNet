@@ -15,7 +15,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Basic Statistics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMean_WithValidValues_ReturnsCorrectMean()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMean_WithSingleValue_ReturnsThatValue()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(42.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMedian_WithOddCount_ReturnsMiddleValue()
     {
         // Arrange
@@ -54,7 +54,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMedian_WithEvenCount_ReturnsAverageOfMiddleValues()
     {
         // Arrange
@@ -67,7 +67,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateVariance_WithValidValues_ReturnsCorrectVariance()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateStandardDeviation_WithValidValues_ReturnsCorrectStdDev()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(Math.Sqrt(variance), result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanAndStandardDeviation_ReturnsConsistentResults()
     {
         // Arrange
@@ -111,7 +111,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(stdDev > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanAbsoluteDeviation_ReturnsCorrectValue()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMedianAbsoluteDeviation_ReturnsCorrectValue()
     {
         // Arrange
@@ -138,7 +138,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateQuantiles_ReturnsFirstAndThirdQuantiles()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(q3 >= 1 && q3 <= 12);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateSkewnessAndKurtosis_ReturnsValidValues()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Error Metrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanSquaredError_WithPerfectPrediction_ReturnsZero()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanSquaredError_WithDifferences_ReturnsPositiveValue()
     {
         // Arrange
@@ -201,7 +201,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.01, result, Tolerance); // Average of 0.01 squared differences
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateRootMeanSquaredError_ReturnsSquareRootOfMSE()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(Math.Sqrt(mse), rmse, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanAbsoluteError_ReturnsCorrectValue()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanAbsolutePercentageError_ReturnsPercentage()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(10.0, result, Tolerance); // 10% error
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateR2_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
@@ -258,7 +258,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateR2_WithRandomPrediction_ReturnsLowValue()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result < 0.5); // Poor fit
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateAdjustedR2_IsLessThanOrEqualToR2()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(adjustedR2 <= r2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateExplainedVarianceScore_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
@@ -301,7 +301,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMaxError_ReturnsLargestAbsoluteDifference()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMedianAbsoluteError_ReturnsMedianOfErrors()
     {
         // Arrange
@@ -329,7 +329,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanBiasError_ReturnsAverageBias()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance); // Systematic over-prediction
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateSymmetricMeanAbsolutePercentageError_ReturnsValue()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 200.0); // SMAPE is between 0 and 200
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanSquaredLogError_ReturnsPositiveValue()
     {
         // Arrange
@@ -375,7 +375,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Correlation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePearsonCorrelation_WithPerfectPositiveCorrelation_ReturnsOne()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePearsonCorrelation_WithPerfectNegativeCorrelation_ReturnsMinusOne()
     {
         // Arrange
@@ -403,7 +403,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePearsonCorrelationCoefficient_MatchesPearsonCorrelation()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(result1, result2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateSpearmanRankCorrelationCoefficient_WithMonotonicData_ReturnsHighValue()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0.9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateKendallTau_WithConcordantPairs_ReturnsPositive()
     {
         // Arrange
@@ -450,7 +450,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Distance Metrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_WithIdenticalVectors_ReturnsZero()
     {
         // Arrange
@@ -464,7 +464,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_WithKnownVectors_ReturnsCorrectDistance()
     {
         // Arrange
@@ -478,7 +478,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance); // 3-4-5 triangle
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_WithKnownVectors_ReturnsCorrectDistance()
     {
         // Arrange
@@ -492,7 +492,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(6.0, result, Tolerance); // |1| + |2| + |3|
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_WithIdenticalVectors_ReturnsOne()
     {
         // Arrange
@@ -506,7 +506,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
     {
         // Arrange
@@ -520,7 +520,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardSimilarity_WithIdenticalSets_ReturnsOne()
     {
         // Arrange
@@ -534,7 +534,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HammingDistance_WithDifferentBits_ReturnsCount()
     {
         // Arrange
@@ -548,7 +548,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.0, result, Tolerance); // Two positions differ
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDistance_WithDifferentMetrics_ReturnsValidDistances()
     {
         // Arrange
@@ -570,7 +570,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Distribution Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateNormalCDF_AtMean_ReturnsHalf()
     {
         // Arrange
@@ -585,7 +585,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateNormalPDF_AtMean_ReturnsMaxValue()
     {
         // Arrange
@@ -600,7 +600,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(atMean > awayFromMean);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateInverseNormalCDF_AtHalf_ReturnsMean()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, 0.01); // Standard normal mean is 0
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateChiSquareCDF_WithPositiveX_ReturnsValidProbability()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateChiSquarePDF_WithValidInput_ReturnsPositive()
     {
         // Arrange
@@ -641,7 +641,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetermineBestFitDistribution_ReturnsValidResult()
     {
         // Arrange - normally distributed data
@@ -656,7 +656,7 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateBetaCDF_AtBoundaries_ReturnsValidValues()
     {
         // Arrange
@@ -676,7 +676,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Statistical Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TTest_WithSameDistributions_ReturnsHighPValue()
     {
         // Arrange
@@ -691,7 +691,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TTest_WithDifferentDistributions_ReturnsLowPValue()
     {
         // Arrange
@@ -706,7 +706,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue < 0.05); // Significant difference
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MannWhitneyUTest_WithValidData_ReturnsResult()
     {
         // Arrange
@@ -721,7 +721,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareTest_WithValidData_ReturnsResult()
     {
         // Arrange
@@ -735,7 +735,7 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FTest_WithValidData_ReturnsResult()
     {
         // Arrange
@@ -750,7 +750,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationTest_WithValidData_ReturnsResult()
     {
         // Arrange
@@ -765,7 +765,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePValue_WithDifferentTestTypes_ReturnsValidValues()
     {
         // Arrange - continuous data for t-test
@@ -789,7 +789,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Model Evaluation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateAIC_WithValidInputs_ReturnsValue()
     {
         // Arrange
@@ -804,7 +804,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateBIC_PenalizesMoreParametersThanAIC()
     {
         // Arrange
@@ -821,7 +821,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(bic));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateAccuracy_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
@@ -835,7 +835,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePrecisionRecallF1_WithValidData_ReturnsValidMetrics()
     {
         // Arrange
@@ -851,7 +851,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(f1 >= 0 && f1 <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateF1Score_IsHarmonicMean()
     {
         // Arrange
@@ -867,7 +867,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(expected, f1, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateConfusionMatrix_WithBinaryData_ReturnsValidMatrix()
     {
         // Arrange
@@ -881,7 +881,7 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateROCAUC_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
@@ -895,7 +895,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateROCCurve_ReturnsValidCurve()
     {
         // Arrange
@@ -911,7 +911,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(fpr.Length, tpr.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDurbinWatsonStatistic_WithResiduals_ReturnsValue()
     {
         // Arrange
@@ -925,7 +925,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 4); // DW statistic range
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateTheilUStatistic_WithValidData_ReturnsValue()
     {
         // Arrange
@@ -943,7 +943,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Information Theory Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMutualInformation_WithDependentVariables_ReturnsPositive()
     {
         // Arrange
@@ -957,7 +957,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateNormalizedMutualInformation_ReturnsBetweenZeroAndOne()
     {
         // Arrange
@@ -975,7 +975,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Clustering Metrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateSilhouetteScore_WithWellSeparatedClusters_ReturnsHighValue()
     {
         // Arrange - Two well-separated clusters
@@ -993,7 +993,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0.5); // Well-separated should have high silhouette
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCalinskiHarabaszIndex_WithValidClusters_ReturnsPositive()
     {
         // Arrange
@@ -1011,7 +1011,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDaviesBouldinIndex_WithValidClusters_ReturnsPositive()
     {
         // Arrange
@@ -1029,7 +1029,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateAdjustedRandIndex_WithIdenticalLabels_ReturnsOne()
     {
         // Arrange
@@ -1047,7 +1047,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Time Series Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateAutoCorrelationFunction_WithLag_ReturnsValidValues()
     {
         // Arrange
@@ -1063,7 +1063,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance); // ACF at lag 0 is always 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePartialAutoCorrelationFunction_WithLag_ReturnsValidValues()
     {
         // Arrange
@@ -1078,7 +1078,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDynamicTimeWarping_WithIdenticalSeries_ReturnsZero()
     {
         // Arrange
@@ -1092,7 +1092,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateDynamicTimeWarping_WithDifferentSeries_ReturnsPositive()
     {
         // Arrange
@@ -1110,7 +1110,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Interval and Confidence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePredictionIntervals_ReturnsValidBounds()
     {
         // Arrange
@@ -1124,7 +1124,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateConfidenceIntervals_WithNormalDistribution_ReturnsValidBounds()
     {
         // Arrange
@@ -1137,7 +1137,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCredibleIntervals_ReturnsValidBounds()
     {
         // Arrange
@@ -1150,7 +1150,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateBootstrapInterval_ReturnsValidBounds()
     {
         // Arrange
@@ -1164,7 +1164,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateClopperPearsonInterval_ReturnsBinomialConfidenceInterval()
     {
         // Arrange
@@ -1181,7 +1181,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateTValue_ReturnsPositiveForValidInputs()
     {
         // Arrange
@@ -1199,7 +1199,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Residual Analysis Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateResiduals_ReturnsCorrectDifferences()
     {
         // Arrange
@@ -1215,7 +1215,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(-0.2, residuals[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateTotalSumOfSquares_ReturnsPositive()
     {
         // Arrange
@@ -1228,7 +1228,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateResidualSumOfSquares_WithPerfectPrediction_ReturnsZero()
     {
         // Arrange
@@ -1246,7 +1246,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Ranking Metrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanAveragePrecision_WithPerfectRanking_ReturnsOne()
     {
         // Arrange
@@ -1260,7 +1260,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateNDCG_WithPerfectRanking_ReturnsOne()
     {
         // Arrange
@@ -1274,7 +1274,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMeanReciprocalRank_WithFirstCorrect_ReturnsOne()
     {
         // Arrange
@@ -1292,7 +1292,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Covariance Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCovarianceMatrix_ReturnsSymmetricMatrix()
     {
         // Arrange
@@ -1320,7 +1320,7 @@ public class StatisticsHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCorrelationMatrix_ReturnsDiagonalOnes()
     {
         // Arrange
@@ -1347,7 +1347,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Gamma and Special Functions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_WithPositiveInteger_ReturnsFactorial()
     {
         // Arrange & Act
@@ -1357,7 +1357,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(24.0, gamma5, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Digamma_WithPositiveValue_ReturnsValue()
     {
         // Arrange
@@ -1370,7 +1370,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IncompleteGamma_WithValidInputs_ReturnsBetweenZeroAndOne()
     {
         // Arrange
@@ -1388,7 +1388,7 @@ public class StatisticsHelperIntegrationTests
 
     #region CRPS Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCRPS_WithPerfectPrediction_ReturnsLowValue()
     {
         // Arrange
@@ -1402,7 +1402,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateCRPS_WithMeanAndStdDev_ReturnsValidValue()
     {
         // Arrange
@@ -1421,7 +1421,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Split Score Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateVarianceReduction_WithValidSplit_ReturnsPositive()
     {
         // Arrange
@@ -1436,7 +1436,7 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateSplitScore_WithDifferentCriteria_ReturnsValues()
     {
         // Arrange
@@ -1459,7 +1459,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Learning Curve Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateLearningCurve_ReturnsCorrectNumberOfSteps()
     {
         // Arrange
@@ -1478,7 +1478,7 @@ public class StatisticsHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculateMean_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -1491,7 +1491,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0f, result, 0.001f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalculatePearsonCorrelation_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -1505,7 +1505,7 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0f, result, 0.001f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange

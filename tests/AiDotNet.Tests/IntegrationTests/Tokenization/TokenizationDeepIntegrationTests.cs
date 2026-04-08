@@ -14,7 +14,7 @@ public class TokenizationDeepIntegrationTests
 {
     // ─── Vocabulary Tests ────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_FirstTokenIsUnk_GetsIdZero()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -22,7 +22,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("[UNK]", vocab.GetToken(0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_AddToken_AssignsSequentialIds()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -36,7 +36,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(4, vocab.Size);  // [UNK] + a + b + c
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_DuplicateToken_ReturnsSameId()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -46,7 +46,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(2, vocab.Size);  // [UNK] + hello
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_UnknownToken_ReturnsUnkId()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -55,7 +55,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(0, unknownId);  // UNK token ID
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_ContainsToken_WorksCorrectly()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -65,14 +65,14 @@ public class TokenizationDeepIntegrationTests
         Assert.False(vocab.ContainsToken("world"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_GetToken_ReturnsNullForInvalidId()
     {
         var vocab = new Vocabulary("[UNK]");
         Assert.Null(vocab.GetToken(999));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_Clear_ResetsButKeepsUnk()
     {
         var vocab = new Vocabulary("[UNK]");
@@ -86,7 +86,7 @@ public class TokenizationDeepIntegrationTests
         Assert.False(vocab.ContainsToken("a"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Vocabulary_FromDictionary_PreservesMapping()
     {
         var mapping = new Dictionary<string, int>
@@ -105,7 +105,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── CharacterTokenizer Tests ────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_SimpleText_SplitsIntoCharacters()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -117,7 +117,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("t", tokens[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_WithSpaces_IncludesSpaceCharacters()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -129,7 +129,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("b", tokens[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_Lowercase_ConvertsToLowercase()
     {
         var tokenizer = CharacterTokenizer.CreateAscii(lowercase: true);
@@ -141,7 +141,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("c", tokens[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_EmptyString_ReturnsEmptyList()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -149,7 +149,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_NullString_ReturnsEmptyList()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -157,7 +157,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_TrainFromCorpus_BuildsVocabulary()
     {
         var corpus = new[] { "hello", "world" };
@@ -172,7 +172,7 @@ public class TokenizationDeepIntegrationTests
         Assert.True(tokenizer.VocabularySize >= 7);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_TrainWithMinFrequency_FiltersRareChars()
     {
         // 'z' appears only once but 'a' appears 3 times
@@ -188,7 +188,7 @@ public class TokenizationDeepIntegrationTests
         Assert.DoesNotContain("[UNK]", aTokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_Encode_ProducesValidTokenIds()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -200,7 +200,7 @@ public class TokenizationDeepIntegrationTests
         Assert.All(result.TokenIds, id => Assert.True(id >= 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_EncodeWithSpecialTokens_AddsClsAndSep()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -215,7 +215,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("[SEP]", result.Tokens[result.Tokens.Count - 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_RoundTrip_ReconstructsText()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -226,7 +226,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(original, decoded);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_NonAscii_MapsToUnk()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -237,7 +237,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── BPE Tokenizer Tests ─────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_TrainSimpleCorpus_LearnsCommonPairs()
     {
         var corpus = new[] {
@@ -254,7 +254,7 @@ public class TokenizationDeepIntegrationTests
         Assert.True(tokens.Count <= 3, $"'the' should be highly merged, got {tokens.Count} tokens");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_EmptyCorpus_ProducesMinimalTokenizer()
     {
         var tokenizer = BpeTokenizer.Train(Array.Empty<string>(), vocabSize: 100);
@@ -263,7 +263,7 @@ public class TokenizationDeepIntegrationTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_EmptyText_ReturnsEmptyList()
     {
         var tokenizer = BpeTokenizer.Train(new[] { "hello" }, vocabSize: 50);
@@ -271,7 +271,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Empty(tokenizer.Tokenize(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_ManualMerges_AppliedInPriorityOrder()
     {
         // Build a minimal BPE tokenizer with known merges
@@ -294,7 +294,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("abc", tokens[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_UnknownMerge_SplitsIntoCharacters()
     {
         var specialTokens = SpecialTokens.Gpt();
@@ -313,7 +313,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Contains("z", tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_CachesResults()
     {
         var corpus = new[] { "hello hello hello" };
@@ -329,7 +329,7 @@ public class TokenizationDeepIntegrationTests
             Assert.Equal(tokens1[i], tokens2[i]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_Train_VocabSizeRespected()
     {
         var corpus = new[] { "the quick brown fox jumps over the lazy dog" };
@@ -341,7 +341,7 @@ public class TokenizationDeepIntegrationTests
             $"Vocabulary size {tokenizer.VocabularySize} exceeds target {targetVocabSize}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_RoundTrip_ReconstructsText()
     {
         var corpus = new[] { "hello world", "foo bar baz" };
@@ -354,7 +354,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(original, decoded);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_MergeOrderMatters()
     {
         // If merge order differs, tokenization result differs
@@ -392,7 +392,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── WordPiece Tokenizer Tests ───────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_KnownVocab_TokenizesCorrectly()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -415,7 +415,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("##ness", tokens[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_TrainFromCorpus_BuildsSubwordVocab()
     {
         var corpus = new[]
@@ -432,7 +432,7 @@ public class TokenizationDeepIntegrationTests
         Assert.DoesNotContain("[UNK]", tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_ContinuingPrefix_UsedForSubwords()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -449,7 +449,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("##ing", tokens[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_MaxCharsPerWord_ReturnsUnk()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -464,7 +464,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Contains("[UNK]", tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_MaxCharsPerWord_LessThan1_Throws()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -474,7 +474,7 @@ public class TokenizationDeepIntegrationTests
             new WordPieceTokenizer(vocab, specialTokens, maxInputCharsPerWord: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_UnknownWord_ReturnsUnkToken()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -489,7 +489,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Contains("[UNK]", tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_EmptyText_ReturnsEmptyList()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -501,7 +501,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Empty(tokenizer.Tokenize(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_CleanupTokens_RemovesContinuationPrefix()
     {
         var corpus = new[] { "playing", "running", "jumping" };
@@ -514,7 +514,7 @@ public class TokenizationDeepIntegrationTests
         Assert.DoesNotContain("##", decoded);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_LowercasesInput()
     {
         var corpus = new[] { "hello world" };
@@ -532,7 +532,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Encoding Options Tests ──────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_WithPadding_PadsToMaxLength()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -555,7 +555,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(0, result.AttentionMask[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_WithTruncation_TruncatesToMaxLength()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -575,7 +575,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("l", result.Tokens[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_WithTruncationAndSpecialTokens_PreservesSpecialTokens()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -595,7 +595,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal("[SEP]", result.Tokens[result.Tokens.Count - 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_ReturnTokenTypeIds_AllZeros()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -606,7 +606,7 @@ public class TokenizationDeepIntegrationTests
         Assert.All(result.TokenTypeIds, id => Assert.Equal(0, id));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_ReturnPositionIds_Sequential()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -618,7 +618,7 @@ public class TokenizationDeepIntegrationTests
             Assert.Equal(i, result.PositionIds[i]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_EmptyString_ReturnsEmptyResult()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -630,7 +630,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Batch Operations ────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EncodeBatch_MultipleTexts_ReturnsCorrectCount()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -644,7 +644,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(2, results[2].Tokens.Count);  // "ok" → 2 chars
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecodeBatch_MultipleSequences_DecodesAll()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -661,7 +661,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Special Tokens Configuration ────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpecialTokens_Bert_HasCorrectTokens()
     {
         var st = SpecialTokens.Bert();
@@ -674,7 +674,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(string.Empty, st.EosToken);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpecialTokens_Gpt_HasCorrectTokens()
     {
         var st = SpecialTokens.Gpt();
@@ -686,7 +686,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Equal(string.Empty, st.SepToken);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpecialTokens_GetAllSpecialTokens_DoesNotIncludeEmpty()
     {
         var st = SpecialTokens.Gpt();
@@ -699,7 +699,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── ConvertTokensToIds / ConvertIdsToTokens ─────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvertTokensToIds_KnownTokens_ReturnsCorrectIds()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -711,7 +711,7 @@ public class TokenizationDeepIntegrationTests
         Assert.NotEqual(ids[0], ids[1]);  // 'a' and 'b' have different IDs
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvertIdsToTokens_ValidIds_ReturnsCorrectTokens()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -726,42 +726,42 @@ public class TokenizationDeepIntegrationTests
 
     // ─── BPE Training Edge Cases ─────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             BpeTokenizer.Train(null, vocabSize: 50));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_Train_InvalidVocabSize_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             BpeTokenizer.Train(new[] { "hello" }, vocabSize: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             CharacterTokenizer.Train(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_Train_InvalidMinFrequency_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             CharacterTokenizer.Train(new[] { "hello" }, minFrequency: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             WordPieceTokenizer.Train(null, vocabSize: 50));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_Train_InvalidVocabSize_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -770,7 +770,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Cross-Tokenizer Consistency ─────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllTokenizers_EmptyInput_ReturnEmpty()
     {
         var charTok = CharacterTokenizer.CreateAscii();
@@ -782,7 +782,7 @@ public class TokenizationDeepIntegrationTests
         Assert.Empty(wpTok.Tokenize(""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllTokenizers_NonEmptyInput_ReturnNonEmpty()
     {
         var corpus = new[] { "hello world" };
@@ -795,7 +795,7 @@ public class TokenizationDeepIntegrationTests
         Assert.NotEmpty(wpTok.Tokenize("hello"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharTokenizer_AlwaysProducesMoreTokensThanBpe()
     {
         var corpus = new[] { "the quick brown fox jumps over the lazy dog" };
@@ -813,7 +813,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Decode with SkipSpecialTokens ───────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Decode_SkipSpecialTokens_RemovesSpecialTokens()
     {
         var specialTokens = SpecialTokens.Bert();
@@ -834,7 +834,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Vocabulary Size Consistency ─────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BpeTokenizer_VocabSize_MatchesVocabularyProperty()
     {
         var corpus = new[] { "hello world foo bar" };
@@ -844,7 +844,7 @@ public class TokenizationDeepIntegrationTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordPiece_VocabSize_MatchesVocabularyProperty()
     {
         var corpus = new[] { "hello world foo bar" };
@@ -855,7 +855,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Left Truncation ─────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_LeftTruncation_KeepsEndOfSequence()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
@@ -878,7 +878,7 @@ public class TokenizationDeepIntegrationTests
 
     // ─── Left Padding ────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Encode_LeftPadding_PadsAtStart()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();

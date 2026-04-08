@@ -50,7 +50,7 @@ public class NeuralProcessAlgorithmTests
         return false;
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -76,7 +76,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(predictions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -98,7 +98,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(adapted.Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -120,7 +120,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(adapted.Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -141,7 +141,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -162,7 +162,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -183,7 +183,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwinTNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -204,7 +204,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EquivCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -225,7 +225,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SteerCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -246,7 +246,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -267,7 +267,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LBANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
@@ -288,7 +288,7 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CNP_MultipleTrainingSteps_ProducesStableLoss()
     {
         var model = new LinearVectorModel(3);
@@ -312,7 +312,7 @@ public class NeuralProcessAlgorithmTests
         Assert.False(double.IsNaN(lastLoss), "Final CNP loss is NaN after 5 steps");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TETNP_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);

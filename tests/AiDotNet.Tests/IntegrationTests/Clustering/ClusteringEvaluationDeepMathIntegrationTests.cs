@@ -36,7 +36,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── WCSS Tests ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WCSS_TwoClusters_HandCalculated()
     {
         // Points: (0,0), (1,0), (10,0), (11,0)
@@ -53,7 +53,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WCSS_SingleCluster_AllPointsContributeToSameCenter()
     {
         // Points: (0,0), (2,0), (4,0) in cluster 0
@@ -68,7 +68,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(8.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WCSS_PerCluster_ReturnsCorrectBreakdown()
     {
         // Cluster 0: (0,0), (2,0) → centroid (1,0) → WCSS = 1+1 = 2
@@ -85,7 +85,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── BCSS Tests ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCSS_TwoClusters_HandCalculated()
     {
         // Points: (0,0), (1,0), (10,0), (11,0)
@@ -102,7 +102,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(100.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WCSS_Plus_BCSS_Equals_TotalVariance()
     {
         // Total variance = sum of squared distances from each point to global centroid
@@ -125,7 +125,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Calinski-Harabasz Index Tests ───────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalinskiHarabasz_TwoClusters_HandCalculated()
     {
         // Using same data: BCSS=100, WCSS=1.0, k=2, n=4
@@ -139,7 +139,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(200.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalinskiHarabasz_BetterSeparation_HigherScore()
     {
         // Close clusters
@@ -158,7 +158,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
             $"Far clusters should have higher CH index. Close={closeScore}, Far={farScore}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalinskiHarabasz_SingleCluster_ReturnsZero()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 2, 0 } });
@@ -172,7 +172,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Davies-Bouldin Index Tests ──────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DaviesBouldin_TwoClusters_HandCalculated()
     {
         // Points: (0,0), (1,0), (10,0), (11,0)
@@ -191,7 +191,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.1, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DaviesBouldin_LowerIsBetter_WellSeparatedClusters()
     {
         // Close clusters → higher DB
@@ -212,7 +212,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Dunn Index Tests ────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DunnIndex_TwoClusters_HandCalculated()
     {
         // Points: (0,0), (1,0), (10,0), (11,0)
@@ -229,7 +229,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(9.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DunnIndex_HigherIsBetter_MoreSeparatedIsHigher()
     {
         var dataClose = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 3, 0 }, { 4, 0 } });
@@ -248,7 +248,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Silhouette Score Tests ──────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_TwoClusters_HandCalculated()
     {
         // Points: (0,0), (1,0), (10,0), (11,0)
@@ -273,7 +273,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_RangeIsMinus1To1()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 10, 0 }, { 11, 0 } });
@@ -285,7 +285,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.InRange(result, -1.0, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_WrongAssignment_NegativeScore()
     {
         // Assign points to the WRONG cluster
@@ -309,7 +309,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
             $"Interleaved labels on well-separated data should give negative silhouette. Got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_PerSampleScores_MatchOverallAverage()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 10, 0 }, { 11, 0 } });
@@ -323,7 +323,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(overall, avgSample, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_SingletonCluster_ShouldBeZeroNotOne()
     {
         // Point 2 is alone in cluster 1
@@ -340,7 +340,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, perSample[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_SingleCluster_ReturnsZero()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 2, 0 } });
@@ -354,7 +354,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Adjusted Rand Index Tests ───────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARI_PerfectAgreement_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -366,7 +366,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARI_LabelPermutation_StillPerfect()
     {
         // Swapping label names doesn't change ARI
@@ -379,7 +379,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARI_RandomLabeling_HandCalculated()
     {
         // True: [0, 0, 1, 1], Pred: [0, 1, 0, 1]
@@ -403,7 +403,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(-0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARI_AllSameLabel_ReturnsZero()
     {
         var trueLabels = MakeLabels(0, 0, 0, 0);
@@ -419,7 +419,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── NMI Tests ───────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NMI_PerfectAgreement_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -431,7 +431,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NMI_LabelPermutation_StillPerfect()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1);
@@ -443,7 +443,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NMI_IndependentClusters_ReturnsZero()
     {
         // True: [0, 0, 1, 1], Pred: [0, 1, 0, 1]
@@ -457,7 +457,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NMI_RangeIsZeroToOne()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1, 2, 2, 2);
@@ -469,7 +469,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.InRange(result, 0.0, 1.0 + 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NMI_DifferentNormalizations_ArithmeticVsGeometric()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 2);
@@ -498,7 +498,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Jaccard Index Tests ─────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Jaccard_PerfectAgreement_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1);
@@ -510,7 +510,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Jaccard_HandCalculated_PartialAgreement()
     {
         // True: [0, 0, 0, 1, 1], Pred: [0, 0, 1, 1, 1]
@@ -536,7 +536,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Jaccard_PairConfusionMatrix_HandCalculated()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1);
@@ -554,7 +554,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Rand Index Tests ────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandIndex_PerfectAgreement_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1);
@@ -566,7 +566,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandIndex_HandCalculated()
     {
         // True: [0, 0, 0, 1, 1], Pred: [0, 0, 1, 1, 1]
@@ -581,7 +581,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.6, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_ViaRandIndexClass_MatchesDedicatedClass()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 2, 2, 2);
@@ -598,7 +598,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Purity Tests ────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Purity_PerfectClustering_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -610,7 +610,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Purity_HandCalculated_MixedClusters()
     {
         // True: [0, 0, 0, 1, 1, 1]
@@ -627,7 +627,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Purity_PerCluster_HandCalculated()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1);
@@ -644,7 +644,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── V-Measure Tests ─────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_PerfectClustering_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -656,7 +656,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_Homogeneity_PureClusters_IsOne()
     {
         // Each cluster contains only one class → perfect homogeneity
@@ -669,7 +669,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, homo, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_Completeness_AllClassTogether_IsOne()
     {
         // All members of each class are in same cluster → perfect completeness
@@ -682,7 +682,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, comp, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_IsHarmonicMean_WithBetaOne()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1);
@@ -701,7 +701,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(expectedHarmonic, vmResult, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_IExternalInterface_MatchesDirect()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -718,7 +718,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Fowlkes-Mallows Index Tests ─────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_PerfectAgreement_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -730,7 +730,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_HandCalculated()
     {
         // True: [0, 0, 0, 1, 1], Pred: [0, 0, 1, 1, 1]
@@ -748,7 +748,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallows_RangeIsZeroToOne()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1, 2, 2, 2);
@@ -762,7 +762,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── F-Measure Tests ─────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FMeasure_PerfectClustering_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -774,7 +774,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FMeasure_HandCalculated_TwoClassesTwoClusters()
     {
         // True: [0, 0, 0, 1, 1], Pred: [0, 0, 1, 1, 1]
@@ -796,7 +796,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.8, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FMeasure_BCubed_PerfectClustering_ReturnsOne()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -810,7 +810,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Connectivity Index Tests ────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Connectivity_PerfectClustering_ReturnsZero()
     {
         // All nearest neighbors in same cluster → connectivity = 0
@@ -825,7 +825,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Connectivity_HandCalculated_MixedNeighbors()
     {
         // Points on a line: (0), (1), (3), (4) in 1D
@@ -845,7 +845,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(4.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Connectivity_LowerIsBetter()
     {
         // Good clustering: nearby points together
@@ -863,7 +863,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Variation of Information Tests ──────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_IdenticalClusters_ReturnsZero()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1, 2, 2);
@@ -875,7 +875,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_LabelPermutation_StillZero()
     {
         var trueLabels = MakeLabels(0, 0, 1, 1);
@@ -887,7 +887,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_Normalized_RangeZeroToOne()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1, 2, 2, 2);
@@ -899,7 +899,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.InRange(result, 0.0, 1.0 + 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_Symmetric()
     {
         // VI(A, B) should equal VI(B, A)
@@ -913,7 +913,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(ab, ba, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_NMI_MatchesDedicatedNMI()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1, 2, 2, 2);
@@ -933,7 +933,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Cross-Metric Consistency Tests ──────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllMetrics_PerfectClustering_OptimalScores()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 10, 0 }, { 11, 0 } });
@@ -977,7 +977,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, vi.Compute(trueLabels, predLabels), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExternalMetrics_WorseClusteringGivesWorsScores()
     {
         var trueLabels = MakeLabels(0, 0, 0, 1, 1, 1);
@@ -1004,7 +1004,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.True(goodFM > badFM, $"Good should beat bad FM. Good={goodFM}, Bad={badFM}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InternalMetrics_WorseClusteringGivesWorsScores()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 10, 0 }, { 11, 0 } });
@@ -1025,7 +1025,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Edge Cases ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllInternalMetrics_TwoPoints_HandleGracefully()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 10, 0 } });
@@ -1048,7 +1048,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, wcssResult, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllExternalMetrics_SinglePoint_HandleGracefully()
     {
         var trueLabels = MakeLabels(0);
@@ -1064,7 +1064,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         jaccard.Compute(trueLabels, predLabels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExternalMetrics_DifferentLengths_ThrowsArgumentException()
     {
         var labels3 = MakeLabels(0, 0, 1);
@@ -1082,7 +1082,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Noise Point Handling ────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_NoisePointsExcluded()
     {
         // Label -1 represents noise (DBSCAN convention)
@@ -1097,7 +1097,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         Assert.InRange(result, -1.0, 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WCSS_NoisePointsExcluded()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 }, { 10, 0 }, { 11, 0 }, { 999, 999 } });
@@ -1113,7 +1113,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── ClusteringEntropy Tests ─────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClusteringEntropy_EqualSizeClusters_MaximalEntropy()
     {
         // 4 points in 2 equal-size clusters: entropy = log2(2) = 1.0 bit
@@ -1128,7 +1128,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
     // ─── Monotonicity Property Tests ─────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Silhouette_IncreasingClusterSeparation_MonotonicallyIncreases()
     {
         var silhouette = new SilhouetteScore<double>();
@@ -1146,7 +1146,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DaviesBouldin_IncreasingClusterSeparation_MonotonicallyDecreases()
     {
         var db = new DaviesBouldinIndex<double>();

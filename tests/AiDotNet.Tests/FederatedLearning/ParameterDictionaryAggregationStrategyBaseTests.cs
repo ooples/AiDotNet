@@ -14,7 +14,7 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
 
     public override string GetStrategyName() => "TestParameterDictionaryBase";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateWeightedAverage_ValidatesInputs()
     {
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(null!, new Dictionary<int, double>()));
@@ -22,7 +22,7 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>> { [1] = new Dictionary<string, double[]>() }, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateWeightedAverage_ThrowsWhenClientMissingLayerOrLengthMismatch()
     {
         var reference = new Dictionary<string, double[]>
@@ -52,7 +52,7 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(modelsLengthMismatch, new Dictionary<int, double> { [1] = 1.0, [2] = 1.0 }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateWeightedAverage_ComputesWeightedAverage()
     {
         var client1 = new Dictionary<string, double[]>
@@ -83,7 +83,7 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Equal((3.0 * 1.0 + 7.0 * 3.0) / 4.0, aggregated["w"][1], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateLayerWeightedAverageInto_UpdatesDestination()
     {
         var client1 = new Dictionary<string, double[]> { ["w"] = new[] { 1.0, 3.0 } };
@@ -108,7 +108,7 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Equal((3.0 * 1.0 + 7.0 * 3.0) / 4.0, destination[1], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateLayerWeightedAverageInto_ThrowsForNullDestination()
     {
         Assert.Throws<ArgumentNullException>(() => AggregateLayerWeightedAverageInto(

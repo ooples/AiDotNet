@@ -14,7 +14,7 @@ public class VoiceProtectionIntegrationTests
 {
     #region PerturbationVoiceProtector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perturbation_ProtectsAudio_PreservesLength()
     {
         var protector = new PerturbationVoiceProtector<double>();
@@ -25,7 +25,7 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, protectedAudio.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perturbation_ModifiesAudio()
     {
         var protector = new PerturbationVoiceProtector<double>();
@@ -47,7 +47,7 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Protection should modify the audio samples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Perturbation_ShortAudio_HandlesGracefully()
     {
         var protector = new PerturbationVoiceProtector<double>();
@@ -62,7 +62,7 @@ public class VoiceProtectionIntegrationTests
 
     #region WatermarkVoiceProtector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Watermark_EmbedAndDetect_PreservesLength()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
@@ -73,7 +73,7 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, watermarked.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Watermark_EmbedWatermark_PreservesLength()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
@@ -84,7 +84,7 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, watermarked.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Watermark_ModifiesAudio()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.1, watermarkKey: 42);
@@ -105,7 +105,7 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Watermark embedding should modify samples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Watermark_DifferentKeys_ProduceDifferentResults()
     {
         var protector1 = new WatermarkVoiceProtector<double>(watermarkStrength: 0.1, watermarkKey: 42);
@@ -132,7 +132,7 @@ public class VoiceProtectionIntegrationTests
 
     #region MaskingVoiceProtector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Masking_ProtectsAudio_PreservesLength()
     {
         var protector = new MaskingVoiceProtector<double>();
@@ -143,7 +143,7 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, protectedAudio.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Masking_ModifiesAudio()
     {
         var protector = new MaskingVoiceProtector<double>();
@@ -164,7 +164,7 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Masking should modify the audio samples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Masking_LongAudio_ProcessesWithoutError()
     {
         var protector = new MaskingVoiceProtector<double>();
@@ -179,7 +179,7 @@ public class VoiceProtectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllProtectors_PreserveAudioLength()
     {
         var audio = GenerateSineWave(16000, 440.0, 16000);

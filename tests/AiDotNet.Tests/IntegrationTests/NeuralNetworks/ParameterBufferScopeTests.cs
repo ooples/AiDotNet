@@ -22,7 +22,7 @@ public class ParameterBufferScopeTests
         return new FeedForwardNeuralNetwork<double>(arch);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_DoesNotPermanentlyReplaceLayerTensors()
     {
         var network = CreateSimpleNetwork();
@@ -67,7 +67,7 @@ public class ParameterBufferScopeTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_UpdatesParameterValues()
     {
         var network = CreateSimpleNetwork();
@@ -126,7 +126,7 @@ public class ParameterBufferScopeTests
         Assert.True(anyChanged, "Training 10 steps with non-trivial loss should update parameter values");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_MultipleConsecutiveSteps_AlwaysRestoreOriginalReferences()
     {
         // Regression: each training step must restore original tensor refs so that
@@ -167,7 +167,7 @@ public class ParameterBufferScopeTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_ThenPredict_ReturnsFiniteOutput()
     {
         // After training (which now wraps in try/finally), Predict() must still work correctly.
@@ -189,7 +189,7 @@ public class ParameterBufferScopeTests
                 $"Prediction element {i} is not finite after training.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_LastLossIsPopulatedAfterStep()
     {
         // TrainWithTape now sets LastLoss inside the try block. Verify it's accessible after Train().
@@ -207,7 +207,7 @@ public class ParameterBufferScopeTests
         Assert.True(loss >= 0.0, "Loss must be non-negative.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_LossDecreasesOverExtendedTraining()
     {
         // End-to-end regression: the try/finally refactor must not break gradient flow.
@@ -232,7 +232,7 @@ public class ParameterBufferScopeTests
             $"Loss should decrease over extended training. Initial: {firstLoss}, Final: {finalLoss}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Train_ParameterValuesAreCopiedBackToOriginalTensors()
     {
         // After RestoreOriginalParameters, the original tensor objects must reflect the updated

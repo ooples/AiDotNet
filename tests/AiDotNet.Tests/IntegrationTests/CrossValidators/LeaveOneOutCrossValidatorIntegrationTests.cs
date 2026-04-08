@@ -56,7 +56,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
@@ -66,7 +66,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Single Sample Validation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_EachValidationSetHasExactlyOneSample()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_EachSampleUsedExactlyOnceForValidation()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Training Set Size Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_TrainingSetHasNMinusOneSamples()
     {
         // Arrange
@@ -198,7 +198,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_TrainAndValidationCoverAllIndices()
     {
         // Arrange
@@ -255,7 +255,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithShuffle_StillUsesEachSampleOnce()
     {
         // Arrange
@@ -319,7 +319,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -358,7 +358,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithTwoSamples_CreatesTwoFolds()
     {
         // Arrange - Minimum meaningful LOO

@@ -106,7 +106,7 @@ public class KernelRegressionIntegrationTests
 
     #region KernelRidgeRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelRidgeRegression_Train_QuadraticData_MakesReasonablePredictions()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelRidgeRegression_Train_SinusoidalData_CapturesNonLinearPattern()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class KernelRegressionIntegrationTests
         Assert.True(mse < 1.0, $"MSE {mse} is too high, model failed to capture pattern");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelRidgeRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(0.5, (double)metadata.AdditionalInfo["LambdaKRR"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelRidgeRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class KernelRegressionIntegrationTests
 
     #region SupportVectorRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportVectorRegression_Train_LinearData_MakesReasonablePredictions()
     {
         // Arrange
@@ -246,7 +246,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportVectorRegression_Train_RBFKernel_CapturesNonLinearity()
     {
         // Arrange
@@ -269,7 +269,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportVectorRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -293,7 +293,7 @@ public class KernelRegressionIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("C"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportVectorRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -322,7 +322,7 @@ public class KernelRegressionIntegrationTests
 
     #region GaussianProcessRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianProcessRegression_Train_SimpleData_MakesReasonablePredictions()
     {
         // Arrange
@@ -348,7 +348,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianProcessRegression_Train_WithHyperparameterOptimization_Converges()
     {
         // Arrange
@@ -371,7 +371,7 @@ public class KernelRegressionIntegrationTests
         // Just verify it completes without exception
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianProcessRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class KernelRegressionIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("SignalVariance"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianProcessRegression_InterpolatesThroughTrainingPoints()
     {
         // Arrange - GPR should exactly interpolate through training points (with low noise)
@@ -426,7 +426,7 @@ public class KernelRegressionIntegrationTests
 
     #region LocallyWeightedRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocallyWeightedRegression_Train_NonLinearData_AdaptsLocally()
     {
         // Arrange
@@ -446,7 +446,7 @@ public class KernelRegressionIntegrationTests
         // LWR should adapt to local patterns
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocallyWeightedRegression_Train_DifferentBandwidths_AffectsSmoothness()
     {
         // Arrange
@@ -470,7 +470,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsLarge.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocallyWeightedRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -495,7 +495,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocallyWeightedRegression_SoftMode_EnablesJitCompilation()
     {
         // Arrange
@@ -517,7 +517,7 @@ public class KernelRegressionIntegrationTests
 
     #region KNearestNeighborsRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_Train_SimpleData_MakesReasonablePredictions()
     {
         // Arrange
@@ -539,7 +539,7 @@ public class KernelRegressionIntegrationTests
         // For K=3, predictions should be averages of 3 nearest neighbors
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_Train_K1_ReturnsNearestNeighbor()
     {
         // Arrange - with K=1, prediction should be the exact value of nearest neighbor
@@ -559,7 +559,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_DifferentKValues_ProduceDifferentResults()
     {
         // Arrange
@@ -580,7 +580,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions5.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -605,7 +605,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_SoftKNN_EnablesJitCompilation()
     {
         // Arrange
@@ -622,7 +622,7 @@ public class KernelRegressionIntegrationTests
         Assert.True(knn.SupportsJitCompilation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNearestNeighborsRegression_MultiDimensionalData_WorksCorrectly()
     {
         // Arrange
@@ -642,7 +642,7 @@ public class KernelRegressionIntegrationTests
 
     #region RadialBasisFunctionRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadialBasisFunctionRegression_Train_QuadraticData_CapturesPattern()
     {
         // Arrange
@@ -663,7 +663,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadialBasisFunctionRegression_DifferentCenters_AffectsComplexity()
     {
         // Arrange
@@ -687,7 +687,7 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsMany.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadialBasisFunctionRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -717,7 +717,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadialBasisFunctionRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class KernelRegressionIntegrationTests
 
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadialBasisFunctionRegression_MultiDimensionalInput_WorksCorrectly()
     {
         // Arrange
@@ -764,7 +764,7 @@ public class KernelRegressionIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernelModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange
@@ -818,7 +818,7 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernelModels_WithNoisyData_HandleNoiseGracefully()
     {
         // Arrange

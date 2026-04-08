@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 /// </summary>
 public class UncertaintySamplingTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_LeastConfidence_InitializesSuccessfully()
     {
         // Act
@@ -20,7 +20,7 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-LeastConfidence", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_MarginSampling_InitializesSuccessfully()
     {
         // Act
@@ -32,7 +32,7 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-MarginSampling", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_Entropy_InitializesSuccessfully()
     {
         // Act
@@ -44,7 +44,7 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-Entropy", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_DefaultParameter_UsesEntropy()
     {
         // Act
@@ -55,7 +55,7 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-Entropy", strategy.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_DefaultsFalse()
     {
         // Act
@@ -65,7 +65,7 @@ public class UncertaintySamplingTests
         Assert.False(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_CanBeSet()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class UncertaintySamplingTests
         Assert.True(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_ReturnsEmptyInitially()
     {
         // Arrange

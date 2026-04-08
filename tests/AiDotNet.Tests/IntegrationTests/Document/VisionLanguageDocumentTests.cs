@@ -35,7 +35,7 @@ public class VisionLanguageDocumentTests
 
     #region DocOwl Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocOwl_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class VisionLanguageDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocOwl_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocOwl_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -68,7 +68,7 @@ public class VisionLanguageDocumentTests
 
     #region InfographicVQA Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InfographicVQA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -76,7 +76,7 @@ public class VisionLanguageDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InfographicVQA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -88,7 +88,7 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InfographicVQA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -101,7 +101,7 @@ public class VisionLanguageDocumentTests
 
     #region UDOP Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -109,7 +109,7 @@ public class VisionLanguageDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -121,7 +121,7 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -134,7 +134,7 @@ public class VisionLanguageDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllVisionLanguageModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();

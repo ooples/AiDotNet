@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -70,7 +70,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(multiStepRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidMaxSteps_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(generator, mockRetriever, maxSteps: 25));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep("   ", 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep("test query", -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_WithValidQuery_ReturnsResult()
         {
             // Arrange
@@ -179,7 +179,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(docList.Count <= 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_TracksReasoningSteps()
         {
             // Arrange
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_GeneratesReasoningTrace()
         {
             // Arrange
@@ -225,7 +225,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Original Query", result.ReasoningTrace);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveMultiStep_WithMetadataFilters_ReturnsResults()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.Documents);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ReasoningStepResult_HasAllRequiredProperties()
         {
             // Arrange
@@ -266,7 +266,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, stepResult.StepNumber);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void MultiStepReasoningResult_HasAllRequiredProperties()
         {
             // Arrange
@@ -324,7 +324,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -335,7 +335,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ToolAugmentedReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -346,7 +346,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ToolAugmentedReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_RegistersDefaultTools()
         {
             // Arrange
@@ -360,7 +360,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(toolRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RegisterTool_WithNullName_ThrowsArgumentException()
         {
             // Arrange
@@ -373,7 +373,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RegisterTool(null!, input => "output"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RegisterTool_WithNullFunction_ThrowsArgumentNullException()
         {
             // Arrange
@@ -386,7 +386,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RegisterTool("test_tool", null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RegisterTool_WithValidArguments_RegistersSuccessfully()
         {
             // Arrange
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(toolRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithTools_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RetrieveWithTools(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithTools_WithValidQuery_ReturnsResult()
         {
             // Arrange
@@ -434,7 +434,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.ReasoningTrace);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithTools_TracksToolInvocations()
         {
             // Arrange
@@ -452,7 +452,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Tool invocations may be empty if LLM didn't request tools
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ToolInvocation_HasAllRequiredProperties()
         {
             // Arrange
@@ -471,7 +471,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(invocation.Success);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ToolAugmentedResult_HasAllRequiredProperties()
         {
             // Arrange

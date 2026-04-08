@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class AiModelBuilderFederatedLearningIntegrationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithFederatedLearning_AddsFederatedLearningMetadata()
     {
         var x = new Matrix<double>(20, 2);

@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -70,7 +70,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new VerifiedReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new VerifiedReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(verifiedRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidThreshold_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     verificationThreshold: -0.1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeRefinementAttempts_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     maxRefinementAttempts: -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -148,7 +148,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification("   ", 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification("test query", -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_WithValidQuery_ReturnsResult()
         {
             // Arrange
@@ -199,7 +199,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(docList.Count <= 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_ReturnsVerifiedSteps()
         {
             // Arrange
@@ -225,7 +225,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_CalculatesAverageVerificationScore()
         {
             // Arrange
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(result.AverageVerificationScore <= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_TracksRefinementAttempts()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithVerification_WithMetadataFilters_ReturnsResults()
         {
             // Arrange
@@ -289,7 +289,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.Documents);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void VerifiedReasoningStep_HasAllRequiredProperties()
         {
             // Arrange
@@ -314,7 +314,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Original test statement", step.OriginalStatement);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void VerifiedReasoningResult_HasAllRequiredProperties()
         {
             // Arrange

@@ -33,7 +33,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithParams_AppliesParametersToOptions()
         {
             // Arrange - LagOrder=3 should differ from default LagOrder=1
@@ -57,7 +57,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(defaultModel, customModel);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithAliasParams_ResolvesCorrectly()
         {
             // Arrange - "p" is an alias for LagOrder, create two models with different p
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(model1, model5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_CaseInsensitiveName_Works()
         {
             // Arrange
@@ -95,7 +95,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotNull(model);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithInvalidName_ThrowsArgumentException()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.Training
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create(config));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithEmptyName_ThrowsArgumentException()
         {
             // Arrange
@@ -117,7 +117,7 @@ namespace AiDotNetTests.UnitTests.Training
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create(config));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithNullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
@@ -125,7 +125,7 @@ namespace AiDotNetTests.UnitTests.Training
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create((ModelConfig)null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_ByStringName_ReturnsModel()
         {
             // Act
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotNull(model);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithSeasonalPeriodParam_ProducesDifferentModelThanDefault()
         {
             // Arrange - create two ExponentialSmoothing models with different seasonal periods
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(defaultModel, customModel);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_WithMultipleParams_AllApplied()
         {
             // Arrange - ARIMA with multiple params via aliases

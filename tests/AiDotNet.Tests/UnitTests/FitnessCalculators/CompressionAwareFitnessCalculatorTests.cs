@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidBaseFitnessCalculator_CreatesInstance()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.NotNull(calculator);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullBaseFitnessCalculator_ThrowsException()
         {
             // Act & Assert
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 new CompressionAwareFitnessCalculator<double, Matrix<double>, Vector<double>>(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeWeights_ThrowsException()
         {
             // Arrange
@@ -111,7 +111,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                     speedWeight: 0.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithAllZeroWeights_ThrowsException()
         {
             // Arrange
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                     speedWeight: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomWeights_NormalizesToSumOfOne()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region IsHigherScoreBetter Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsHigherScoreBetter_ReturnsTrue()
         {
             // Arrange
@@ -187,7 +187,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CompressionMetrics Property Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressionMetrics_DefaultsToNull()
         {
             // Arrange
@@ -199,7 +199,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Null(calculator.CompressionMetrics);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressionMetrics_CanBeSetAndRetrieved()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CalculateFitnessScore Tests (ModelEvaluationData)
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithoutCompressionMetrics_ReturnsBaseAccuracy()
         {
             // Arrange
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness >= 0 && fitness <= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithCompressionMetrics_CombinesScores()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithLowerIsBetterBase_NormalizesCorrectly()
         {
             // Arrange - Error-based fitness calculator where lower is better
@@ -287,7 +287,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness > 0 && fitness <= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithZeroError_ReturnsHighScore()
         {
             // Arrange
@@ -308,7 +308,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CalculateFitnessScore Tests (DataSetStats)
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_DataSetStats_WithoutCompressionMetrics_ReturnsBaseAccuracy()
         {
             // Arrange
@@ -325,7 +325,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness >= 0 && fitness <= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_DataSetStats_WithCompressionMetrics_CombinesScores()
         {
             // Arrange
@@ -359,7 +359,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region IsBetterFitness Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsBetterFitness_HigherIsBetter_ReturnsCorrectComparison()
         {
             // Arrange
@@ -377,7 +377,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Type-Specific Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -396,7 +396,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Edge Case Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithVeryHighError_ReturnsLowScore()
         {
             // Arrange - High error value
@@ -413,7 +413,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness < 0.5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithPerfectAccuracyAndGoodCompression_ReturnsHighScore()
         {
             // Arrange

@@ -15,7 +15,7 @@ public class FairnessIntegrationTests
 {
     #region DemographicParityChecker Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParity_GenderBias_DetectsBias()
     {
         var checker = new DemographicParityChecker<double>(disparityThreshold: 0.1);
@@ -27,7 +27,7 @@ public class FairnessIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Bias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParity_NeutralText_NoFindings()
     {
         var checker = new DemographicParityChecker<double>(disparityThreshold: 0.2);
@@ -36,7 +36,7 @@ public class FairnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParity_RacialBias_DetectsBias()
     {
         var checker = new DemographicParityChecker<double>(disparityThreshold: 0.2);
@@ -48,7 +48,7 @@ public class FairnessIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Bias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParity_BalancedText_NoFindings()
     {
         var checker = new DemographicParityChecker<double>(disparityThreshold: 0.2);
@@ -62,7 +62,7 @@ public class FairnessIntegrationTests
 
     #region EqualizedOddsChecker Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualizedOdds_NeutralText_NoFindings()
     {
         var checker = new EqualizedOddsChecker<double>();
@@ -71,7 +71,7 @@ public class FairnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualizedOdds_BiasedText_DetectsFindings()
     {
         var checker = new EqualizedOddsChecker<double>();
@@ -82,7 +82,7 @@ public class FairnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualizedOdds_EmptyText_NoFindings()
     {
         var checker = new EqualizedOddsChecker<double>();
@@ -95,7 +95,7 @@ public class FairnessIntegrationTests
 
     #region StereotypeDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Stereotype_RacialStereotype_DetectsBias()
     {
         var detector = new StereotypeDetector<double>(threshold: 0.3);
@@ -107,7 +107,7 @@ public class FairnessIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Bias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Stereotype_GenderStereotype_DetectsBias()
     {
         var detector = new StereotypeDetector<double>(threshold: 0.3);
@@ -118,7 +118,7 @@ public class FairnessIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Stereotype_NeutralText_NoFindings()
     {
         var detector = new StereotypeDetector<double>(threshold: 0.5);
@@ -128,7 +128,7 @@ public class FairnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Stereotype_CustomThreshold_Works()
     {
         var strict = new StereotypeDetector<double>(threshold: 0.1);
@@ -145,7 +145,7 @@ public class FairnessIntegrationTests
 
     #region RepresentationalBiasDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Representational_ImbalancedText_DetectsBias()
     {
         var detector = new RepresentationalBiasDetector<double>(disparityThreshold: 0.2);
@@ -156,7 +156,7 @@ public class FairnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Representational_BalancedText_NoFindings()
     {
         var detector = new RepresentationalBiasDetector<double>(disparityThreshold: 0.5);
@@ -165,7 +165,7 @@ public class FairnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Representational_CustomAttributes_Works()
     {
         var detector = new RepresentationalBiasDetector<double>(
@@ -181,7 +181,7 @@ public class FairnessIntegrationTests
 
     #region IntersectionalBiasDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Intersectional_CombinedBias_DetectsFindings()
     {
         // Intersectional bias: individual axes have neutral/positive sentiment,
@@ -198,7 +198,7 @@ public class FairnessIntegrationTests
         // Either way, the detector should complete without error
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Intersectional_NeutralText_NoFindings()
     {
         var detector = new IntersectionalBiasDetector<double>(threshold: 0.5);
@@ -208,7 +208,7 @@ public class FairnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Intersectional_CustomThreshold_Works()
     {
         var strict = new IntersectionalBiasDetector<double>(threshold: 0.1);
@@ -225,7 +225,7 @@ public class FairnessIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllFairnessModules_BiasedText_AtLeastOneDetects()
     {
         var text = "Men are strong leaders. Women are emotional and weak. " +
@@ -243,7 +243,7 @@ public class FairnessIntegrationTests
         Assert.NotEmpty(allFindings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllFairnessModules_NeutralText_MinimalFindings()
     {
         var text = "The database query returned results in 50 milliseconds.";

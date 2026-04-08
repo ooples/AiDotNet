@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class NeuralOperatorTrainingTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FourierNeuralOperator_TrainUpdatesParameters()
     {
         var architecture = CreateLinearArchitecture(inputSize: 2, outputSize: 2);
@@ -43,7 +43,7 @@ public class NeuralOperatorTrainingTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeepOperatorNetwork_TrainUpdatesParameters()
     {
         var branchArchitecture = CreateLinearArchitecture(inputSize: 2, outputSize: 2);

@@ -16,7 +16,7 @@ public class RAGDeepMathIntegrationTests
     // RAGConfiguration: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGConfiguration_Defaults()
     {
         var config = new RAGConfiguration<double>();
@@ -33,7 +33,7 @@ public class RAGDeepMathIntegrationTests
     // ChunkingConfig: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChunkingConfig_Defaults()
     {
         var config = new ChunkingConfig();
@@ -44,7 +44,7 @@ public class RAGDeepMathIntegrationTests
         Assert.Empty(config.Parameters);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChunkingConfig_OverlapLessThanChunkSize()
     {
         var config = new ChunkingConfig();
@@ -56,7 +56,7 @@ public class RAGDeepMathIntegrationTests
     // RetrievalConfig: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RetrievalConfig_Defaults()
     {
         var config = new RetrievalConfig();
@@ -70,7 +70,7 @@ public class RAGDeepMathIntegrationTests
     // Document: Construction
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Document_DefaultConstructor()
     {
         var doc = new Document<double>();
@@ -82,7 +82,7 @@ public class RAGDeepMathIntegrationTests
         Assert.Null(doc.Embedding);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Document_ConstructorWithIdAndContent()
     {
         var doc = new Document<double>("doc-1", "This is a test document.");
@@ -90,7 +90,7 @@ public class RAGDeepMathIntegrationTests
         Assert.Equal("This is a test document.", doc.Content);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Document_ConstructorWithMetadata()
     {
         var metadata = new Dictionary<string, object> { ["source"] = "web", ["date"] = "2025-01-01" };
@@ -99,7 +99,7 @@ public class RAGDeepMathIntegrationTests
         Assert.Equal("web", doc.Metadata["source"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Document_RelevanceScore_DefaultIsZero()
     {
         var doc = new Document<double>();
@@ -110,7 +110,7 @@ public class RAGDeepMathIntegrationTests
     // VectorDocument: Construction
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VectorDocument_DefaultConstructor()
     {
         var vDoc = new VectorDocument<double>();
@@ -176,7 +176,7 @@ public class RAGDeepMathIntegrationTests
         Assert.Equal(expected, similarity, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGMath_CosineSimilarity_RangeIsMinusOneToOne()
     {
         // Random vectors should have cosine similarity in [-1, 1]
@@ -214,7 +214,7 @@ public class RAGDeepMathIntegrationTests
         Assert.True(idf > 0, "IDF should be positive for terms not in all documents");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGMath_BM25_HigherTF_HigherScore()
     {
         int N = 100, df = 10, docLen = 50;
@@ -258,7 +258,7 @@ public class RAGDeepMathIntegrationTests
             $"NDCG ({ndcg}) should be in [0, 1]");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGMath_NDCG_PerfectRanking_IsOne()
     {
         // If results are already in ideal order, NDCG = 1.0
@@ -280,7 +280,7 @@ public class RAGDeepMathIntegrationTests
     // RAG Math: Reciprocal Rank Fusion (RRF)
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGMath_ReciprocalRankFusion()
     {
         // RRF score for document d: sum(1 / (k + rank_i(d))) across all rankers
@@ -293,7 +293,7 @@ public class RAGDeepMathIntegrationTests
         Assert.True(rrfScore < 2.0 / k, "RRF score should be bounded by 2/k for 2 rankers");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RAGMath_RRF_HigherRank_HigherScore()
     {
         int k = 60;

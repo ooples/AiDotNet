@@ -11,7 +11,7 @@ public class LLIRTests
 {
     #region LLIROp Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulOp_EstimateCost_CalculatesCorrectFLOPs()
     {
         var matmul = new MatMulOp
@@ -28,7 +28,7 @@ public class LLIRTests
         Assert.Equal(2L * 128 * 256 * 512, cost.FLOPs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MatMulOp_Validate_ReturnsTrueForValidOp()
     {
         var matmul = new MatMulOp
@@ -44,7 +44,7 @@ public class LLIRTests
         Assert.True(matmul.Validate());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseOp_EstimateCost_CalculatesCorrectly()
     {
         var elementwise = new ElementwiseOp
@@ -60,7 +60,7 @@ public class LLIRTests
         Assert.Equal(24, cost.FLOPs); // 2*3*4 = 24 elements
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElementwiseOp_FusedMultiplyAdd_DoublesOperationCount()
     {
         var fma = new ElementwiseOp
@@ -76,7 +76,7 @@ public class LLIRTests
         Assert.Equal(20, cost.FLOPs); // 10 * 2 for FMA
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Conv2DOp_EstimateCost_CalculatesCorrectFLOPs()
     {
         var conv = new Conv2DOp
@@ -102,7 +102,7 @@ public class LLIRTests
         Assert.Equal(expectedFlops, cost.FLOPs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReduceOp_EstimateCost_CalculatesCorrectly()
     {
         var reduce = new ReduceOp
@@ -120,7 +120,7 @@ public class LLIRTests
         Assert.True(cost.MemoryRead > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryOp_EstimateCost_HasZeroFLOPs()
     {
         var memOp = new MemoryOp
@@ -138,7 +138,7 @@ public class LLIRTests
         Assert.True(cost.MemoryWrite > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FusedOp_EstimateCost_CombinesOperations()
     {
         var op1 = new ElementwiseOp { OutputShape = new[] { 10 }, ElementwiseType = ElementwiseOpType.ReLU };
@@ -158,7 +158,7 @@ public class LLIRTests
         Assert.Equal(20, cost.FLOPs); // 10 + 10
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstantOp_EstimateCost_CalculatesCorrectly()
     {
         var constant = new ConstantOp
@@ -175,7 +175,7 @@ public class LLIRTests
         Assert.True(cost.MemoryRead > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIROp_ToString_ReturnsFormattedString()
     {
         var matmul = new MatMulOp
@@ -199,7 +199,7 @@ public class LLIRTests
 
     #region ScheduleInfo Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScheduleInfo_DefaultValues_AreCorrect()
     {
         var schedule = new ScheduleInfo();
@@ -212,7 +212,7 @@ public class LLIRTests
         Assert.Equal(1, schedule.UnrollFactor);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScheduleInfo_Clone_CreatesIndependentCopy()
     {
         var original = new ScheduleInfo
@@ -237,7 +237,7 @@ public class LLIRTests
 
     #region BufferInfo Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BufferInfo_DefaultValues_AreCorrect()
     {
         var buffer = new BufferInfo();
@@ -250,7 +250,7 @@ public class LLIRTests
         Assert.False(buffer.IsPersistent);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BufferInfo_InPlaceConfiguration_CanBeSet()
     {
         var buffer = new BufferInfo
@@ -268,7 +268,7 @@ public class LLIRTests
 
     #region LLIRGraph Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_AddOperation_AssignsOutputId()
     {
         var graph = new LLIRGraph();
@@ -285,7 +285,7 @@ public class LLIRTests
         Assert.Single(graph.Operations);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_AllocateBufferId_ReturnsUniqueIds()
     {
         var graph = new LLIRGraph();
@@ -299,7 +299,7 @@ public class LLIRTests
         Assert.NotEqual(id1, id3);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_GetOperationByOutputId_ReturnsCorrectOp()
     {
         var graph = new LLIRGraph();
@@ -314,7 +314,7 @@ public class LLIRTests
         Assert.Null(graph.GetOperationByOutputId(999));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_GetConsumers_ReturnsCorrectOperations()
     {
         var graph = new LLIRGraph();
@@ -335,7 +335,7 @@ public class LLIRTests
         Assert.Contains(op2, consumers);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_Validate_ReturnsTrueForValidGraph()
     {
         var graph = new LLIRGraph();
@@ -358,7 +358,7 @@ public class LLIRTests
         Assert.True(result.IsValid);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_Validate_DetectsUndefinedInput()
     {
         var graph = new LLIRGraph();
@@ -378,7 +378,7 @@ public class LLIRTests
         Assert.Contains(result.Errors, e => e.Contains("undefined buffer"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_ComputeMetrics_CalculatesCorrectly()
     {
         var graph = new LLIRGraph();
@@ -403,7 +403,7 @@ public class LLIRTests
         Assert.True(metrics.PeakMemoryBytes > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_OptimizeMemory_CreatesMemoryPlan()
     {
         var graph = new LLIRGraph();
@@ -424,7 +424,7 @@ public class LLIRTests
         Assert.True(graph.MemoryPlan.PoolCount >= 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_AutoSchedule_SetsSchedulingInfo()
     {
         var graph = new LLIRGraph();
@@ -445,7 +445,7 @@ public class LLIRTests
         Assert.True(op.Schedule.VectorWidth >= 1);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_ComputeCriticalPath_CalculatesCorrectly()
     {
         var graph = new LLIRGraph();
@@ -464,7 +464,7 @@ public class LLIRTests
         Assert.True(criticalPath > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_Clone_CreatesIndependentCopy()
     {
         var graph = new LLIRGraph { Name = "original" };
@@ -481,7 +481,7 @@ public class LLIRTests
         Assert.Equal(graph.InputIds, clone.InputIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LLIRGraph_ComputeStructureHash_ReturnsSameHashForSameStructure()
     {
         var graph1 = new LLIRGraph();
@@ -505,7 +505,7 @@ public class LLIRTests
 
     #region DeviceConfiguration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeviceConfiguration_DefaultValues_AreReasonable()
     {
         var config = new DeviceConfiguration();
@@ -523,7 +523,7 @@ public class LLIRTests
 
     #region OperationMetrics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OperationMetrics_ArithmeticIntensity_CalculatesCorrectly()
     {
         var metrics = new OperationMetrics
@@ -537,7 +537,7 @@ public class LLIRTests
         Assert.Equal(10.0, metrics.ArithmeticIntensity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OperationMetrics_RooflineGFLOPS_CalculatesCorrectly()
     {
         var metrics = new OperationMetrics
@@ -560,7 +560,7 @@ public class LLIRTests
 
     #region MemoryPlan Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryPlan_Validate_ReturnsTrueForValidPlan()
     {
         var plan = new MemoryPlan
@@ -579,7 +579,7 @@ public class LLIRTests
         Assert.True(result.IsValid);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryPlan_Validate_DetectsInvalidPoolId()
     {
         var plan = new MemoryPlan

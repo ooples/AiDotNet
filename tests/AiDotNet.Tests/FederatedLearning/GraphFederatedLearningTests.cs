@@ -23,7 +23,7 @@ public class GraphFederatedLearningTests
 
     // ========== FedGnnAggregationStrategy Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FedGnnAggregation_StrategyName_IsFedGNN()
     {
         var strategy = new FedGnnAggregationStrategy<double>();
@@ -31,7 +31,7 @@ public class GraphFederatedLearningTests
         Assert.Equal("FedGNN", strategy.StrategyName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FedGnnAggregation_DefaultWeights_SumToOne()
     {
         // Default weights: edge=0.4, label=0.4, degree=0.2
@@ -39,7 +39,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FedGnnAggregation_Aggregate_WithClientModels_ProducesResult()
     {
         var strategy = new FedGnnAggregationStrategy<double>();
@@ -64,7 +64,7 @@ public class GraphFederatedLearningTests
 
     // ========== SubgraphExpander Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubgraphExpander_Constructor_WithOptions_Succeeds()
     {
         var options = new FederatedGraphOptions
@@ -77,7 +77,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(expander);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubgraphExpander_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new SubgraphExpander<double>(null));
@@ -85,7 +85,7 @@ public class GraphFederatedLearningTests
 
     // ========== FederatedGraphPartitioner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphPartitioner_Constructor_WithOptions_Succeeds()
     {
         var options = new FederatedGraphOptions
@@ -98,7 +98,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(partitioner);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphPartitioner_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new FederatedGraphPartitioner<double>(null));
@@ -106,7 +106,7 @@ public class GraphFederatedLearningTests
 
     // ========== GraphNeighborhoodPrivacy Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNeighborhoodPrivacy_Constructor_WithDefaults_Succeeds()
     {
         var privacy = new GraphNeighborhoodPrivacy<double>();
@@ -114,7 +114,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(privacy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNeighborhoodPrivacy_Constructor_WithParams_Succeeds()
     {
         var privacy = new GraphNeighborhoodPrivacy<double>(epsilon: 1.0, delta: 1e-5, sensitivity: 2.0);
@@ -122,21 +122,21 @@ public class GraphFederatedLearningTests
         Assert.NotNull(privacy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNeighborhoodPrivacy_ZeroEpsilon_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new GraphNeighborhoodPrivacy<double>(epsilon: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNeighborhoodPrivacy_NegativeEpsilon_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new GraphNeighborhoodPrivacy<double>(epsilon: -1.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNeighborhoodPrivacy_InvalidDelta_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -148,7 +148,7 @@ public class GraphFederatedLearningTests
 
     // ========== SecureCrossClientEdgeDiscovery Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SecureCrossClientEdge_Constructor_WithDefaults_Succeeds()
     {
         var discovery = new SecureCrossClientEdgeDiscovery<double>();
@@ -157,7 +157,7 @@ public class GraphFederatedLearningTests
         Assert.Equal(0, discovery.DiscoveredEdgeCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SecureCrossClientEdge_Constructor_WithParams_Succeeds()
     {
         var discovery = new SecureCrossClientEdgeDiscovery<double>(
@@ -168,7 +168,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(discovery);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SecureCrossClientEdge_DiscoverEdges_FindsCommonNodes()
     {
         var discovery = new SecureCrossClientEdgeDiscovery<double>();
@@ -184,7 +184,7 @@ public class GraphFederatedLearningTests
 
     // ========== PrototypeFederatedGraphLearning Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PrototypeFGL_Constructor_Succeeds()
     {
         var options = new FederatedGraphOptions
@@ -199,14 +199,14 @@ public class GraphFederatedLearningTests
         Assert.NotNull(proto);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PrototypeFGL_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new PrototypeFederatedGraphLearning<double>(null, 16, 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PrototypeFGL_RegisterAndAggregate_Prototypes()
     {
         var options = new FederatedGraphOptions
@@ -237,7 +237,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(globalPrototypes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PrototypeFGL_ComputePrototypeLoss_ReturnsValue()
     {
         var options = new FederatedGraphOptions
@@ -261,7 +261,7 @@ public class GraphFederatedLearningTests
 
     // ========== GraphNodeGenerator Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNodeGenerator_Constructor_WithFeatureDim_Succeeds()
     {
         var generator = new GraphNodeGenerator<double>(featureDim: 16);
@@ -269,7 +269,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(generator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNodeGenerator_Constructor_WithParams_Succeeds()
     {
         var generator = new GraphNodeGenerator<double>(
@@ -278,14 +278,14 @@ public class GraphFederatedLearningTests
         Assert.NotNull(generator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNodeGenerator_ZeroFeatureDim_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new GraphNodeGenerator<double>(featureDim: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphNodeGenerator_NegativeFeatureDim_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -294,7 +294,7 @@ public class GraphFederatedLearningTests
 
     // ========== SubgraphFederatedTrainer Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubgraphFederatedTrainer_Constructor_Succeeds()
     {
         var options = new FederatedGraphOptions();
@@ -305,7 +305,7 @@ public class GraphFederatedLearningTests
         Assert.NotNull(trainer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubgraphFederatedTrainer_WithEdgeHandler_Succeeds()
     {
         var options = new FederatedGraphOptions();
@@ -319,7 +319,7 @@ public class GraphFederatedLearningTests
 
     // ========== FederatedGraphOptions Defaults ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedGraphOptions_DefaultValues()
     {
         var options = new FederatedGraphOptions();
@@ -338,20 +338,20 @@ public class GraphFederatedLearningTests
         Assert.Null(options.NumberOfPartitions);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphFLMode_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(GraphFLMode), GraphFLMode.SubgraphLevel));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphPartitionStrategy_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(GraphPartitionStrategy), GraphPartitionStrategy.Preassigned));
         Assert.True(Enum.IsDefined(typeof(GraphPartitionStrategy), GraphPartitionStrategy.Random));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PseudoNodeStrategy_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(PseudoNodeStrategy), PseudoNodeStrategy.FeatureAverage));

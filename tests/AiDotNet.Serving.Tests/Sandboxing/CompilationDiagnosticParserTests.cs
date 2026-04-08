@@ -7,7 +7,7 @@ namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class CompilationDiagnosticParserTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parse_GccJson_DocumentRootAndLineRoots()
     {
         var json = """
@@ -43,7 +43,7 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(CompilationDiagnosticSeverity.Info, multi[1].Severity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parse_RustcJson_ExtractsPrimarySpan()
     {
         var payload = """
@@ -59,7 +59,7 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(2, diagnostics[0].Column);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parse_JavacText_ParsesWarningsAndErrors()
     {
         var text = """
@@ -76,7 +76,7 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(CompilationDiagnosticSeverity.Warning, diagnostics[1].Severity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parse_DotNetBuildText_ParsesCSharpDiagnostics()
     {
         var text = "Program.cs(3,5): error CS1002: ; expected\nProgram.cs(4,1): warning CS0168: The variable 'x' is declared but never used";

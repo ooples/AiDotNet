@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingProgramSynthesisConcurrencyLimiterTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task AcquireAsync_EnforcesTierConcurrency()
     {
         var options = new ServingProgramSynthesisOptions

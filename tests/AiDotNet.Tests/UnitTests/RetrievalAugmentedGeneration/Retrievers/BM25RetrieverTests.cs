@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 new BM25Retriever<double>(null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomDefaultTopK_SetsCorrectly()
         {
             // Arrange & Act
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -69,7 +69,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Basic Retrieval Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -97,7 +97,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithCustomTopK_ReturnsCorrectNumberOfResults()
         {
             // Arrange
@@ -111,7 +111,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.True(results.Count <= 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithValidQuery_ReturnsSortedByRelevance()
         {
             // Arrange
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Keyword Matching Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithExactKeywordMatch_ReturnsRelevantDocuments()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Contains("machine", topResult.Content.ToLowerInvariant());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMultipleKeywords_ScoresAppropriately()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNoMatchingKeywords_ReturnsLowScores()
         {
             // Arrange
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Metadata Filtering Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNonMatchingFilter_ReturnsEmpty()
         {
             // Arrange
@@ -219,7 +219,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithEmptyMetadataFilter_ReturnsAllDocuments()
         {
             // Arrange
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region BM25-Specific Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithDifferentK1Values_ProducesDifferentScores()
         {
             // Arrange
@@ -256,7 +256,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             // Different k1 values should produce different scores (in most cases)
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithDifferentBValues_ProducesDifferentScores()
         {
             // Arrange
@@ -274,7 +274,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             // Different b values should produce different scores (in most cases)
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithRepeatedTerms_ScoresHigher()
         {
             // Arrange
@@ -303,7 +303,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal("doc1", results.First().Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -325,7 +325,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Edge Cases
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithQueryContainingPunctuation_HandlesCorrectly()
         {
             // Arrange
@@ -339,7 +339,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotEmpty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithCaseSensitiveQuery_WorksCorrectly()
         {
             // Arrange

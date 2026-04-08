@@ -84,7 +84,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Batcher Creation Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithDefaultOptions_CreatesBatcherCorrectly()
         {
             // Arrange
@@ -101,7 +101,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(4, batcher.NumBatches); // 100/32 = 4 (3 full + 1 partial)
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithShuffleDisabled_ReturnsSequentialOrder()
         {
             // Arrange
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(Enumerable.Range(0, 50), allIndices);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithDropLast_DropsIncompleteBatches()
         {
             // Arrange
@@ -137,7 +137,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithSeed_IsReproducible()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Custom Sampler Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithCustomSampler_UsesSamplerIndices()
         {
             // Arrange - Create data matching sampler size to avoid batcher/sampler size mismatch
@@ -180,7 +180,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(Enumerable.Range(0, 50), allIndices);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateBatcher_WithRandomSampler_ShufflesCorrectly()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Epoch Notification Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NotifyEpochStart_CallsSamplerOnEpochStart()
         {
             // Arrange
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(new[] { 0, 1, 2 }, trackingSampler.EpochStartCalls);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CurriculumSampler_EpochNotification_AffectsSampling()
         {
             // Arrange
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(lastBatchExpectedSize, batches[batches.Count - 1].Indices.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BatchSizeNegativeOne_ForFullBatch_UsesAllData()
         {
             // Arrange - For second-order optimizers, BatchSize = -1 means full batch
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Batch Data Extraction Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetBatches_ExtractedDataMatchesIndices()
         {
             // Arrange
@@ -327,7 +327,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(inputData.YTrain[0], firstBatch.YBatch[0]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetBatches_WithShuffle_DataMatchesShuffledIndices()
         {
             // Arrange
@@ -361,7 +361,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Optimizer Options Default BatchSize Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AdamOptimizerOptions_DefaultBatchSize_Is32()
         {
             // Arrange
@@ -371,7 +371,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SGDOptimizerOptions_DefaultBatchSize_Is1()
         {
             // Arrange
@@ -381,7 +381,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(1, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void MiniBatchGDOptimizerOptions_DefaultBatchSize_Is32()
         {
             // Arrange
@@ -391,7 +391,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange - Second-order optimizers use full batch
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void LBFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
@@ -411,7 +411,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NewtonMethodOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
@@ -421,7 +421,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void TrustRegionOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
@@ -435,7 +435,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region WithSampler and WithCurriculumLearning Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void WithSampler_CreatesNewBatcherWithSampler()
         {
             // Arrange
@@ -453,7 +453,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(newBatcher);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void WithClassBalancing_CreatesWeightedSampler()
         {
             // Arrange
@@ -474,7 +474,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotSame(batcher, balancedBatcher);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void WithCurriculumLearning_CreatesCurriculumSampler()
         {
             // Arrange

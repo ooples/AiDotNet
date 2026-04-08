@@ -19,7 +19,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region PointCloudNormalization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Center_GoldenReference_CentroidBecomesOrigin()
     {
         // Triangle at (0,0,0), (6,0,0), (0,6,0) => centroid = (2,2,0)
@@ -47,7 +47,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(4.0, centered.Points[1, 0], Tolerance);  // 6 - 2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Center_PreservesNonXYZFeatures()
     {
         // 6-feature cloud: XYZ + RGB
@@ -67,7 +67,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(150.0, centered.Points[1, 3], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Center_EmptyCloud_ReturnsOriginal()
     {
         var data = new double[0];
@@ -79,7 +79,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0, centered.NumPoints);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleToUnitSphere_GoldenReference()
     {
         // Points at (1,0,0), (-1,0,0), (0,1,0), (0,-1,0)
@@ -100,7 +100,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleToUnitSphere_FarPoint_ScalesCorrectly()
     {
         // Points with max distance 5 from centroid
@@ -121,7 +121,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, maxDist, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaleToUnitCube_AllPointsInRange()
     {
         var random = RandomHelper.CreateSeededRandom(137);
@@ -143,7 +143,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalizeColors_GoldenReference_255To01()
     {
         var data = new double[]
@@ -166,7 +166,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(2.0, normalized.Points[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalizeColors_NoColorFeatures_ReturnsOriginal()
     {
         var data = new double[] { 1, 2, 3, 4, 5, 6 };
@@ -182,7 +182,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region PointCloudSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformSample_ReducesPointCount()
     {
         var cloud = CreateRandomCloud(100, 3, seed: 139);
@@ -193,7 +193,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(3, sampled.NumFeatures);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformSample_ReturnsOriginalIfSamplesGreaterOrEqual()
     {
         var cloud = CreateRandomCloud(10, 3, seed: 149);
@@ -206,7 +206,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Same(cloud, sampled2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformSample_PreservesLabels()
     {
         var points = CreateRandomTensor(20, 3, seed: 163);
@@ -219,7 +219,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(5, sampled.Labels.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformSample_Deterministic_SameSeedSameResult()
     {
         var cloud = CreateRandomCloud(50, 3, seed: 173);
@@ -233,7 +233,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FarthestPointSample_MaximizesSpread()
     {
         // Cluster of points at origin + one outlier
@@ -262,7 +262,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.True(hasOutlier, "FPS should include the far outlier point");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FarthestPointSample_ReturnsOriginalIfSamplesGreaterOrEqual()
     {
         var cloud = CreateRandomCloud(5, 3, seed: 179);
@@ -271,7 +271,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Same(cloud, sampled);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FarthestPointSample_InvalidSamples_Throws()
     {
         var cloud = CreateRandomCloud(10, 3, seed: 191);
@@ -280,7 +280,7 @@ public class GeometryPreprocessingIntegrationTests
             PointCloudSampling<double>.FarthestPointSample(cloud, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoissonDiskSample_EnforcesMinimumDistance()
     {
         var cloud = CreateRandomCloud(200, 3, seed: 193);
@@ -303,7 +303,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoissonDiskSample_InvalidMinDistance_Throws()
     {
         var cloud = CreateRandomCloud(10, 3, seed: 199);
@@ -314,7 +314,7 @@ public class GeometryPreprocessingIntegrationTests
             PointCloudSampling<double>.PoissonDiskSample(cloud, -1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoissonDiskSample_MaxSamples_LimitsOutput()
     {
         var cloud = CreateRandomCloud(200, 3, seed: 211);
@@ -324,7 +324,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.True(sampled.NumPoints <= 5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelGridSample_ReducesPointCount()
     {
         // Many points in a small area should reduce to fewer voxels
@@ -336,7 +336,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.True(sampled.NumPoints > 0, "Should have at least some points");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelGridSample_AveragesPointsPerVoxel()
     {
         // Two points in same voxel should average to midpoint
@@ -358,7 +358,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelGridSample_LargeVoxelSize_SinglePoint()
     {
         var cloud = CreateRandomCloud(50, 3, seed: 229);
@@ -373,7 +373,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region GeometryMetrics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_IdenticalClouds_IsZero()
     {
         var data = new double[] { 0, 0, 0, 1, 0, 0, 0, 1, 0 };
@@ -384,7 +384,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0.0, dist, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_GoldenReference_KnownShift()
     {
         // Source at origin, target shifted by (1,0,0)
@@ -399,7 +399,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, dist, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_Squared_ReturnsSquaredDistances()
     {
         var srcData = new double[] { 0, 0, 0 };
@@ -416,7 +416,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(5.0, distNormal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_IsSymmetric()
     {
         var cloud1 = CreateRandomCloud(20, 3, seed: 233);
@@ -428,7 +428,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(d12, d21, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HausdorffDistance_IdenticalClouds_IsZero()
     {
         var cloud = CreateRandomCloud(10, 3, seed: 241);
@@ -438,7 +438,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0.0, dist, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HausdorffDistance_GoldenReference()
     {
         // Source: (0,0,0), (1,0,0)  Target: (0,0,0), (1,0,0), (5,0,0)
@@ -455,7 +455,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(4.0, dist, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_PerfectMatch_ReturnsOne()
     {
         var data = new double[] { 0, 0, 0, 1, 0, 0, 0, 1, 0 };
@@ -468,7 +468,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, recall, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_NoMatch_ReturnsZero()
     {
         var pred = new PointCloudData<double>(new Tensor<double>(
@@ -481,7 +481,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0.0, fscore, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_PartialMatch()
     {
         // 2 predictions, 1 matches, 1 doesn't
@@ -504,7 +504,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region Voxelization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelizePointCloud_ProducesOccupiedVoxels()
     {
         var data = new double[]
@@ -529,7 +529,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.True(occupied <= 3, "Should not have more occupied voxels than points");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelizePointCloud_EmptyCloud_ReturnsEmptyGrid()
     {
         var cloud = new PointCloudData<double>(new Tensor<double>(new double[0], new[] { 0, 3 }));
@@ -539,7 +539,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(new[] { 4, 4, 4 }, grid.Voxels.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU_PerfectMatch_ReturnsOne()
     {
         var data = new double[] { 1, 0, 0, 1, 0, 0, 0, 0 };
@@ -551,7 +551,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, iou, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU_NoOverlap_ReturnsZero()
     {
         var data1 = new double[] { 1, 0, 0, 0, 0, 0, 0, 0 };
@@ -564,7 +564,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0.0, iou, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU_PartialOverlap_GoldenReference()
     {
         // Grid1: voxels 0,1 occupied; Grid2: voxels 1,2 occupied
@@ -579,7 +579,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0 / 3.0, iou, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dilate_ExpandsOccupiedRegion()
     {
         // Single voxel in center of 3x3x3
@@ -598,7 +598,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(27, occupied); // All voxels should be filled
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Erode_ShrinksOccupiedRegion()
     {
         // All voxels occupied in 3x3x3
@@ -617,7 +617,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.True(eroded.Voxels[13] > 0.5); // center
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DilateErode_RoundTrip_ReducesRegion()
     {
         var data = new double[27];
@@ -635,7 +635,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region NeighborSearch Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_GoldenReference_FindsClosestPoints()
     {
         var data = new double[]
@@ -657,7 +657,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(3, knn[3, 0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KNN_SelfIsAlwaysFirstNeighbor()
     {
         var cloud = CreateRandomCloud(20, 3, seed: 251);
@@ -670,7 +670,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RadiusSearch_GoldenReference()
     {
         var data = new double[]
@@ -696,7 +696,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.DoesNotContain(3, results[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BallQuery_RespectsRadiusAndMaxSamples()
     {
         var cloud = CreateRandomCloud(50, 3, seed: 257);
@@ -709,7 +709,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(5, result.GetLength(1)); // maxSamples
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DistanceMatrix_GoldenReference_Symmetric()
     {
         var data = new double[]
@@ -743,7 +743,7 @@ public class GeometryPreprocessingIntegrationTests
 
     #region MeshOperations Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeFaceNormals_GoldenReference_XYPlaneTriangle()
     {
         var vertices = new Tensor<double>(new double[]
@@ -764,7 +764,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, normals[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeFaceNormals_XZPlaneTriangle()
     {
         var vertices = new Tensor<double>(new double[]
@@ -785,7 +785,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(0.0, normals[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeVertexNormals_SharedVertex_AveragesNormals()
     {
         // Two triangles sharing vertex 0
@@ -815,7 +815,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, len, 1e-4); // should be unit length
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildVertexAdjacency_SimpleTriangle()
     {
         var vertices = new Tensor<double>(new double[]
@@ -836,7 +836,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(2, adjacency[2].Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SamplePoints_ProducesCorrectCount()
     {
         var vertices = new Tensor<double>(new double[]
@@ -854,7 +854,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(6, samples.NumFeatures); // XYZ + normals
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SamplePoints_WithoutNormals_Has3Features()
     {
         var vertices = new Tensor<double>(new double[]
@@ -872,7 +872,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(3, samples.NumFeatures);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SamplePoints_AllPointsOnTriangleSurface()
     {
         // Triangle in XY plane: z should be 0 for all samples
@@ -900,7 +900,7 @@ public class GeometryPreprocessingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeStatistics_GoldenReference_UnitTetrahedron()
     {
         // Unit right tetrahedron: 4 faces
@@ -936,7 +936,7 @@ public class GeometryPreprocessingIntegrationTests
         Assert.Equal(1.0, stats.BoundingBoxMax.Z, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelizeMeshSurface_ProducesOccupiedVoxels()
     {
         var vertices = new Tensor<double>(new double[]

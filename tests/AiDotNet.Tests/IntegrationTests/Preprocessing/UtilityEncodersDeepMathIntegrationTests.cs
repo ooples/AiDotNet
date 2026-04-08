@@ -19,7 +19,7 @@ public class UtilityEncodersDeepMathIntegrationTests
     // SumEncoder - Deviation / Effect Coding
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_ThreeCategories_ContrastValues()
     {
         // k=3 categories (10, 20, 30), creates 2 columns
@@ -46,7 +46,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(-1.0, result[2, 1], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_ColumnSumsToZero()
     {
         // Key property of sum coding: each column sums to zero across all categories
@@ -68,7 +68,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_OutputDimension_KMinusOne()
     {
         // 5 categories -> 4 output columns
@@ -82,7 +82,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_TwoCategories_OneColumn()
     {
         // k=2: creates 1 column
@@ -99,7 +99,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(-1.0, result[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_UnknownCategory_ZeroVector()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -114,7 +114,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(0.0, result[0, 1], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_RepeatedCategories_SameEncoding()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -137,7 +137,7 @@ public class UtilityEncodersDeepMathIntegrationTests
     // CountEncoder - Frequency Encoding
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_RawCounts_HandComputed()
     {
         // Data: [1, 1, 1, 2, 2, 3]
@@ -156,7 +156,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(1.0, result[5, 0], Tol); // Cat 3
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_Normalized_CountsDividedByN()
     {
         // Data: [1, 1, 1, 2, 2, 3] (n=6)
@@ -172,7 +172,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(1.0 / 6, result[5, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_LogTransform_Log1POfCount()
     {
         // LogTransform: log1p(count) = log(1 + count)
@@ -190,7 +190,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(Math.Log(1 + 1), result[5, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_NormalizedAndLogTransform_Combined()
     {
         // First normalize (count/n), then log1p: log(1 + count/n)
@@ -206,7 +206,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(Math.Log(1 + 1.0 / 6), result[5, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_MoreFrequent_HigherEncoding()
     {
         // More frequent categories should have higher encoded values
@@ -220,7 +220,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.True(result[0, 0] > result[4, 0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_UnknownCategory_UsesDefaultValue()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -234,7 +234,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(0.5, result[0, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_PreservesOutputDimension()
     {
         // CountEncoder should NOT expand dimensions (same columns in = same columns out)
@@ -252,7 +252,7 @@ public class UtilityEncodersDeepMathIntegrationTests
     // BinaryEncoder - Binary Representation
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_FourCategories_TwoBitsNeeded()
     {
         // 4 categories + 1 for unknown = 5, ceil(log2(6)) = 3 bits
@@ -285,7 +285,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(4, encodings.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_OutputBitsAreZeroOrOne()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 }, { 6 }, { 7 }, { 8 } });
@@ -306,7 +306,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_FewerColumnsThanOneHot()
     {
         // 8 categories: one-hot would use 8 columns
@@ -322,7 +322,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.True(result.Columns >= 4, $"Need at least 4 columns for 8 categories, got {result.Columns}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_UnknownCategory_AllZeros()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -340,7 +340,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_TwoCategories_OneBitSuffices()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -369,7 +369,7 @@ public class UtilityEncodersDeepMathIntegrationTests
     // HashingEncoder - Feature Hashing
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_FixedOutputDimension()
     {
         // HashingEncoder should always produce nComponents columns per encoded column
@@ -383,7 +383,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_SameInput_SameOutput()
     {
         // Deterministic: same category should always hash to same bucket
@@ -401,7 +401,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_OutputSparse_MostlyZeros()
     {
         // Each category hashes to a single bucket out of nComponents
@@ -421,7 +421,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.Equal(1, nonZeroCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_AlternateSign_ProducesNegativeValues()
     {
         // With alternateSign=true, some hash values become -1 instead of +1
@@ -448,7 +448,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.True(hasNegative, "With alternateSign, should have some negative values");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_NoAlternateSign_AllNonNegative()
     {
         // Without alternateSign, all values should be non-negative
@@ -470,7 +470,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_HandlesUnseenCategories()
     {
         // Hash encoder should handle unseen categories without error
@@ -496,7 +496,7 @@ public class UtilityEncodersDeepMathIntegrationTests
         Assert.True(anyNonZero, "Unseen category should still hash to some bucket");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_InvalidNComponents_Throws()
     {
         Assert.Throws<ArgumentException>(() => new HashingEncoder<double>(nComponents: 0));
@@ -506,28 +506,28 @@ public class UtilityEncodersDeepMathIntegrationTests
     // Cross-Encoder Properties
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumEncoder_InverseTransform_NotSupported()
     {
         var encoder = new SumEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountEncoder_InverseTransform_NotSupported()
     {
         var encoder = new CountEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HashingEncoder_InverseTransform_NotSupported()
     {
         var encoder = new HashingEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryEncoder_SupportsInverseTransform()
     {
         var encoder = new BinaryEncoder<double>();

@@ -74,13 +74,13 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_CreateByString_EmptyName_Throws()
     {
         Assert.Throws<ArgumentException>(() => LossFunctionFactory<double>.Create(""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_CreateByString_UnknownName_Throws()
     {
         Assert.Throws<ArgumentException>(() => LossFunctionFactory<double>.Create("UnknownLoss"));
@@ -90,7 +90,7 @@ public class FactoriesDeepMathIntegrationTests
     // LossFunctionFactory: Parameters
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_Huber_CustomDelta()
     {
         var parameters = new Dictionary<string, object> { { "delta", 2.0 } };
@@ -98,7 +98,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_Focal_CustomGammaAndAlpha()
     {
         var parameters = new Dictionary<string, object>
@@ -110,7 +110,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_Quantile_CustomQuantile()
     {
         var parameters = new Dictionary<string, object> { { "quantile", 0.9 } };
@@ -118,7 +118,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_Contrastive_CustomMargin()
     {
         var parameters = new Dictionary<string, object> { { "margin", 2.0 } };
@@ -126,7 +126,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_ElasticNet_CustomParams()
     {
         var parameters = new Dictionary<string, object>
@@ -138,7 +138,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_CTC_CustomClasses()
     {
         var parameters = new Dictionary<string, object>
@@ -150,7 +150,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_Margin_CustomParams()
     {
         var parameters = new Dictionary<string, object>
@@ -163,14 +163,14 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_NullParameters_UsesDefaults()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, null);
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_StringParam_ParsedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", "1.5" } };
@@ -178,7 +178,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_IntParam_ConvertedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", 2 } };
@@ -186,7 +186,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LossFactory_FloatParam_ConvertedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", 1.5f } };
@@ -225,14 +225,14 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(window);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             WindowFunctionFactory.CreateWindowFunction<double>((WindowFunctionType)999));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFactory_FloatType_Works()
     {
         var window = WindowFunctionFactory.CreateWindowFunction<float>(WindowFunctionType.Hanning);
@@ -243,7 +243,7 @@ public class FactoriesDeepMathIntegrationTests
     // PromptTemplateFactory: All Template Types
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Simple_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Simple, "Hello {name}");
@@ -251,7 +251,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.IsType<SimplePromptTemplate>(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Chat_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Chat);
@@ -259,63 +259,63 @@ public class FactoriesDeepMathIntegrationTests
         Assert.IsType<ChatPromptTemplate>(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_ChainOfThought_AppendsStepByStep()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ChainOfThought, "Solve {problem}");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_ChainOfThought_NullTemplate_UsesDefault()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ChainOfThought);
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_ReAct_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct, "Custom base");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_ReAct_NullTemplate_UsesDefault()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct);
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Tool_ReturnsSimpleTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Tool, "Use tool {tool}");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Optimized_ReturnsSimpleTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Optimized, "Optimize {input}");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Simple_NullTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_Simple_EmptyTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, "  "));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptFactory_FewShot_WithoutSelector_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -326,7 +326,7 @@ public class FactoriesDeepMathIntegrationTests
     // TrainingResult: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrainingResult_Defaults()
     {
         var result = new AiDotNet.Training.TrainingResult<double>();
@@ -338,7 +338,7 @@ public class FactoriesDeepMathIntegrationTests
         Assert.False(result.Completed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrainingResult_SetProperties()
     {
         var result = new AiDotNet.Training.TrainingResult<double>

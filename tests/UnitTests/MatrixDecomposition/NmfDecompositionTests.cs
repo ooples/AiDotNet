@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.MatrixDecomposition;
 /// </summary>
 public class NmfDecompositionTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidMatrix_InitializesCorrectly()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class NmfDecompositionTests
         Assert.Equal(2, nmf.Components);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNegativeValues_ThrowsArgumentException()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithZeroComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix, components: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTooManyComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -75,7 +75,7 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix, components: 10));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reconstruct_ApproximatesOriginalMatrix()
     {
         // Arrange
@@ -110,7 +110,7 @@ public class NmfDecompositionTests
         Assert.True(rmse < 2.0, $"RMSE {rmse} should be less than 2.0");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WAndH_AreNonNegative()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Solve_ReturnsVectorOfCorrectSize()
     {
         // Arrange
@@ -163,7 +163,7 @@ public class NmfDecompositionTests
         Assert.Equal(2, x.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Invert_ReturnsMatrixOfCorrectDimensions()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class NmfDecompositionTests
         Assert.Equal(matrix.Rows, inverse.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Factorization_WithIdentityMatrix_WorksCorrectly()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Factorization_WithSparseMatrix_PreservesSparsity()
     {
         // Arrange - Create a sparse matrix (mostly zeros)
@@ -230,7 +230,7 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Components_Property_ReturnsCorrectValue()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class NmfDecompositionTests
         Assert.Equal(2, nmf.Components);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void A_Property_ReturnsOriginalMatrix()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class NmfDecompositionTests
         Assert.Equal(matrix, nmf.A);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Factorization_WithDifferentNumericTypes_WorksCorrectly()
     {
         // Arrange

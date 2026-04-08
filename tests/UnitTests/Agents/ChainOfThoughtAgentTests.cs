@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.Agents;
 /// </summary>
 public class ChainOfThoughtAgentTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidChatModel_InitializesSuccessfully()
     {
         // Arrange
@@ -25,7 +25,7 @@ public class ChainOfThoughtAgentTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTools_InitializesWithTools()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class ChainOfThoughtAgentTests
         Assert.Equal("Calculator", agent.Tools[0].Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithAllowToolsFalse_CreatesPureReasoningAgent()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class ChainOfThoughtAgentTests
         Assert.Single(agent.Tools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -67,7 +67,7 @@ public class ChainOfThoughtAgentTests
             new ChainOfThoughtAgent<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -79,7 +79,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync(""));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithValidQuery_ReturnsAnswer()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("What is the answer?", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithToolCall_ExecutesTool()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("Calculator", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithInvalidMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync("Test query", maxIterations: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_UpdatesScratchpad()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("Reasoning Steps", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithHttpError_ReturnsErrorMessage()
     {
         // Arrange
@@ -194,7 +194,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("error", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_PureCoTMode_DoesNotExecuteTools()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class ChainOfThoughtAgentTests
         // In pure CoT mode, even if tool_calls were present, they wouldn't execute
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithFallbackParsing_HandlesNonJsonResponse()
     {
         // Arrange

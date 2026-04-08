@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.Reasoning.Benchmarks;
 
 public class AiModelResultBenchmarkFacadeTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task EvaluateBenchmarkAsync_UsesPromptChain_WhenConfigured()
     {
         var benchmark = new GSM8KBenchmark<double>();

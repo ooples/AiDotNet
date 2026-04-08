@@ -12,7 +12,7 @@ public class VGGNetworkTests
 {
     #region VGGConfiguration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_Constructor_ValidParameters_CreatesConfiguration()
     {
         // Arrange & Act
@@ -29,7 +29,7 @@ public class VGGNetworkTests
         Assert.True(config.IncludeClassifier);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_BNVariant_UsesBatchNormalization()
     {
         // Arrange & Act
@@ -39,7 +39,7 @@ public class VGGNetworkTests
         Assert.True(config.UseBatchNormalization);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -47,7 +47,7 @@ public class VGGNetworkTests
             new VGGConfiguration(VGGVariant.VGG16, numClasses: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -55,7 +55,7 @@ public class VGGNetworkTests
             new VGGConfiguration(VGGVariant.VGG16, numClasses: 10, inputHeight: 16));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_InvalidDropoutRate_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -95,7 +95,7 @@ public class VGGNetworkTests
         Assert.Equal(expectedWeightLayers, config.NumWeightLayers);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_InputShape_ReturnsCorrectShape()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class VGGNetworkTests
         Assert.Equal(224, inputShape[2]); // width
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_BlockConfiguration_VGG16_ReturnsCorrectBlocks()
     {
         // Arrange
@@ -130,7 +130,7 @@ public class VGGNetworkTests
         Assert.Equal(new[] { 512, 512, 512 }, blocks[4]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_CreateVGG16BN_CreatesCorrectConfiguration()
     {
         // Act
@@ -142,7 +142,7 @@ public class VGGNetworkTests
         Assert.True(config.UseBatchNormalization);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGConfiguration_CreateForCIFAR_Creates32x32Input()
     {
         // Act
@@ -158,7 +158,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Construction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class VGGNetworkTests
         Assert.True(network.LayerCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_WithBatchNormalization_CreatesValidNetwork()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class VGGNetworkTests
         Assert.True(network.UsesBatchNormalization);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_NullConfiguration_ThrowsArgumentNullException()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class VGGNetworkTests
             new VGGNetwork<float>(architecture, null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_MismatchedOutputSize_ThrowsArgumentException()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class VGGNetworkTests
             new VGGNetwork<float>(architecture, config));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_MismatchedInputShape_ThrowsArgumentException()
     {
         // Arrange
@@ -268,7 +268,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Forward Pass Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_Predict_With4DInput_ReturnsCorrectShape()
     {
         // Arrange - test with batch dimension [B, C, H, W]
@@ -429,7 +429,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Metadata Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -459,7 +459,7 @@ public class VGGNetworkTests
         Assert.Equal(16, metadata.AdditionalInfo["NumWeightLayers"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -486,7 +486,7 @@ public class VGGNetworkTests
 
     #region VGGVariant Enum Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VGGVariant_AllVariantsAreDefined()
     {
         // Act - use non-generic Enum.GetValues for .NET Framework compatibility

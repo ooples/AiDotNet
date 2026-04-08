@@ -8,7 +8,7 @@ using Xunit;
 
 public class ObfuscationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BuildKeyProvider_ReturnsEmpty_WhenNoEmbeddedResource()
     {
         // In test/dev builds there is no embedded build key
@@ -17,31 +17,31 @@ public class ObfuscationTests
         Assert.Empty(key);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BuildKeyProvider_IsOfficialBuild_ReturnsFalse_InDevBuild()
     {
         Assert.False(BuildKeyProvider.IsOfficialBuild);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PayloadEncryptionScheme_AesGcm256Signed_HasCorrectValue()
     {
         Assert.Equal(2, (int)PayloadEncryptionScheme.AesGcm256Signed);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PayloadEncryptionScheme_None_HasCorrectValue()
     {
         Assert.Equal(0, (int)PayloadEncryptionScheme.None);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PayloadEncryptionScheme_AesGcm256_HasCorrectValue()
     {
         Assert.Equal(1, (int)PayloadEncryptionScheme.AesGcm256);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AssemblyIntegrityChecker_NoHash_ReturnsTrue_InDevBuild()
     {
         // Dev builds have no integrity hash, so verification should pass
@@ -49,7 +49,7 @@ public class ObfuscationTests
     }
 
 #if !NET471
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EncryptSigned_WithoutBuildKey_ProducesValidCiphertext()
     {
         // In dev builds (no build key), EncryptSigned should still work
@@ -73,7 +73,7 @@ public class ObfuscationTests
         Assert.NotEqual(plaintext, encrypted.Ciphertext);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DecryptSigned_RoundTrip_ProducesIdenticalBytes()
     {
         var plaintext = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
@@ -88,7 +88,7 @@ public class ObfuscationTests
         Assert.Equal(plaintext, decrypted);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DecryptSigned_WithDecryptionToken_RoundTrip()
     {
         var plaintext = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
@@ -107,7 +107,7 @@ public class ObfuscationTests
         Assert.Equal(plaintext, decrypted);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DecryptSigned_WrongToken_Throws()
     {
         var plaintext = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
@@ -130,7 +130,7 @@ public class ObfuscationTests
                 encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad, wrongToken));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DecryptSigned_WrongLicenseKey_Throws()
     {
         var plaintext = new byte[] { 0x11, 0x22, 0x33, 0x44 };
@@ -145,21 +145,21 @@ public class ObfuscationTests
                 encrypted.Ciphertext, wrongKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EncryptSigned_NullPayload_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.EncryptSigned(null, "key", "aad"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EncryptSigned_EmptyLicenseKey_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelPayloadEncryption.EncryptSigned(new byte[] { 0x01 }, "", "aad"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Signed_And_Standard_Produce_Different_Ciphertext()
     {
         // Even with the same inputs, signed and standard encryption should produce

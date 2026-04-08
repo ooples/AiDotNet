@@ -5,14 +5,14 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class PersonalizedFederatedLearningTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsForInvalidFraction()
     {
         Assert.Throws<ArgumentException>(() => new PersonalizedFederatedLearning<double>(personalizationFraction: -0.1));
         Assert.Throws<ArgumentException>(() => new PersonalizedFederatedLearning<double>(personalizationFraction: 1.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IdentifyPersonalizedLayers_LastN_SelectsExpectedTailLayers()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.4);
@@ -40,7 +40,7 @@ public class PersonalizedFederatedLearningTests
         Assert.False(pfl.IsLayerPersonalized("layer2"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SeparateModel_ThenCombineModels_RoundTripsStructure()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
@@ -74,7 +74,7 @@ public class PersonalizedFederatedLearningTests
         Assert.Equal(0.5, stats["communication_reduction"], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IdentifyPersonalizedLayers_ByPattern_SelectsMatchingLayers()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.2);
@@ -92,7 +92,7 @@ public class PersonalizedFederatedLearningTests
         Assert.False(pfl.IsLayerPersonalized("conv1"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IdentifyPersonalizedLayers_ThrowsForInvalidInputs()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
@@ -103,7 +103,7 @@ public class PersonalizedFederatedLearningTests
         Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: PersonalizedLayerSelectionStrategy.ByPattern, customPatterns: null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SeparateModel_AndSplitStatistics_ValidateInputs()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
@@ -113,7 +113,7 @@ public class PersonalizedFederatedLearningTests
         Assert.Throws<ArgumentException>(() => pfl.GetModelSplitStatistics(new Dictionary<string, double[]>()));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CombineModels_ThrowsForNullArguments()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);

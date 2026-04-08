@@ -27,7 +27,7 @@ public class ScoreBasedCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GES_FindsCausalStructure()
     {
         var algo = new GESAlgorithm<double>();
@@ -36,7 +36,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FGES_FindsCausalStructure()
     {
         var algo = new FGESAlgorithm<double>();
@@ -45,7 +45,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HillClimbing_FindsCausalStructure()
     {
         var algo = new HillClimbingAlgorithm<double>();
@@ -54,7 +54,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TabuSearch_FindsCausalStructure()
     {
         var algo = new TabuSearchAlgorithm<double>();
@@ -63,7 +63,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void K2_FindsCausalStructure()
     {
         var algo = new K2Algorithm<double>();
@@ -72,7 +72,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BOSS_FindsCausalStructure()
     {
         var algo = new BOSSAlgorithm<double>();
@@ -81,7 +81,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRaSP_FindsCausalStructure()
     {
         var algo = new GRaSPAlgorithm<double>();
@@ -90,7 +90,7 @@ public class ScoreBasedCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExactSearch_FindsCausalStructure()
     {
         var algo = new ExactSearchAlgorithm<double>();

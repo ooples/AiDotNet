@@ -21,7 +21,7 @@ public class CROWNVerificationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_Default_CreatesInstance()
     {
         // Act
@@ -35,7 +35,7 @@ public class CROWNVerificationTests
         Assert.True(options.UseTightBounds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithOptions_UsesOptions()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class CROWNVerificationTests
         Assert.True(returnedOptions.UseTightBounds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -70,7 +70,7 @@ public class CROWNVerificationTests
 
     #region CertifyPrediction Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(null!, mockModel));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(input, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithValidInput_ReturnsCertification()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class CROWNVerificationTests
         Assert.True(result.Confidence >= 0.0 && result.Confidence <= 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithSmallEpsilon_MayCertify()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class CROWNVerificationTests
         Assert.True(result.IsCertified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_CROWN_ShouldProduceTighterBounds_ThanIBP()
     {
         // Arrange - CROWN should produce tighter bounds than IBP
@@ -163,7 +163,7 @@ public class CROWNVerificationTests
         Assert.True(crownResult.UpperBound <= ibpResult.UpperBound + Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_ReturnsBoundsForPredictedClass()
     {
         // Arrange
@@ -188,7 +188,7 @@ public class CROWNVerificationTests
 
     #region CertifyBatch Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
@@ -199,7 +199,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(null!, mockModel));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyBatch_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -210,7 +210,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(inputs, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyBatch_ReturnsCorrectNumberOfResults()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class CROWNVerificationTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -256,7 +256,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(null!, mockModel));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -267,7 +267,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(input, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class CROWNVerificationTests
         Assert.True(radius >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeCertifiedRadius_CROWN_ShouldGiveTighterRadius_ThanIBP()
     {
         // Arrange - CROWN with tighter bounds should give larger certified radius
@@ -315,7 +315,7 @@ public class CROWNVerificationTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -354,7 +354,7 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -372,7 +372,7 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, labels, mockModel, 0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class CROWNVerificationTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_ReturnsNonEmptyBytes()
     {
         // Arrange
@@ -433,7 +433,7 @@ public class CROWNVerificationTests
         Assert.True(bytes.Length > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -443,7 +443,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.Deserialize(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SerializeDeserialize_PreservesOptions()
     {
         // Arrange
@@ -480,7 +480,7 @@ public class CROWNVerificationTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
@@ -490,7 +490,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.SaveModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_WithEmptyPath_ThrowsArgumentException()
     {
         // Arrange
@@ -500,7 +500,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.SaveModel(string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
@@ -510,7 +510,7 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.LoadModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
@@ -520,7 +520,7 @@ public class CROWNVerificationTests
         Assert.Throws<FileNotFoundException>(() => crown.LoadModel("nonexistent_crown_model_12345.json"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveAndLoadModel_RoundTrip_PreservesOptions()
     {
         // Arrange
@@ -562,7 +562,7 @@ public class CROWNVerificationTests
 
     #region Reset Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reset_ResetsToDefaultOptions()
     {
         // Arrange
@@ -587,7 +587,7 @@ public class CROWNVerificationTests
 
     #region CROWN-Specific Linear Relaxation Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CROWN_WithIdenticalInputs_ProducesSameCertification()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class CROWNVerificationTests
         Assert.Equal(result1.UpperBound, result2.UpperBound, Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CROWN_WithLargerEpsilon_ProducesWiderBounds()
     {
         // Arrange
@@ -646,7 +646,7 @@ public class CROWNVerificationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_FloatType_WorksCorrectly()
     {
         // Arrange

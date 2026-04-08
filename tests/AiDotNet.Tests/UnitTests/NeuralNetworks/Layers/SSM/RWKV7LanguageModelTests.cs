@@ -34,7 +34,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7Block Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Constructor_ValidParameters_CreatesBlock()
     {
         var block = new RWKV7Block<float>(
@@ -46,42 +46,42 @@ public class RWKV7LanguageModelTests
         Assert.True(block.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Constructor_ThrowsWhenSequenceLengthNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7Block<float>(sequenceLength: 0, modelDimension: 32, numHeads: 4));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7Block<float>(sequenceLength: 16, modelDimension: 0, numHeads: 4));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7Block<float>(sequenceLength: 16, modelDimension: 32, numHeads: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7Block<float>(sequenceLength: 16, modelDimension: 33, numHeads: 4));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_SupportsTraining_ReturnsTrue()
     {
         var block = new RWKV7Block<float>(16, 32, 4);
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_FFNDimension_MatchesMultiplier()
     {
         var block = new RWKV7Block<float>(16, 32, 4, ffnMultiplier: 3.5);
@@ -92,7 +92,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7Block Forward Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Forward_3D_ProducesCorrectShape()
     {
         int batchSize = 2;
@@ -107,7 +107,7 @@ public class RWKV7LanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Forward_2D_ProducesCorrectShape()
     {
         int seqLen = 4;
@@ -121,7 +121,7 @@ public class RWKV7LanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_Forward_ProducesNonTrivialOutput()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
@@ -152,7 +152,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7Block Parameter Management
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_GetSetParameters_RoundTrip()
     {
         var block = new RWKV7Block<float>(4, 32, 4);
@@ -167,14 +167,14 @@ public class RWKV7LanguageModelTests
             Assert.Equal(params1[i], params2[i]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_SetParameters_ThrowsOnWrongLength()
     {
         var block = new RWKV7Block<float>(4, 32, 4);
         Assert.Throws<ArgumentException>(() => block.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_GetMetadata_ContainsRWKV7()
     {
         var block = new RWKV7Block<float>(4, 32, 4);
@@ -190,7 +190,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7Block Recurrent State
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_RecurrentState_InitiallyNull()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
@@ -198,7 +198,7 @@ public class RWKV7LanguageModelTests
         Assert.Null(block.GetPreviousToken());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_RecurrentState_PopulatedAfterForward()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
@@ -209,7 +209,7 @@ public class RWKV7LanguageModelTests
         Assert.NotNull(block.GetPreviousToken());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Block_ResetState_ClearsRecurrentState()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
@@ -225,7 +225,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ValidParameters_CreatesModel()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -239,42 +239,42 @@ public class RWKV7LanguageModelTests
         Assert.Equal(3.5, model.FFNMultiplier);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ThrowsWhenVocabSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7LanguageModel<float>(CreateArch(1), vocabSize: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ThrowsWhenNumLayersNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numHeads: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
             new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 33, numHeads: 4));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_SupportsTraining_ReturnsTrue()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -286,7 +286,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Predict Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Predict_3D_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
@@ -305,7 +305,7 @@ public class RWKV7LanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Predict_2D_ProducesCorrectOutputShape()
     {
         int seqLen = 4;
@@ -323,7 +323,7 @@ public class RWKV7LanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Predict_ProducesNonTrivialOutput()
     {
         int seqLen = 4;
@@ -355,7 +355,7 @@ public class RWKV7LanguageModelTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Train_ForwardBackwardUpdate_NoErrors()
     {
         int seqLen = 4;
@@ -380,7 +380,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Parameter Management
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_GetParameters_SetParameters_RoundTrip()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -399,7 +399,7 @@ public class RWKV7LanguageModelTests
             Assert.Equal(params1[i], params2[i]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_SetParameters_ThrowsOnWrongLength()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -407,7 +407,7 @@ public class RWKV7LanguageModelTests
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Predict_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -439,7 +439,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel State
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_ResetState_AllowsReuse()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -458,7 +458,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Metadata
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_GetModelMetadata_ContainsExpectedKeys()
     {
         var model = new RWKV7LanguageModel<float>(
@@ -482,7 +482,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Double Precision
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_Predict_Double_ProducesValidOutput()
     {
         int seqLen = 4;
@@ -503,7 +503,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModel Multi-Layer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Model_MultiLayer_ProducesNonTrivialOutput()
     {
         int seqLen = 4;
@@ -533,7 +533,7 @@ public class RWKV7LanguageModelTests
 
     #region RWKV7LanguageModelOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Options_DefaultValues_AreCorrect()
     {
         var options = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>();
@@ -548,7 +548,7 @@ public class RWKV7LanguageModelTests
         Assert.Null(options.Seed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Options_CopyConstructor_CopiesAllValues()
     {
         var original = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>
@@ -575,14 +575,14 @@ public class RWKV7LanguageModelTests
         Assert.Equal(original.Seed, copy.Seed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Options_CopyConstructor_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Options_CanConstructModelFromOptions()
     {
         var options = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>

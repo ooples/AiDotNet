@@ -13,7 +13,7 @@ public class RdpPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RdpPrivacyAccountant(clipNorm));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithInvalidOrders_Throws()
     {
         Assert.Throws<ArgumentException>(() => new RdpPrivacyAccountant(clipNorm: 1.0, orders: Array.Empty<double>()));
@@ -33,7 +33,7 @@ public class RdpPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.AddRound(epsilon, delta, samplingRate));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddRound_AccumulatesDeltaAndIncreasesEpsilon()
     {
         var accountant = new RdpPrivacyAccountant(clipNorm: 1.0);

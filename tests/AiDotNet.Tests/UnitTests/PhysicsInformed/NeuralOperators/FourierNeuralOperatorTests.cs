@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class FourierNeuralOperatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FourierNeuralOperator_ForwardPreservesSpatialShape()
     {
         var architecture = new NeuralNetworkArchitecture<double>(

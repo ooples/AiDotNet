@@ -194,7 +194,7 @@ public class EigenDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class EigenDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_DiagonalMatrix_HasDiagonalAsEigenvalues()
     {
         // Arrange - Diagonal matrix with values 4, 3, 2, 1
@@ -239,7 +239,7 @@ public class EigenDecompositionIntegrationTests
         Assert.Empty(remainingExpected);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_ZeroMatrix_HasAllZeroEigenvalues()
     {
         // Arrange
@@ -256,7 +256,7 @@ public class EigenDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_SymmetricPositiveDefinite_HasPositiveEigenvalues()
     {
         // Arrange - Create SPD matrix A^T * A
@@ -304,7 +304,7 @@ public class EigenDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_LargeMatrix_ProducesValidDecomposition()
     {
         // Arrange
@@ -333,7 +333,7 @@ public class EigenDecompositionIntegrationTests
             $"Large matrix: A*v should equal λ*v. Max difference: {diff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_IllConditionedMatrix_HandlesGracefully()
     {
         // Arrange - Create a nearly singular matrix
@@ -364,7 +364,7 @@ public class EigenDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EigenDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange

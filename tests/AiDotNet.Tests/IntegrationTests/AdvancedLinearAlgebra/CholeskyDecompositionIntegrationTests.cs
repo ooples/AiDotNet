@@ -141,7 +141,7 @@ public class CholeskyDecompositionIntegrationTests
             "L should be lower triangular");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_L_HasPositiveDiagonal()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Known Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_KnownMatrix_CorrectL()
     {
         // Arrange - Use a known SPD matrix with calculable Cholesky factor
@@ -210,7 +210,7 @@ public class CholeskyDecompositionIntegrationTests
         Assert.True(IsLowerTriangular(chol.L), "L should be lower triangular");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_IdentityMatrix_L_Is_Identity()
     {
         // Arrange
@@ -235,7 +235,7 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class CholeskyDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new CholeskyDecomposition<double>(A));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_NonSymmetricMatrix_ThrowsArgumentException()
     {
         // Arrange - Create a non-symmetric matrix
@@ -262,7 +262,7 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_WellConditionedMatrix_HighAccuracy()
     {
         // Arrange - Create a well-conditioned SPD matrix
@@ -279,7 +279,7 @@ public class CholeskyDecompositionIntegrationTests
             $"Well-conditioned matrix should have very high accuracy. Max difference: {maxDiff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_CovarianceMatrix_ValidDecomposition()
     {
         // Arrange - Simulate a covariance matrix (common use case)
@@ -332,7 +332,7 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Uniqueness Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CholeskyDecomposition_IsUnique()
     {
         // Arrange

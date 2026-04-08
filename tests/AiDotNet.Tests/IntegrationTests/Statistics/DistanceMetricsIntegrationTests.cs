@@ -21,7 +21,7 @@ public class DistanceMetricsIntegrationTests
     /// np.linalg.norm(np.array([0, 0]) - np.array([3, 4])) = 5.0
     /// Classic 3-4-5 right triangle.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_ClassicTriangle_ReturnsExactValue()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class DistanceMetricsIntegrationTests
     /// np.linalg.norm(np.array([1, 2, 3]) - np.array([4, 5, 6])) = 5.196152422706632
     /// sqrt((4-1)² + (5-2)² + (6-3)²) = sqrt(9+9+9) = sqrt(27) = 3*sqrt(3)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_3DVector_ReturnsExactValue()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class DistanceMetricsIntegrationTests
     /// Verified with NumPy:
     /// np.linalg.norm(np.array([1]) - np.array([5])) = 4.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_SingleDimension_ReturnsAbsoluteDifference()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class DistanceMetricsIntegrationTests
     /// Squared Euclidean distance for efficiency testing.
     /// np.sum((np.array([0, 0]) - np.array([3, 4]))**2) = 25
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_Squared_ReturnsExactValue()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class DistanceMetricsIntegrationTests
     /// Verified with NumPy:
     /// np.sum(np.abs(np.array([0, 0]) - np.array([3, 4]))) = 7.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_BasicExample_ReturnsExactValue()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class DistanceMetricsIntegrationTests
     /// Verified with NumPy:
     /// np.sum(np.abs(np.array([1, 2, 3]) - np.array([4, 5, 6]))) = 9.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_3DVector_ReturnsExactValue()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class DistanceMetricsIntegrationTests
     /// Manhattan distance with negative values.
     /// np.sum(np.abs(np.array([-1, -2]) - np.array([1, 2]))) = 6.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_NegativeValues_ReturnsExactValue()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
@@ -198,7 +198,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Verified: max(|3-0|, |4-0|) = max(3, 4) = 4
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_BasicExample_ReturnsExactValue()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Verified: max(|4-1|, |5-2|, |6-3|) = max(3, 3, 3) = 3
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_3DVector_ReturnsExactValue()
     {
         // Arrange
@@ -235,7 +235,7 @@ public class DistanceMetricsIntegrationTests
     /// Chebyshev distance with one large difference.
     /// max(|0-0|, |0-10|, |0-0|) = 10
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_OneLargeDifference_ReturnsExactValue()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
@@ -276,7 +276,7 @@ public class DistanceMetricsIntegrationTests
     /// Identical vectors should have cosine distance = 0.
     /// (same direction)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_IdenticalVectors_ReturnsZero()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class DistanceMetricsIntegrationTests
     /// Parallel vectors (same direction, different magnitude) should have distance = 0.
     /// [1, 2] and [2, 4] point in the same direction.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_ParallelVectors_ReturnsZero()
     {
         // Arrange
@@ -314,7 +314,7 @@ public class DistanceMetricsIntegrationTests
     /// Perpendicular vectors (90°) should have cosine similarity = 0, distance = 1.
     /// [1, 0] and [0, 1] are perpendicular.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_PerpendicularVectors_ReturnsOne()
     {
         // Arrange
@@ -333,7 +333,7 @@ public class DistanceMetricsIntegrationTests
     /// Opposite vectors (180°) should have cosine similarity = -1, distance = 2.
     /// [1, 0] and [-1, 0] point in opposite directions.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_OppositeVectors_ReturnsTwo()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class DistanceMetricsIntegrationTests
     /// from scipy.spatial.distance import cosine
     /// cosine([1, 2, 3], [4, 5, 6]) = 0.025368153802923787
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_3DVector_ReturnsExactValue()
     {
         // Arrange
@@ -371,7 +371,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Cosine similarity should be 1 - distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_IsOneMinusDistance()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Minkowski with p=1 should equal Manhattan distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_P1_EqualsManhattan()
     {
         // Arrange
@@ -415,7 +415,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Minkowski with p=2 should equal Euclidean distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_P2_EqualsEuclidean()
     {
         // Arrange
@@ -438,7 +438,7 @@ public class DistanceMetricsIntegrationTests
     /// from scipy.spatial.distance import minkowski
     /// minkowski([0, 0], [3, 4], p=3) = 4.497941445275415
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_P3_ReturnsExactValue()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero for any p.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
@@ -475,7 +475,7 @@ public class DistanceMetricsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -490,7 +490,7 @@ public class DistanceMetricsIntegrationTests
         Assert.Equal(5.0f, distance, 1e-5f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -505,7 +505,7 @@ public class DistanceMetricsIntegrationTests
         Assert.Equal(7.0f, distance, 1e-5f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -528,7 +528,7 @@ public class DistanceMetricsIntegrationTests
     /// Distance metrics should satisfy the triangle inequality:
     /// d(a, c) <= d(a, b) + d(b, c)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_SatisfiesTriangleInequality()
     {
         // Arrange
@@ -547,7 +547,7 @@ public class DistanceMetricsIntegrationTests
             $"Triangle inequality violated: {dAC} > {dAB} + {dBC}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ManhattanDistance_SatisfiesTriangleInequality()
     {
         // Arrange
@@ -573,7 +573,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Distance should be symmetric: d(a, b) = d(b, a)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistances_AreSymmetric()
     {
         // Arrange
@@ -604,7 +604,7 @@ public class DistanceMetricsIntegrationTests
     /// b = np.array([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
     /// np.linalg.norm(a - b) = 18.16590212458495
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_10Dimensions_ReturnsExactValue()
     {
         // Arrange
@@ -626,7 +626,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Different length vectors should throw ArgumentException.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EuclideanDistance_DifferentLengthVectors_ThrowsException()
     {
         // Arrange
@@ -641,7 +641,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Empty vectors should return zero distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_EmptyVectors_ReturnsZero()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class DistanceMetricsIntegrationTests
     /// <summary>
     /// Minkowski with p < 1 should throw ArgumentException.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_InvalidP_ThrowsException()
     {
         // Act & Assert

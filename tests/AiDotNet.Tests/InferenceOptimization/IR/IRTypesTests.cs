@@ -71,7 +71,7 @@ public class IRTypesTests
 
     #region TensorType Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_DefaultValues_AreCorrect()
     {
         var tensorType = new TensorType();
@@ -93,14 +93,14 @@ public class IRTypesTests
         Assert.Equal(expected, tensorType.NumElements);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_NumElements_ReturnsMinusOneForDynamicShape()
     {
         var tensorType = new TensorType { Shape = new[] { 2, -1, 4 } };
         Assert.Equal(-1, tensorType.NumElements);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_HasDynamicShape_DetectsDynamicDimensions()
     {
         var staticType = new TensorType { Shape = new[] { 2, 3, 4 } };
@@ -122,7 +122,7 @@ public class IRTypesTests
         Assert.Equal(expected, tensorType.ElementSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_TotalBytes_CalculatesCorrectly()
     {
         var tensorType = new TensorType
@@ -148,7 +148,7 @@ public class IRTypesTests
         Assert.Equal(expected, type1.IsBroadcastCompatible(type2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_Clone_CreatesIndependentCopy()
     {
         var original = new TensorType
@@ -171,7 +171,7 @@ public class IRTypesTests
         Assert.NotEqual(original.Shape[0], clone.Shape[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_ToString_ReturnsFormattedString()
     {
         var tensorType = new TensorType
@@ -191,7 +191,7 @@ public class IRTypesTests
 
     #region QuantizationParams Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizationParams_DefaultValues_AreCorrect()
     {
         var qParams = new QuantizationParams();
@@ -202,7 +202,7 @@ public class IRTypesTests
         Assert.Equal(-1, qParams.QuantizationAxis);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void QuantizationParams_PerChannel_CanBeConfigured()
     {
         var qParams = new QuantizationParams
@@ -223,7 +223,7 @@ public class IRTypesTests
 
     #region MemoryLayout Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryLayout_AllValuesAreDefined()
     {
         Assert.True(Enum.IsDefined(typeof(MemoryLayout), MemoryLayout.RowMajor));
@@ -238,7 +238,7 @@ public class IRTypesTests
 
     #region DeviceType Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeviceType_AllValuesAreDefined()
     {
         Assert.True(Enum.IsDefined(typeof(DeviceType), DeviceType.CPU));

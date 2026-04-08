@@ -35,7 +35,7 @@ public class ZkVerificationTests
 
     // ========== HashCommitmentScheme Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HashCommitment_CommitAndOpen_Verifies()
     {
         var scheme = new HashCommitmentScheme<double>();
@@ -52,7 +52,7 @@ public class ZkVerificationTests
         Assert.True(verified, "Verifying a valid commitment should succeed");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HashCommitment_DifferentGradients_DifferentCommitments()
     {
         var scheme = new HashCommitmentScheme<double>();
@@ -67,14 +67,14 @@ public class ZkVerificationTests
         Assert.NotNull(commit2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HashCommitment_RandomnessLengthValidation()
     {
         // Short randomness length should throw
         Assert.Throws<ArgumentOutOfRangeException>(() => new HashCommitmentScheme<double>(randomnessLength: 8));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HashCommitment_VerifyAggregation_Works()
     {
         var scheme = new HashCommitmentScheme<double>();
@@ -97,7 +97,7 @@ public class ZkVerificationTests
 
     // ========== PedersenCommitment Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PedersenCommitment_CommitAndVerify_Succeeds()
     {
         var scheme = new PedersenCommitment<double>();
@@ -114,7 +114,7 @@ public class ZkVerificationTests
         Assert.True(verified, "Pedersen commitment verification should succeed");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PedersenCommitment_VerifyAggregation_Works()
     {
         var scheme = new PedersenCommitment<double>();
@@ -136,7 +136,7 @@ public class ZkVerificationTests
 
     // ========== GradientNormRangeProof Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientNormRangeProof_SmallGradient_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
@@ -148,7 +148,7 @@ public class ZkVerificationTests
         Assert.NotNull(normProof);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientNormRangeProof_GenerateAndVerify_Constraint()
     {
         var proofSystem = new HashCommitmentScheme<double>();
@@ -176,7 +176,7 @@ public class ZkVerificationTests
         Assert.True(verified, "Small gradient should pass norm bound verification");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientNormRangeProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -185,7 +185,7 @@ public class ZkVerificationTests
 
     // ========== GradientBoundednessProof Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientBoundednessProof_BoundedGradient_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
@@ -197,7 +197,7 @@ public class ZkVerificationTests
         Assert.NotNull(boundProof);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientBoundednessProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -206,7 +206,7 @@ public class ZkVerificationTests
 
     // ========== LossThresholdProof Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LossThresholdProof_LowLoss_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
@@ -217,7 +217,7 @@ public class ZkVerificationTests
         Assert.NotNull(lossProof);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LossThresholdProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -226,7 +226,7 @@ public class ZkVerificationTests
 
     // ========== ComputationIntegrityProof Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputationIntegrityProof_GenerateProof_Succeeds()
     {
         var proofSystem = new HashCommitmentScheme<double>();
@@ -247,7 +247,7 @@ public class ZkVerificationTests
         Assert.True(verified);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputationIntegrityProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -256,7 +256,7 @@ public class ZkVerificationTests
 
     // ========== ModelUpdateVerifier Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelUpdateVerifier_DefaultOptions_Created()
     {
         var verifier = new ModelUpdateVerifier<double>();
@@ -265,7 +265,7 @@ public class ZkVerificationTests
         Assert.NotNull(verifier);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelUpdateVerifier_WithOptions_Created()
     {
         var options = new VerificationOptions
@@ -279,7 +279,7 @@ public class ZkVerificationTests
         Assert.NotNull(verifier);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelUpdateVerifier_VerifyClientUpdate_WithCommitment_Passes()
     {
         var options = new VerificationOptions
@@ -304,7 +304,7 @@ public class ZkVerificationTests
         Assert.Equal(1, result.Round);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelUpdateVerifier_GetVerifiedClientCount_TracksClients()
     {
         var options = new VerificationOptions
@@ -326,7 +326,7 @@ public class ZkVerificationTests
         Assert.True(verified >= 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelUpdateVerifier_GetRejectedClientCount_TracksRejections()
     {
         var options = new VerificationOptions
@@ -346,7 +346,7 @@ public class ZkVerificationTests
 
     // ========== VerificationOptions Defaults ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VerificationOptions_DefaultValues()
     {
         var options = new VerificationOptions();
@@ -362,20 +362,20 @@ public class ZkVerificationTests
         Assert.NotNull(options.Commitment);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ZkProofSystem_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(ZkProofSystem), ZkProofSystem.Pedersen));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VerificationLevel_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(VerificationLevel), VerificationLevel.NormBound));
         Assert.True(Enum.IsDefined(typeof(VerificationLevel), VerificationLevel.ElementBound));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConstraintType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(ConstraintType), ConstraintType.NormBound));
@@ -386,7 +386,7 @@ public class ZkVerificationTests
 
     // ========== VerificationProof / VerificationConstraint Defaults ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VerificationProof_DefaultValues()
     {
         var proof = new VerificationProof();
@@ -398,7 +398,7 @@ public class ZkVerificationTests
         Assert.Equal(string.Empty, proof.ProofSystem);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VerificationConstraint_DefaultValues()
     {
         var constraint = new VerificationConstraint();

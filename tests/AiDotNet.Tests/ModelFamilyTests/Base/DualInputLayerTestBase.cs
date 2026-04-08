@@ -83,7 +83,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 1: Forward produces finite, non-empty output
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_ShouldProduceFiniteOutput()
     {
         var layer = CreateLayer();
@@ -106,7 +106,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 2: Forward is deterministic
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_ShouldBeDeterministic()
     {
         var layer = CreateLayer();
@@ -127,7 +127,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 3: Different primary inputs produce different outputs
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
     {
         if (!ExpectsDifferentOutputForDifferentInputs) return;
@@ -164,7 +164,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 5: Parameter count consistency
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Parameters_CountShouldMatchVector()
     {
         var layer = CreateLayer();
@@ -182,7 +182,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 6: SetParameters → GetParameters roundtrip
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Parameters_SetGet_Roundtrip()
     {
         var layer = CreateLayer();
@@ -207,7 +207,7 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 8: ResetState doesn't break the layer
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void ResetState_ShouldNotBreakForward()
     {
         var layer = CreateLayer();

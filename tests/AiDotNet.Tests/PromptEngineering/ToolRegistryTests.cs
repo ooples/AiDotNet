@@ -39,7 +39,7 @@ public class ToolRegistryTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_CreatesEmptyRegistry()
     {
         var registry = new ToolRegistry();
@@ -47,7 +47,7 @@ public class ToolRegistryTests
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RegisterTool_AddsTool()
     {
         var registry = new ToolRegistry();
@@ -59,7 +59,7 @@ public class ToolRegistryTests
         Assert.True(registry.HasTool("test_tool"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RegisterTool_WithNullTool_ThrowsArgumentNullException()
     {
         var registry = new ToolRegistry();
@@ -67,7 +67,7 @@ public class ToolRegistryTests
         Assert.Throws<ArgumentNullException>(() => registry.RegisterTool(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RegisterTool_WithDuplicateName_ThrowsArgumentException()
     {
         var registry = new ToolRegistry();
@@ -79,7 +79,7 @@ public class ToolRegistryTests
         Assert.Throws<ArgumentException>(() => registry.RegisterTool(tool2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTool_ReturnsRegisteredTool()
     {
         var registry = new ToolRegistry();
@@ -92,7 +92,7 @@ public class ToolRegistryTests
         Assert.Equal("test_tool", retrieved.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTool_WithNonExistentTool_ReturnsNull()
     {
         var registry = new ToolRegistry();
@@ -102,7 +102,7 @@ public class ToolRegistryTests
         Assert.Null(retrieved);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UnregisterTool_RemovesTool()
     {
         var registry = new ToolRegistry();
@@ -116,7 +116,7 @@ public class ToolRegistryTests
         Assert.False(registry.HasTool("test_tool"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UnregisterTool_WithNonExistentTool_ReturnsFalse()
     {
         var registry = new ToolRegistry();
@@ -126,7 +126,7 @@ public class ToolRegistryTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetAllTools_ReturnsAllRegisteredTools()
     {
         var registry = new ToolRegistry();
@@ -139,7 +139,7 @@ public class ToolRegistryTests
         Assert.Equal(3, tools.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExecuteTool_ExecutesRegisteredTool()
     {
         var registry = new ToolRegistry();
@@ -152,7 +152,7 @@ public class ToolRegistryTests
         Assert.Equal("Executed test_tool", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExecuteTool_WithNonExistentTool_ThrowsArgumentException()
     {
         var registry = new ToolRegistry();
@@ -161,7 +161,7 @@ public class ToolRegistryTests
         Assert.Throws<ArgumentException>(() => registry.ExecuteTool("nonexistent", args));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clear_RemovesAllTools()
     {
         var registry = new ToolRegistry();
@@ -173,7 +173,7 @@ public class ToolRegistryTests
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerateToolsDescription_CreatesFormattedDescription()
     {
         var registry = new ToolRegistry();

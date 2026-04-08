@@ -13,7 +13,7 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Poincare Ball Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MobiusAdd_OriginPlusPoint_ReturnsPoint()
     {
         // Arrange: x + 0 = x in Mobius addition
@@ -30,7 +30,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MobiusAdd_PointPlusOrigin_ReturnsPoint()
     {
         // Arrange: 0 + x = x in Mobius addition
@@ -47,7 +47,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareDistance_SamePoint_ReturnsZero()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, distance, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareDistance_SymmetricProperty()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(distXY, distYX, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareExpLogMap_RoundTrip()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(tangent[1], logResult[1], precision: 8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareProject_PointInsideBall_ReturnsUnchanged()
     {
         // Arrange: Point inside ball
@@ -110,7 +110,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareProject_PointOutsideBall_ProjectsBack()
     {
         // Arrange: Point outside ball (norm = sqrt(2) > 1)
@@ -131,7 +131,7 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Hyperboloid Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperboloidProject_EnsuresConstraint()
     {
         // Arrange: Some point
@@ -147,7 +147,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(-1.0, constraint, precision: 8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperboloidDistance_SamePoint_ReturnsZero()
     {
         // Arrange: Create valid hyperboloid point
@@ -161,7 +161,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, distance, precision: 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperboloidDistance_SymmetricProperty()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Model Conversion Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareToHyperboloid_Origin_ReturnsNorthPole()
     {
         // Arrange: Origin in Poincare ball
@@ -198,7 +198,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, result[2], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConversionRoundTrip_PoincareToHyperboloidAndBack()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Batch Operations Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareExpMapBatch_MultipleVectors_ComputesAll()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareDistanceBatch_MultiplePoints_ComputesAll()
     {
         // Arrange

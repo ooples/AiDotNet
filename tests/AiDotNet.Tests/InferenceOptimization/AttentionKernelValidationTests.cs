@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class AttentionKernelValidationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_MatchesNaiveAttention()
     {
         var kernel = new AttentionKernel();
@@ -27,7 +27,7 @@ public class AttentionKernelValidationTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_WithMask_RespectsMaskZeros()
     {
         var kernel = new AttentionKernel();

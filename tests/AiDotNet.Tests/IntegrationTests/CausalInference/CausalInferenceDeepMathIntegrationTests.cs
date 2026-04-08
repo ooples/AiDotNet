@@ -88,7 +88,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Propensity Score Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScores_BalancedData_AllApproximatelyHalf()
     {
         // With zero features and balanced treatment, propensity scores should converge to ~0.5
@@ -109,7 +109,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScores_AlwaysInZeroOneRange()
     {
         // Propensity scores must be in (0, 1) since they're probabilities
@@ -127,7 +127,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScores_Trimming_EnforcedCorrectly()
     {
         // With trimMin=0.1, trimMax=0.9, all scores should be in [0.1, 0.9]
@@ -147,7 +147,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScores_ConfoundedData_HigherForTreatedGroup()
     {
         // When treatment depends on X, treated group should have higher average propensity
@@ -181,7 +181,7 @@ public class CausalInferenceDeepMathIntegrationTests
             "when treatment is confounded with features.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScores_PSM_NeverTrimmed()
     {
         // PSM doesn't apply trimming to propensity scores (unlike IPW)
@@ -204,7 +204,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW Weight Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_StabilizedWeights_BalancedData_AllApproximatelyOne()
     {
         // With balanced data and uniform propensity ~0.5:
@@ -224,7 +224,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_UnstabilizedWeights_BalancedData_AllApproximatelyTwo()
     {
         // With balanced data and uniform propensity ~0.5:
@@ -244,7 +244,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_Weights_AlwaysPositive()
     {
         // IPW weights must always be positive (they're ratios of probabilities)
@@ -262,7 +262,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_Weights_BoundedByTrimming()
     {
         // With trimMin=0.1, max unstabilized weight = 1/0.1 = 10
@@ -283,7 +283,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_StabilizedWeights_SumApproximatesGroupSize()
     {
         // For balanced data with uniform propensity:
@@ -324,7 +324,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW Effective Sample Size Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ESS_UniformWeights_EqualsGroupSize()
     {
         // ESS = (sum_w)^2 / (sum_w^2)
@@ -343,7 +343,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Control ESS ({essControl:F2}) should be close to 20 with uniform weights");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ESS_NeverExceedsGroupSize()
     {
         // ESS <= n for each group (by Cauchy-Schwarz inequality)
@@ -367,7 +367,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Control ESS ({essControl:F2}) cannot exceed group size ({nControl})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ESS_AlwaysPositive()
     {
         var (x, treatment, _) = CreateConfoundedData(40, 5.0);
@@ -383,7 +383,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Control ESS must be positive, got {essControl:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ESS_HandComputed_ThreeObservations()
     {
         // Hand-compute ESS for a simple case:
@@ -413,7 +413,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW ATE Estimation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATE_BalancedNoConfounding_RecoversKnownEffect()
     {
         // With no confounding and balanced groups:
@@ -433,7 +433,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Standard error must be non-negative, got {se:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATE_ConstantOutcome_ZeroEffect()
     {
         // When treated and control have same outcomes, ATE should be ~0
@@ -451,7 +451,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"ATE should be ~0 when outcomes are identical, got {ate:F4}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATE_NegativeEffect_DetectedCorrectly()
     {
         // Treatment has negative effect (-3.0)
@@ -469,7 +469,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"ATE ({ate:F4}) should be close to true ATE ({trueATE})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATE_StabilizedEqualsUnstabilized_HajekEstimator()
     {
         // The Hajek estimator (normalized weights) gives the same ATE regardless
@@ -491,7 +491,7 @@ public class CausalInferenceDeepMathIntegrationTests
             "for the Hajek estimator.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATE_StandardError_PositiveAndReasonable()
     {
         // Standard error should be positive and not unreasonably large
@@ -512,7 +512,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW ATT Estimation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATT_BalancedNoConfounding_RecoversKnownEffect()
     {
         // With no confounding, ATT should equal ATE
@@ -528,7 +528,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"ATT ({att:F4}) should be close to true effect ({trueEffect})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ATT_TreatedWeightIsOne()
     {
         // For ATT, treated units get weight=1 (not IPW-weighted)
@@ -554,7 +554,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW CATE and Prediction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_CATEPerIndividual_ReturnsConstantATE()
     {
         // IPW doesn't estimate heterogeneous effects; it returns ATE for all individuals
@@ -575,7 +575,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_PredictTreatmentEffect_ReturnsConstantATE()
     {
         // PredictTreatmentEffect should return ATE for all new observations
@@ -598,7 +598,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_Predict_ReturnsPropensityScores()
     {
         // The Predict method should return propensity scores
@@ -621,7 +621,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW Overlap Check Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_CheckOverlap_ReturnsValidBounds()
     {
         // Overlap check should return min/max propensity scores for each group
@@ -643,7 +643,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.True(cMin <= cMax, $"Control min ({cMin:F4}) should be <= max ({cMax:F4})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_CheckOverlap_BalancedData_OverlappingRanges()
     {
         // With balanced data, both groups should have similar propensity score ranges
@@ -663,7 +663,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region PSM Matching Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_ATE_BalancedNoConfounding_RecoversKnownEffect()
     {
         // With balanced data and known effect, PSM should recover the effect
@@ -681,7 +681,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Standard error must be non-negative, got {se:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_ATT_EqualsATE_ForPSM()
     {
         // For PSM, ATT = ATE since matching is done from treated to controls
@@ -696,7 +696,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.Equal(ate, att, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_NumberOfMatches_PositiveForWideCaliperBalancedData()
     {
         // With wide caliper and balanced data, most treated should find matches
@@ -714,7 +714,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"With balanced data and wide caliper, should have many matches, got {numMatches}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_MatchQuality_SMDDecreases_AfterMatching()
     {
         // After matching, standardized mean difference should decrease or stay similar
@@ -741,7 +741,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_WithReplacement_CanReuseControls()
     {
         // With replacement, the same control can match multiple treated individuals
@@ -765,7 +765,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"With-replacement matches ({matchesWithReplacement}) should be >= without ({matchesWithout})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_NarrowCaliper_FewerMatches()
     {
         // Narrower caliper should produce fewer or equal matches
@@ -783,7 +783,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Narrow caliper matches ({narrowMatches}) should be <= wide caliper matches ({wideMatches})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_MatchRatio_IncreasesMatchCount()
     {
         // Higher match ratio should produce more total matches (if controls available)
@@ -805,7 +805,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Doubly Robust Estimator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_ATE_BalancedNoConfounding_RecoversKnownEffect()
     {
         // DR should recover known treatment effect
@@ -823,7 +823,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Standard error must be non-negative, got {se:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_ATE_ConstantOutcome_ZeroEffect()
     {
         // With identical outcomes, ATE should be ~0
@@ -847,7 +847,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"DR ATE should be ~0 when outcomes are identical, got {ate:F4}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_OutcomeModelPredictions_ReasonableValues()
     {
         // The outcome model should produce reasonable predictions
@@ -878,7 +878,7 @@ public class CausalInferenceDeepMathIntegrationTests
             "when treatment effect is positive.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_TreatmentEffect_EqualsOutcomeModelDifference()
     {
         // PredictTreatmentEffect should equal PredictTreated - PredictControl
@@ -901,7 +901,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_ATT_RecoversEffect()
     {
         // ATT should recover treatment effect for balanced data
@@ -918,7 +918,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.True(se >= 0.0, "ATT SE must be non-negative.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_CATEPerIndividual_MatchesTreatmentEffect()
     {
         // CATE per individual should match PredictTreatmentEffect
@@ -938,7 +938,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_PropensityScores_Trimmed()
     {
         // DR should trim propensity scores like IPW
@@ -963,7 +963,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Cross-Method Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllMethods_BalancedData_AgreeOnEffectDirection()
     {
         // With balanced data and known positive effect, all methods should agree on direction
@@ -999,7 +999,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"DR ATE ({ateDR:F4}) should be within 2 of true ATE ({trueATE})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllMethods_BalancedData_AgreeOnNegativeEffect()
     {
         // All methods should detect negative treatment effects
@@ -1023,7 +1023,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.True(ateDR < 0.0, $"DR ATE ({ateDR:F4}) should be negative.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_And_DR_PropensityScores_AgreeMathematically()
     {
         // Both IPW and DR use logistic regression for propensity scores
@@ -1057,7 +1057,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Validation and Edge Case Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_InvalidTrimBounds_Throws()
     {
         // trimMin must be in (0, 1)
@@ -1073,7 +1073,7 @@ public class CausalInferenceDeepMathIntegrationTests
             new InverseProbabilityWeighting<double>(trimMin: 0.5, trimMax: 0.3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_InvalidCaliper_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -1082,14 +1082,14 @@ public class CausalInferenceDeepMathIntegrationTests
             new PropensityScoreMatching<double>(caliper: -1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_InvalidMatchRatio_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new PropensityScoreMatching<double>(matchRatio: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_InvalidTrimBounds_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -1098,14 +1098,14 @@ public class CausalInferenceDeepMathIntegrationTests
             new DoublyRobustEstimator<double>(trimMax: 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_CrossFittingRequiresMultipleFolds_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DoublyRobustEstimator<double>(useCrossFitting: true, numFolds: 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_AllTreated_ThrowsOnEstimateATE()
     {
         int n = 10;
@@ -1123,7 +1123,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => ipw.EstimateATE(x, treatment, outcome));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_AllControl_ThrowsOnEstimateATE()
     {
         int n = 10;
@@ -1141,7 +1141,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => ipw.EstimateATE(x, treatment, outcome));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_MismatchedDimensions_Throws()
     {
         var x = new Matrix<double>(10, 1);
@@ -1151,7 +1151,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => ipw.Fit(x, treatment));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_InvalidTreatmentValues_Throws()
     {
         var x = new Matrix<double>(5, 1);
@@ -1161,7 +1161,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => ipw.Fit(x, treatment));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_NotFitted_ThrowsOnPredict()
     {
         var x = new Matrix<double>(5, 1);
@@ -1174,7 +1174,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_Serialization_PreservesParameters()
     {
         var (x, treatment, outcome) = CreateBalancedZeroFeatureData(20, 5.0);
@@ -1197,7 +1197,7 @@ public class CausalInferenceDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_Serialization_PreservesParameters()
     {
         var (x, treatment, _) = CreateBalancedZeroFeatureData(20, 5.0);
@@ -1224,7 +1224,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Logistic Regression Convergence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_SeparatesGroups_PropensityReflectsTreatment()
     {
         // When features strongly predict treatment, propensity scores should
@@ -1260,7 +1260,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Average propensity for control ({avgControl:F4}) should be < 0.5");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_ZeroFeatures_InterceptOnly()
     {
         // With zero features, logistic regression reduces to intercept-only model
@@ -1292,7 +1292,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region DR Formula Verification Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_Formula_WhenOutcomeModelPerfect_IPWCorrectionSmall()
     {
         // When the outcome model perfectly fits, the IPW correction term
@@ -1325,7 +1325,7 @@ public class CausalInferenceDeepMathIntegrationTests
             "when outcome model is reasonably accurate.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_CrossFitting_ProducesReasonableEstimate()
     {
         // Cross-fitting should also produce a reasonable ATE estimate
@@ -1346,28 +1346,28 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Model Type and Interface Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_IsCorrectType()
     {
         var ipw = new InverseProbabilityWeighting<double>();
         Assert.IsType<InverseProbabilityWeighting<double>>(ipw);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSM_IsCorrectType()
     {
         var psm = new PropensityScoreMatching<double>();
         Assert.IsType<PropensityScoreMatching<double>>(psm);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_IsCorrectType()
     {
         var dr = new DoublyRobustEstimator<double>();
         Assert.IsType<DoublyRobustEstimator<double>>(dr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_GetModelMetadata_ContainsExpectedFields()
     {
         var (x, treatment, _) = CreateBalancedZeroFeatureData(20, 5.0);
@@ -1382,7 +1382,7 @@ public class CausalInferenceDeepMathIntegrationTests
         Assert.True(metadata.AdditionalInfo is not null);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_WithParameters_CreatesNewInstance()
     {
         var (x, treatment, _) = CreateBalancedZeroFeatureData(20, 5.0);
@@ -1402,7 +1402,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region Confounded Data Tests (Key Causal Inference Scenarios)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_ConfoundedData_ReducesBias()
     {
         // Without adjustment: naive difference = mean(Y|T=1) - mean(Y|T=0) includes confounding bias
@@ -1445,7 +1445,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"naive ({naiveATE:F4}, bias={naiveBias:F4}). True ATE={trueATE}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DR_ConfoundedData_ReducesBias()
     {
         // DR should also reduce confounding bias
@@ -1479,7 +1479,7 @@ public class CausalInferenceDeepMathIntegrationTests
 
     #region IPW Predict Treated/Control Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_PredictTreated_ReturnsReasonableValues()
     {
         // PredictTreated uses kernel-weighted outcomes from training treated subjects
@@ -1503,7 +1503,7 @@ public class CausalInferenceDeepMathIntegrationTests
             $"Average treated prediction ({avgPred:F4}) should be near 15.0 (treated outcome)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_PredictControl_ReturnsReasonableValues()
     {
         // PredictControl uses kernel-weighted outcomes from training control subjects

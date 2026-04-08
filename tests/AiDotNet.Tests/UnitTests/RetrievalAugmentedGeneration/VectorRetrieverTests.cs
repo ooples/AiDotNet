@@ -286,7 +286,7 @@ public class VectorRetrieverTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
     {
         // Arrange
@@ -298,7 +298,7 @@ public class VectorRetrieverTests
         Assert.Equal("documentStore", exception.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -310,7 +310,7 @@ public class VectorRetrieverTests
         Assert.Equal("embeddingModel", exception.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidParameters_CreatesInstance()
     {
         // Arrange
@@ -324,7 +324,7 @@ public class VectorRetrieverTests
         Assert.NotNull(retriever);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultTopK_UsesDefaultValue()
     {
         // Arrange
@@ -376,7 +376,7 @@ public class VectorRetrieverTests
 
     #region Retrieve Method Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_EmbedsQueryUsingEmbeddingModel()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class VectorRetrieverTests
         Assert.Equal(query, embeddingModel.LastEmbeddedText);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_PassesQueryVectorToDocumentStore()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class VectorRetrieverTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_ReturnsDocumentsFromStore()
     {
         // Arrange
@@ -444,7 +444,7 @@ public class VectorRetrieverTests
         Assert.Contains(results, r => r.Id == "doc2");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithTopK_ReturnsRequestedNumberOfDocuments()
     {
         // Arrange
@@ -466,7 +466,7 @@ public class VectorRetrieverTests
         Assert.Equal(3, documentStore.LastTopK);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_ReturnsDocumentsOrderedBySimilarity()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class VectorRetrieverTests
         Assert.Equal("doc3", results[2].Id);  // Least similar last
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithEmptyStore_ReturnsEmptyList()
     {
         // Arrange
@@ -512,7 +512,7 @@ public class VectorRetrieverTests
         Assert.Empty(results);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_IncludesRelevanceScores()
     {
         // Arrange
@@ -535,7 +535,7 @@ public class VectorRetrieverTests
 
     #region Metadata Filtering Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithMetadataFilters_PassesFiltersToStore()
     {
         // Arrange
@@ -557,7 +557,7 @@ public class VectorRetrieverTests
         Assert.Contains(documentStore.LastFilters, kvp => kvp.Key == "category" && (string)kvp.Value == "A");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithMetadataFilters_FiltersDocuments()
     {
         // Arrange
@@ -582,7 +582,7 @@ public class VectorRetrieverTests
         Assert.All(results, r => Assert.Equal("science", r.Metadata["category"]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithMultipleFilters_AppliesAllFilters()
     {
         // Arrange
@@ -607,7 +607,7 @@ public class VectorRetrieverTests
         Assert.Equal("doc1", results[0].Id);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithNoMatchingFilters_ReturnsEmpty()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class VectorRetrieverTests
         Assert.Empty(results);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithEmptyFilters_ReturnsAllMatchingDocuments()
     {
         // Arrange
@@ -647,7 +647,7 @@ public class VectorRetrieverTests
         Assert.Equal(2, results.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithNullMetadataFilters_ThrowsArgumentNullException()
     {
         // Arrange
@@ -664,7 +664,7 @@ public class VectorRetrieverTests
 
     #region Edge Cases and Error Handling
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -677,7 +677,7 @@ public class VectorRetrieverTests
             retriever.Retrieve(null!).ToList());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -690,7 +690,7 @@ public class VectorRetrieverTests
             retriever.Retrieve("").ToList());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithWhitespaceQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -719,7 +719,7 @@ public class VectorRetrieverTests
             retriever.Retrieve("query", topK).ToList());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithTopKGreaterThanDocumentCount_ReturnsAllDocuments()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class VectorRetrieverTests
         Assert.Equal(3, results.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_MultipleTimes_EmbedsQueryEachTime()
     {
         // Arrange
@@ -757,7 +757,7 @@ public class VectorRetrieverTests
         Assert.Equal(3, embeddingModel.EmbedCallCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_PreservesDocumentMetadata()
     {
         // Arrange
@@ -785,7 +785,7 @@ public class VectorRetrieverTests
         Assert.Equal("2024-01-01", results[0].Metadata["date"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_PreservesDocumentContent()
     {
         // Arrange
@@ -809,7 +809,7 @@ public class VectorRetrieverTests
 
     #region Semantic Similarity Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_FindsSemanticallyRelatedDocuments()
     {
         // Arrange
@@ -837,7 +837,7 @@ public class VectorRetrieverTests
         Assert.Equal("doc1", results[0].Id);  // Related document should be returned
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_ReturnsNormalizedRelevanceScores()
     {
         // Arrange
@@ -863,7 +863,7 @@ public class VectorRetrieverTests
 
     #region Integration-Style Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithLargeDocumentSet_HandlesEfficiently()
     {
         // Arrange
@@ -886,7 +886,7 @@ public class VectorRetrieverTests
         Assert.Equal(10, results.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithVaryingTopK_ReturnsCorrectCount()
     {
         // Arrange
@@ -907,7 +907,7 @@ public class VectorRetrieverTests
         Assert.Equal(15, retriever.Retrieve("q", 15).Count());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_SameQueryDifferentFilters_ReturnsDifferentResults()
     {
         // Arrange
@@ -933,7 +933,7 @@ public class VectorRetrieverTests
         Assert.Equal("doc2", resultsB[0].Id);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_DocumentsWithSameEmbedding_ReturnsAllEqually()
     {
         // Arrange
@@ -957,7 +957,7 @@ public class VectorRetrieverTests
         // All should have equal relevance scores (same embedding = same similarity)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_WithDifferentEmbeddingDimensions_WorksCorrectly()
     {
         // Arrange
@@ -980,7 +980,7 @@ public class VectorRetrieverTests
 
     #region Document Store Interaction Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_CallsGetSimilarWithFiltersNotGetSimilar()
     {
         // Arrange
@@ -997,7 +997,7 @@ public class VectorRetrieverTests
         Assert.Equal(0, documentStore.GetSimilarCallCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Retrieve_PassesCorrectTopKToStore()
     {
         // Arrange

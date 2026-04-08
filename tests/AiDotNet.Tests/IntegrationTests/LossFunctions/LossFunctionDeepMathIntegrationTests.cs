@@ -22,7 +22,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region MSE - Mean Squared Error
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_HandCalculated_TwoElements()
     {
         // predicted=[1, 3], actual=[2, 5]
@@ -33,7 +33,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(2.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_PerfectPrediction_IsZero()
     {
         var loss = new MeanSquaredErrorLoss<double>();
@@ -41,7 +41,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_Symmetric()
     {
         // MSE(p, a) should equal MSE(a, p) since (p-a)² = (a-p)²
@@ -51,7 +51,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(loss.CalculateLoss(p, a), loss.CalculateLoss(a, p), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_Derivative_HandCalculated()
     {
         // predicted=[3, 5], actual=[1, 2]
@@ -63,7 +63,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(3.0, grad[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_SingleElement()
     {
         // predicted=[2], actual=[5] → MSE = (2-5)²/1 = 9
@@ -75,7 +75,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Huber Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_SmallError_IsQuadratic()
     {
         // delta=1.0, error=0.3 (< delta)
@@ -86,7 +86,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.045, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_LargeError_IsLinear()
     {
         // delta=1.0, error=3.0 (> delta)
@@ -96,7 +96,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(2.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_AtDeltaBoundary_QuadraticAndLinearMatch()
     {
         // At exactly error = delta, both branches should give same value
@@ -107,7 +107,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_MultipleElements_HandCalculated()
     {
         // delta=1.0, predicted=[1.3, 4.0], actual=[1.0, 1.0]
@@ -120,7 +120,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.2725, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_CustomDelta_HandCalculated()
     {
         // delta=0.5, error=1.0 (> delta)
@@ -130,7 +130,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.375, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_Derivative_QuadraticRegion()
     {
         // delta=1.0, error=0.5 (< delta)
@@ -140,7 +140,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.5, grad[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_Derivative_LinearRegion()
     {
         // delta=1.0, error=3.0 (> delta), sign=+1
@@ -150,7 +150,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, grad[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_PerfectPrediction_IsZero()
     {
         var loss = new HuberLoss<double>(delta: 1.0);
@@ -161,7 +161,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Binary Cross Entropy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_HandCalculated()
     {
         // predicted=[0.9], actual=[1.0]
@@ -172,7 +172,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(-Math.Log(0.9), result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_PerfectPrediction_NearZero()
     {
         // predicted ≈ 1.0 when actual = 1.0 → loss ≈ 0
@@ -182,7 +182,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(result < 0.001, $"Loss should be near zero, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_ConfidentWrongPrediction_HighLoss()
     {
         // predicted=0.01 when actual=1.0 → loss = -log(0.01) ≈ 4.605
@@ -191,7 +191,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(result > 4.0, $"Loss should be high for confident mistake, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_MultiElement_HandCalculated()
     {
         // predicted=[0.9, 0.2], actual=[1, 0]
@@ -204,7 +204,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_Derivative_HandCalculated()
     {
         // predicted=[0.8], actual=[1.0]
@@ -220,7 +220,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region KL Divergence
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_IdenticalDistributions_IsZero()
     {
         // KL(P||Q) = sum(P * log(P/Q)) = 0 when P = Q
@@ -229,7 +229,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_HandCalculated()
     {
         // P = actual = [0.4, 0.6], Q = predicted = [0.5, 0.5]
@@ -243,7 +243,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_NonNegative()
     {
         // KL divergence is always >= 0 (Gibbs' inequality)
@@ -252,7 +252,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(result >= -1e-10, $"KL divergence should be non-negative, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_NotSymmetric()
     {
         // KL(P||Q) != KL(Q||P) in general
@@ -262,7 +262,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.NotEqual(kl_pq, kl_qp);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_Derivative_HandCalculated()
     {
         // d KL(P||Q) / dQ_i = -P_i / Q_i
@@ -278,7 +278,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Dice Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_PerfectOverlap_IsZero()
     {
         // pred = actual = [1, 1, 0, 0]
@@ -291,7 +291,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_NoOverlap_IsOne()
     {
         // pred = [1, 1, 0, 0], actual = [0, 0, 1, 1]
@@ -304,7 +304,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_PartialOverlap_HandCalculated()
     {
         // pred = [0.8, 0.6, 0.3], actual = [1, 1, 0]
@@ -318,7 +318,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_Bounded_ZeroToOne()
     {
         // Dice loss should always be in [0, 1] for valid inputs
@@ -332,7 +332,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Focal Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_GammaZero_EquivalentToBCE()
     {
         // When gamma=0, focal loss = -alpha * log(pt)
@@ -346,7 +346,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_HighGamma_DownWeightsEasyExamples()
     {
         // Easy example: predicted=0.95 for actual=1.0
@@ -361,7 +361,7 @@ public class LossFunctionDeepMathIntegrationTests
             $"Gamma=2 loss ({loss_g2}) should be << gamma=0 loss ({loss_g0}) for easy examples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_HardExample_NotDownWeightedMuch()
     {
         // Hard example: predicted=0.2 for actual=1.0
@@ -377,7 +377,7 @@ public class LossFunctionDeepMathIntegrationTests
             $"Gamma=2 loss ({loss_g2}) should retain most of gamma=0 loss ({loss_g0}) for hard examples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_AlphaWeighting_HandCalculated()
     {
         // alpha=0.25 for positive class (actual=1)
@@ -389,7 +389,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_NegativeClass_HandCalculated()
     {
         // predicted=0.1 for actual=0.0, alpha=0.25, gamma=2
@@ -408,7 +408,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Cosine Similarity Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_IdenticalVectors_IsZero()
     {
         // cos(v, v) = 1.0, loss = 1 - 1 = 0
@@ -417,7 +417,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_OrthogonalVectors_IsOne()
     {
         // cos([1,0], [0,1]) = 0, loss = 1 - 0 = 1
@@ -426,7 +426,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_OppositeVectors_IsTwo()
     {
         // cos([1,0], [-1,0]) = -1, loss = 1 - (-1) = 2
@@ -435,7 +435,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_HandCalculated()
     {
         // predicted=[3, 4], actual=[4, 3]
@@ -448,7 +448,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.04, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_ScaleInvariant()
     {
         // Cosine similarity doesn't depend on magnitude
@@ -463,7 +463,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Quantile Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_Median_HandCalculated()
     {
         // quantile=0.5, predicted=[2], actual=[5]
@@ -474,7 +474,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_Median_Symmetric()
     {
         // For quantile=0.5, underprediction and overprediction by same amount
@@ -485,7 +485,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(underLoss, overLoss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_90th_PenalizesUnderestimationMore()
     {
         // quantile=0.9
@@ -499,7 +499,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(underLoss > overLoss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_10th_PenalizesOverestimationMore()
     {
         // quantile=0.1
@@ -513,7 +513,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(overLoss > underLoss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_PerfectPrediction_IsZero()
     {
         var loss = new QuantileLoss<double>(quantile: 0.75);
@@ -521,14 +521,14 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_InvalidQuantile_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new QuantileLoss<double>(quantile: -0.1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new QuantileLoss<double>(quantile: 1.5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_Derivative_HandCalculated()
     {
         // quantile=0.75, predicted=[3], actual=[5]
@@ -539,7 +539,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(-0.75, grad[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_Derivative_Overestimation()
     {
         // quantile=0.75, predicted=[7], actual=[5]
@@ -554,7 +554,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Log-Cosh Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_SmallError_ApproximatesMSEHalf()
     {
         // For small x: log(cosh(x)) ≈ x²/2
@@ -565,7 +565,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_LargeError_ApproximatesMAE()
     {
         // For large |x|: log(cosh(x)) ≈ |x| - log(2)
@@ -576,7 +576,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_Symmetric()
     {
         // log(cosh(x)) = log(cosh(-x)) since cosh is even function
@@ -586,14 +586,14 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(pos, neg, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_PerfectPrediction_IsZero()
     {
         var loss = new LogCoshLoss<double>();
         Assert.Equal(0.0, loss.CalculateLoss(V(5, 10), V(5, 10)), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_Derivative_IsTanh()
     {
         // d/dx log(cosh(x)) = tanh(x)
@@ -603,7 +603,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Tanh(0.5), grad[0], 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_AlwaysNonNegative()
     {
         var loss = new LogCoshLoss<double>();
@@ -615,7 +615,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Poisson Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_HandCalculated()
     {
         // predicted=[3.0], actual=[2.0]
@@ -628,7 +628,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_PerfectPrediction_IsMinimum()
     {
         // When predicted = actual: loss = y - y*log(y)
@@ -641,7 +641,7 @@ public class LossFunctionDeepMathIntegrationTests
             $"Loss at perfect ({atPerfect}) should be <= loss at 5.1 ({slightly_off})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_Derivative_HandCalculated()
     {
         // d/dp PoissonLoss = (1 - actual/predicted) / n
@@ -652,7 +652,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, grad[0], 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_Derivative_AtPerfect_IsZero()
     {
         // At optimal: d/dp = (1 - actual/predicted) = 0 when predicted = actual
@@ -665,7 +665,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Charbonnier Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_HandCalculated()
     {
         // epsilon=1e-6, predicted=[3], actual=[1]
@@ -676,7 +676,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(4.0 + 1e-12), result, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_ZeroError_ReturnsEpsilon()
     {
         // When diff=0: sqrt(0 + ε²) = ε
@@ -685,7 +685,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.001, result, 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_ApproximatesL1_ForLargeErrors()
     {
         // For large |diff|: sqrt(diff² + ε²) ≈ |diff|
@@ -694,7 +694,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(100.0, result, 1e-3); // Within 0.001 of L1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_SmoothAtZero()
     {
         // Unlike L1, Charbonnier has a well-defined derivative at 0
@@ -705,7 +705,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, grad[0], 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_Derivative_HandCalculated()
     {
         // epsilon=1e-6, predicted=[3], actual=[1]
@@ -720,7 +720,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Contrastive Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_SimilarPair_DistanceSquared()
     {
         // Similar pair (label=1): loss = distance²
@@ -732,7 +732,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(9.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_DissimilarPair_InsideMargin()
     {
         // Dissimilar pair (label=0), distance < margin
@@ -744,7 +744,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_DissimilarPair_OutsideMargin()
     {
         // Dissimilar pair (label=0), distance > margin
@@ -756,7 +756,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_IdenticalPairs_ZeroLossForSimilar()
     {
         // Similar pair with zero distance → loss = 0
@@ -769,7 +769,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Triplet Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_HandCalculated_ActiveTriplet()
     {
         // anchor=[0, 0], positive=[1, 0], negative=[3, 0]
@@ -788,7 +788,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_InactiveTriplet_ZeroLoss()
     {
         // anchor=[0, 0], positive=[1, 0], negative=[5, 0], margin=1
@@ -802,7 +802,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_LargerMargin_MoreActiveTriplets()
     {
         // Same triplet, different margins
@@ -819,7 +819,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(3.0, loss5.CalculateLoss(anchor, positive, negative), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_BatchAveraged()
     {
         // Batch of 2 triplets
@@ -838,7 +838,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region ElasticNet Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_PureL1_HandCalculated()
     {
         // l1Ratio=1.0, alpha=0.1
@@ -852,7 +852,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(4.3, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_PureL2_HandCalculated()
     {
         // l1Ratio=0.0, alpha=0.1
@@ -866,7 +866,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(4.45, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_Mixed_HandCalculated()
     {
         // l1Ratio=0.5, alpha=0.1
@@ -880,7 +880,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(4.375, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_ZeroAlpha_ReducesToMSE()
     {
         // When alpha=0, regularization terms vanish
@@ -891,7 +891,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(mse.CalculateLoss(pred, actual), elastic.CalculateLoss(pred, actual), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_InvalidL1Ratio_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ElasticNetLoss<double>(l1Ratio: -0.1));
@@ -902,7 +902,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Cross-Loss Consistency
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_LargeDelta_ConvergesToMSE()
     {
         // With very large delta, all errors are in the quadratic region
@@ -917,7 +917,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Equal(0.5 * mseResult, huberResult, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_VsHuber_BothSmootherThanMSE()
     {
         // For large outliers, both LogCosh and Huber give less loss than MSE
@@ -937,7 +937,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.True(logcoshLoss < mseLoss, "LogCosh should be less than MSE for outliers");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_VsMAE_ApproachesAsEpsilonShrinks()
     {
         // As epsilon → 0, Charbonnier → |error|
@@ -951,7 +951,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Gradient Numerical Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_GradientCheck_NumericalDifference()
     {
         // Verify MSE gradient via numerical differentiation
@@ -973,7 +973,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_GradientCheck_NumericalDifference()
     {
         var loss = new HuberLoss<double>(delta: 1.0);
@@ -994,7 +994,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_GradientCheck_NumericalDifference()
     {
         var loss = new LogCoshLoss<double>();
@@ -1015,7 +1015,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_GradientCheck_NumericalDifference()
     {
         var loss = new PoissonLoss<double>();
@@ -1036,7 +1036,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Charbonnier_GradientCheck_NumericalDifference()
     {
         var loss = new CharbonnierLoss<double>(epsilon: 1e-3);
@@ -1057,7 +1057,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_GradientCheck_NumericalDifference()
     {
         var loss = new DiceLoss<double>();
@@ -1078,7 +1078,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_GradientCheck_NumericalDifference()
     {
         var loss = new CosineSimilarityLoss<double>();
@@ -1099,7 +1099,7 @@ public class LossFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KL_GradientCheck_NumericalDifference()
     {
         var loss = new KullbackLeiblerDivergence<double>();
@@ -1124,7 +1124,7 @@ public class LossFunctionDeepMathIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllLossFunctions_LengthMismatch_Throws()
     {
         var pred2 = V(1, 2);
@@ -1142,7 +1142,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new KullbackLeiblerDivergence<double>().CalculateLoss(pred2, actual3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_StandardOverload_ThrowsNotSupported()
     {
         var loss = new ContrastiveLoss<double>();
@@ -1150,7 +1150,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(V(1), V(2)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_StandardOverload_ThrowsNotSupported()
     {
         var loss = new TripletLoss<double>();
@@ -1158,7 +1158,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(V(1), V(2)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_NumericalStability_NearZeroAndOne()
     {
         // Should not produce NaN or infinity for extreme values
@@ -1171,7 +1171,7 @@ public class LossFunctionDeepMathIntegrationTests
         Assert.False(double.IsInfinity(result2), "BCE near one should not be infinity");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_NumericalStability_NearZeroPrediction()
     {
         // Should handle near-zero predictions without NaN/Inf

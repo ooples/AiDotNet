@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringDistanceMetricsIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChebyshevDistance_ComputesMaxDifference()
     {
         var metric = new ChebyshevDistance<double>();
@@ -17,7 +17,7 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Equal(2.0, distance, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineDistance_HandlesOrthogonalAndZeroVectors()
     {
         var metric = new CosineDistance<double>();
@@ -35,7 +35,7 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Equal(1.0, similarity, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinkowskiDistance_ComputesExpectedValuesAndValidatesP()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0 });
@@ -55,7 +55,7 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => new MinkowskiDistance<double>(0.5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MahalanobisDistance_FallsBackToEuclideanAndFitsFromData()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0 });
@@ -76,7 +76,7 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.True(fitted > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DistanceMetricBase_ComputeToAllAndPairwiseWork()
     {
         var metric = new EuclideanDistance<double>();

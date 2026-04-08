@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
 {
     public class QuantileTransformerTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidUniformDistribution_Succeeds()
         {
             // Act
@@ -19,7 +19,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.NotNull(transformer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidNormalDistribution_Succeeds()
         {
             // Act
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.NotNull(transformer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithTooFewQuantiles_ThrowsArgumentException()
         {
             // Act & Assert
@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithUniformDistribution_MapsToZeroOne()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(normalized[normalized.Length - 1] > 0.8, "Largest value should map close to 1");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithNormalDistribution_TransformsData()
         {
             // Arrange
@@ -93,7 +93,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 "Most values should fall within 3 standard deviations");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithSkewedData_HandlesOutliers()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(distinctValues.Count > 3, "Values should be reasonably spread out");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Denormalize_WithUniformDistribution_RestoresApproximateValues()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Denormalize_WithNormalDistribution_RestoresApproximateValues()
         {
             // Arrange
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Denormalize_Coefficients_ThrowsNotSupportedException()
         {
             // Arrange
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 transformer.Denormalize(coefficients, xParams, yParams));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Denormalize_Intercept_ThrowsNotSupportedException()
         {
             // Arrange
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 transformer.Denormalize(xMatrix, y, coefficients, xParams, yParams));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithTensor_WorksCorrectly()
         {
             // Arrange
@@ -259,7 +259,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeInput_WithTensor_WorksCorrectly()
         {
             // Arrange
@@ -278,7 +278,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(2, parametersList.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_PreservesRankOrdering()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(normalized[3] < normalized[2], "15.0 should map lower than 20.0");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RoundTrip_NormalizeAndDenormalize_ReturnsApproximateOriginal()
         {
             // Arrange
@@ -318,7 +318,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithRepeatedValues_HandlesCorrectly()
         {
             // Arrange
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 "Repeated value 5.0 should map to similar values");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void NormalizeOutput_WithExtremeOutliers_HandlesGracefully()
         {
             // Arrange

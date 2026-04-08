@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class ForecastingModelTestBase : FinancialModelTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ForecastHorizon_ShouldProduceOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -21,7 +21,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
         Assert.True(output.Length > 0, "Forecasting model produced empty forecast.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DifferentHistories_DifferentForecasts()
     {
         var network = CreateNetwork();

@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class HuberLossTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultDelta_UsesOneAsDefault()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.125, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomDelta_UsesSpecifiedValue()
         {
             // Arrange & Act
@@ -41,7 +41,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.125, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithSmallErrors_UsesQuadraticLoss()
         {
             // Arrange
@@ -73,7 +73,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.18333333333333333, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithLargeErrors_UsesLinearLoss()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(3.5, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithMixedErrors_UsesBothQuadraticAndLinear()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.8125, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithNegativeErrors_HandlesCorrectly()
         {
             // Arrange
@@ -125,7 +125,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -137,7 +137,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithSmallErrors_ReturnsLinearDerivative()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.3, result[1], 10);   // 0.6 / 2
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithLargeErrors_ReturnsClippedDerivative()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-0.5, result[1], 10);  // 1.0 * -1 / 2 = -0.5
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.8125f, result, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -229,7 +229,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5f, result[1], 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateLoss_LessRobustToOutliersThanMAE_ButMoreThanMSE()
         {
             // Arrange

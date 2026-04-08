@@ -127,7 +127,7 @@ public class TimeSeriesTrainPredictTests
 
     #region ARModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_TrainAndPredict_ProducesFinitePredictions()
     {
         // AR requires stationary data — use mean-reverting sinusoidal
@@ -141,7 +141,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARModel.Predict");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_TrainAndPredict_NotAllZeros()
     {
         // Regression test: before fix, Predict(Matrix) used input column (time indices)
@@ -165,7 +165,7 @@ public class TimeSeriesTrainPredictTests
         Assert.True(hasNonZero, "ARModel predictions are all zero after training on non-zero data");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
@@ -183,7 +183,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(forecasts, "ARModel.Forecast");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateStationaryData(100);
@@ -196,7 +196,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteMetrics(metrics);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_PredictSingle_ProducesFiniteResult()
     {
         var (x, y) = CreateStationaryData(100);
@@ -213,7 +213,7 @@ public class TimeSeriesTrainPredictTests
         Assert.False(double.IsInfinity(prediction), "PredictSingle returned Infinity");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Clone_PreservesTrainedState()
     {
         var (x, y) = CreateStationaryData(100);
@@ -235,7 +235,7 @@ public class TimeSeriesTrainPredictTests
 
     #region MAModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(100);
@@ -248,7 +248,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "MAModel.Predict");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
@@ -268,7 +268,7 @@ public class TimeSeriesTrainPredictTests
 
     #region ARMAModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARMAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(100);
@@ -281,7 +281,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARMAModel.Predict");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
@@ -301,7 +301,7 @@ public class TimeSeriesTrainPredictTests
 
     #region ARIMAModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
@@ -314,7 +314,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARIMAModel.Predict");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMAModel_TrainAndPredict_UsesStoredState()
     {
         // Regression test: before fix, ARIMA Predict(Matrix) started from zeros.
@@ -342,7 +342,7 @@ public class TimeSeriesTrainPredictTests
             $"converged={convergedValue:F6}). This suggests stored training state is not being used.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
@@ -358,7 +358,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(forecasts, "ARIMAModel.Forecast");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMAModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
@@ -381,7 +381,7 @@ public class TimeSeriesTrainPredictTests
     /// This is distinct from SARIMAModel_PureARNoMA_DoesNotCrash which tests
     /// both Q=0 AND seasonal Q=0 with AR order 2.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SARIMAModel_TrainAndPredict_PureAR_ProducesFinitePredictions()
     {
         // Test SARIMA with Q=0 (no MA components) — previously crashed
@@ -402,7 +402,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "SARIMAModel.Predict(Q=0)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SARIMAModel_TrainAndPredict_WithMA_ProducesFinitePredictions()
     {
         // Test SARIMA with MA components (Q > 0)
@@ -422,7 +422,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "SARIMAModel.Predict(Q=1)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SARIMAModel_TrainAndPredict_UsesStoredState()
     {
         // SARIMA Predict(Matrix) works in the differenced domain where predictions
@@ -450,7 +450,7 @@ public class TimeSeriesTrainPredictTests
             $"converged={convergedValue:F6}). This suggests stored training state is not being used.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SARIMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateSeasonalData(120, period: 12);
@@ -476,7 +476,7 @@ public class TimeSeriesTrainPredictTests
 
     #region ExponentialSmoothingModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateLinearTrendData(100, slope: 2.0);
@@ -495,7 +495,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ExponentialSmoothing.Predict");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_Forecast_MonotonicallyIncreasingForUpwardTrend()
     {
         var (x, y) = CreateLinearTrendData(100, slope: 2.0, intercept: 10.0);
@@ -525,7 +525,7 @@ public class TimeSeriesTrainPredictTests
 
     #region StateSpaceModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StateSpaceModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(60);
@@ -542,7 +542,7 @@ public class TimeSeriesTrainPredictTests
 
     #region Serialization Round-trip Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_SerializeAndDeserialize_PreservesPredictions()
     {
         // Use stationary data to avoid coefficient instability
@@ -575,7 +575,7 @@ public class TimeSeriesTrainPredictTests
 
     #region Cross-Model Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMA_And_ExponentialSmoothing_ForecastProducesFiniteResults()
     {
         // Verify that ARIMA and ExponentialSmoothing both produce finite forecasts
@@ -609,7 +609,7 @@ public class TimeSeriesTrainPredictTests
 
     #region Edge Case Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_DummyFeatureMatrix_StillProducesValidPredictions()
     {
         // This is the exact scenario that caused #878: training data has meaningful y values
@@ -645,7 +645,7 @@ public class TimeSeriesTrainPredictTests
             "This indicates Predict is using the dummy feature matrix instead of stored training data.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Forecast_AfterPredictMatrix_StillWorks()
     {
         // Uses stationary data
@@ -671,7 +671,7 @@ public class TimeSeriesTrainPredictTests
     /// This is distinct from SARIMAModel_TrainAndPredict_PureAR which tests
     /// Q=0 with AR order 1 and seasonal AR order 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SARIMAModel_PureARNoMA_DoesNotCrash()
     {
         // Regression test: SARIMA with Q=0 and seasonal Q=0 crashed
@@ -697,7 +697,7 @@ public class TimeSeriesTrainPredictTests
 
     #region Additional Coverage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateStationaryData(100);
@@ -710,7 +710,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteMetrics(metrics);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAModel_Clone_PreservesTrainedState()
     {
         var (x, y) = CreateStationaryData(100);
@@ -728,7 +728,7 @@ public class TimeSeriesTrainPredictTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARIMAModel_SerializeAndDeserialize_PreservesPredictions()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);

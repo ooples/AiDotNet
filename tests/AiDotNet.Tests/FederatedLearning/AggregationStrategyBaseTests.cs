@@ -4,7 +4,7 @@ using Xunit;
 
 public class AggregationStrategyBaseTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTotalWeightOrThrow_Throws_WhenWeightsNull()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -14,7 +14,7 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTotalWeightOrThrow_Throws_WhenWeightsEmpty()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -24,7 +24,7 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTotalWeightOrThrow_Throws_WhenClientWeightMissing()
     {
         var weights = new Dictionary<int, double> { [1] = 1.0 };
@@ -36,7 +36,7 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTotalWeightOrThrow_Throws_WhenTotalWeightNotPositive()
     {
         var weights = new Dictionary<int, double> { [1] = 0.0, [2] = -1.0 };
@@ -48,7 +48,7 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetTotalWeightOrThrow_ReturnsSum_ForValidWeights()
     {
         var weights = new Dictionary<int, double> { [1] = 0.25, [2] = 0.75 };

@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.Agents;
 /// </summary>
 public class PlanAndExecuteAgentTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidChatModel_InitializesSuccessfully()
     {
         // Arrange
@@ -25,7 +25,7 @@ public class PlanAndExecuteAgentTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTools_InitializesWithTools()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class PlanAndExecuteAgentTests
         Assert.Equal("Calculator", agent.Tools[0].Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithAllowPlanRevisionFalse_CreateStrictAgent()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class PlanAndExecuteAgentTests
         // Agent should not revise plan on errors (tested in execution)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -64,7 +64,7 @@ public class PlanAndExecuteAgentTests
             new PlanAndExecuteAgent<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync(""));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithValidPlan_ExecutesSteps()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("EXECUTION PHASE", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithInvalidMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync("Test query", maxIterations: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_UpdatesScratchpad()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("Plan created", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNoPlan_ReturnsErrorMessage()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("unable to create a plan", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithMultipleSteps_ExecutesInOrder()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("Step 3", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithFallbackParsing_HandlesNonJsonPlan()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class PlanAndExecuteAgentTests
         // Fallback parser should extract numbered steps
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithFinalStepInPlan_ReturnsImmediately()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("PLAN COMPLETED", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithToolNotFound_ReturnsErrorInResult()
     {
         // Arrange

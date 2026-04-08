@@ -12,7 +12,7 @@ public class RAGToolTests
 {
     #region PR #756 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNullRetriever()
     {
         var mockGenerator = new MockGenerator<double>();
@@ -21,7 +21,7 @@ public class RAGToolTests
             new RAGTool<double>(null!, null, mockGenerator));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNullGenerator()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -30,7 +30,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnZeroTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -40,7 +40,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNegativeTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -50,7 +50,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnExcessiveTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -60,7 +60,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 101));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnZeroTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -70,7 +70,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 10, topKAfterRerank: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsOnNegativeTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -80,7 +80,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 10, topKAfterRerank: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsWhenTopKAfterRerankExceedsTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -90,7 +90,7 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 5, topKAfterRerank: 10));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsMaxAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -102,7 +102,7 @@ public class RAGToolTests
         Assert.Equal("RAG", tool.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsMinAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -114,7 +114,7 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsNullReranker()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -125,7 +125,7 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_AcceptsNullTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -136,7 +136,7 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_EmptyInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -149,7 +149,7 @@ public class RAGToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_WhitespaceInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -161,7 +161,7 @@ public class RAGToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_ValidQuery_ReturnsAnswer()
     {
         var mockRetriever = new MockRetriever<double>();
@@ -174,7 +174,7 @@ public class RAGToolTests
         Assert.Contains("Answer", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_NoDocumentsFound_ReturnsNoDocumentsMessage()
     {
         var mockRetriever = new MockRetriever<double>(returnEmpty: true);

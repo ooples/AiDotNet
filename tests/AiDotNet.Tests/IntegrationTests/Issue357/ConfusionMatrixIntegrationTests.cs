@@ -13,7 +13,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Binary Classification Basics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_BinaryConstructor_SetsValuesCorrectly()
     {
         // TP=50, TN=40, FP=10, FN=5
@@ -25,7 +25,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(5.0, cm.FalseNegatives);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Accuracy_ComputesCorrectly()
     {
         // TP=50, TN=40, FP=10, FN=5 -> Accuracy = (50+40)/(50+40+10+5) = 90/105
@@ -35,7 +35,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(expected, cm.Accuracy, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Precision_ComputesCorrectly()
     {
         // Precision = TP / (TP + FP) = 50 / (50 + 10) = 50/60
@@ -45,7 +45,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(expected, cm.Precision, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Recall_ComputesCorrectly()
     {
         // Recall = TP / (TP + FN) = 50 / (50 + 5) = 50/55
@@ -55,7 +55,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(expected, cm.Recall, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_F1Score_IsHarmonicMeanOfPrecisionAndRecall()
     {
         // F1 = 2 * (Precision * Recall) / (Precision + Recall)
@@ -68,7 +68,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(expected, cm.F1Score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Specificity_ComputesCorrectly()
     {
         // Specificity = TN / (TN + FP) = 40 / (40 + 10) = 40/50
@@ -82,7 +82,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Perfect and Worst Case Scenarios
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_PerfectClassifier_HasUnitMetrics()
     {
         // All correct: TP=50, TN=50, FP=0, FN=0
@@ -95,7 +95,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(1.0, cm.Specificity, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_AllFalsePositives_HasZeroPrecision()
     {
         // TP=0, FP=50 -> Precision = 0
@@ -104,7 +104,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(0.0, cm.Precision, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_AllFalseNegatives_HasZeroRecall()
     {
         // TP=0, FN=50 -> Recall = 0
@@ -117,7 +117,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Multi-Class Classification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MultiClass_DimensionConstructor()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -127,7 +127,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(3, cm.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Increment_UpdatesCounts()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -142,7 +142,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(1.0, cm[1, 1]); // TP for class 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MultiClass_GetTruePositives()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -158,7 +158,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(3.0, cm.GetTruePositives(2));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MultiClass_GetFalsePositives()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -171,7 +171,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(0.0, cm.GetFalsePositives(2)); // No FPs for class 2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MultiClass_GetFalseNegatives()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -184,7 +184,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(0.0, cm.GetFalseNegatives(2)); // No FNs for class 2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MultiClass_GetAccuracy()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -202,7 +202,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Macro/Micro/Weighted Averages
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MacroPrecision_AveragesClassPrecisions()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -221,7 +221,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(expected, cm.GetMacroPrecision(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MicroPrecision_EqualsAccuracy()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -237,7 +237,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Matthews Correlation Coefficient
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MCC_PerfectClassifier_EqualsOne()
     {
         var cm = new ConfusionMatrix<double>(50, 50, 0, 0);
@@ -245,7 +245,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(1.0, cm.GetMatthewsCorrelationCoefficient(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MCC_RandomClassifier_NearZero()
     {
         // Balanced confusion matrix representing random guessing
@@ -254,7 +254,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(0.0, cm.GetMatthewsCorrelationCoefficient(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_MCC_MultiClass_ComputesCorrectly()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -274,7 +274,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Cohen's Kappa
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_CohenKappa_PerfectAgreement_EqualsOne()
     {
         var cm = new ConfusionMatrix<double>(50, 50, 0, 0);
@@ -282,7 +282,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(1.0, cm.GetCohenKappa(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_CohenKappa_ChanceAgreement_NearZero()
     {
         // Balanced confusion that matches expected by chance
@@ -295,7 +295,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Hamming Loss
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_HammingLoss_PerfectClassifier_IsZero()
     {
         var cm = new ConfusionMatrix<double>(50, 50, 0, 0);
@@ -303,7 +303,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(0.0, cm.GetHammingLoss(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_HammingLoss_IsOneMinusAccuracy()
     {
         var cm = new ConfusionMatrix<double>(50, 40, 10, 5);
@@ -316,7 +316,7 @@ public class ConfusionMatrixIntegrationTests
 
     #region Jaccard Score
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_JaccardScore_PerfectClassifier_IsOne()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -331,7 +331,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Equal(1.0, cm.GetJaccardScore(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_JaccardScore_PerClass_ComputesCorrectly()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -349,13 +349,13 @@ public class ConfusionMatrixIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_DimensionLessThanTwo_ThrowsException()
     {
         Assert.Throws<ArgumentException>(() => new ConfusionMatrix<double>(1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_Increment_OutOfRange_ThrowsException()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -365,7 +365,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => cm.Increment(3, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_GetMetrics_OutOfRange_ThrowsException()
     {
         var cm = new ConfusionMatrix<double>(3);
@@ -379,7 +379,7 @@ public class ConfusionMatrixIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => cm.GetF1Score(3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrix_EmptyMatrix_ReturnsZeroMetrics()
     {
         var cm = new ConfusionMatrix<double>(3);

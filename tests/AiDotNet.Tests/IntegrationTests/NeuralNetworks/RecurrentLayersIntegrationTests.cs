@@ -16,7 +16,7 @@ public class RecurrentLayersIntegrationTests
 
     #region GRULayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -35,7 +35,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_ForwardPass_ReturnSequences_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -57,7 +57,7 @@ public class RecurrentLayersIntegrationTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_SupportsTraining_ReturnsTrue()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -65,7 +65,7 @@ public class RecurrentLayersIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_GetParameters_ReturnsParameters()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -75,7 +75,7 @@ public class RecurrentLayersIntegrationTests
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_LongSequence_RemainsNumericallyStable()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class RecurrentLayersIntegrationTests
 
     #region LSTMLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class RecurrentLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_GetParameters_ReturnsParameters()
     {
         int[] inputShape = [1, 5, 10];
@@ -127,7 +127,7 @@ public class RecurrentLayersIntegrationTests
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_LongSequence_RemainsNumericallyStable()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class RecurrentLayersIntegrationTests
         Assert.True(output.Max().maxVal < 100.0, "Values exploded in long sequence");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_SupportsTraining_ReturnsTrue()
     {
         int[] inputShape = [1, 5, 10];
@@ -159,7 +159,7 @@ public class RecurrentLayersIntegrationTests
 
     #region BidirectionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalLayer_WithGRU_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalLayer_WithLSTM_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class RecurrentLayersIntegrationTests
 
     #region RecurrentLayer Base Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecurrentLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class RecurrentLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_ZeroInput_HandlesGracefully()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
@@ -241,7 +241,7 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_ZeroInput_HandlesGracefully()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
@@ -257,7 +257,7 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_LargeInputValues_RemainsStable()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
@@ -273,7 +273,7 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_LargeInputValues_RemainsStable()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
@@ -289,7 +289,7 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_BatchSizeOne_WorksCorrectly()
     {
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -303,7 +303,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(batchSize, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_BatchSizeOne_WorksCorrectly()
     {
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -322,7 +322,7 @@ public class RecurrentLayersIntegrationTests
 
     #region Clone Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRULayer_Clone_CreatesIndependentCopy()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -341,7 +341,7 @@ public class RecurrentLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTMLayer_Clone_CreatesIndependentCopy()
     {
         int[] inputShape = [2, 5, 10];

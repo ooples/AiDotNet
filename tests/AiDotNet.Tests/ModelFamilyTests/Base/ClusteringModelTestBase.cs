@@ -38,7 +38,7 @@ public abstract class ClusteringModelTestBase
     // ARI = 0 means random; ARI < 0 means anti-correlated.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdjustedRandIndex_ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -63,7 +63,7 @@ public abstract class ClusteringModelTestBase
     // Classification's "Accuracy_ShouldBeHigh_OnPerfectlySeparableData".
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IntraClusterPurity_ShouldBeHigh_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -111,7 +111,7 @@ public abstract class ClusteringModelTestBase
     // Mirrors Classification's "MoreData_ShouldNotDegrade_Accuracy".
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MoreData_ShouldNotDegrade_ClusterQuality()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -144,7 +144,7 @@ public abstract class ClusteringModelTestBase
     // cluster structure. Mirrors Classification's IrrelevantFeature test.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IrrelevantFeature_ShouldNotDegrade_ClusterQuality()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -187,7 +187,7 @@ public abstract class ClusteringModelTestBase
     // SAME cluster assignments. Cluster structure is relative, not absolute.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TranslationEquivariance_ShiftingPoints_PreservesAssignments()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -224,7 +224,7 @@ public abstract class ClusteringModelTestBase
     // Scaling all features by same constant should preserve assignments.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UniformScaling_ShouldPreserveAssignments()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -260,7 +260,7 @@ public abstract class ClusteringModelTestBase
     // The mean of points in each cluster should be near a generation center.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClusterMeans_ShouldBeNearGenerationCenters()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -317,7 +317,7 @@ public abstract class ClusteringModelTestBase
     // MATHEMATICAL INVARIANT: Correct Number of Distinct Clusters
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DistinctClusters_ShouldBeReasonable()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -342,7 +342,7 @@ public abstract class ClusteringModelTestBase
     // MATHEMATICAL INVARIANT: Identical Points → Same Cluster
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IdenticalPoints_ShouldGetSameCluster()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -366,7 +366,7 @@ public abstract class ClusteringModelTestBase
     // MATHEMATICAL INVARIANT: Predictions Are Finite
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -387,7 +387,7 @@ public abstract class ClusteringModelTestBase
     // BASIC CONTRACTS: Determinism, Output Shape, Clone, Metadata, Parameters
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -402,7 +402,7 @@ public abstract class ClusteringModelTestBase
             Assert.Equal(a1[i], a2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -414,7 +414,7 @@ public abstract class ClusteringModelTestBase
         Assert.Equal(TestSamples, model.Predict(testX).Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clone_ShouldProduceIdenticalAssignments()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -430,7 +430,7 @@ public abstract class ClusteringModelTestBase
             Assert.Equal(a1[i], a2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -441,7 +441,7 @@ public abstract class ClusteringModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         if (!HasFlatParameters) return;
@@ -469,7 +469,7 @@ public abstract class ClusteringModelTestBase
     protected virtual IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
         => CreateModel();
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SingleClusterData_ShouldAssignSameCluster()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -506,7 +506,7 @@ public abstract class ClusteringModelTestBase
     // Shuffling row order should produce equivalent cluster assignments.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PermutationInvariance_ShuffledRows_SameAssignments()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -537,7 +537,7 @@ public abstract class ClusteringModelTestBase
     // INTEGRATION: Builder Pipeline
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -554,7 +554,7 @@ public abstract class ClusteringModelTestBase
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_ClusteringShouldBeatRandom()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

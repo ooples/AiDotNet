@@ -62,35 +62,35 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // DAG Validation Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_IsDAG()
     {
         var graph = CreateChainGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForkGraph_IsDAG()
     {
         var graph = CreateForkGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ColliderGraph_IsDAG()
     {
         var graph = CreateColliderGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_IsDAG()
     {
         var graph = CreateDiamondGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmptyGraph_IsDAG()
     {
         var adj = new Matrix<double>(3, 3); // all zeros
@@ -102,7 +102,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Parent/Child Relationship Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Parents_BHasParentA()
     {
         var graph = CreateChainGraph();
@@ -111,7 +111,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(0, parents[0]); // A
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Parents_AHasNoParents()
     {
         var graph = CreateChainGraph();
@@ -119,7 +119,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Empty(parents);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Children_AHasChildB()
     {
         var graph = CreateChainGraph();
@@ -128,7 +128,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, children[0]); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Children_CIsLeaf()
     {
         var graph = CreateChainGraph();
@@ -136,7 +136,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Empty(children);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForkGraph_Children_AHasTwoChildren()
     {
         var graph = CreateForkGraph();
@@ -146,7 +146,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, children); // C
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ColliderGraph_Parents_CHasTwoParents()
     {
         var graph = CreateColliderGraph();
@@ -156,7 +156,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, parents); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParentsByName_ReturnsCorrectNames()
     {
         var graph = CreateColliderGraph();
@@ -166,7 +166,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains("B", parents);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChildrenByName_ReturnsCorrectNames()
     {
         var graph = CreateForkGraph();
@@ -180,7 +180,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Ancestor/Descendant Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Ancestors_CDescendsFromAAndB()
     {
         var graph = CreateChainGraph();
@@ -190,7 +190,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, ancestors); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Ancestors_RootHasNoAncestors()
     {
         var graph = CreateChainGraph();
@@ -198,7 +198,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Empty(ancestors);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_Descendants_ADescendsToAllOthers()
     {
         var graph = CreateChainGraph();
@@ -208,7 +208,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, descendants); // C
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_Ancestors_DDescendsFromAll()
     {
         var graph = CreateDiamondGraph();
@@ -219,7 +219,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, ancestors); // C
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_Descendants_ADescendsToAll()
     {
         var graph = CreateDiamondGraph();
@@ -234,7 +234,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Markov Blanket Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_MarkovBlanket_MiddleNode()
     {
         // B's Markov blanket: parents={A}, children={C}, co-parents of children={}
@@ -246,7 +246,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, mb); // C
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_MarkovBlanket_Root()
     {
         // A's Markov blanket: parents={}, children={B}, co-parents of B={}
@@ -257,7 +257,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, mb[0]); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChainGraph_MarkovBlanket_Leaf()
     {
         // C's Markov blanket: parents={B}, children={}, co-parents={}
@@ -268,7 +268,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, mb[0]); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ColliderGraph_MarkovBlanket_IncludesCoParents()
     {
         // A's Markov blanket: parents={}, children={C}, co-parents of C = {B}
@@ -280,7 +280,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, mb); // B (co-parent of C)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ColliderGraph_MarkovBlanket_Collider()
     {
         // C's Markov blanket: parents={A,B}, children={}, co-parents={}
@@ -292,7 +292,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, mb); // B
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_MarkovBlanket_MiddleNode()
     {
         // B's Markov blanket: parents={A}, children={D}, co-parents of D={C}
@@ -309,7 +309,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Edge Weight Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_EdgeWeights_HandComputed()
     {
         var graph = CreateDiamondGraph();
@@ -320,7 +320,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1.2, graph.GetEdgeWeight(2, 3), Tolerance); // C -> D = 1.2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiamondGraph_NoEdge_WeightIsZero()
     {
         var graph = CreateDiamondGraph();
@@ -328,7 +328,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(0.0, graph.GetEdgeWeight(1, 2), Tolerance); // B -> C (no edge)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EdgeWeightByName_MatchesIndexedWeight()
     {
         var graph = CreateDiamondGraph();
@@ -338,7 +338,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
             Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HasEdge_ExistingEdge_True()
     {
         var graph = CreateChainGraph();
@@ -346,7 +346,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.True(graph.HasEdge(1, 2)); // B -> C
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HasEdge_NonExistingEdge_False()
     {
         var graph = CreateChainGraph();
@@ -358,21 +358,21 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Graph Properties Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NumVariables_MatchesMatrixDimension()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(4, graph.NumVariables);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FeatureNames_MatchesConstructorNames()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(new[] { "A", "B", "C", "D" }, graph.FeatureNames);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NonSquareMatrix_Throws()
     {
         var adj = new Matrix<double>(2, 3);
@@ -380,7 +380,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
             new CausalGraph<double>(adj, new[] { "A", "B" }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_NameLengthMismatch_Throws()
     {
         var adj = new Matrix<double>(3, 3);
@@ -388,7 +388,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
             new CausalGraph<double>(adj, new[] { "A", "B" }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_DuplicateNames_Throws()
     {
         var adj = new Matrix<double>(2, 2);
@@ -400,7 +400,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Topological Properties
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParentsAndChildren_AreInverse()
     {
         // For every edge i -> j:
@@ -421,7 +421,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ancestors_ContainAllParentsTransitively()
     {
         var graph = CreateDiamondGraph();
@@ -439,7 +439,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Descendants_ContainAllChildrenTransitively()
     {
         var graph = CreateDiamondGraph();
@@ -457,7 +457,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarkovBlanket_AlwaysContainsParentsAndChildren()
     {
         var graph = CreateDiamondGraph();
@@ -476,7 +476,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarkovBlanket_NeverContainsSelf()
     {
         var graph = CreateDiamondGraph();
@@ -488,7 +488,7 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SingleNode_Graph_AllEmpty()
     {
         var adj = new Matrix<double>(1, 1);

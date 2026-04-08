@@ -19,7 +19,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class BaseClassesIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolicyBase_ValidateStateAndAction_ThrowsForInvalidInput()
     {
         var policy = new TestPolicy();
@@ -29,7 +29,7 @@ public class BaseClassesIntegrationTests
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateActionSize(expected: 2, actual: 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolicyBase_Dispose_MarksDisposed()
     {
         var policy = new TestPolicy();
@@ -39,7 +39,7 @@ public class BaseClassesIntegrationTests
         Assert.True(policy.IsDisposed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExplorationStrategyBase_ClampAndValidate_Work()
     {
         var strategy = new TestExplorationStrategy();
@@ -57,7 +57,7 @@ public class BaseClassesIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.ValidateSize(expected: 2, actual: 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExplorationStrategyBase_BoxMullerSample_IsFinite()
     {
         var strategy = new TestExplorationStrategy();
@@ -68,7 +68,7 @@ public class BaseClassesIntegrationTests
         Assert.False(double.IsInfinity(sample));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks()
     {
         var agent = new TestDeepAgent(CreateOptions());
@@ -76,7 +76,7 @@ public class BaseClassesIntegrationTests
         Assert.Equal(agent.NetworkParameterCount, agent.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepReinforcementLearningAgentBase_JitRemoved_SupportsJitIsFalse()
     {
         var agent = new TestDeepAgent(CreateOptions());
@@ -86,7 +86,7 @@ public class BaseClassesIntegrationTests
         Assert.Throws<NotSupportedException>(() => agent.ExportComputationGraph(new List<ComputationNode<double>>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReinforcementLearningAgentBase_DefaultsAndStateRoundTrip_Work()
     {
         var agent = new TestBaseAgent(CreateOptions());

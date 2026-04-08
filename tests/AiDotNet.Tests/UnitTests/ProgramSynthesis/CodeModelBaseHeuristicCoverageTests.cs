@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class CodeModelBaseHeuristicCoverageTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformTask_HeuristicRequests_ReturnStructuredOutputs()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);

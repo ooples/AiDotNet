@@ -11,7 +11,7 @@ public class DeepARModelTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new DeepARModel<double>();
@@ -19,7 +19,7 @@ public class DeepARModelTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new DeepAROptions<double>
@@ -37,7 +37,7 @@ public class DeepARModelTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithZeroHiddenSize_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
@@ -48,7 +48,7 @@ public class DeepARModelTests
         Assert.Throws<ArgumentException>(() => new DeepARModel<double>(options));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNegativeHiddenSize_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
@@ -59,7 +59,7 @@ public class DeepARModelTests
         Assert.Throws<ArgumentException>(() => new DeepARModel<double>(options));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithZeroNumLayers_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
@@ -74,7 +74,7 @@ public class DeepARModelTests
 
     #region Training Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new DeepAROptions<double>
@@ -95,7 +95,7 @@ public class DeepARModelTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new DeepAROptions<double>
@@ -120,7 +120,7 @@ public class DeepARModelTests
 
     #region Prediction Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictSingle_AfterTraining_ReturnsValidPrediction()
     {
         var options = new DeepAROptions<double>
@@ -149,7 +149,7 @@ public class DeepARModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictSingle_ReturnsFiniteValues()
     {
         var options = new DeepAROptions<double>
@@ -178,7 +178,7 @@ public class DeepARModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new DeepAROptions<double>
@@ -211,7 +211,7 @@ public class DeepARModelTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new DeepAROptions<double>
@@ -251,7 +251,7 @@ public class DeepARModelTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new DeepAROptions<float>

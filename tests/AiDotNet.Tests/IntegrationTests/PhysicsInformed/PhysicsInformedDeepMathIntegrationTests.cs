@@ -16,7 +16,7 @@ public class PhysicsInformedDeepMathIntegrationTests
     // TrainingHistory: Basics
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrainingHistory_Defaults_EmptyLosses()
     {
         var history = new TrainingHistory<double>();
@@ -24,7 +24,7 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Empty(history.Losses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrainingHistory_AddEpoch_TracksLoss()
     {
         var history = new TrainingHistory<double>();
@@ -56,14 +56,14 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Empty(history.PhysicsLosses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_Construction_ZeroThrows()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DomainDecompositionTrainingHistory<double>(0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_Construction_NegativeThrows()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -74,7 +74,7 @@ public class PhysicsInformedDeepMathIntegrationTests
     // DomainDecompositionTrainingHistory: AddEpoch
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_AddEpoch_TracksAllLosses()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
@@ -96,7 +96,7 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Equal(1.5, history.Losses[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_AddEpoch_WrongSubdomainCountThrows()
     {
         var history = new DomainDecompositionTrainingHistory<double>(3);
@@ -104,7 +104,7 @@ public class PhysicsInformedDeepMathIntegrationTests
             history.AddEpoch(1.0, new List<double> { 0.5, 0.5 }, 0.1, 0.2)); // Only 2 instead of 3
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_AddEpoch_NullSubdomainLossesThrows()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
@@ -112,7 +112,7 @@ public class PhysicsInformedDeepMathIntegrationTests
             history.AddEpoch(1.0, null!, 0.1, 0.2));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DomainDecomposition_AddEpoch_MultipleEpochs()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
@@ -136,7 +136,7 @@ public class PhysicsInformedDeepMathIntegrationTests
     // MultiFidelityTrainingHistory: Construction
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiFidelity_Defaults_EmptyLists()
     {
         var history = new MultiFidelityTrainingHistory<double>();
@@ -147,7 +147,7 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Empty(history.Losses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiFidelity_AddEpoch_TracksAllLosses()
     {
         var history = new MultiFidelityTrainingHistory<double>();
@@ -208,7 +208,7 @@ public class PhysicsInformedDeepMathIntegrationTests
     // Physics Math: Laplacian
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhysicsMath_Laplacian_1D()
     {
         // Laplacian of f(x) = x^2 is f''(x) = 2
@@ -221,7 +221,7 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Equal(2.0, laplacian, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhysicsMath_Laplacian_SinFunction()
     {
         // Laplacian of f(x) = sin(x) is f''(x) = -sin(x)

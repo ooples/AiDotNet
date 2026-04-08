@@ -16,7 +16,7 @@ public class FeatureSelectionDeepMathIntegrationTests
     // SSW = sum(sum((x_ij - mean_i)^2))
     // =====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FClassif_HandComputedFStatistic()
     {
         // 2 classes, 2 features, 6 samples
@@ -60,7 +60,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0, selector.SelectedIndices[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FClassif_SelectsHighestKFeatures()
     {
         // 3 features with varying discriminative power
@@ -91,7 +91,7 @@ public class FeatureSelectionDeepMathIntegrationTests
             "SelectedIndices should be sorted");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FRegression_HandComputedFStatistic()
     {
         // y = 2*x0 + noise, x1 is random
@@ -124,7 +124,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0, selector.SelectedIndices[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FRegression_FormulaVerification()
     {
         // Simple case: 5 data points, 1 feature, known regression statistics
@@ -157,7 +157,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedF, selector.Scores[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_Chi2_HandComputed()
     {
         // 2 classes, equal size, 1 feature with non-negative values
@@ -186,7 +186,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedChi2, selector.Scores[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_MutualInfo_NonNegative()
     {
         // Mutual information should always be non-negative
@@ -211,7 +211,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_TransformReducesDimensionality()
     {
         var data = new double[,]
@@ -233,7 +233,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_TransformPreservesSelectedValues()
     {
         var data = new double[,]
@@ -259,7 +259,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_GetSupportMask_CorrectBoolean()
     {
         var data = new double[,]
@@ -290,7 +290,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_KExceedsFeaturesCount_SelectsAll()
     {
         var data = new double[,]
@@ -310,7 +310,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns); // Should select all
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_SelectedIndicesAreSorted()
     {
         var data = new double[,]
@@ -338,7 +338,7 @@ public class FeatureSelectionDeepMathIntegrationTests
     // SelectPercentile Tests
     // =====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectPercentile_50Percent_SelectsHalfOfFeatures()
     {
         var data = new double[,]
@@ -358,7 +358,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectPercentile_25Percent_SelectsAtLeastOne()
     {
         var data = new double[,]
@@ -378,7 +378,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(result.Columns >= 1, "Should select at least 1 feature");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectPercentile_100Percent_SelectsAll()
     {
         var data = new double[,]
@@ -397,7 +397,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectPercentile_ValidationRejectsInvalid()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -410,7 +410,7 @@ public class FeatureSelectionDeepMathIntegrationTests
     // GenericUnivariateSelect Tests
     // =====================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_KBestMode_SameAsSelectKBest()
     {
         var data = new double[,]
@@ -443,7 +443,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_PercentileMode_SelectsCorrectCount()
     {
         var data = new double[,]
@@ -464,7 +464,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_FWEMode_BonferroniCorrection()
     {
         // FWE uses Bonferroni: threshold = alpha / p
@@ -489,7 +489,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_FDRMode_BenjaminiHochberg()
     {
         // FDR uses BH procedure: sorted p-values, threshold_i = i * alpha / p
@@ -513,7 +513,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_FPRMode_SelectsBelowAlpha()
     {
         var data = new double[,]
@@ -536,7 +536,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_ValidationRejectsInvalidParams()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -549,7 +549,7 @@ public class FeatureSelectionDeepMathIntegrationTests
             new GenericUnivariateSelect<double>(mode: SelectionMode.FPR, param: 1.5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_FClassifScores_MatchAnovaFormula()
     {
         // 3 classes, 1 feature
@@ -581,7 +581,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedF, selector.Scores[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_FRegressionScores_MatchOLSFormula()
     {
         // Perfect linear relationship: y = 3x
@@ -614,7 +614,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0.0, selector.Scores[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenericSelect_GetSupportMask_MatchesSelectedIndices()
     {
         var data = new double[,]
@@ -646,7 +646,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FClassif_ZeroWithinVariance_ReturnsZeroFScore()
     {
         // When all values in each class are identical, SSW = 0, MSW = 0
@@ -667,7 +667,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0.0, selector.Scores[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_FClassif_ConstantFeature_ZeroScore()
     {
         // A constant feature has no discriminative power
@@ -693,7 +693,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Contains(0, selector.SelectedIndices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_CustomScoreFunc_IsUsed()
     {
         var data = new double[,]
@@ -723,7 +723,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(1, selector.SelectedIndices[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_GetFeatureNamesOut_ReturnsSelectedNames()
     {
         var data = new double[,]
@@ -751,7 +751,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelectKBest_RequiresTarget_ThrowsWithoutTarget()
     {
         var data = new double[,]

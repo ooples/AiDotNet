@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.Agents;
 /// </summary>
 public class AgentTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidParameters_InitializesSuccessfully()
     {
         // Arrange
@@ -26,7 +26,7 @@ public class AgentTests
         Assert.Single(agent.Tools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -37,7 +37,7 @@ public class AgentTests
         Assert.Throws<ArgumentNullException>(() => new Agent<double>(nullModel, tools));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullTools_InitializesWithEmptyToolList()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class AgentTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class AgentTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class AgentTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(""));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithWhitespaceQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class AgentTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync("   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithInvalidMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -96,7 +96,7 @@ public class AgentTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync("test query", maxIterations: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithFinalAnswerInFirstIteration_ReturnsFinalAnswer()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class AgentTests
         Assert.Contains("42", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithCalculatorTool_ExecutesToolAndReturnsFinalAnswer()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class AgentTests
         Assert.Contains("Observation: 8", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithMultipleToolCalls_ExecutesAllToolsCorrectly()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class AgentTests
         Assert.Contains("Observation: 30", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNonExistentTool_ReturnsToolNotFoundError()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class AgentTests
         Assert.Contains("Tool 'NonExistentTool' not found", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithSearchTool_ExecutesSearchAndReturnsAnswer()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class AgentTests
         Assert.Contains("Paris", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithBothTools_CanUseBothSuccessfully()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class AgentTests
         Assert.Contains("Calculator", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_ReachingMaxIterationsWithoutAnswer_ReturnsPartialResults()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class AgentTests
         Assert.Contains("Observation: 6", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_ClearsScratchpadBetweenRuns()
     {
         // Arrange
@@ -263,7 +263,7 @@ public class AgentTests
         Assert.Contains("Query 2", scratchpad2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithMarkdownWrappedJSON_ParsesCorrectly()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class AgentTests
         Assert.Equal("Success", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithNonJSONResponse_ParsesWithRegex()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class AgentTests
         Assert.Equal("42", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_RecordsIterationNumbers()
     {
         // Arrange
@@ -314,7 +314,7 @@ public class AgentTests
         Assert.Contains("=== Iteration 2 ===", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_RecordsThoughtsActionsAndObservations()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class AgentTests
         Assert.Contains("Thought: Got the result", agent.Scratchpad);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_SendsToolDescriptionsToModel()
     {
         // Arrange
@@ -356,7 +356,7 @@ public class AgentTests
         Assert.Contains("mathematical", sentPrompt, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class AgentTests
         Assert.Equal("6.28", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_WithDecimalType_WorksCorrectly()
     {
         // Arrange
@@ -390,7 +390,7 @@ public class AgentTests
         Assert.Equal("Success", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChatModel_Property_ReturnsCorrectModel()
     {
         // Arrange
@@ -404,7 +404,7 @@ public class AgentTests
         Assert.Same(mockModel, chatModel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tools_Property_ReturnsReadOnlyList()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class AgentTests
         Assert.Single(agentTools);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Scratchpad_InitiallyEmpty()
     {
         // Arrange

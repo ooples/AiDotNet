@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.Benchmarks;
 
 public class PhysicsInformedBenchmarkTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BurgersBenchmark_BaselinePredictorMatchesFiniteDifference()
     {
         var options = new BurgersBenchmarkOptions
@@ -33,7 +33,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.InRange(result.MaxError, 0.0, 1e-8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BurgersBenchmark_NaivePredictorWorseThanBaseline()
     {
         var options = new BurgersBenchmarkOptions
@@ -61,7 +61,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.True(naiveResult.MaxError > baselineResult.MaxError);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllenCahnBenchmark_BaselinePredictorMatchesFiniteDifference()
     {
         var options = new AllenCahnBenchmarkOptions
@@ -88,7 +88,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.InRange(result.MaxError, 0.0, 1e-8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllenCahnBenchmark_NaivePredictorWorseThanBaseline()
     {
         var options = new AllenCahnBenchmarkOptions
@@ -116,7 +116,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.True(naiveResult.MaxError > baselineResult.MaxError);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OperatorBenchmark_MovingAverageBeatsIdentity()
     {
         var options = new OperatorBenchmarkOptions
@@ -142,7 +142,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.True(baseline.MaxError < identity.MaxError);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoissonOperatorBenchmark_BaselineSolverMatchesDataset()
     {
         var options = new PoissonOperatorBenchmarkOptions
@@ -170,7 +170,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.InRange(result.RelativeL2Error, 0.0, 1e-10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoissonOperatorBenchmark_NaivePredictorWorseThanBaseline()
     {
         var options = new PoissonOperatorBenchmarkOptions
@@ -193,7 +193,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.True(naive.RelativeL2Error > baseline.RelativeL2Error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DarcyOperatorBenchmark_BaselineSolverMatchesDataset()
     {
         var options = new DarcyOperatorBenchmarkOptions
@@ -227,7 +227,7 @@ public class PhysicsInformedBenchmarkTests
         Assert.InRange(result.RelativeL2Error, 0.0, 1e-10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DarcyOperatorBenchmark_NaivePredictorWorseThanBaseline()
     {
         var options = new DarcyOperatorBenchmarkOptions

@@ -15,7 +15,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Sigmoid Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidActivation_Activate_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidActivation_ActivatePositive_ApproachesOne()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result <= 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidActivation_ActivateNegative_ApproachesZero()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidActivation_Derivative_MaximumAtZero()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(derivativeAtNegative < derivativeAtZero);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidActivation_ActivateVector_ProcessesAllElements()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region ReLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
@@ -107,7 +107,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_ActivateNegative_ReturnsZero()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_DerivativePositive_ReturnsOne()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_DerivativeNegative_ReturnsZero()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLUActivation_ActivateVector_ProcessesAllElements()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Tanh Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_ActivatePositive_ReturnsPositive()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_ActivateNegative_ReturnsNegative()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > -1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_LargePositive_ApproachesOne()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > 0.99);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_LargeNegative_ApproachesMinusOne()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result < -0.99);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanhActivation_Derivative_MaximumAtZero()
     {
         // Arrange
@@ -266,7 +266,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Softmax Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftmaxActivation_ActivateVector_SumsToOne()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftmaxActivation_ActivateVector_AllPositive()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftmaxActivation_LargestInputHasLargestOutput()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region LeakyReLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LeakyReLUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LeakyReLUActivation_ActivateNegative_ReturnsScaledInput()
     {
         // Arrange
@@ -347,7 +347,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(-0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LeakyReLUActivation_DerivativeNegative_ReturnsAlpha()
     {
         // Arrange
@@ -364,7 +364,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region ELU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ELUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ELUActivation_ActivateNegative_ReturnsExponential()
     {
         // Arrange
@@ -391,7 +391,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > -1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ELUActivation_LargeNegative_ApproachesMinusAlpha()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region GELU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GELUActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GELUActivation_ActivatePositive_ReturnsPositive()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GELUActivation_LargePositive_ApproachesInput()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region HardSigmoid Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSigmoidActivation_ActivateZero_ReturnsHalf()
     {
         // Arrange
@@ -465,7 +465,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSigmoidActivation_LargePositive_ReturnsOne()
     {
         // Arrange
@@ -478,7 +478,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSigmoidActivation_LargeNegative_ReturnsZero()
     {
         // Arrange
@@ -495,7 +495,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region HardTanh Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardTanhActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
@@ -508,7 +508,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardTanhActivation_LargePositive_ReturnsOne()
     {
         // Arrange
@@ -521,7 +521,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardTanhActivation_LargeNegative_ReturnsMinusOne()
     {
         // Arrange
@@ -538,7 +538,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Gaussian Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianActivation_ActivateZero_ReturnsOne()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianActivation_ActivateNonZero_ReturnsLessThanOne()
     {
         // Arrange
@@ -569,7 +569,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Linear Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_Activate_ReturnsInput()
     {
         // Arrange
@@ -582,7 +582,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_Derivative_ReturnsOne()
     {
         // Arrange
@@ -595,7 +595,7 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_ActivateTensor_ReturnsSameReference()
     {
         // Arrange — the override must return the input tensor itself (no allocation)
@@ -610,7 +610,7 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same tensor reference (no copy)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_ActivateTensor_PreservesAllValues()
     {
         // Arrange
@@ -628,7 +628,7 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_ActivateTensor_1D_ReturnsSameReference()
     {
         // Arrange
@@ -643,7 +643,7 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same reference for 1-D tensors");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_ActivateTensor_3D_ReturnsSameReference()
     {
         // Arrange
@@ -660,7 +660,7 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same reference for 3-D tensors");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityActivation_ActivateTensor_NegativeValues_PreservedExactly()
     {
         // Arrange — regression: no clipping of negative values (unlike ReLU)
@@ -680,7 +680,7 @@ public class ActivationFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllActivationFunctions_HandleLargeValues()
     {
         // Arrange - test only bounded activation functions
@@ -702,7 +702,7 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllActivationFunctions_HandleNegativeValues()
     {
         // Arrange

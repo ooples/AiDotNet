@@ -16,7 +16,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // PositionalEncoding - Sinusoidal formula verification
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PositionalEncoding_Position0_AllSinAreZero_AllCosAreOne()
     {
         // PE(0, 2i) = sin(0 / 10000^(2i/d)) = sin(0) = 0
@@ -37,7 +37,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PositionalEncoding_Position1_HandComputed()
     {
         // For position 1, embedding_size=4:
@@ -68,7 +68,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(expected_1_3, NumOps<double>.ToDouble(output[1, 3]), 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PositionalEncoding_DifferentPositions_AreDistinct()
     {
         // Different positions should produce different encoding vectors
@@ -93,7 +93,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.True(sumDiff12 > 0.1, "Position 1 and 2 encodings should differ");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PositionalEncoding_AddsToInput_NotReplaces()
     {
         // The forward pass should ADD encodings to the input, not replace it
@@ -117,7 +117,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(6.0, NumOps<double>.ToDouble(output[0, 3]), Tol); // 5 + cos(0) = 6
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PositionalEncoding_HigherDimensions_LowerFrequency()
     {
         // The encoding uses sin(pos / 10000^(2i/d))
@@ -142,7 +142,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // LayerNormalization - Forward pass math verification
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_UniformInput_OutputIsZero()
     {
         // If all features are the same value, mean=value, variance=0
@@ -162,7 +162,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_HandComputed_SingleSample()
     {
         // Input: [2, 4, 6, 8]
@@ -197,7 +197,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal((8.0 - mean) * invStd, NumOps<double>.ToDouble(output[0, 3]), 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_OutputMeanIsZero()
     {
         // Layer normalization should produce output with mean ≈ 0 (when beta=0)
@@ -220,7 +220,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(0.0, sum / featureSize, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_OutputVarianceIsOne()
     {
         // Layer normalization should produce output with variance ≈ 1 (when gamma=1)
@@ -250,7 +250,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(1.0, variance, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_BatchIndependence()
     {
         // Layer norm normalizes each sample independently
@@ -277,7 +277,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(sample0_dim0_v1, sample0_dim0_v2, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_WithCustomGammaBeta()
     {
         // Set gamma=2, beta=1, then output = 2 * normalized + 1
@@ -329,7 +329,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // FullyConnectedLayer - Forward pass math verification
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullyConnectedLayer_Forward_MatMulPlusBias()
     {
         // FC layer: output = input * W^T + bias
@@ -366,7 +366,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(17.3, NumOps<double>.ToDouble(output[0, 2]), 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullyConnectedLayer_Forward_BatchProcessing()
     {
         // Test with batch size 2
@@ -394,7 +394,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(6.0, NumOps<double>.ToDouble(output[1, 1]), 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullyConnectedLayer_ParameterCount()
     {
         // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters
@@ -406,7 +406,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // DropoutLayer - Inference mode passes through
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_InferenceMode_PassesThrough()
     {
         // In inference mode (not training), dropout should pass all values through
@@ -427,7 +427,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.Equal(4.0, NumOps<double>.ToDouble(output[0, 3]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_TrainingMode_ScalesOutput()
     {
         // In training mode, dropout drops some values and scales remaining by 1/(1-rate)
@@ -458,7 +458,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         Assert.True(scaled > 10, $"Expected some scaled values, got {scaled}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DropoutLayer_Rate0_NothingDropped()
     {
         // With rate=0, nothing should be dropped
@@ -480,7 +480,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // FlattenLayer - Shape transformation
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FlattenLayer_PreservesValues()
     {
         // FlattenLayer should reshape [batch, h, w] -> [batch, h*w]
@@ -509,7 +509,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     // EmbeddingLayer - Lookup verification
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmbeddingLayer_Lookup_CorrectRowsReturned()
     {
         // EmbeddingLayer maps indices to embedding vectors

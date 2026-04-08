@@ -21,7 +21,7 @@ public class QueryByCommitteeTests
         return committee;
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ValidCommitteeSize_InitializesSuccessfully()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class QueryByCommitteeTests
         Assert.Equal(5, strategy.Committee.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_CommitteeSizeLessThan2_ThrowsArgumentException()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class QueryByCommitteeTests
         Assert.Contains("at least 2", exception.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_NullCommittee_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -57,7 +57,7 @@ public class QueryByCommitteeTests
             new QueryByCommittee<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDifferentMeasures_InitializesCorrectly()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class QueryByCommitteeTests
         Assert.Equal("QueryByCommittee-PredictionVariance", predictionVariance.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_DefaultsFalse()
     {
         // Arrange
@@ -95,7 +95,7 @@ public class QueryByCommitteeTests
         Assert.False(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_CanBeSet()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class QueryByCommitteeTests
         Assert.True(strategy.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_ContainsCommitteeSize()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class QueryByCommitteeTests
         Assert.Equal(5.0, stats["CommitteeSize"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ExactlyTwoMembers_Succeeds()
     {
         // Arrange

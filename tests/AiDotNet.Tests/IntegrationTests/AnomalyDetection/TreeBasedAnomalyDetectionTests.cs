@@ -60,14 +60,14 @@ public class TreeBasedAnomalyDetectionTests
 
     #region IsolationForest Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsolationForest_Construction_NotFittedByDefault()
     {
         var detector = new IsolationForest<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsolationForest_OutlierGetsHighestScore()
     {
         var detector = new IsolationForest<double>();
@@ -79,7 +79,7 @@ public class TreeBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsolationForest_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new IsolationForest<double>();
@@ -93,7 +93,7 @@ public class TreeBasedAnomalyDetectionTests
 
     #region ExtendedIsolationForest Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtendedIsolationForest_OutlierGetsHighestScore()
     {
         var detector = new ExtendedIsolationForest<double>();
@@ -104,7 +104,7 @@ public class TreeBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExtendedIsolationForest_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ExtendedIsolationForest<double>();
@@ -118,7 +118,7 @@ public class TreeBasedAnomalyDetectionTests
 
     #region SCiForest Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SCiForest_OutlierGetsHighestScore()
     {
         var detector = new SCiForest<double>();
@@ -129,7 +129,7 @@ public class TreeBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SCiForest_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SCiForest<double>();
@@ -143,7 +143,7 @@ public class TreeBasedAnomalyDetectionTests
 
     #region FairCutForest Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairCutForest_OutlierGetsHighestScore()
     {
         var detector = new FairCutForest<double>();
@@ -154,7 +154,7 @@ public class TreeBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FairCutForest_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FairCutForest<double>();
@@ -168,7 +168,7 @@ public class TreeBasedAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllTreeDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

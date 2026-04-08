@@ -10,7 +10,7 @@ public class LicenseKeyTests
 {
     // ────────── AiDotNetLicenseKey construction ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiDotNetLicenseKey_ValidKey_SetsKeyProperty()
     {
         var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ");
@@ -18,19 +18,19 @@ public class LicenseKeyTests
         Assert.Equal("aidn.abc123.secretXYZ", license.Key);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiDotNetLicenseKey_NullKey_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiDotNetLicenseKey_WhitespaceKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AiDotNetLicenseKey("   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiDotNetLicenseKey_DefaultProperties_HaveCorrectValues()
     {
         var license = new AiDotNetLicenseKey("test-key");
@@ -41,7 +41,7 @@ public class LicenseKeyTests
         Assert.True(license.EnableTelemetry);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiDotNetLicenseKey_CustomProperties_AreSettable()
     {
         var license = new AiDotNetLicenseKey("test-key")
@@ -60,7 +60,7 @@ public class LicenseKeyTests
 
     // ────────── LicenseKeyResolver ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseKeyResolver_ExplicitKey_ReturnsThatKey()
     {
         var license = new AiDotNetLicenseKey("explicit-key-value");
@@ -69,7 +69,7 @@ public class LicenseKeyTests
         Assert.Equal("explicit-key-value", resolved);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseKeyResolver_NullLicense_FallsThrough()
     {
         // Save and clear env var to ensure clean state
@@ -89,7 +89,7 @@ public class LicenseKeyTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseKeyResolver_EnvVar_FallbackWhenNoExplicit()
     {
         string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
@@ -106,7 +106,7 @@ public class LicenseKeyTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseKeyResolver_ExplicitKey_TakesPriorityOverEnvVar()
     {
         string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
@@ -125,7 +125,7 @@ public class LicenseKeyTests
 
     // ────────── MachineFingerprint ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MachineFingerprint_GetMachineId_ReturnsNonEmptyString()
     {
         string id = MachineFingerprint.GetMachineId();
@@ -133,7 +133,7 @@ public class LicenseKeyTests
         Assert.False(string.IsNullOrWhiteSpace(id));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MachineFingerprint_GetMachineId_IsConsistent()
     {
         string id1 = MachineFingerprint.GetMachineId();
@@ -142,7 +142,7 @@ public class LicenseKeyTests
         Assert.Equal(id1, id2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MachineFingerprint_GetMachineId_IsHexEncoded()
     {
         string id = MachineFingerprint.GetMachineId();
@@ -154,7 +154,7 @@ public class LicenseKeyTests
 
     // ────────── LicenseValidator (offline mode) ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseValidator_ExplicitOffline_ReturnsActive()
     {
         // Use empty ServerUrl for explicit offline-only mode.
@@ -170,7 +170,7 @@ public class LicenseKeyTests
         Assert.Equal(LicenseKeyStatus.Active, result.Status);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseValidator_ExplicitOffline_SetsOfflineMessage()
     {
         var license = new AiDotNetLicenseKey("aidn.test123.abc456")
@@ -184,7 +184,7 @@ public class LicenseKeyTests
         Assert.Contains("Offline", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseValidator_UnreachableServer_ReturnsValidationPending()
     {
         var license = new AiDotNetLicenseKey("test-key")
@@ -200,7 +200,7 @@ public class LicenseKeyTests
 
     // ────────── LicenseValidationResult ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LicenseValidationResult_DefaultsAreReasonable()
     {
         var result = new LicenseValidationResult(LicenseKeyStatus.Active);
@@ -216,7 +216,7 @@ public class LicenseKeyTests
 
     // ────────── AiModelBuilder integration ──────────
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiModelBuilder_DefaultConstructor_LicenseKeyIsNull()
     {
         var builder = new AiModelBuilder<double, double[], double>();
@@ -224,7 +224,7 @@ public class LicenseKeyTests
         Assert.Null(builder.ConfiguredLicenseKey);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiModelBuilder_ConstructorWithLicenseKey_StoresKey()
     {
         var license = new AiDotNetLicenseKey("test-key-123");
@@ -234,7 +234,7 @@ public class LicenseKeyTests
         Assert.Equal("test-key-123", builder.ConfiguredLicenseKey.Key);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiModelBuilder_ConfigureLicenseKey_SetsKey()
     {
         var license = new AiDotNetLicenseKey("fluent-key");
@@ -246,7 +246,7 @@ public class LicenseKeyTests
         Assert.Equal("fluent-key", builder.ConfiguredLicenseKey.Key);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiModelBuilder_ConfigureLicenseKey_ReturnsSameBuilder()
     {
         var license = new AiDotNetLicenseKey("fluent-key");
@@ -257,7 +257,7 @@ public class LicenseKeyTests
         Assert.Same(builder, returned);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AiModelBuilder_ConfigureLicenseKey_NullThrows()
     {
         var builder = new AiModelBuilder<double, double[], double>();

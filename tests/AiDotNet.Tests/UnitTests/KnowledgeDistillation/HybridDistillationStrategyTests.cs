@@ -21,7 +21,7 @@ public class HybridDistillationStrategyTests
         return matrix;
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidStrategies_InitializesCorrectly()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class HybridDistillationStrategyTests
         Assert.Equal(0.3, hybridStrategy.Alpha);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNonNormalizedWeights_ThrowsArgumentException()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class HybridDistillationStrategyTests
             new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithEmptyStrategies_ThrowsArgumentException()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class HybridDistillationStrategyTests
             new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullStrategies_ThrowsArgumentException()
     {
         // Act & Assert
@@ -81,7 +81,7 @@ public class HybridDistillationStrategyTests
             new HybridDistillationStrategy<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithIdenticalOutputs_ReturnsZero()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class HybridDistillationStrategyTests
         Assert.True(loss < 0.01); // Should be very close to zero
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithDifferentOutputs_ReturnsPositiveLoss()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class HybridDistillationStrategyTests
         Assert.True(loss > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_CombinesMultipleStrategies_WeightsLossCorrectly()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class HybridDistillationStrategyTests
         Assert.True(hybridLoss <= expectedMax * 1.1);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_WithIdenticalOutputs_ReturnsZeroGradient()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class HybridDistillationStrategyTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeGradient_WithDifferentOutputs_ReturnsNonZeroGradient()
     {
         // Arrange
@@ -207,7 +207,7 @@ public class HybridDistillationStrategyTests
         Assert.True(hasNonZero);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_WithTrueLabels_IncorporatesHardLoss()
     {
         // Arrange

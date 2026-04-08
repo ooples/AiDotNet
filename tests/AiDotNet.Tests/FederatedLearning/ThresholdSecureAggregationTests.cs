@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class ThresholdSecureAggregationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MasksCancel_ForStructuredUpdates()
     {
         var secureAggregation = new ThresholdSecureAggregation<double>(parameterCount: 3, randomSeed: 123);
@@ -43,7 +43,7 @@ public class ThresholdSecureAggregationTests
         Assert.Equal(18.0, sum["b"][1], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateSumSecurely_Succeeds_WithUnmaskingDropout_ForStructuredUpdates()
     {
         var secureAggregation = new ThresholdSecureAggregation<double>(parameterCount: 3, randomSeed: 42);

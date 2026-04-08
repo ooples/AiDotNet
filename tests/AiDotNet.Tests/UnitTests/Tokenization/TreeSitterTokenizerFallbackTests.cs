@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.Tokenization;
 
 public sealed class TreeSitterTokenizerFallbackTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_FallsBackToBaseTokenizer_WhenTreeSitterUnavailable()
     {
         var baseTokenizer = new SimpleTestTokenizer();
@@ -22,7 +22,7 @@ public sealed class TreeSitterTokenizerFallbackTests
         Assert.Equal(baseTokenizer.Tokenize("print('hi')"), tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FactoryHelpers_CreateTokenizers_AndDispose()
     {
         var baseTokenizer = new SimpleTestTokenizer();

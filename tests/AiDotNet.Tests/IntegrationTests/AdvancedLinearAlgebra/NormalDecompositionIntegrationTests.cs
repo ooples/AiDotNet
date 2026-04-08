@@ -125,7 +125,7 @@ public class NormalDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange

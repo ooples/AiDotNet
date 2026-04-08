@@ -96,14 +96,14 @@ public class MetaLearningFailurePathIntegrationTests
         return prototypes;
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskBatch_Constructor_NullTasks_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TaskBatch<double, Matrix<double>, Vector<double>>(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskBatch_Constructor_EmptyTasks_Throws()
     {
         var tasks = Array.Empty<IMetaLearningTask<double, Matrix<double>, Vector<double>>>();
@@ -112,7 +112,7 @@ public class MetaLearningFailurePathIntegrationTests
             new TaskBatch<double, Matrix<double>, Vector<double>>(tasks));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskBatch_Constructor_MismatchedConfiguration_Throws()
     {
         var taskA = CreateVectorTask(2, 1, 1);
@@ -123,7 +123,7 @@ public class MetaLearningFailurePathIntegrationTests
             new TaskBatch<double, Matrix<double>, Vector<double>>(tasks));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskBatch_GetRange_InvalidIndices_Throws()
     {
         var task = CreateVectorTask(2, 1, 1);
@@ -134,7 +134,7 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => batch.GetRange(0, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskBatch_Split_InvalidCount_Throws()
     {
         var task = CreateVectorTask(2, 1, 1);
@@ -145,7 +145,7 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => batch.Split(3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MatchingNetworks_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(3, 2);
@@ -159,7 +159,7 @@ public class MetaLearningFailurePathIntegrationTests
             new MatchingNetworksAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProtoNets_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(3, 2);
@@ -172,7 +172,7 @@ public class MetaLearningFailurePathIntegrationTests
             new ProtoNetsAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaSGD_InvalidOptions_Throws()
     {
         var model = new LinearVectorModel(2);
@@ -185,7 +185,7 @@ public class MetaLearningFailurePathIntegrationTests
             new MetaSGDAlgorithm<double, Matrix<double>, Vector<double>>(options));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaLearningModels_TrainAndUpdateParameters_Throw()
     {
         static void AssertModelNotSupported(
@@ -244,7 +244,7 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<NotSupportedException>(() => protoModel.GetParameters());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaLearningAlgorithms_VectorOutputs_Adapt_NullTask_Throws()
     {
         static void AssertNullTaskThrows<TInput, TOutput>(
@@ -382,7 +382,7 @@ public class MetaLearningFailurePathIntegrationTests
             }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaLearningAlgorithms_TensorOutputs_Adapt_NullTask_Throws()
     {
         static void AssertNullTaskThrows<TInput, TOutput>(

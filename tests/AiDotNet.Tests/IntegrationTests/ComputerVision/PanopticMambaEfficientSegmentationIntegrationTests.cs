@@ -31,7 +31,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region KMaXDeepLab
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KMaXDeepLab_Construction_Succeeds()
     {
         var model = new KMaXDeepLab<double>(Arch(), modelSize: KMaXDeepLabModelSize.R50);
@@ -39,7 +39,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KMaXDeepLab_Predict_ReturnsOutput()
     {
         var model = new KMaXDeepLab<double>(Arch(), modelSize: KMaXDeepLabModelSize.R50);
@@ -48,7 +48,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KMaXDeepLab_Dispose_DoesNotThrow()
     {
         var model = new KMaXDeepLab<double>(Arch());
@@ -59,7 +59,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region ODISE
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ODISE_Construction_Succeeds()
     {
         var model = new ODISE<double>(Arch(), modelSize: ODISEModelSize.Base);
@@ -67,7 +67,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ODISE_Predict_ReturnsOutput()
     {
         var model = new ODISE<double>(Arch(), modelSize: ODISEModelSize.Base);
@@ -76,7 +76,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ODISE_Dispose_DoesNotThrow()
     {
         var model = new ODISE<double>(Arch());
@@ -87,7 +87,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region CUPS
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CUPS_Construction_Succeeds()
     {
         var model = new CUPS<double>(Arch());
@@ -95,7 +95,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CUPS_Predict_ReturnsOutput()
     {
         var model = new CUPS<double>(Arch());
@@ -104,7 +104,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CUPS_Dispose_DoesNotThrow()
     {
         var model = new CUPS<double>(Arch());
@@ -115,7 +115,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region VisionMamba
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_Construction_Succeeds()
     {
         var model = new VisionMamba<double>(Arch(), modelSize: VisionMambaModelSize.Tiny);
@@ -123,7 +123,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_Predict_ReturnsOutput()
     {
         var model = new VisionMamba<double>(Arch(), modelSize: VisionMambaModelSize.Tiny);
@@ -132,7 +132,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_Dispose_DoesNotThrow()
     {
         var model = new VisionMamba<double>(Arch());
@@ -143,7 +143,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region VMamba
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMamba_Construction_Succeeds()
     {
         var model = new VMamba<double>(Arch(), modelSize: VMambaModelSize.Tiny);
@@ -151,7 +151,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMamba_Predict_ReturnsOutput()
     {
         var model = new VMamba<double>(Arch(), modelSize: VMambaModelSize.Tiny);
@@ -160,7 +160,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMamba_Dispose_DoesNotThrow()
     {
         var model = new VMamba<double>(Arch());
@@ -171,7 +171,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region ViMUNet
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViMUNet_Construction_Succeeds()
     {
         var model = new ViMUNet<double>(Arch());
@@ -179,7 +179,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViMUNet_Predict_ReturnsOutput()
     {
         var model = new ViMUNet<double>(Arch());
@@ -188,7 +188,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViMUNet_Dispose_DoesNotThrow()
     {
         var model = new ViMUNet<double>(Arch());
@@ -199,7 +199,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region PIDNet
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_Construction_Succeeds()
     {
         var model = new PIDNet<double>(Arch(), modelSize: PIDNetModelSize.Small);
@@ -207,7 +207,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_Predict_ReturnsOutput()
     {
         var model = new PIDNet<double>(Arch(), modelSize: PIDNetModelSize.Small);
@@ -216,7 +216,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_Dispose_DoesNotThrow()
     {
         var model = new PIDNet<double>(Arch());
@@ -227,7 +227,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region FastSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FastSAM_Construction_Succeeds()
     {
         var model = new FastSAM<double>(Arch());
@@ -235,7 +235,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FastSAM_Predict_ReturnsOutput()
     {
         var model = new FastSAM<double>(Arch());
@@ -244,7 +244,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FastSAM_Dispose_DoesNotThrow()
     {
         var model = new FastSAM<double>(Arch());
@@ -255,7 +255,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region MobileSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MobileSAM_Construction_Succeeds()
     {
         var model = new MobileSAM<double>(Arch());
@@ -263,7 +263,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MobileSAM_Predict_ReturnsOutput()
     {
         var model = new MobileSAM<double>(Arch());
@@ -272,7 +272,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MobileSAM_Dispose_DoesNotThrow()
     {
         var model = new MobileSAM<double>(Arch());
@@ -283,7 +283,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region EdgeSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EdgeSAM_Construction_Succeeds()
     {
         var model = new EdgeSAM<double>(Arch());
@@ -291,7 +291,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EdgeSAM_Predict_ReturnsOutput()
     {
         var model = new EdgeSAM<double>(Arch());
@@ -300,7 +300,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EdgeSAM_Dispose_DoesNotThrow()
     {
         var model = new EdgeSAM<double>(Arch());
@@ -311,7 +311,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region SlimSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlimSAM_Construction_Succeeds()
     {
         var model = new SlimSAM<double>(Arch());
@@ -319,7 +319,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlimSAM_Predict_ReturnsOutput()
     {
         var model = new SlimSAM<double>(Arch());
@@ -328,7 +328,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlimSAM_Dispose_DoesNotThrow()
     {
         var model = new SlimSAM<double>(Arch());
@@ -339,7 +339,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region EfficientSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientSAM_Construction_Succeeds()
     {
         var model = new EfficientSAM<double>(Arch());
@@ -347,7 +347,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientSAM_Predict_ReturnsOutput()
     {
         var model = new EfficientSAM<double>(Arch());
@@ -356,7 +356,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientSAM_Dispose_DoesNotThrow()
     {
         var model = new EfficientSAM<double>(Arch());
@@ -367,7 +367,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
 
     #region RepViTSAM
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RepViTSAM_Construction_Succeeds()
     {
         var model = new RepViTSAM<double>(Arch());
@@ -375,7 +375,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RepViTSAM_Predict_ReturnsOutput()
     {
         var model = new RepViTSAM<double>(Arch());
@@ -384,7 +384,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RepViTSAM_Dispose_DoesNotThrow()
     {
         var model = new RepViTSAM<double>(Arch());

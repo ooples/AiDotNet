@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class LayerPortTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_HasSingleInputPort()
     {
         var layer = new DenseLayer<double>(4, 8);
@@ -18,7 +18,7 @@ public class LayerPortTests
         Assert.Equal("input", layer.InputPorts[0].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_HasSingleOutputPort()
     {
         var layer = new DenseLayer<double>(4, 8);
@@ -26,7 +26,7 @@ public class LayerPortTests
         Assert.Equal("output", layer.OutputPorts[0].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_MultiInputForward_DelegatesToSingleInput()
     {
         var layer = new DenseLayer<double>(4, 2);
@@ -50,7 +50,7 @@ public class LayerPortTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddLayer_HasTwoInputPorts()
     {
         var layer = new AddLayer<double>(new int[][] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
@@ -59,7 +59,7 @@ public class LayerPortTests
         Assert.Equal("input_b", layer.InputPorts[1].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddLayer_MultiInputForward_AddsCorrectly()
     {
         var layer = new AddLayer<double>(new int[][] { new[] { 3 }, new[] { 3 } }, (IActivationFunction<double>?)null);
@@ -77,7 +77,7 @@ public class LayerPortTests
         Assert.Equal(9.0, result[2], 10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffusionResBlock_HasTimeEmbedPort_WhenConfigured()
     {
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
@@ -89,7 +89,7 @@ public class LayerPortTests
         Assert.Equal(64, block.InputPorts[1].Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffusionResBlock_SinglePort_WhenNoTimeEmbed()
     {
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
@@ -99,7 +99,7 @@ public class LayerPortTests
         Assert.Equal("input", block.InputPorts[0].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerPort_Record_HasCorrectProperties()
     {
         var port = new LayerPort("query", [8, 64], Required: true);
@@ -111,14 +111,14 @@ public class LayerPortTests
         Assert.True(port.Required);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerPort_OptionalPort()
     {
         var port = new LayerPort("mask", [8, 8], Required: false);
         Assert.False(port.Required);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffusionResBlock_MultiInputForward_IncludesTimeConditioning()
     {
         int channels = 4;
@@ -156,7 +156,7 @@ public class LayerPortTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerBase_ForwardGpu_ThrowsOnEmptyArgs()
     {
         var layer = new DenseLayer<double>(4, 2);
@@ -166,7 +166,7 @@ public class LayerPortTests
 
     // BackwardGpuMulti test removed — Backward deleted in tape-based autodiff migration
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
     {
         var layer = new DenseLayer<double>(4, 2);

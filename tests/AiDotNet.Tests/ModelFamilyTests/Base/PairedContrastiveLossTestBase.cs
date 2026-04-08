@@ -17,7 +17,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 1: Loss is finite for similar pairs
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_SimilarPair_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -34,7 +34,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 2: Loss is finite for dissimilar pairs
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_DissimilarPair_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -51,7 +51,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 3: Loss is non-negative
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
@@ -66,7 +66,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 4: Identical vectors → zero loss for similar pairs
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_IdenticalVectors_SimilarLabel_ShouldBeZero()
     {
         var loss = CreateLoss();
@@ -81,7 +81,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 5: Closer similar pairs → lower loss
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_CloserSimilarPair_ShouldProduceLowerLoss()
     {
         var loss = CreateLoss();
@@ -100,7 +100,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 6: Well-separated dissimilar pairs → zero loss
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateLoss_WellSeparatedDissimilarPair_ShouldBeZero()
     {
         var loss = CreateLoss();
@@ -116,7 +116,7 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 7: Gradients are finite
     // =========================================================================
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();

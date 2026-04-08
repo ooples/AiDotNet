@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PerformanceMetricsTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldRecordLatency()
     {
         // Arrange
@@ -24,7 +24,7 @@ public class PerformanceMetricsTests
         Assert.Equal(20.0, averageLatency, precision: 1);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldCalculateLatencyPercentiles()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class PerformanceMetricsTests
         Assert.InRange(p99, 95, 100); // Around 99th percentile
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldRecordBatchMetrics()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class PerformanceMetricsTests
         Assert.Equal(15.0, (double)allMetrics["averageBatchSize"]); // 45 / 3
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldCalculateThroughput()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class PerformanceMetricsTests
         Assert.True(throughput > 0); // Should have some throughput
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldRecordQueueDepth()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class PerformanceMetricsTests
         Assert.Equal(10.0, avgQueueDepth, precision: 1);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldCalculateBatchUtilization()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class PerformanceMetricsTests
         Assert.Equal(85.0, utilization, precision: 1); // (170 / 200) * 100
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldReturnAllMetrics()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class PerformanceMetricsTests
         Assert.Contains("uptimeSeconds", allMetrics.Keys);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldReset()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class PerformanceMetricsTests
         Assert.Equal(0.0, (double)allMetrics["averageLatencyMs"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_ShouldLimitSampleSize()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class PerformanceMetricsTests
 
     #region PR #758 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxSamples()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -188,7 +188,7 @@ public class PerformanceMetricsTests
             new PerformanceMetrics(maxSamples: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxQueueDepthSamples()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>

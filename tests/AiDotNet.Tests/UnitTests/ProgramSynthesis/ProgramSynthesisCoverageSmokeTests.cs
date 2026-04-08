@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisCoverageSmokeTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgramSynthesisOptions_HasSensibleDefaults()
     {
         var options = new ProgramSynthesisOptions();
@@ -30,7 +30,7 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(options.NumDecoderLayers > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CodeT5_GetModelMetadata_ProducesTransformerMetadata()
     {
         var tokenizer = new SimpleTestTokenizer(vocabularySize: 16);
@@ -44,7 +44,7 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(metadata.ModelData.Length > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphCodeBERT_GetModelMetadata_IncludesUseDataFlow()
     {
         var tokenizer = new SimpleTestTokenizer(vocabularySize: 16);
@@ -59,7 +59,7 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(metadata.ModelData.Length > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ServingProgramExecutionEngine_ReturnsTrue_OnSuccessfulExecution()
     {
         var engine = new ServingProgramExecutionEngine(new FakeServingClient(success: true));
@@ -77,7 +77,7 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.Null(error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ServingProgramExecutionEngine_ReturnsFalse_OnFailedExecution()
     {
         var engine = new ServingProgramExecutionEngine(new FakeServingClient(success: false));

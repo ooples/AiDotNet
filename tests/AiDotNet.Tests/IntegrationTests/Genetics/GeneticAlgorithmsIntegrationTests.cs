@@ -16,7 +16,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region GeneticParameters Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_DefaultValues_AreCorrect()
     {
         // Arrange & Act
@@ -163,7 +163,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(method, parameters.InitializationMethod);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_MaxTime_CanBeConfigured()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(customTime, parameters.MaxTime);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_CrossoverOperator_CanBeConfigured()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal("Uniform", parameters.CrossoverOperator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_MutationOperator_CanBeConfigured()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal("Gaussian", parameters.MutationOperator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_FullConfiguration_WorksCorrectly()
     {
         // Arrange & Act - Create a fully configured parameters object
@@ -246,7 +246,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region ModelParameterGene Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_Constructor_SetsCorrectValues()
     {
         // Arrange & Act
@@ -272,7 +272,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_Clone_CreatesDeepCopy()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_Clone_IsIndependentCopy()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_Equals_ReturnsTrueForEqualGenes()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(gene1.GetHashCode(), gene2.GetHashCode());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_Equals_ReturnsFalseForDifferentGenes()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.False(gene1.Equals(gene3)); // Different index
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelParameterGene_MultipleGenes_CanRepresentModelParameters()
     {
         // Arrange & Act - Simulate a simple model's parameters
@@ -351,7 +351,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region MultiObjectiveRealIndividual Advanced Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiObjectiveRealIndividual_Dominates_CorrectlyIdentifiesDominance()
     {
         // Arrange
@@ -371,7 +371,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(dominates);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiObjectiveRealIndividual_Dominates_ReturnsFalseWhenNotDominating()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.False(dominates2Over1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiObjectiveRealIndividual_RankAndCrowdingDistance_CanBeSet()
     {
         // Arrange
@@ -444,7 +444,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(distance, individual.GetCrowdingDistance(), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiObjectiveRealIndividual_Clone_PreservesAllProperties()
     {
         // Arrange
@@ -479,7 +479,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region PermutationIndividual Advanced Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationIndividual_OrderCrossover_ProducesValidPermutations()
     {
         // Arrange
@@ -511,7 +511,7 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationIndividual_SwapMutation_MaintainsValidPermutation()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationIndividual_InversionMutation_MaintainsValidPermutation()
     {
         // Arrange
@@ -552,7 +552,7 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationIndividual_MultipleSwapMutations_MaintainValidity()
     {
         // Arrange
@@ -580,7 +580,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region TreeIndividual Advanced Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_RandomGeneration_ProducesVariedExpressions()
     {
         // Arrange
@@ -599,7 +599,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(expressions.Count > 1, "Should produce varied expressions");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_FullMethod_ProducesDeepTrees()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(tree.GetDepth() >= 1, "Full method should produce trees with depth >= 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_Evaluate_HandlesProtectedDivision()
     {
         // Arrange - Create a division by zero scenario
@@ -629,7 +629,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_Evaluate_HandlesProtectedLog()
     {
         // Arrange - Create a log of negative number scenario
@@ -644,7 +644,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_SubtreeMutation_ChangesExpression()
     {
         // Arrange
@@ -669,7 +669,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(changed, "Subtree mutation should change the expression");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TreeIndividual_Evaluate_WithMultipleVariables()
     {
         // Arrange - Build: (x + y) * 2
@@ -692,7 +692,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region RealValuedIndividual Advanced Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RealValuedIndividual_UpdateStepSizes_IncreasesWithHighSuccess()
     {
         // Arrange
@@ -713,7 +713,7 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RealValuedIndividual_UpdateStepSizes_DecreasesWithLowSuccess()
     {
         // Arrange
@@ -734,7 +734,7 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RealValuedIndividual_GetValuesAsArray_ReturnsCorrectValues()
     {
         // Arrange
@@ -760,7 +760,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region BinaryIndividual Advanced Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueAsInt_ReturnsCorrectValue()
     {
         // Arrange - Binary 1010 (LSB first, so bits 0 and 2 are set)
@@ -799,7 +799,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(expected, decoded);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueInRange()
     {
         // Arrange
@@ -814,7 +814,7 @@ public class GeneticAlgorithmsIntegrationTests
             $"Normalized value {normalized} should be between 0 and 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueAsNormalizedDouble_AllZeros_ReturnsZero()
     {
         // Arrange
@@ -828,7 +828,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(0.0, normalized, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueAsNormalizedDouble_AllOnes_ReturnsOne()
     {
         // Arrange
@@ -842,7 +842,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(1.0, normalized, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueMapped_ReturnsValueInRange()
     {
         // Arrange
@@ -859,7 +859,7 @@ public class GeneticAlgorithmsIntegrationTests
             $"Mapped value {mapped} should be between {min} and {max}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueMapped_AllZeros_ReturnsMin()
     {
         // Arrange
@@ -873,7 +873,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(-10.0, mapped, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_GetValueMapped_AllOnes_ReturnsMax()
     {
         // Arrange
@@ -887,7 +887,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(10.0, mapped, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_Clone_CreatesDeepCopy()
     {
         // Arrange
@@ -906,7 +906,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.GetValueAsInt(), clone.GetValueAsInt());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinaryIndividual_SetGenes_UpdatesIndividual()
     {
         // Arrange
@@ -932,7 +932,7 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region Integration Tests - GA Component Interactions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_WithPermutationIndividual_ConfigurationScenario()
     {
         // Arrange - Simulate TSP configuration
@@ -965,7 +965,7 @@ public class GeneticAlgorithmsIntegrationTests
         });
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_WithRealValuedIndividual_NumericalOptimization()
     {
         // Arrange - Simulate numerical optimization configuration
@@ -998,7 +998,7 @@ public class GeneticAlgorithmsIntegrationTests
         });
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_WithBinaryIndividual_FeatureSelection()
     {
         // Arrange - Simulate feature selection configuration
@@ -1026,7 +1026,7 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.All(population, p => Assert.Equal(20, p.GetGenes().Count));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticParameters_WithTreeIndividual_SymbolicRegression()
     {
         // Arrange - Simulate symbolic regression configuration

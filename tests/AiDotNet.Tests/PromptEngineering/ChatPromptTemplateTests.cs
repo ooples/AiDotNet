@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class ChatPromptTemplateTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_CreatesEmptyTemplate()
     {
         var template = new ChatPromptTemplate();
@@ -14,7 +14,7 @@ public class ChatPromptTemplateTests
         Assert.Empty(template.Messages);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddSystemMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
@@ -26,7 +26,7 @@ public class ChatPromptTemplateTests
         Assert.Equal("You are a helpful assistant", template.Messages[0].Content);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddUserMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
@@ -38,7 +38,7 @@ public class ChatPromptTemplateTests
         Assert.Equal("What is the weather?", template.Messages[0].Content);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddAssistantMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
@@ -50,7 +50,7 @@ public class ChatPromptTemplateTests
         Assert.Equal("It's sunny today.", template.Messages[0].Content);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddMessage_WithCustomRole_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
@@ -62,7 +62,7 @@ public class ChatPromptTemplateTests
         Assert.Equal("Custom message", template.Messages[0].Content);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddMultipleMessages_CreatesConversation()
     {
         var template = new ChatPromptTemplate();
@@ -77,7 +77,7 @@ public class ChatPromptTemplateTests
         Assert.Equal("assistant", template.Messages[2].Role);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_ReturnsFormattedConversation()
     {
         var template = new ChatPromptTemplate();
@@ -90,7 +90,7 @@ public class ChatPromptTemplateTests
         Assert.Contains("User: Hello", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChainedCalls_Work()
     {
         var template = new ChatPromptTemplate()

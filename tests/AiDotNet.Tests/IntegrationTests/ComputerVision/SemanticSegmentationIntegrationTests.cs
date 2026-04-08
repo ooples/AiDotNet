@@ -28,7 +28,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region SegNeXt
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_Construction_Succeeds()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
@@ -36,7 +36,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_Predict_ReturnsOutput()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
@@ -45,7 +45,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_Train_DoesNotThrow()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
@@ -55,7 +55,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_Dispose_DoesNotThrow()
     {
         var model = new SegNeXt<double>(Arch());
@@ -66,7 +66,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region InternImage
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InternImage_Construction_Succeeds()
     {
         var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
@@ -74,7 +74,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InternImage_Predict_ReturnsOutput()
     {
         var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
@@ -83,7 +83,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InternImage_Dispose_DoesNotThrow()
     {
         var model = new InternImage<double>(Arch());
@@ -94,7 +94,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region ViTAdapter
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTAdapter_Construction_Succeeds()
     {
         var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
@@ -102,7 +102,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTAdapter_Predict_ReturnsOutput()
     {
         var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
@@ -111,7 +111,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTAdapter_Dispose_DoesNotThrow()
     {
         var model = new ViTAdapter<double>(Arch());
@@ -122,7 +122,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region ViTCoMer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTCoMer_Construction_Succeeds()
     {
         var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
@@ -130,7 +130,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTCoMer_Predict_ReturnsOutput()
     {
         var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
@@ -139,7 +139,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTCoMer_Dispose_DoesNotThrow()
     {
         var model = new ViTCoMer<double>(Arch());
@@ -150,7 +150,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region DiffCut
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffCut_Construction_Succeeds()
     {
         var model = new DiffCut<double>(Arch());
@@ -158,7 +158,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffCut_Predict_ReturnsOutput()
     {
         var model = new DiffCut<double>(Arch());
@@ -167,7 +167,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffCut_Dispose_DoesNotThrow()
     {
         var model = new DiffCut<double>(Arch());
@@ -178,7 +178,7 @@ public class SemanticSegmentationIntegrationTests
 
     #region DiffSeg
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffSeg_Construction_Succeeds()
     {
         var model = new DiffSeg<double>(Arch());
@@ -186,7 +186,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffSeg_Predict_ReturnsOutput()
     {
         var model = new DiffSeg<double>(Arch());
@@ -195,7 +195,7 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffSeg_Dispose_DoesNotThrow()
     {
         var model = new DiffSeg<double>(Arch());

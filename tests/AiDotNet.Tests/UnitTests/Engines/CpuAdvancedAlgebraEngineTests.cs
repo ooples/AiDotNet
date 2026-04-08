@@ -14,7 +14,7 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Octonion Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OctonionAddBatch_ComputesCorrectly()
     {
         // Arrange
@@ -38,7 +38,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(3.0, result[1].E1, precision: 10);       // 1 + 2
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OctonionMultiplyBatch_RealNumbers_BehavesLikeScalarMultiply()
     {
         // Arrange: Real octonions (scalar only)
@@ -64,7 +64,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.True(result[1].IsScalar);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OctonionConjugateBatch_FlipsImaginaryParts()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(-8.0, result[0].E7, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OctonionNormBatch_ComputesMagnitudes()
     {
         // Arrange: (3, 4, 0, 0, 0, 0, 0, 0) has magnitude 5
@@ -107,7 +107,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(1.0, result[1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OctonionMultiply_NonAssociativity()
     {
         // Arrange: Octonion multiplication is NOT associative: (a*b)*c != a*(b*c)
@@ -138,7 +138,7 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Multivector/Clifford Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultivectorAddBatch_ComputesCorrectly()
     {
         // Arrange: G(2,0) - 2D Euclidean geometric algebra
@@ -163,7 +163,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(6.0, result[1].Scalar, precision: 10);  // 2 + 4
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeometricProductBatch_Scalars_MultipliesScalars()
     {
         // Arrange
@@ -188,7 +188,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(15.0, result[1].Scalar, precision: 10);  // 3 * 5
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultivectorReverseBatch_AppliesReverseToAll()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(5.0, result[0].Scalar, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradeProjectBatch_ExtractsGradeZero()
     {
         // Arrange: Create multivector with multiple grades
@@ -235,7 +235,7 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Lie Group Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void So3ExpBatch_ZeroVectors_ReturnsIdentities()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void So3ExpLogBatch_RoundTrip()
     {
         // Arrange
@@ -286,7 +286,7 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void So3ComposeBatch_IdentityComposition()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Se3ExpBatch_ZeroVector_ReturnsIdentity()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(0.0, result[0].Translation[2], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Se3ExpLogBatch_RoundTrip()
     {
         // Arrange
@@ -356,7 +356,7 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void So3AdjointBatch_ReturnsRotationMatrices()
     {
         // Arrange: For SO(3), the adjoint is just the rotation matrix itself

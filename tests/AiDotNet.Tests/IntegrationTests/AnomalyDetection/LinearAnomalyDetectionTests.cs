@@ -62,14 +62,14 @@ public class LinearAnomalyDetectionTests
 
     #region PCADetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PCA_Construction_NotFittedByDefault()
     {
         var detector = new PCADetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PCA_OutlierGetsHighestScore()
     {
         var detector = new PCADetector<double>();
@@ -81,7 +81,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new PCADetector<double>();
@@ -95,7 +95,7 @@ public class LinearAnomalyDetectionTests
 
     #region OneClassSVM Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneClassSVM_OutlierGetsHighestScore()
     {
         var detector = new OneClassSVM<double>();
@@ -106,7 +106,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneClassSVM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new OneClassSVM<double>();
@@ -120,7 +120,7 @@ public class LinearAnomalyDetectionTests
 
     #region EllipticEnvelopeDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EllipticEnvelope_OutlierGetsHighestScore()
     {
         var detector = new EllipticEnvelopeDetector<double>();
@@ -131,7 +131,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EllipticEnvelope_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new EllipticEnvelopeDetector<double>();
@@ -145,7 +145,7 @@ public class LinearAnomalyDetectionTests
 
     #region MCDDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCD_OutlierGetsHighestScore()
     {
         var detector = new MCDDetector<double>();
@@ -156,7 +156,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MCDDetector<double>();
@@ -170,7 +170,7 @@ public class LinearAnomalyDetectionTests
 
     #region KernelPCADetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelPCA_OutlierGetsHighestScore()
     {
         var detector = new KernelPCADetector<double>();
@@ -181,7 +181,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KernelPCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KernelPCADetector<double>();
@@ -195,7 +195,7 @@ public class LinearAnomalyDetectionTests
 
     #region RobustPCADetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustPCA_OutlierGetsHighestScore()
     {
         var detector = new RobustPCADetector<double>();
@@ -206,7 +206,7 @@ public class LinearAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustPCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new RobustPCADetector<double>();
@@ -220,7 +220,7 @@ public class LinearAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllLinearDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

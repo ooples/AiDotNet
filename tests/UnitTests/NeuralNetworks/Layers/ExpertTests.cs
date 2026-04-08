@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class ExpertTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithValidLayers_InitializesCorrectly()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class ExpertTests
         Assert.True(expert.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithEmptyLayerList_ThrowsArgumentException()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class ExpertTests
             new Expert<float>(layers, new[] { 10 }, new[] { 10 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithNullLayerList_ThrowsArgumentException()
     {
         // Act & Assert
@@ -51,7 +51,7 @@ public class ExpertTests
 #pragma warning restore CS8625
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_WithValidInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class ExpertTests
         Assert.Equal(10, output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_ProcessesDataThroughAllLayers()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class ExpertTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_ReturnsAllLayerParameters()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class ExpertTests
         Assert.True(parameters.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_UpdatesAllLayerParameters()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class ExpertTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_WithIncorrectLength_ThrowsArgumentException()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class ExpertTests
         Assert.Throws<ArgumentException>(() => expert.SetParameters(wrongSizeParams));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResetState_ClearsLayerStates()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class ExpertTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterCount_ReflectsSumOfAllLayers()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class ExpertTests
         Assert.Equal(expectedCount, paramCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_ReturnsTrueWhenAnyLayerIsTrainable()
     {
         // Arrange

@@ -23,7 +23,7 @@ public class AudioExtendedIntegrationTests
 
     #region WhisperOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperOptions_DefaultValues()
     {
         var options = new WhisperOptions();
@@ -43,7 +43,7 @@ public class AudioExtendedIntegrationTests
         Assert.False(options.WordTimestamps);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperOptions_CustomValues()
     {
         var options = new WhisperOptions
@@ -81,7 +81,7 @@ public class AudioExtendedIntegrationTests
 
     #region WhisperModelSize Enum
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperModelSize_AllValues()
     {
         var values = (((WhisperModelSize[])Enum.GetValues(typeof(WhisperModelSize))));
@@ -95,7 +95,7 @@ public class AudioExtendedIntegrationTests
         Assert.Contains(WhisperModelSize.LargeV3, values);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperModelSize_OrderedCorrectly()
     {
         Assert.True((int)WhisperModelSize.Tiny < (int)WhisperModelSize.Base);
@@ -108,7 +108,7 @@ public class AudioExtendedIntegrationTests
 
     #region WhisperResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperResult_DefaultValues()
     {
         var result = new WhisperResult();
@@ -122,7 +122,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0L, result.ProcessingTimeMs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperResult_SetProperties()
     {
         var result = new WhisperResult
@@ -146,7 +146,7 @@ public class AudioExtendedIntegrationTests
 
     #region WhisperSegment
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperSegment_DefaultValues()
     {
         var segment = new WhisperSegment();
@@ -157,7 +157,7 @@ public class AudioExtendedIntegrationTests
         Assert.Empty(segment.Words);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperSegment_SetProperties()
     {
         var segment = new WhisperSegment
@@ -181,7 +181,7 @@ public class AudioExtendedIntegrationTests
 
     #region WhisperWord
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperWord_DefaultValues()
     {
         var word = new WhisperWord();
@@ -191,7 +191,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, word.Confidence, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhisperWord_SetProperties()
     {
         var word = new WhisperWord
@@ -211,7 +211,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerTurn
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerTurn_DefaultValues()
     {
         var turn = new SpeakerTurn();
@@ -221,7 +221,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, turn.EndTime, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerTurn_Duration_Computed()
     {
         var turn = new SpeakerTurn
@@ -234,7 +234,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(3.5, turn.Duration, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerTurn_ZeroDuration()
     {
         var turn = new SpeakerTurn { StartTime = 1.0, EndTime = 1.0 };
@@ -245,7 +245,7 @@ public class AudioExtendedIntegrationTests
 
     #region DiarizationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiarizationResult_DefaultValues()
     {
         var result = new DiarizationResult();
@@ -255,7 +255,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, result.Duration, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiarizationResult_SpeakingTimePerSpeaker()
     {
         var result = new DiarizationResult
@@ -276,7 +276,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(3.0, speakingTime["B"], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiarizationResult_EmptyTurns_SpeakingTimeEmpty()
     {
         var result = new DiarizationResult();
@@ -288,7 +288,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerMatch
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerMatch_DefaultValues()
     {
         var match = new SpeakerMatch();
@@ -296,7 +296,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, match.Score, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerMatch_SetProperties()
     {
         var match = new SpeakerMatch { SpeakerId = "Speaker_1", Score = 0.87 };
@@ -308,7 +308,7 @@ public class AudioExtendedIntegrationTests
 
     #region IdentificationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentificationResult_DefaultValues()
     {
         var result = new IdentificationResult();
@@ -319,7 +319,7 @@ public class AudioExtendedIntegrationTests
         Assert.Empty(result.Matches);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentificationResult_WithMatches()
     {
         var result = new IdentificationResult
@@ -342,7 +342,7 @@ public class AudioExtendedIntegrationTests
 
     #region VerificationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VerificationResult_DefaultValues()
     {
         var result = new VerificationResult();
@@ -353,7 +353,7 @@ public class AudioExtendedIntegrationTests
         Assert.Null(result.ErrorMessage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VerificationResult_Verified()
     {
         var result = new VerificationResult
@@ -367,7 +367,7 @@ public class AudioExtendedIntegrationTests
         Assert.True(result.Score > result.Threshold);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VerificationResult_NotVerified_WithError()
     {
         var result = new VerificationResult
@@ -386,7 +386,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerEmbedding
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_IdenticalVectors()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 1, 0, 0, 0 } };
@@ -394,7 +394,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1.0, emb1.CosineSimilarity(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_OrthogonalVectors()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 1, 0 } };
@@ -402,7 +402,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, emb1.CosineSimilarity(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_OppositeVectors()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 1, 0 } };
@@ -410,7 +410,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(-1.0, emb1.CosineSimilarity(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_ZeroVector()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 0, 0, 0 } };
@@ -418,7 +418,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, emb1.CosineSimilarity(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_EuclideanDistance_SameVector()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 1, 2, 3 } };
@@ -426,7 +426,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, emb1.EuclideanDistance(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_EuclideanDistance_KnownValue()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 0, 0 } };
@@ -434,7 +434,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(5.0, emb1.EuclideanDistance(emb2), 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_Properties()
     {
         var emb = new SpeakerEmbedding<double>
@@ -452,7 +452,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerDiarizerOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerDiarizerOptions_DefaultValues()
     {
         var options = new SpeakerDiarizerOptions();
@@ -466,7 +466,7 @@ public class AudioExtendedIntegrationTests
         Assert.Null(options.EmbeddingModelPath);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerDiarizerOptions_CustomValues()
     {
         var options = new SpeakerDiarizerOptions
@@ -490,7 +490,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerEmbeddingOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbeddingOptions_DefaultValues()
     {
         var options = new SpeakerEmbeddingOptions();
@@ -507,7 +507,7 @@ public class AudioExtendedIntegrationTests
 
     #region SpeakerVerifierOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerVerifierOptions_DefaultValues()
     {
         var options = new SpeakerVerifierOptions();
@@ -515,7 +515,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.6, options.IdentificationThreshold, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerVerifierOptions_CustomValues()
     {
         var options = new SpeakerVerifierOptions
@@ -531,7 +531,7 @@ public class AudioExtendedIntegrationTests
 
     #region LocalizationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_Properties()
     {
         var result = new LocalizationResult
@@ -551,7 +551,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal("GCC-PHAT", result.Algorithm);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_GetDirectionVector_Forward()
     {
         // Azimuth 0, Elevation 0 -> forward direction (0, 1, 0)
@@ -567,7 +567,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, z, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_GetDirectionVector_Right()
     {
         // Azimuth 90, Elevation 0 -> right direction (1, 0, 0)
@@ -583,7 +583,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, z, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_GetDirectionVector_UnitLength()
     {
         var result = new LocalizationResult
@@ -601,7 +601,7 @@ public class AudioExtendedIntegrationTests
 
     #region LocalizationAlgorithm Enum
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationAlgorithm_AllValues()
     {
         var values = (((LocalizationAlgorithm[])Enum.GetValues(typeof(LocalizationAlgorithm))));
@@ -615,7 +615,7 @@ public class AudioExtendedIntegrationTests
 
     #region SoundLocalizerOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoundLocalizerOptions_DefaultValues()
     {
         var options = new SoundLocalizerOptions();
@@ -629,7 +629,7 @@ public class AudioExtendedIntegrationTests
         Assert.NotNull(options.OnnxOptions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoundLocalizerOptions_CustomValues()
     {
         var options = new SoundLocalizerOptions
@@ -650,7 +650,7 @@ public class AudioExtendedIntegrationTests
 
     #region ChordSegment
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChordSegment_DefaultValues()
     {
         var segment = new ChordSegment();
@@ -660,7 +660,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, segment.Confidence, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChordSegment_Duration_Computed()
     {
         var segment = new ChordSegment
@@ -673,7 +673,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(2.5, segment.Duration, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChordSegment_ZeroDuration()
     {
         var segment = new ChordSegment { StartTime = 2.0, EndTime = 2.0 };
@@ -684,7 +684,7 @@ public class AudioExtendedIntegrationTests
 
     #region BeatTrackingResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BeatTrackingResult_DefaultValues()
     {
         var result = new BeatTrackingResult();
@@ -694,28 +694,28 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, result.ConfidenceScore, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BeatTrackingResult_AverageBeatInterval_120BPM()
     {
         var result = new BeatTrackingResult { Tempo = 120.0 };
         Assert.Equal(0.5, result.AverageBeatInterval, Tolerance); // 60/120 = 0.5s
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BeatTrackingResult_AverageBeatInterval_60BPM()
     {
         var result = new BeatTrackingResult { Tempo = 60.0 };
         Assert.Equal(1.0, result.AverageBeatInterval, Tolerance); // 60/60 = 1s
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BeatTrackingResult_AverageBeatInterval_ZeroTempo()
     {
         var result = new BeatTrackingResult { Tempo = 0.0 };
         Assert.Equal(0.0, result.AverageBeatInterval, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BeatTrackingResult_WithBeatTimes()
     {
         var result = new BeatTrackingResult
@@ -732,7 +732,7 @@ public class AudioExtendedIntegrationTests
 
     #region KeyDetectionResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KeyDetectionResult_DefaultValues()
     {
         var result = new KeyDetectionResult();
@@ -745,7 +745,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(string.Empty, result.RelativeKey);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KeyDetectionResult_SetProperties()
     {
         var result = new KeyDetectionResult
@@ -770,7 +770,7 @@ public class AudioExtendedIntegrationTests
 
     #region KeyMode Enum
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KeyMode_AllValues()
     {
         var values = (((KeyMode[])Enum.GetValues(typeof(KeyMode))));
@@ -783,7 +783,7 @@ public class AudioExtendedIntegrationTests
 
     #region SourceSeparationOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SourceSeparationOptions_DefaultValues()
     {
         var options = new SourceSeparationOptions();
@@ -796,7 +796,7 @@ public class AudioExtendedIntegrationTests
         Assert.NotNull(options.OnnxOptions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SourceSeparationOptions_CustomValues()
     {
         var options = new SourceSeparationOptions
@@ -817,7 +817,7 @@ public class AudioExtendedIntegrationTests
 
     #region SeparationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SeparationResult_ToDictionary()
     {
         var vocals = new Tensor<double>(new[] { 10 });
@@ -843,7 +843,7 @@ public class AudioExtendedIntegrationTests
         Assert.Same(vocals, dict["vocals"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SeparationResult_SampleRate()
     {
         var tensor = new Tensor<double>(new[] { 5 });
@@ -862,7 +862,7 @@ public class AudioExtendedIntegrationTests
 
     #region TtsOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TtsOptions_DefaultValues()
     {
         var options = new TtsOptions();
@@ -882,7 +882,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(256, options.HopLength);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TtsOptions_CustomValues()
     {
         var options = new TtsOptions
@@ -914,7 +914,7 @@ public class AudioExtendedIntegrationTests
 
     #region TtsResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TtsResult_Properties()
     {
         var result = new TtsResult<double>
@@ -934,7 +934,7 @@ public class AudioExtendedIntegrationTests
 
     #region TtsModelType Enum
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TtsModelType_AllValues()
     {
         var values = (((TtsModelType[])Enum.GetValues(typeof(TtsModelType))));
@@ -948,7 +948,7 @@ public class AudioExtendedIntegrationTests
 
     #region VocoderType Enum
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VocoderType_AllValues()
     {
         var values = (((VocoderType[])Enum.GetValues(typeof(VocoderType))));
@@ -962,7 +962,7 @@ public class AudioExtendedIntegrationTests
 
     #region WebRTCVadOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WebRTCVadOptions_DefaultValues()
     {
         var options = new WebRTCVadOptions();
@@ -980,7 +980,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1e-3, options.LearningRate, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WebRTCVadOptions_CustomValues()
     {
         var options = new WebRTCVadOptions
@@ -1006,7 +1006,7 @@ public class AudioExtendedIntegrationTests
 
     #region EnergyBasedVad - Construction and Detection
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_DefaultConstruction()
     {
         var vad = new EnergyBasedVad<double>();
@@ -1018,7 +1018,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(300, vad.MinSilenceDurationMs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_CustomConstruction()
     {
         var vad = new EnergyBasedVad<double>(
@@ -1032,14 +1032,14 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.3, vad.Threshold, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_ImplementsInterface()
     {
         var vad = new EnergyBasedVad<double>();
         Assert.IsAssignableFrom<IVoiceActivityDetector<double>>(vad);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_DetectSpeech_SilentFrame_ReturnsFalse()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1047,7 +1047,7 @@ public class AudioExtendedIntegrationTests
         Assert.False(vad.DetectSpeech(silentFrame));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_GetSpeechProbability_SilentFrame_Low()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1056,7 +1056,7 @@ public class AudioExtendedIntegrationTests
         Assert.True(prob < 0.5, $"Silent frame probability should be low, got {prob}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_GetSpeechProbability_LoudFrame_Higher()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1072,7 +1072,7 @@ public class AudioExtendedIntegrationTests
         Assert.False(double.IsInfinity(prob));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_GetFrameProbabilities_ReturnsCorrectCount()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1081,7 +1081,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(10, probs.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_ProcessChunk_ReturnsTuple()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1090,7 +1090,7 @@ public class AudioExtendedIntegrationTests
         Assert.False(double.IsNaN(probability));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_ResetState_ClearsState()
     {
         var vad = new EnergyBasedVad<double>(sampleRate: 16000, frameSize: 480);
@@ -1115,7 +1115,7 @@ public class AudioExtendedIntegrationTests
 
     #region YinPitchDetector - Construction and Detection
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_DefaultConstruction()
     {
         var detector = new YinPitchDetector<double>();
@@ -1125,7 +1125,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(2000, detector.MaxPitch);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_CustomConstruction()
     {
         var detector = new YinPitchDetector<double>(
@@ -1139,7 +1139,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1000, detector.MaxPitch);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_DetectPitch_440Hz_SineWave()
     {
         int sampleRate = 44100;
@@ -1161,7 +1161,7 @@ public class AudioExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_DetectPitch_Silence_NoPitch()
     {
         var detector = new YinPitchDetector<double>();
@@ -1170,7 +1170,7 @@ public class AudioExtendedIntegrationTests
         Assert.False(hasPitch);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_PitchToMidi_A4_Is69()
     {
         var detector = new YinPitchDetector<double>();
@@ -1178,7 +1178,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(69.0, midi, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_PitchToMidi_C4_Is60()
     {
         var detector = new YinPitchDetector<double>();
@@ -1186,7 +1186,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(60.0, midi, 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_MidiToPitch_69_Is440()
     {
         var detector = new YinPitchDetector<double>();
@@ -1194,7 +1194,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(440.0, pitch, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_PitchToMidi_MidiToPitch_RoundTrip()
     {
         var detector = new YinPitchDetector<double>();
@@ -1204,7 +1204,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(originalPitch, recoveredPitch, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_PitchToNoteName_A4()
     {
         var detector = new YinPitchDetector<double>();
@@ -1212,7 +1212,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal("A4", note);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_PitchToNoteName_ZeroPitch()
     {
         var detector = new YinPitchDetector<double>();
@@ -1220,7 +1220,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal("---", note);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_GetCentsDeviation_ExactNote()
     {
         var detector = new YinPitchDetector<double>();
@@ -1228,7 +1228,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.0, cents, 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_ExtractPitchContour_ReturnsValues()
     {
         int sampleRate = 16000;
@@ -1246,7 +1246,7 @@ public class AudioExtendedIntegrationTests
         Assert.True(contour.Length > 0, "Should have at least one contour frame");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YinPitchDetector_ExtractDetailedPitchContour_HasTimeInfo()
     {
         int sampleRate = 16000;
@@ -1276,7 +1276,7 @@ public class AudioExtendedIntegrationTests
 
     #region GenreClassificationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenreClassificationResult_Properties()
     {
         var result = new GenreClassificationResult
@@ -1314,7 +1314,7 @@ public class AudioExtendedIntegrationTests
 
     #region GenreFeatures
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenreFeatures_AllProperties()
     {
         var features = new GenreFeatures
@@ -1341,7 +1341,7 @@ public class AudioExtendedIntegrationTests
 
     #region SceneClassificationResult
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SceneClassificationResult_Properties()
     {
         var result = new SceneClassificationResult
@@ -1369,7 +1369,7 @@ public class AudioExtendedIntegrationTests
 
     #region SceneFeatures
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SceneFeatures_AllProperties()
     {
         var features = new SceneFeatures
@@ -1401,7 +1401,7 @@ public class AudioExtendedIntegrationTests
 
     #region Cross-Module - Pitch Detection Mathematical Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PitchDetector_PitchToMidi_OctaveRelationship()
     {
         var detector = new YinPitchDetector<double>();
@@ -1411,7 +1411,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(12.0, midiA5 - midiA4, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PitchDetector_MidiToPitch_OctaveDoubles()
     {
         var detector = new YinPitchDetector<double>();
@@ -1420,7 +1420,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(pitchC4 * 2, pitchC5, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PitchDetector_NoteNames_Chromatic()
     {
         var detector = new YinPitchDetector<double>();
@@ -1433,7 +1433,7 @@ public class AudioExtendedIntegrationTests
 
     #region Cross-Module - VAD with Speech-Like Signal
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_DetectSpeechSegments_FullSilence_Empty()
     {
         var vad = new EnergyBasedVad<double>(
@@ -1447,7 +1447,7 @@ public class AudioExtendedIntegrationTests
         Assert.Empty(segments);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnergyBasedVad_ThresholdProperty_Settable()
     {
         var vad = new EnergyBasedVad<double>();
@@ -1459,7 +1459,7 @@ public class AudioExtendedIntegrationTests
 
     #region Cross-Module - Speaker Embedding Similarity Symmetry
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_Symmetric()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 0.1, 0.5, 0.3, 0.2 } };
@@ -1469,7 +1469,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(sim12, sim21, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_EuclideanDistance_Symmetric()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 1, 2, 3 } };
@@ -1479,7 +1479,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(dist12, dist21, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_EuclideanDistance_NonNegative()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { -1, 2, -3 } };
@@ -1487,7 +1487,7 @@ public class AudioExtendedIntegrationTests
         Assert.True(emb1.EuclideanDistance(emb2) >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerEmbedding_CosineSimilarity_InRange()
     {
         var emb1 = new SpeakerEmbedding<double> { Vector = new double[] { 0.3, 0.7, 0.1 } };
@@ -1500,7 +1500,7 @@ public class AudioExtendedIntegrationTests
 
     #region Cross-Module - Localization Direction Vector Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_GetDirectionVector_Up()
     {
         // Elevation 90 -> up direction (0, 0, 1)
@@ -1516,7 +1516,7 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1.0, z, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LocalizationResult_GetDirectionVector_Left()
     {
         // Azimuth -90, Elevation 0 -> left direction (-1, 0, 0)

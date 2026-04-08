@@ -59,7 +59,7 @@ public class iMAMLAlgorithmTests
         };
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidOptions_ReturnsInstance()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class iMAMLAlgorithmTests
         Assert.Equal(MetaLearningAlgorithmType.iMAML, algorithm.AlgorithmType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -81,7 +81,7 @@ public class iMAMLAlgorithmTests
             new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithNullTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class iMAMLAlgorithmTests
         Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithEmptyTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class iMAMLAlgorithmTests
             new TaskBatch<double, Matrix<double>, Vector<double>>(emptyTasks));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithSingleTask_ReturnsValidLoss()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class iMAMLAlgorithmTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class iMAMLAlgorithmTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Adapt_WithNullTask_ThrowsArgumentNullException()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class iMAMLAlgorithmTests
         Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Adapt_WithValidTask_ReturnsAdaptedModel()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class iMAMLAlgorithmTests
         Assert.NotNull(adaptedModel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithNeumannApproximation_ReturnsValidLoss()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class iMAMLAlgorithmTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MetaTrain_WithFirstOrderApproximation_ReturnsValidLoss()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class iMAMLAlgorithmTests
         Assert.True(loss >= 0, $"Loss should be non-negative for adaptation steps={adaptationSteps}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class iMAMLAlgorithmTests
         Assert.True(isValid);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Options_Clone_CreatesIndependentCopy()
     {
         // Arrange

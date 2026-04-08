@@ -10,7 +10,7 @@ namespace AiDotNetTests.IntegrationTests.Training
 {
     public class TrainerTests
     {
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithInMemoryData_CompletesTraining()
         {
             // Arrange - create a simple time series dataset
@@ -51,7 +51,7 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.True(result.TrainingDuration.TotalMilliseconds > 0);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithCsvData_CompletesTraining()
         {
             // Arrange - create a temporary CSV file
@@ -100,7 +100,7 @@ namespace AiDotNetTests.IntegrationTests.Training
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_FromYamlString_CreatesAndRunsCorrectly()
         {
             // Arrange - create temp CSV and YAML files
@@ -150,7 +150,7 @@ trainer:
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithNoData_ThrowsInvalidOperationException()
         {
             // Arrange
@@ -166,7 +166,7 @@ trainer:
             Assert.Throws<InvalidOperationException>(() => trainer.Run());
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithNoModel_ThrowsArgumentException()
         {
             // Arrange
@@ -176,14 +176,14 @@ trainer:
             Assert.Throws<ArgumentException>(() => new Trainer<double>(config));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithNullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new Trainer<double>((TrainingRecipeConfig)null));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_EpochLosses_AreRecorded()
         {
             // Arrange
@@ -222,7 +222,7 @@ trainer:
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_ConfigProperty_ReturnsOriginalConfig()
         {
             // Arrange
@@ -240,7 +240,7 @@ trainer:
             Assert.Equal("ExponentialSmoothing", trainer.Config.Model?.Name);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithOptimizer_CreatesOptimizerAndSetsModel()
         {
             // Arrange
@@ -258,7 +258,7 @@ trainer:
             Assert.NotNull(trainer.Optimizer);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithoutOptimizer_OptimizerIsNull()
         {
             // Arrange
@@ -275,7 +275,7 @@ trainer:
             Assert.Null(trainer.Optimizer);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithInvalidOptimizerName_ThrowsArgumentException()
         {
             // Arrange
@@ -289,7 +289,7 @@ trainer:
             Assert.Throws<ArgumentException>(() => new Trainer<double>(config));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithOptimizerAndData_CompletesTraining()
         {
             // Arrange
@@ -328,7 +328,7 @@ trainer:
             Assert.NotNull(trainer.Optimizer);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_WithSeed_ProducesReproducibleResults()
         {
             // Arrange - run the same training twice with the same seed
@@ -371,7 +371,7 @@ trainer:
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Trainer_DefaultsToModelLossFunction_WhenNotSpecified()
         {
             // Arrange - no LossFunction section in config

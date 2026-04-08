@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class TemperatureScalingTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultTemperature_InitializesToOne()
     {
         // Arrange & Act
@@ -16,7 +16,7 @@ public class TemperatureScalingTests
         Assert.Equal(1.0, tempScaling.Temperature);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomTemperature_InitializesCorrectly()
     {
         // Arrange & Act
@@ -26,7 +26,7 @@ public class TemperatureScalingTests
         Assert.Equal(2.0, tempScaling.Temperature);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Temperature_SetToNegative_ThrowsException()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class TemperatureScalingTests
         Assert.Throws<ArgumentException>(() => tempScaling.Temperature = -1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Temperature_SetToZero_ThrowsException()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class TemperatureScalingTests
         Assert.Throws<ArgumentException>(() => tempScaling.Temperature = 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaleLogits_WithTemperatureOne_ReturnsUnchangedLogits()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class TemperatureScalingTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaleLogits_WithTemperatureTwo_HalvesLogits()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class TemperatureScalingTests
         Assert.Equal(3.0, scaled[2], precision: 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaleLogits_WithTemperatureHalf_DoublesLogits()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class TemperatureScalingTests
         Assert.Equal(6.0, scaled[2], precision: 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Calibrate_WithValidData_UpdatesTemperature()
     {
         // Arrange

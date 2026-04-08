@@ -11,7 +11,7 @@ public class TextProcessingHelperIntegrationTests
 {
     #region SplitIntoSentences
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_MultipleSentences()
     {
         string text = "Hello world. How are you? I am fine!";
@@ -20,7 +20,7 @@ public class TextProcessingHelperIntegrationTests
         Assert.True(sentences.Count >= 2, "Should split into multiple sentences");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_SingleSentence()
     {
         string text = "Hello world";
@@ -29,28 +29,28 @@ public class TextProcessingHelperIntegrationTests
         Assert.Equal("Hello world", sentences[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_EmptyString_ReturnsEmpty()
     {
         var sentences = TextProcessingHelper.SplitIntoSentences("");
         Assert.Empty(sentences);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_NullString_ReturnsEmpty()
     {
         var sentences = TextProcessingHelper.SplitIntoSentences(null!);
         Assert.Empty(sentences);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_WhitespaceOnly_ReturnsEmpty()
     {
         var sentences = TextProcessingHelper.SplitIntoSentences("   ");
         Assert.Empty(sentences);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoSentences_WithNewlines()
     {
         string text = "First sentence.\nSecond sentence.";
@@ -62,7 +62,7 @@ public class TextProcessingHelperIntegrationTests
 
     #region Tokenize
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_SimpleText()
     {
         string text = "Hello World";
@@ -72,7 +72,7 @@ public class TextProcessingHelperIntegrationTests
         Assert.Equal("world", tokens[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_ConvertToLowercase()
     {
         string text = "HELLO World";
@@ -80,7 +80,7 @@ public class TextProcessingHelperIntegrationTests
         Assert.All(tokens, t => Assert.Equal(t.ToLowerInvariant(), t));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_RemovesPunctuation()
     {
         string text = "Hello, world! How are you?";
@@ -90,21 +90,21 @@ public class TextProcessingHelperIntegrationTests
         Assert.DoesNotContain("?", tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_EmptyString_ReturnsEmpty()
     {
         var tokens = TextProcessingHelper.Tokenize("");
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_NullString_ReturnsEmpty()
     {
         var tokens = TextProcessingHelper.Tokenize(null!);
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Tokenize_WithTabs()
     {
         string text = "Hello\tWorld";

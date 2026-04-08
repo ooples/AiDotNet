@@ -11,7 +11,7 @@ public class InitializationIntegrationTests
 {
     #region EagerInitializationStrategy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Eager_IsNotLazy()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -19,7 +19,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Eager_InitializeWeights_ProducesNonZeroValues()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -39,7 +39,7 @@ public class InitializationIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Eager_InitializeBiases_ProducesZeros()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -58,7 +58,7 @@ public class InitializationIntegrationTests
 
     #region LazyInitializationStrategy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lazy_IsLazy()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -66,7 +66,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lazy_InitializeWeights_StillProducesValues()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -85,7 +85,7 @@ public class InitializationIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lazy_InitializeBiases_ProducesZeros()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -103,7 +103,7 @@ public class InitializationIntegrationTests
 
     #region ZeroInitializationStrategy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Zero_IsNotLazy()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -111,7 +111,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Zero_InitializeWeights_AllZero()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -129,7 +129,7 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Zero_InitializeBiases_AllZero()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -147,14 +147,14 @@ public class InitializationIntegrationTests
 
     #region FromFileInitializationStrategy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_EmptyPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new FromFileInitializationStrategy<double>(""));
         Assert.Throws<ArgumentException>(() => new FromFileInitializationStrategy<double>("   "));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_IsNotLazy()
     {
         var strategy = new FromFileInitializationStrategy<double>("test.json");
@@ -162,7 +162,7 @@ public class InitializationIntegrationTests
         Assert.True(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_NonexistentFile_ThrowsOnInitialize()
     {
         var strategy = new FromFileInitializationStrategy<double>("nonexistent_weights.json");
@@ -171,7 +171,7 @@ public class InitializationIntegrationTests
         Assert.Throws<FileNotFoundException>(() => strategy.InitializeWeights(weights, 3, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_ValidJsonFile_LoadsWeights()
     {
         var tempFile = Path.GetTempFileName() + ".json";
@@ -207,7 +207,7 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_Reset_AllowsReinitialization()
     {
         var tempFile = Path.GetTempFileName() + ".json";
@@ -240,7 +240,7 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FromFile_ValidJsonFile_LoadsBiases()
     {
         var tempFile = Path.GetTempFileName() + ".json";
@@ -281,7 +281,7 @@ public class InitializationIntegrationTests
 
     #region InitializationStrategies Factory Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Strategies_Lazy_ReturnsLazyStrategy()
     {
         var strategy = InitializationStrategies<double>.Lazy;
@@ -290,7 +290,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Strategies_Eager_ReturnsEagerStrategy()
     {
         var strategy = InitializationStrategies<double>.Eager;
@@ -299,7 +299,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Strategies_Zero_ReturnsZeroStrategy()
     {
         var strategy = InitializationStrategies<double>.Zero;
@@ -308,7 +308,7 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Strategies_Singletons_AreSameInstance()
     {
         var lazy1 = InitializationStrategies<double>.Lazy;
@@ -324,7 +324,7 @@ public class InitializationIntegrationTests
         Assert.Same(zero1, zero2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Strategies_FromFile_CreatesNewInstance()
     {
         var s1 = InitializationStrategies<double>.FromFile("a.json");

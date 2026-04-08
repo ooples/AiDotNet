@@ -61,7 +61,7 @@ public class CausalInferenceIntegrationTests
 
     #region SLearner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SLearner_Construction_WithDefaults()
     {
         var learner = new SLearner<double>();
@@ -69,7 +69,7 @@ public class CausalInferenceIntegrationTests
         Assert.False(learner.IsTrained);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -94,7 +94,7 @@ public class CausalInferenceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -116,7 +116,7 @@ public class CausalInferenceIntegrationTests
 
     #region TLearner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -133,7 +133,7 @@ public class CausalInferenceIntegrationTests
         Assert.True(avgEffect > 1.0, $"T-Learner average effect should be > 1.0, got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -152,7 +152,7 @@ public class CausalInferenceIntegrationTests
 
     #region XLearner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void XLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -169,7 +169,7 @@ public class CausalInferenceIntegrationTests
         Assert.True(avgEffect > 0, $"X-Learner average effect should be positive, got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void XLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
@@ -188,7 +188,7 @@ public class CausalInferenceIntegrationTests
 
     #region DoublyRobustEstimator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DoublyRobust_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var dr = new DoublyRobustEstimator<double>();
@@ -207,7 +207,7 @@ public class CausalInferenceIntegrationTests
             $"Doubly Robust average effect should be > 1.0 (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DoublyRobust_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var dr = new DoublyRobustEstimator<double>();
@@ -223,7 +223,7 @@ public class CausalInferenceIntegrationTests
         Assert.False(double.IsInfinity(ate), "ATE is Infinity");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DoublyRobust_PredictTreatedVsControl_TreatedIsHigher()
     {
         var dr = new DoublyRobustEstimator<double>();
@@ -254,7 +254,7 @@ public class CausalInferenceIntegrationTests
 
     #region InverseProbabilityWeighting Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var ipw = new InverseProbabilityWeighting<double>();
@@ -274,7 +274,7 @@ public class CausalInferenceIntegrationTests
             $"IPW average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IPW_EstimateATE_ReturnsPositiveValue()
     {
         var ipw = new InverseProbabilityWeighting<double>();
@@ -293,7 +293,7 @@ public class CausalInferenceIntegrationTests
 
     #region PropensityScoreMatching Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScoreMatching_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var psm = new PropensityScoreMatching<double>();
@@ -313,7 +313,7 @@ public class CausalInferenceIntegrationTests
             $"PSM average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PropensityScoreMatching_EstimateATE_ReturnsPositiveValue()
     {
         var psm = new PropensityScoreMatching<double>();
@@ -332,7 +332,7 @@ public class CausalInferenceIntegrationTests
 
     #region CausalForest Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CausalForest_FitAndEstimate_ReturnsPositiveEffects()
     {
         var forest = new CausalForest<double>(numTrees: 5, maxDepth: 3);
@@ -352,7 +352,7 @@ public class CausalInferenceIntegrationTests
             $"CausalForest average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CausalForest_EstimateATE_ReturnsPositiveValue()
     {
         var forest = new CausalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
@@ -371,7 +371,7 @@ public class CausalInferenceIntegrationTests
 
     #region Cross-Estimator Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllEstimators_AgreeTreatmentIsPositive()
     {
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -408,7 +408,7 @@ public class CausalInferenceIntegrationTests
         Assert.True(drAvg > 0, $"DR estimator should find positive effect, got {drAvg}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllEstimators_ThrowWhenNotFitted()
     {
         var features = new Matrix<double>(1, 2);

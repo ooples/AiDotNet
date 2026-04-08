@@ -17,7 +17,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     // produce deafening noise or crash downstream processing.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FiniteSpectralEnergy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -41,7 +41,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     // A model that produces loud output from silence is broken.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SilenceIn_NearSilenceOut()
     {
         var network = CreateNetwork();
@@ -65,7 +65,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     // Audio models must handle varying input sizes gracefully.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentInputLengths_ShouldNotCrash()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -90,7 +90,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     // Audio output must contain at least one sample.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputLength_ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

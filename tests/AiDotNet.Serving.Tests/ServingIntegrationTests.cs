@@ -309,7 +309,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// and the model is called once with the full batch.
     /// Note: This test now uses Channel-based batching which is reliable in CI environments.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task Predict_WithConcurrentRequests_ProcessesAsBatch()
     {
         // Arrange

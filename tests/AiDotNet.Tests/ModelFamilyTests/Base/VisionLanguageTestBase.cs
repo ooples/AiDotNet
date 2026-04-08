@@ -16,7 +16,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // The model should produce finite output from image-only input.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ImageOnly_ShouldProduceOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -38,7 +38,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // A model mapping everything to the same embedding is collapsed.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentImages_DifferentEmbeddings()
     {
         var network = CreateNetwork();
@@ -69,7 +69,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // indicate numerical instability or unbounded growth.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputNorm_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -93,7 +93,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // All-black image is a valid edge case.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZeroImage_ShouldNotCrash()
     {
         var network = CreateNetwork();

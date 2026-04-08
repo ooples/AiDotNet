@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class SparseTensorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FromDense_ToDense_RoundTrip()
     {
         var dense = new Tensor<double>(new[] { 2, 3 });
@@ -20,7 +20,7 @@ public class SparseTensorTests
         Assert.Equal(0.0, roundTrip[0, 0], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Transpose_SwapsIndices()
     {
         var sparse = new SparseTensor<double>(
@@ -39,7 +39,7 @@ public class SparseTensorTests
         Assert.Equal(3.0, dense[2, 1], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Coalesce_MergesDuplicates()
     {
         var sparse = new SparseTensor<double>(

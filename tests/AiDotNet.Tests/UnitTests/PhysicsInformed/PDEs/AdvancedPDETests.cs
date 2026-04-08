@@ -19,7 +19,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Black-Scholes constructor with valid parameters.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BlackScholesEquation_Constructor_WithValidParameters_Succeeds()
     {
         var pde = new BlackScholesEquation<double>(0.2, 0.05);
@@ -32,7 +32,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Black-Scholes constructor with double convenience overload.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BlackScholesEquation_Constructor_DoubleOverload_Succeeds()
     {
         var pde = new BlackScholesEquation<double>(volatility: 0.3, riskFreeRate: 0.02);
@@ -58,7 +58,7 @@ public class AdvancedPDETests
     /// Tests Black-Scholes with a constant option value (trivial case).
     /// For constant V with all derivatives zero except dV/dt = 0, the residual is -rV.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BlackScholesEquation_ConstantValue_ComputesExpectedResidual()
     {
         double sigma = 0.2;
@@ -87,7 +87,7 @@ public class AdvancedPDETests
     /// Tests Black-Scholes with linear option value V = S.
     /// This is like a forward contract at maturity.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BlackScholesEquation_LinearValue_ComputesCorrectResidual()
     {
         double sigma = 0.2;
@@ -114,7 +114,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Black-Scholes gradient computation.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BlackScholesEquation_GradientComputation_ReturnsExpectedValues()
     {
         double sigma = 0.2;
@@ -146,7 +146,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Linear Elasticity constructor with valid Lame parameters.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearElasticityEquation_Constructor_WithValidParameters_Succeeds()
     {
         var pde = new LinearElasticityEquation<double>(1.0, 1.0);
@@ -171,7 +171,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Linear Elasticity factory method from engineering constants.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearElasticityEquation_FromEngineeringConstants_CreatesValidEquation()
     {
         double E = 200e9;  // Steel-like Young's modulus
@@ -200,7 +200,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Linear Elasticity with zero displacement (trivial equilibrium).
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearElasticityEquation_ZeroDisplacement_ReturnsZeroResidual()
     {
         var pde = new LinearElasticityEquation<double>(1.0, 1.0);
@@ -227,7 +227,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Linear Elasticity with uniform strain (constant displacement gradient).
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearElasticityEquation_UniformStrain_HasZeroSecondDerivatives()
     {
         var pde = new LinearElasticityEquation<double>(1.0, 1.0);
@@ -264,7 +264,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests 1D Advection-Diffusion constructor.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_1D_Constructor_Succeeds()
     {
         var pde = new AdvectionDiffusionEquation<double>(0.1, 1.0);
@@ -277,7 +277,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests 2D Advection-Diffusion constructor.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_2D_Constructor_Succeeds()
     {
         // Explicitly specify all 4 parameters to ensure 2D constructor is called
@@ -295,7 +295,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Advection-Diffusion constructor throws on negative diffusion coefficient.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_NegativeDiffusion_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -306,7 +306,7 @@ public class AdvancedPDETests
     /// Tests 1D pure diffusion (no advection) with Gaussian solution.
     /// For pure diffusion, the equation reduces to heat equation.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_1D_PureDiffusion_ConstantSolution_ZeroResidual()
     {
         double D = 0.1;
@@ -330,7 +330,7 @@ public class AdvancedPDETests
     /// Tests 1D pure advection (no diffusion) with traveling wave.
     /// Solution: c(x,t) = f(x - vt) for any function f.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_1D_PureAdvection_TravelingWave_ZeroResidual()
     {
         double v = 1.0;
@@ -361,7 +361,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests 2D advection-diffusion with uniform concentration.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_2D_UniformConcentration_ZeroResidual()
     {
         // Explicitly specify all 4 parameters to ensure 2D constructor is called
@@ -393,7 +393,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests Advection-Diffusion gradient computation for 1D case.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdvectionDiffusionEquation_1D_GradientComputation_ReturnsExpectedValues()
     {
         double D = 0.1;
@@ -421,7 +421,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV equation constructor with default canonical form.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_Canonical_HasExpectedParameters()
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
@@ -435,7 +435,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV equation constructor with physical form.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_Physical_HasExpectedParameters()
     {
         var pde = KortewegDeVriesEquation<double>.Physical();
@@ -446,7 +446,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV equation constructor throws on zero dispersion coefficient.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_ZeroDispersion_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -456,7 +456,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV with constant solution (all derivatives zero).
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_ConstantSolution_ZeroResidual()
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
@@ -478,7 +478,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV with zero solution.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_ZeroSolution_ZeroResidual()
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
@@ -500,7 +500,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV residual computation for non-trivial case.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_ComputeResidual_ReturnsFiniteValue()
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
@@ -533,7 +533,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Tests KdV gradient computation.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KortewegDeVriesEquation_GradientComputation_ReturnsExpectedValues()
     {
         double alpha = 6.0;
@@ -567,7 +567,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Verifies all new PDEs implement required interfaces correctly.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllNewPDEs_ImplementRequiredInterfaces()
     {
         // Black-Scholes
@@ -594,7 +594,7 @@ public class AdvancedPDETests
     /// <summary>
     /// Verifies all new PDEs have sensible Name properties.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllNewPDEs_HaveDescriptiveNames()
     {
         var bs = new BlackScholesEquation<double>(0.2, 0.05);

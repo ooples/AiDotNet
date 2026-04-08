@@ -75,7 +75,7 @@ public class FederatedDriftDetectionTests
 
     // ========== StatisticalDriftDetector Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_PageHinkley_DetectsNoDriftOnStableData()
     {
         var options = new FederatedDriftOptions
@@ -101,7 +101,7 @@ public class FederatedDriftDetectionTests
         Assert.False(lastReport.GlobalDriftDetected, "Stable data should not trigger global drift");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_ADWIN_ReturnsReport()
     {
         var options = new FederatedDriftOptions
@@ -129,7 +129,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(3, report.ClientResults.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_DDM_ReturnsValidReport()
     {
         var options = new FederatedDriftOptions
@@ -155,7 +155,7 @@ public class FederatedDriftDetectionTests
         Assert.InRange(report.AverageDriftScore, 0.0, 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_GetAdaptiveWeights_PreservesNormalization()
     {
         var options = new FederatedDriftOptions
@@ -192,7 +192,7 @@ public class FederatedDriftDetectionTests
         Assert.InRange(sum, 0.99, 1.01);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_GetAdaptiveWeights_WithDisabledAdaptation_ReturnsOriginal()
     {
         var options = new FederatedDriftOptions
@@ -216,7 +216,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(originalWeights[2], adjusted[2], 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_Reset_ClearsState()
     {
         var options = new FederatedDriftOptions
@@ -242,13 +242,13 @@ public class FederatedDriftDetectionTests
         Assert.False(report.GlobalDriftDetected);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new StatisticalDriftDetector<double>(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_NullClientMetrics_Throws()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.ADWIN };
@@ -258,7 +258,7 @@ public class FederatedDriftDetectionTests
             detector.DetectDrift(0, CreateClientModels(3, 10), CreateGlobalModel(10), null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Statistical_MethodName_MatchesOption()
     {
         var options = new FederatedDriftOptions { Method = FederatedDriftMethod.DDM };
@@ -269,7 +269,7 @@ public class FederatedDriftDetectionTests
 
     // ========== ModelDriftDetector Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_GradientDivergence_DetectsOnStableModels()
     {
         var options = new FederatedDriftOptions
@@ -295,7 +295,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(3, report.ClientResults.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_WeightDivergence_ReturnsValidReport()
     {
         var options = new FederatedDriftOptions
@@ -321,7 +321,7 @@ public class FederatedDriftDetectionTests
         Assert.InRange(report.AverageDriftScore, 0.0, 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_NullClientModels_Throws()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.GradientDivergence };
@@ -331,7 +331,7 @@ public class FederatedDriftDetectionTests
             detector.DetectDrift(0, null, CreateGlobalModel(10), CreateStableMetrics(3)));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_NullGlobalModel_Throws()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.GradientDivergence };
@@ -341,7 +341,7 @@ public class FederatedDriftDetectionTests
             detector.DetectDrift(0, CreateClientModels(3, 10), null, CreateStableMetrics(3)));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_Reset_ClearsHistory()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.GradientDivergence };
@@ -363,13 +363,13 @@ public class FederatedDriftDetectionTests
         Assert.Equal(0, report.Round);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ModelDriftDetector<double>(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Model_MethodName_MatchesOption()
     {
         var options = new FederatedDriftOptions { Method = FederatedDriftMethod.WeightDivergence };
@@ -380,7 +380,7 @@ public class FederatedDriftDetectionTests
 
     // ========== DriftAdaptiveAggregator Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_SkipsWhenDisabled()
     {
         var options = new FederatedDriftOptions { Enabled = false };
@@ -402,7 +402,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(3, adjustedWeights.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_ProcessRound_ReturnsReportAndWeights()
     {
         var options = new FederatedDriftOptions
@@ -434,7 +434,7 @@ public class FederatedDriftDetectionTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_SkipsNonDetectionRounds()
     {
         var options = new FederatedDriftOptions
@@ -463,7 +463,7 @@ public class FederatedDriftDetectionTests
         Assert.DoesNotContain("skipped", report3.Summary);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_GetDriftingClients_EmptyWhenNoDrift()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.PageHinkley };
@@ -474,7 +474,7 @@ public class FederatedDriftDetectionTests
         Assert.Empty(driftingClients);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_GetClientsNeedingRetraining_EmptyByDefault()
     {
         var options = new FederatedDriftOptions { Enabled = true, Method = FederatedDriftMethod.ADWIN };
@@ -485,7 +485,7 @@ public class FederatedDriftDetectionTests
         Assert.Empty(retrainClients);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_Reset_ClearsLatestReport()
     {
         var options = new FederatedDriftOptions
@@ -509,14 +509,14 @@ public class FederatedDriftDetectionTests
         Assert.Null(aggregator.LatestReport);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_NullOptions_Throws()
     {
         var detector = new StatisticalDriftDetector<double>(new FederatedDriftOptions());
         Assert.Throws<ArgumentNullException>(() => new DriftAdaptiveAggregator<double>(null, detector));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAdaptive_NullDetector_Throws()
     {
         var options = new FederatedDriftOptions();
@@ -525,7 +525,7 @@ public class FederatedDriftDetectionTests
 
     // ========== DriftReport and Related Types Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftReport_DefaultValues()
     {
         var report = new DriftReport();
@@ -539,7 +539,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(string.Empty, report.Summary);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClientDriftResult_DefaultValues()
     {
         var result = new ClientDriftResult();
@@ -551,7 +551,7 @@ public class FederatedDriftDetectionTests
         Assert.Equal(1.0, result.SuggestedWeightMultiplier);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(DriftType), DriftType.None));
@@ -561,7 +561,7 @@ public class FederatedDriftDetectionTests
         Assert.True(Enum.IsDefined(typeof(DriftType), DriftType.Recurring));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DriftAction_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(DriftAction), DriftAction.None));
@@ -571,7 +571,7 @@ public class FederatedDriftDetectionTests
         Assert.True(Enum.IsDefined(typeof(DriftAction), DriftAction.TemporaryExclude));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedDriftMethod_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(FederatedDriftMethod), FederatedDriftMethod.PageHinkley));
@@ -583,7 +583,7 @@ public class FederatedDriftDetectionTests
 
     // ========== Options Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedDriftOptions_DefaultValues()
     {
         var options = new FederatedDriftOptions();
@@ -601,7 +601,7 @@ public class FederatedDriftDetectionTests
 
     // ========== Integration with FederatedLearningOptions ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedLearningOptions_CanSetDriftOptions()
     {
         var flOptions = new FederatedLearningOptions

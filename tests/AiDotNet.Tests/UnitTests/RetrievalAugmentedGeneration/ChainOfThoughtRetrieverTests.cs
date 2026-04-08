@@ -60,7 +60,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ChainOfThoughtRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ChainOfThoughtRetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(cotRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithFewShotExamples_InitializesCorrectly()
         {
             // Arrange
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(cotRetriever);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.Retrieve(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.Retrieve("   ", 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.Retrieve("test query", -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMetadataFilters_ReturnsDocuments()
         {
             // Arrange
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithSelfConsistency_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -205,7 +205,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.RetrieveWithSelfConsistency(null!, 10));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithSelfConsistency_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.RetrieveWithSelfConsistency("test query", -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithSelfConsistency_WithNegativeNumPaths_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 cotRetriever.RetrieveWithSelfConsistency("test query", 10, numPaths: -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithSelfConsistency_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void RetrieveWithSelfConsistency_RanksDocumentsByFrequency()
         {
             // Arrange

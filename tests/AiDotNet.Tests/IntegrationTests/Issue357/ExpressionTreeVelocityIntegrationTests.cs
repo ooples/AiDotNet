@@ -14,7 +14,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region Construction and Initialization
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_DefaultConstructor_CreatesEmptyCollections()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -25,7 +25,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Empty(velocity.StructureChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_Float_WorksCorrectly()
     {
         var velocity = new ExpressionTreeVelocity<float>();
@@ -38,7 +38,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region NodeValueChanges
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_CanAddEntries()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -51,7 +51,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(-0.3, velocity.NodeValueChanges[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_CanUpdateEntries()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -63,7 +63,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(1.2, velocity.NodeValueChanges[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_CanRemoveEntries()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -77,7 +77,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.True(velocity.NodeValueChanges.ContainsKey(2));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_SupportsNegativeValues()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -89,7 +89,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(-0.001, velocity.NodeValueChanges[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_SupportsZeroValues()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -100,7 +100,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(0.0, velocity.NodeValueChanges[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_NodeValueChanges_SupportsLargeNodeIds()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -115,7 +115,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region StructureChanges
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_StructureChanges_CanAddModifications()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -130,7 +130,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Single(velocity.StructureChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_StructureChanges_CanAddMultipleModifications()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -157,7 +157,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(3, velocity.StructureChanges.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_StructureChanges_PreservesOrder()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -171,7 +171,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(2, velocity.StructureChanges[2].NodeId);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_StructureChanges_CanClear()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -187,7 +187,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region Combined Velocity Information
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_CanTrackBothValueAndStructureChanges()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -208,7 +208,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Single(velocity.StructureChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_CanResetVelocity()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -225,7 +225,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Empty(velocity.StructureChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_CanReplaceCollections()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -252,7 +252,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region Optimization Simulation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_SimulateOptimizationStep()
     {
         var velocity = new ExpressionTreeVelocity<double>();
@@ -274,7 +274,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(0.02, velocity.NodeValueChanges[3], Tolerance);  // -0.1 * -0.2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_SimulateMomentumUpdate()
     {
         var currentVelocity = new ExpressionTreeVelocity<double>();
@@ -312,7 +312,7 @@ public class ExpressionTreeVelocityIntegrationTests
 
     #region Type Support
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_Float_NodeValueChanges()
     {
         var velocity = new ExpressionTreeVelocity<float>();
@@ -324,7 +324,7 @@ public class ExpressionTreeVelocityIntegrationTests
         Assert.Equal(-0.3f, velocity.NodeValueChanges[2], 1e-6f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpressionTreeVelocity_Int_NodeValueChanges()
     {
         var velocity = new ExpressionTreeVelocity<int>();

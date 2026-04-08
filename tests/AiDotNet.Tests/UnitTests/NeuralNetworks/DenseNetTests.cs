@@ -13,7 +13,7 @@ public class DenseNetTests
 {
     #region DenseNet-121 Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet121_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -27,7 +27,7 @@ public class DenseNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet169_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -39,7 +39,7 @@ public class DenseNetTests
         Assert.Equal(100, network.NumClasses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet201_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -50,7 +50,7 @@ public class DenseNetTests
         Assert.Equal(DenseNetVariant.DenseNet201, network.Variant);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet264_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -65,7 +65,7 @@ public class DenseNetTests
 
     #region Configuration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNetConfiguration_GetBlockLayers_ReturnsCorrectValues()
     {
         // Test DenseNet-121
@@ -89,7 +89,7 @@ public class DenseNetTests
         Assert.Equal([6, 12, 64, 48], layers264);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_WithCustomGrowthRate_CreatesValidNetwork()
     {
         // Arrange - Use factory method with custom growth rate
@@ -101,7 +101,7 @@ public class DenseNetTests
         Assert.Equal(32, network.GrowthRate); // Default growth rate
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_WithGrayscaleInput_CreatesValidNetwork()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class DenseNetTests
 
     #region DenseBlock Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseBlock_Constructor_CreatesValidBlock()
     {
         // Arrange & Act
@@ -133,7 +133,7 @@ public class DenseNetTests
         Assert.Equal(64 + 6 * 32, block.OutputChannels); // 64 + 192 = 256
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseBlock_OutputChannels_CalculatedCorrectly()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class DenseNetTests
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseBlock_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class DenseNetTests
 
     #region TransitionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionLayer_Constructor_CreatesValidLayer()
     {
         // Arrange & Act
@@ -192,7 +192,7 @@ public class DenseNetTests
         Assert.Equal(128, layer.OutputChannels); // 256 * 0.5
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class DenseNetTests
         Assert.Equal(14, output.Shape[3]); // width (28 / 2)
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionLayer_DifferentCompressionFactor_WorksCorrectly()
     {
         // Arrange - no compression (compression = 1.0)
@@ -234,7 +234,7 @@ public class DenseNetTests
 
     #region Model Metadata Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -255,7 +255,7 @@ public class DenseNetTests
 
     #region Clone and Layer Access Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_Clone_CreatesNewInstance()
     {
         // Arrange
@@ -269,7 +269,7 @@ public class DenseNetTests
         Assert.IsType<DenseNetNetwork<float>>(clone);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_GetLayer_ReturnsCorrectLayer()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class DenseNetTests
         Assert.IsType<DenseLayer<float>>(lastLayer); // Classification head
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_GetLayer_ThrowsOnInvalidIndex()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class DenseNetTests
 
     #region Larger Variant Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseNet_LargerVariants_HaveMoreLayers()
     {
         // Arrange

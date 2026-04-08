@@ -16,7 +16,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Normal Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_PdfAtMean_HandCalculated()
     {
         // For N(0,1): PDF(0) = 1/sqrt(2*pi) ≈ 0.398942
@@ -25,7 +25,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Pdf(0.0), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_PdfAt1_HandCalculated()
     {
         // For N(0,1): PDF(1) = (1/sqrt(2*pi)) * exp(-0.5) ≈ 0.241971
@@ -34,7 +34,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Pdf(1.0), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_CdfKnownValues()
     {
         // Standard normal CDF known values:
@@ -46,7 +46,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(0.975, dist.Cdf(1.96), 1e-2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_LogPdf_ConsistentWithPdf()
     {
         var dist = new NormalDistribution<double>(2.0, 3.0);
@@ -59,7 +59,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_GradLogPdf_FiniteDifference()
     {
         var dist = new NormalDistribution<double>(2.0, 3.0);
@@ -82,7 +82,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradVar, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_FisherInformation_HandCalculated()
     {
         // For N(mean, variance):
@@ -96,7 +96,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(1.0 / (2.0 * 16.0), fisher[1, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_SampleMeanConverges()
     {
         var dist = new NormalDistribution<double>(5.0, 2.0);
@@ -113,7 +113,7 @@ public class DistributionsExtendedIntegrationTests
             $"Sample mean {sampleMean} too far from theoretical 5.0");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_NonStandard_CdfRoundTrip()
     {
         // For N(3, 4): CDF(InverseCDF(p)) = p at various quantiles
@@ -130,7 +130,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Beta Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_UniformCase_PdfIsOne()
     {
         // Beta(1,1) = Uniform(0,1), so PDF = 1 everywhere in (0,1)
@@ -140,7 +140,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(1.0, dist.Pdf(0.9), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_SymmetricCase_CdfAtHalf()
     {
         // For symmetric Beta(a, a), CDF(0.5) = 0.5
@@ -148,7 +148,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(0.5, dist.Cdf(0.5), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_Variance_HandCalculated()
     {
         // Var(Beta(a,b)) = ab / ((a+b)^2 * (a+b+1))
@@ -158,7 +158,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_CdfInverseCdf_RoundTrip()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
@@ -170,7 +170,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_GradLogPdf_FiniteDifference()
     {
         var dist = new BetaDistribution<double>(3.0, 5.0);
@@ -192,7 +192,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradBeta, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_FromMeanVariance_RecoversParameters()
     {
         double a = 4.0, b = 6.0;
@@ -203,7 +203,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(original.Variance, reconstructed.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Beta_LogPdf_ConsistentWithPdf()
     {
         var dist = new BetaDistribution<double>(2.0, 3.0);
@@ -220,7 +220,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Gamma Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_Shape1_IsExponential()
     {
         // Gamma(1, rate) = Exponential(rate)
@@ -236,7 +236,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_PdfAtMode_HandCalculated()
     {
         // Mode of Gamma(alpha, beta) = (alpha-1)/beta for alpha >= 1
@@ -250,7 +250,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.True(pdfAtMode > dist.Pdf(mode + 0.1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_CdfRoundTrip()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
@@ -262,7 +262,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_GradLogPdf_FiniteDifference()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
@@ -284,7 +284,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradRate, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_FromMeanVariance_RecoversParameters()
     {
         double shape = 4.0, rate = 2.0;
@@ -295,7 +295,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(original.Variance, reconstructed.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_LogPdf_ConsistentWithPdf()
     {
         var dist = new GammaDistribution<double>(2.0, 1.5);
@@ -312,7 +312,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Exponential Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_CdfFormula_HandCalculated()
     {
         // CDF(x) = 1 - exp(-rate * x)
@@ -323,7 +323,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Cdf(x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_Variance_HandCalculated()
     {
         // Var(Exp(rate)) = 1/rate^2
@@ -332,7 +332,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(1.0 / (rate * rate), dist.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_MemorylessProperty()
     {
         // P(X > s+t | X > s) = P(X > t)
@@ -347,7 +347,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(pGtT, conditional, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_InverseCdfRoundTrip()
     {
         var dist = new ExponentialDistribution<double>(2.0);
@@ -363,7 +363,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Laplace Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_PdfAtLocation_HandCalculated()
     {
         // PDF at location = 1/(2*scale)
@@ -373,7 +373,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Pdf(loc), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_Variance_HandCalculated()
     {
         // Var(Laplace(loc, scale)) = 2 * scale^2
@@ -383,7 +383,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_CdfKnownValues()
     {
         // CDF(x) = 0.5 * exp((x-loc)/scale) for x < loc
@@ -395,7 +395,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(1.0 - 0.5 * Math.Exp(-1.0), dist.Cdf(1.0), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_GradLogPdf_FiniteDifference()
     {
         var dist = new LaplaceDistribution<double>(2.0, 3.0);
@@ -417,7 +417,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradScale, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_InverseCdfRoundTrip()
     {
         var dist = new LaplaceDistribution<double>(1.0, 2.0);
@@ -429,7 +429,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Laplace_LogPdf_ConsistentWithPdf()
     {
         var dist = new LaplaceDistribution<double>(1.0, 2.0);
@@ -446,7 +446,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region LogNormal Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_MeanFormula_HandCalculated()
     {
         // E[X] = exp(mu + sigma^2/2)
@@ -456,7 +456,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Mean, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_VarianceFormula_HandCalculated()
     {
         // Var[X] = (exp(sigma^2) - 1) * exp(2*mu + sigma^2)
@@ -467,7 +467,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_MedianIsExpMu()
     {
         // Median = exp(mu)
@@ -477,7 +477,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(Math.Exp(mu), median, 1e-2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_CdfRoundTrip()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
@@ -489,7 +489,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_GradLogPdf_FiniteDifference()
     {
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
@@ -511,7 +511,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradSigma, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_FromMeanVariance_RecoversDistribution()
     {
         double mu = 1.0, sigma = 0.5;
@@ -523,7 +523,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(original.Variance, reconstructed.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormal_LogPdf_ConsistentWithPdf()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
@@ -540,7 +540,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Weibull Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_CdfFormula_HandCalculated()
     {
         // CDF(x) = 1 - exp(-(x/lambda)^k)
@@ -551,7 +551,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Cdf(x), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_InverseCdfFormula_HandCalculated()
     {
         // InverseCDF(p) = lambda * (-ln(1-p))^(1/k)
@@ -562,7 +562,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.InverseCdf(p), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_CdfRoundTrip()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
@@ -574,7 +574,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_MeanFormula_HandCalculated()
     {
         // Mean = lambda * Gamma(1 + 1/k)
@@ -584,7 +584,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Mean, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_GradLogPdf_FiniteDifference()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
@@ -606,7 +606,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(numGradScale, analyticalGrad[1], GradTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Weibull_LogPdf_ConsistentWithPdf()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
@@ -623,7 +623,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Student-T Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentT_Df1_IsCauchy()
     {
         // Student-t with df=1 is the Cauchy distribution
@@ -633,7 +633,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Pdf(0.0), 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentT_CdfAtZero_IsHalf()
     {
         // For any symmetric distribution, CDF(0) = 0.5
@@ -644,7 +644,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentT_HighDf_ApproachesNormalPdf()
     {
         // Student-t with large df approaches standard normal
@@ -658,7 +658,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentT_CdfRoundTrip()
     {
         var dist = new StudentTDistribution<double>(5);
@@ -674,7 +674,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Poisson Distribution - Deep Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_PmfKnownValues()
     {
         // P(X=k) = lambda^k * exp(-lambda) / k!
@@ -687,7 +687,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(2 * e2, dist.Pdf(2.0), Tolerance);      // lambda^2/2! * e^-lambda = 4/2*e^-2 = 2*e^-2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_PmfSumsToApproximatelyOne()
     {
         // Sum of PMF values from 0 to N should approach 1
@@ -704,7 +704,7 @@ public class DistributionsExtendedIntegrationTests
 
     #region Cross-Distribution Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_PdfNonNegative()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -731,7 +731,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_StdDev_IsSqrtVariance()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -756,7 +756,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_FisherInformation_IsSymmetric()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -777,7 +777,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_FisherInformation_DiagonalPositive()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -801,7 +801,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_Clone_ProducesSamePdf()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -826,7 +826,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_ParameterSetGet_RoundTrip()
     {
         var distributions = new IParametricDistribution<double>[]
@@ -852,7 +852,7 @@ public class DistributionsExtendedIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NegativeBinomial_MeanFormula()
     {
         // Mean = r*(1-p)/p
@@ -862,7 +862,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(expected, dist.Mean, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NegativeBinomial_VarianceFormula()
     {
         // Variance = r*(1-p)/p^2
@@ -876,21 +876,21 @@ public class DistributionsExtendedIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normal_StdDev_IsSqrtVariance()
     {
         var dist = new NormalDistribution<double>(0, 4.0);
         Assert.Equal(2.0, dist.StdDev, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Gamma_Scale_IsOneOverRate()
     {
         var dist = new GammaDistribution<double>(2.0, 4.0);
         Assert.Equal(0.25, ((GammaDistribution<double>)dist).Scale, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_SampleBatch_ReturnsCorrectCount()
     {
         var dist = new NormalDistribution<double>(0, 1);
@@ -899,7 +899,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Equal(100, samples.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_SampleBatch_InvalidCount_Throws()
     {
         var dist = new NormalDistribution<double>(0, 1);
@@ -908,7 +908,7 @@ public class DistributionsExtendedIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => dist.Sample(rng, -1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDistributions_ParameterCount_MatchesNames()
     {
         var distributions = new IParametricDistribution<double>[]

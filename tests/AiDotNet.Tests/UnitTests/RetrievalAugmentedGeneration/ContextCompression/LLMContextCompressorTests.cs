@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidCompressionRatio_CreatesInstance()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(compressor);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCompressionRatioZero_CreatesInstance()
         {
             // Arrange & Act
@@ -33,7 +33,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(compressor);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCompressionRatioNegative_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -41,7 +41,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new LLMContextCompressor<double>(compressionRatio: -0.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCompressionRatioGreaterThanOne_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -49,7 +49,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new LLMContextCompressor<double>(compressionRatio: 1.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCompressionRatioOne_CreatesInstance()
         {
             // Arrange & Act
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Basic Functionality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidDocuments_ReturnsCompressedDocuments()
         {
             // Arrange
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertCompressed(documents, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullDocuments_ThrowsArgumentNullException()
         {
             // Arrange
@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(null, query));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithWhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, "   "));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocumentList_ReturnsEmptyList()
         {
             // Arrange
@@ -148,7 +148,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Compression Quality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesRelevantInformation()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Contains("machine learning", compressedContent);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithLowCompressionRatio_RetainsFewSentences()
         {
             // Arrange
@@ -183,7 +183,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result[0].Content.Length < document.Content.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithHighCompressionRatio_RetainsMoreContent()
         {
             // Arrange
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(highLength > lowLength);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesMetadata()
         {
             // Arrange
@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertMetadataPreserved(documents, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesRelevanceScores()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertRelevanceScoresPreserved(documents, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesDocumentIds()
         {
             // Arrange
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Edge Cases Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocument_ReturnsEmptyDocument()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSingleSentenceDocument_RetainsSentence()
         {
             // Arrange
@@ -292,7 +292,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithDocumentSmallerThanTarget_ReturnsOriginal()
         {
             // Arrange
@@ -311,7 +311,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithVeryLargeDocument_CompressesSuccessfully()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result[0].Content.Length > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithUnicodeContent_HandlesCorrectly()
         {
             // Arrange
@@ -346,7 +346,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSpecialCharacters_HandlesCorrectly()
         {
             // Arrange
@@ -363,7 +363,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithMultipleDocuments_ProcessesAllDocuments()
         {
             // Arrange
@@ -390,7 +390,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region CompressText Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressText_WithValidInput_CompressesText()
         {
             // Arrange
@@ -406,7 +406,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result.Length < text.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressText_WithEmptyText_ReturnsEmpty()
         {
             // Arrange
@@ -420,7 +420,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressText_WithNullText_ReturnsNull()
         {
             // Arrange
@@ -434,7 +434,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Null(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressText_SelectsMostRelevantSentences()
         {
             // Arrange
@@ -456,7 +456,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Integration Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithDifferentCompressionRatios_ProducesExpectedRatios()
         {
             // Arrange
@@ -482,7 +482,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithDifferentQueries_ProducesDifferentResults()
         {
             // Arrange
@@ -505,7 +505,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEqual(result1[0].Content, result2[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_MultipleInvocations_ProducesSameResults()
         {
             // Arrange

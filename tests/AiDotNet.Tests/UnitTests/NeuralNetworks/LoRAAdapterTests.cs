@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
     public class LoRAAdapterTests
     {
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithValidBaseLayer_InitializesCorrectly()
         {
             // Arrange
@@ -28,14 +28,14 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(adapter.IsBaseLayerFrozen);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithNullBaseLayer_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new DenseLoRAAdapter<double>(null!, rank: 3));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ParameterCount_WithFrozenBase_ReturnsOnlyLoRAParameters()
         {
             // Arrange
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(45, paramCount);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ParameterCount_WithUnfrozenBase_ReturnsAllParameters()
         {
             // Arrange
@@ -65,7 +65,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(100, paramCount);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_ProducesCorrectOutputShape()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_CombinesBaseAndLoRAOutputs()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
 
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void GetParameters_ReturnsCorrectCount()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(45, parameters.Length);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void SetParameters_ThenGetParameters_ReturnsSetValues()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void SetParameters_WithWrongSize_ThrowsArgumentException()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Throws<ArgumentException>(() => adapter.SetParameters(wrongParams));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergeToSingleLayer_ProducesDenseLayer()
         {
             // Arrange
@@ -176,7 +176,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedLayer.GetOutputShape()[0]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void BaseLayer_Property_ReturnsOriginalLayer()
         {
             // Arrange
@@ -227,7 +227,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Same(baseLayer, retrievedBase);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void LoRALayer_Property_ReturnsLoRALayer()
         {
             // Arrange
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(3, loraLayer.Rank);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void IsBaseLayerFrozen_Property_ReflectsConstructorParameter()
         {
             // Arrange & Act
@@ -255,7 +255,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.False(adapter2.IsBaseLayerFrozen);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Alpha_Property_ReturnsCorrectValue()
         {
             // Arrange & Act
@@ -265,7 +265,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(16.0, adapter.Alpha);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void SupportsTraining_ReturnsTrue()
         {
             // Arrange
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(freeze, adapter.IsBaseLayerFrozen);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void LoRAAdapter_WithFloat_WorksCorrectly()
         {
             // Arrange

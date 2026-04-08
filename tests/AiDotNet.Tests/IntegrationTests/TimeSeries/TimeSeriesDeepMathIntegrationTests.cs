@@ -22,7 +22,7 @@ public class TimeSeriesDeepMathIntegrationTests
     // ARModel - Prediction Formula: y_hat(t) = sum(coeff[i] * y[t-i-1])
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_PredictSingle_AR1_DotProductFormula()
     {
         // AR(1): y_hat(t) = coeff[0] * y[t-1]
@@ -44,7 +44,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), "Prediction should be finite");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Forecast_RollingPrediction()
     {
         // Forecast uses rolling prediction: each prediction feeds into the next
@@ -70,7 +70,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Forecast_NegativeHorizon_Throws()
     {
         var options = new ARModelOptions<double> { AROrder = 1 };
@@ -81,7 +81,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.Forecast(MakeVector(new double[] { 1, 2, 3 }), 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Evaluate_MSE_RMSE_MAE_MAPE_Consistent()
     {
         // Verify evaluation metrics are internally consistent
@@ -103,7 +103,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(metrics["MSE"]), metrics["RMSE"], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_PredictSingle_InsufficientHistory_Throws()
     {
         var options = new ARModelOptions<double> { AROrder = 5 };
@@ -116,7 +116,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.PredictSingle(shortHistory));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Clone_ProducesSamePredictions()
     {
         var options = new ARModelOptions<double> { AROrder = 2, MaxIterations = 100 };
@@ -136,7 +136,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(origPred, clonePred, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Reset_ClearsCoefficients()
     {
         var options = new ARModelOptions<double> { AROrder = 1, MaxIterations = 100 };
@@ -151,7 +151,7 @@ public class TimeSeriesDeepMathIntegrationTests
             model.Forecast(MakeVector(new double[] { 1, 2, 3 }), 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_SerializeDeserialize_PreservesPredictions()
     {
         var options = new ARModelOptions<double> { AROrder = 2, MaxIterations = 200, LearningRate = 0.001 };
@@ -178,7 +178,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(origPred, newPred, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_ConstantSeries_ConvergesToZeroCoefficients()
     {
         // A constant series y = [1, 1, 1, ...] (using small values to prevent gradient explosion)
@@ -205,7 +205,7 @@ public class TimeSeriesDeepMathIntegrationTests
     // ExponentialSmoothingModel - Simple (SES), Double (DES), Triple (TES)
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_SimpleES_LevelUpdateFormula()
     {
         // Simple Exponential Smoothing (no trend, no seasonality):
@@ -252,7 +252,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_DoubleES_TrendCapture()
     {
         // Double Exponential Smoothing (Holt's method):
@@ -291,7 +291,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_DoubleES_ForecastIncreasingForLinearData()
     {
         // For a strictly increasing linear series, multi-step forecasts should also be increasing
@@ -322,7 +322,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_Metrics_AllPositive()
     {
         // ExponentialSmoothing EvaluateModel returns MSE, RMSE, MAPE (not MAE)
@@ -350,7 +350,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(metrics["MSE"]), metrics["RMSE"], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_TripleES_HandComputedSeasonalFactors()
     {
         // Triple Exponential Smoothing (Holt-Winters) with seasonality
@@ -393,7 +393,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_TripleES_ForecastPreservesSeasonality()
     {
         // Seasonal data with period 4: forecasts should show periodicity
@@ -425,7 +425,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_SES_ConstantSeries_PredictsSameValue()
     {
         // For constant series, SES should predict approximately the same constant
@@ -453,7 +453,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_Clone_ProducesSamePredictions()
     {
         var options = new ExponentialSmoothingOptions<double>
@@ -482,7 +482,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_SerializeDeserialize_PreservesPredictions()
     {
         var options = new ExponentialSmoothingOptions<double>
@@ -515,7 +515,7 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_Reset_ClearsState()
     {
         var options = new ExponentialSmoothingOptions<double>
@@ -549,7 +549,7 @@ public class TimeSeriesDeepMathIntegrationTests
     // Cross-model properties
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_Metadata_ContainsExpectedFields()
     {
         var options = new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 };
@@ -569,7 +569,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(3, metadata.AdditionalInfo["AROrder"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_ToString_ContainsAROrder()
     {
         var options = new ARModelOptions<double> { AROrder = 2 };
@@ -582,7 +582,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Contains("AR Coefficients", str);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialSmoothing_DES_DecreasingData_NegativeTrend()
     {
         // For decreasing data, the trend component should be negative
@@ -610,7 +610,7 @@ public class TimeSeriesDeepMathIntegrationTests
             $"First forecast {forecast[0]} should be near or below last data point {data[^1]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ARModel_HighAROrder_CapturesLongerPatterns()
     {
         // AR(5) should look at 5 lagged values

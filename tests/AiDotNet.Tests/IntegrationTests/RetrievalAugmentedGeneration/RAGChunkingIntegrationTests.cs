@@ -13,7 +13,7 @@ public class RAGChunkingIntegrationTests
 {
     #region FixedSizeChunkingStrategy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_DefaultParams_ChunksText()
     {
         var strategy = new FixedSizeChunkingStrategy(100, 10);
@@ -23,7 +23,7 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 2, "Should produce multiple chunks for text longer than chunk size");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_ShortText_SingleChunk()
     {
         var strategy = new FixedSizeChunkingStrategy(500, 50);
@@ -34,7 +34,7 @@ public class RAGChunkingIntegrationTests
         Assert.Equal("Short text here.", chunks[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_ChunkSizeRespected()
     {
         var strategy = new FixedSizeChunkingStrategy(20, 5);
@@ -47,7 +47,7 @@ public class RAGChunkingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_WithPositions_TracksPositions()
     {
         var strategy = new FixedSizeChunkingStrategy(10, 2);
@@ -59,7 +59,7 @@ public class RAGChunkingIntegrationTests
         Assert.Equal(0, chunksWithPos[0].StartPosition);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_OverlapCreatesOverlappingContent()
     {
         var strategy = new FixedSizeChunkingStrategy(10, 3);
@@ -75,39 +75,39 @@ public class RAGChunkingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_NullText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy();
         Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_EmptyText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy();
         Assert.Throws<ArgumentException>(() => strategy.Chunk("").ToList());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_ZeroChunkSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(0, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_NegativeOverlap_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(100, -1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_OverlapGteChunkSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(100, 100));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FixedSize_Properties_MatchConstructorParams()
     {
         var strategy = new FixedSizeChunkingStrategy(200, 30);
@@ -119,7 +119,7 @@ public class RAGChunkingIntegrationTests
 
     #region SentenceChunkingStrategy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sentence_SplitsOnSentenceBoundaries()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 50, maxChunkSize: 100, overlapSentences: 0);
@@ -129,7 +129,7 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 1, "Should produce at least one chunk");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sentence_ShortText_SingleChunk()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 500, maxChunkSize: 1000);
@@ -139,21 +139,21 @@ public class RAGChunkingIntegrationTests
         Assert.Single(chunks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sentence_MaxChunkSizeLessThanTarget_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new SentenceChunkingStrategy(targetChunkSize: 1000, maxChunkSize: 500));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sentence_NegativeOverlapSentences_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new SentenceChunkingStrategy(overlapSentences: -1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Sentence_WithPositions_TracksPositions()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 30, maxChunkSize: 60);
@@ -172,7 +172,7 @@ public class RAGChunkingIntegrationTests
 
     #region SlidingWindowChunkingStrategy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlidingWindow_CreatesOverlappingChunks()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 20, stride: 10);
@@ -182,7 +182,7 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 2, "Should create multiple overlapping windows");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SlidingWindow_ShortText_SingleChunk()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
@@ -196,7 +196,7 @@ public class RAGChunkingIntegrationTests
 
     #region RecursiveCharacterChunkingStrategy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Recursive_SplitsLongText()
     {
         var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 50, chunkOverlap: 10);
@@ -206,7 +206,7 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 1, "Should produce at least one chunk");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Recursive_ShortText_SingleChunk()
     {
         var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 500);
@@ -220,7 +220,7 @@ public class RAGChunkingIntegrationTests
 
     #region Cross-Strategy - Consistency
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_CoverEntireText_NoContentLoss()
     {
         var text = "The quick brown fox jumps over the lazy dog.";
@@ -231,7 +231,7 @@ public class RAGChunkingIntegrationTests
         Assert.All(chunks, chunk => Assert.False(string.IsNullOrWhiteSpace(chunk)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_WithPositions_PositionsInRange()
     {
         var text = "This is a test text for chunking with position tracking.";

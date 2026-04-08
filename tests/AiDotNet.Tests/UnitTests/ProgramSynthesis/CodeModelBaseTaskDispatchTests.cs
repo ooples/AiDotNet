@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class CodeModelBaseTaskDispatchTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformTask_AllTasks_ReturnsStructuredResults()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);

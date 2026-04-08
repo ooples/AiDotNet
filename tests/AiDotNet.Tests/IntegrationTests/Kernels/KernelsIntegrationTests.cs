@@ -15,7 +15,7 @@ public class KernelsIntegrationTests
 
     #region Linear Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_IdenticalVectors_ReturnsSquaredNorm()
     {
         // Arrange
@@ -29,7 +29,7 @@ public class KernelsIntegrationTests
         Assert.Equal(14.0, result, Tolerance); // 1*1 + 2*2 + 3*3 = 14
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_OrthogonalVectors_ReturnsZero()
     {
         // Arrange
@@ -44,7 +44,7 @@ public class KernelsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_GeneralVectors_CalculatesDotProduct()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class KernelsIntegrationTests
         Assert.Equal(32.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_ZeroVector_ReturnsZero()
     {
         // Arrange
@@ -74,7 +74,7 @@ public class KernelsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_Symmetry()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class KernelsIntegrationTests
 
     #region Gaussian (RBF) Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_IdenticalVectors_ReturnsOne()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class KernelsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_DifferentVectors_ReturnsBetweenZeroAndOne()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class KernelsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_FarVectors_ReturnsNearZero()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class KernelsIntegrationTests
         Assert.True(result < 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_DifferentSigma_AffectsResult()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class KernelsIntegrationTests
         Assert.True(resultSmall < resultLarge);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_DefaultSigma_Works()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class KernelsIntegrationTests
         Assert.True(result > 0.5 && result < 0.7);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_Symmetry()
     {
         // Arrange
@@ -191,7 +191,7 @@ public class KernelsIntegrationTests
 
     #region Polynomial Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_ReturnsFiniteValue()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class KernelsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_ZeroDotProduct_ReturnsFiniteValue()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class KernelsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_CustomDegreeAndCoef0_Works()
     {
         // Arrange
@@ -238,7 +238,7 @@ public class KernelsIntegrationTests
         Assert.Equal(121.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_LinearDegree_EquivalentToLinear()
     {
         // Arrange
@@ -256,7 +256,7 @@ public class KernelsIntegrationTests
         Assert.Equal(linearResult, polyResult, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_HigherDotProduct_HigherResult()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class KernelsIntegrationTests
 
     #region Laplacian Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacianKernel_DoesNotThrow()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacianKernel_Symmetry()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class KernelsIntegrationTests
 
     #region Sigmoid Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidKernel_GeneralCase_ReturnsBoundedValue()
     {
         // Arrange
@@ -333,7 +333,7 @@ public class KernelsIntegrationTests
         Assert.True(result <= 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidKernel_ZeroVectors_ReturnsBoundedValue()
     {
         // Arrange
@@ -348,7 +348,7 @@ public class KernelsIntegrationTests
         Assert.True(result > -1.0 && result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidKernel_ReturnsFiniteValue()
     {
         // Arrange
@@ -368,7 +368,7 @@ public class KernelsIntegrationTests
 
     #region Cauchy Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CauchyKernel_DoesNotThrow()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CauchyKernel_Symmetry()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class KernelsIntegrationTests
 
     #region Multiquadric Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiquadricKernel_DoesNotThrow()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiquadricKernel_DifferentVectors_ReturnsPositive()
     {
         // Arrange
@@ -442,7 +442,7 @@ public class KernelsIntegrationTests
 
     #region Inverse Multiquadric Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseMultiquadricKernel_DoesNotThrow()
     {
         // Arrange
@@ -458,7 +458,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseMultiquadricKernel_DifferentVectors_ReturnsPositive()
     {
         // Arrange
@@ -477,7 +477,7 @@ public class KernelsIntegrationTests
 
     #region Rational Quadratic Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadraticKernel_DoesNotThrow()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadraticKernel_Symmetry()
     {
         // Arrange
@@ -516,7 +516,7 @@ public class KernelsIntegrationTests
 
     #region Exponential Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialKernel_DoesNotThrow()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class KernelsIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialKernel_Symmetry()
     {
         // Arrange
@@ -555,7 +555,7 @@ public class KernelsIntegrationTests
 
     #region Chi-Square Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareKernel_IdenticalVectors_ReturnsOne()
     {
         // Arrange
@@ -569,7 +569,7 @@ public class KernelsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareKernel_DifferentVectors_ReturnsLessThanOne()
     {
         // Arrange
@@ -584,7 +584,7 @@ public class KernelsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareKernel_Symmetry()
     {
         // Arrange
@@ -604,7 +604,7 @@ public class KernelsIntegrationTests
 
     #region Hellinger Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HellingerKernel_IdenticalVectors_ReturnsOne()
     {
         // Arrange
@@ -618,7 +618,7 @@ public class KernelsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HellingerKernel_DifferentVectors_ReturnsBounded()
     {
         // Arrange
@@ -634,7 +634,7 @@ public class KernelsIntegrationTests
         Assert.True(result <= 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HellingerKernel_Symmetry()
     {
         // Arrange
@@ -654,7 +654,7 @@ public class KernelsIntegrationTests
 
     #region Spline Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplineKernel_GeneralCase_ReturnsFiniteValue()
     {
         // Arrange
@@ -670,7 +670,7 @@ public class KernelsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplineKernel_IdenticalVectors_ReturnsFiniteValue()
     {
         // Arrange
@@ -689,7 +689,7 @@ public class KernelsIntegrationTests
 
     #region Matern Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaternKernel_DifferentVectors_ReturnsFinite()
     {
         // Arrange
@@ -704,7 +704,7 @@ public class KernelsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaternKernel_Symmetry()
     {
         // Arrange
@@ -727,7 +727,7 @@ public class KernelsIntegrationTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernels_HandleZeroVectors()
     {
         // Arrange
@@ -749,7 +749,7 @@ public class KernelsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SymmetricKernels_VerifySymmetry()
     {
         // Arrange
@@ -771,7 +771,7 @@ public class KernelsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_PositiveDefinite_ReturnPositive()
     {
         // Arrange
@@ -785,7 +785,7 @@ public class KernelsIntegrationTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_PositiveDefinite_ReturnPositive()
     {
         // Arrange

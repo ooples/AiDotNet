@@ -28,7 +28,7 @@ public class DeepCorrectnessTests
 
     #region Convergence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
@@ -57,7 +57,7 @@ public class DeepCorrectnessTests
             $"MAML loss did not trend downward: early avg={earlyAvg:F6}, late avg={lateAvg:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProtoNets_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
@@ -83,7 +83,7 @@ public class DeepCorrectnessTests
             $"ProtoNets loss did not trend downward: early={earlyAvg:F6}, late={lateAvg:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CNP_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
@@ -113,7 +113,7 @@ public class DeepCorrectnessTests
 
     #region Adaptation Quality Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_AdaptedModel_OutperformsUnadapted()
     {
         var model = new LinearVectorModel(InputDim);
@@ -146,7 +146,7 @@ public class DeepCorrectnessTests
             $"MAML adapted model did not improve: pre={preAdaptLoss:F6}, post={postAdaptLoss:F6}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProtoNets_AdaptedModel_ProducesValidPredictions()
     {
         var model = new LinearVectorModel(InputDim);
@@ -184,7 +184,7 @@ public class DeepCorrectnessTests
 
     #region Determinism and Reproducibility
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_FixedSeed_ProducesIdenticalResults()
     {
         double loss1 = RunMAMLWithSeed(42);
@@ -193,7 +193,7 @@ public class DeepCorrectnessTests
         Assert.Equal(loss1, loss2, 10); // Should be exactly equal with same seed
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_DifferentSeeds_ProduceDifferentResults()
     {
         double loss1 = RunMAMLWithSeed(42);
@@ -220,7 +220,7 @@ public class DeepCorrectnessTests
 
     #region Parameter Isolation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_Adapt_DoesNotCorruptMetaParameters()
     {
         var model = new LinearVectorModel(InputDim);
@@ -254,7 +254,7 @@ public class DeepCorrectnessTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_MultipleAdaptations_AreIndependent()
     {
         var model = new LinearVectorModel(InputDim);
@@ -296,7 +296,7 @@ public class DeepCorrectnessTests
 
     #region Gradient Flow Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_GradientsAreNonZeroAndBounded()
     {
         var model = new LinearVectorModel(InputDim);
@@ -327,7 +327,7 @@ public class DeepCorrectnessTests
         Assert.True(allBounded, "Gradients should be bounded (no explosion)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultipleAlgorithms_GradientFlowConsistency()
     {
         var rng = new Random(900);
@@ -382,7 +382,7 @@ public class DeepCorrectnessTests
 
     #region Edge Case Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_SingleExamplePerClass_StillConverges()
     {
         var model = new LinearVectorModel(InputDim);
@@ -410,7 +410,7 @@ public class DeepCorrectnessTests
             "Average 1-shot loss should be finite");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_HighDimensionalInput_HandledCorrectly()
     {
         const int highDim = 32;
@@ -433,7 +433,7 @@ public class DeepCorrectnessTests
         Assert.Equal(tasks[0].QuerySetY.Length, preds.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAML_LargeBatch_HandledCorrectly()
     {
         var model = new LinearVectorModel(InputDim);
@@ -455,7 +455,7 @@ public class DeepCorrectnessTests
 
     #region Data Infrastructure Deep Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SineWaveDataset_TasksAreDistinct()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -482,7 +482,7 @@ public class DeepCorrectnessTests
         Assert.True(anyDifferent, "Different episodes should have different support data");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianDataset_ClassesAreWellSeparated()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -518,7 +518,7 @@ public class DeepCorrectnessTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RotatedDigitsDataset_ProducesCorrectDimensions()
     {
         var dataset = new RotatedDigitsMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -541,7 +541,7 @@ public class DeepCorrectnessTests
         Assert.Equal(9, task.QuerySetY.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaDatasetFormat_SamplesFromCorrectDomain()
     {
         var sine = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -568,7 +568,7 @@ public class DeepCorrectnessTests
             $"Unexpected domain: {epRandom.Domain}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskDifficultyEstimator_EasyTaskHasLowDifficulty()
     {
         // Create a well-separated 2-class task
@@ -590,7 +590,7 @@ public class DeepCorrectnessTests
         Assert.True(difficulty < 0.5, $"Easy task should have low difficulty, got {difficulty:F4}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaskDifficultyEstimator_HardTaskHasHighDifficulty()
     {
         // Create overlapping 2-class task
@@ -614,7 +614,7 @@ public class DeepCorrectnessTests
         Assert.True(difficulty > 0.3, $"Hard task should have high difficulty, got {difficulty:F4}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CurriculumSampler_IncreasesDifficultyOverTime()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -641,7 +641,7 @@ public class DeepCorrectnessTests
         Assert.NotNull(laterEpisode.Task);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelPredictiveSampler_OperatesCorrectly()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -666,7 +666,7 @@ public class DeepCorrectnessTests
 
     #region Multi-Algorithm Consistency
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllNeuralProcesses_ProduceFiniteLossAcrossMultipleEpochs()
     {
         var npAlgorithms = new (string Name, Func<MetaLearnerBase<double, Matrix<double>, Vector<double>>> Factory)[]

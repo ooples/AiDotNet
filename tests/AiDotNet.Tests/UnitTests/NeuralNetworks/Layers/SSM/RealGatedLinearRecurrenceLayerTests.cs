@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class RealGatedLinearRecurrenceLayerTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
@@ -22,7 +22,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Equal(recurrenceDim, layer.RecurrenceDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(16);
@@ -31,7 +31,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Equal(256, layer.RecurrenceDimension); // defaults to modelDim when -1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_DefaultRecurrenceDimMatchesModelDim()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(16, modelDimension: 64);
@@ -40,7 +40,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Equal(64, layer.RecurrenceDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -83,7 +83,7 @@ public class RealGatedLinearRecurrenceLayerTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -105,7 +105,7 @@ public class RealGatedLinearRecurrenceLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(4, 32);
@@ -114,7 +114,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResetState_ClearsInternalState()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(4, 32);
@@ -136,7 +136,7 @@ public class RealGatedLinearRecurrenceLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -161,14 +161,14 @@ public class RealGatedLinearRecurrenceLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_ReturnsTrue()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(4, 32);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(8, 64, recurrenceDimension: 128);
@@ -181,7 +181,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Equal("128", metadata["RecurrenceDimension"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDecayParameter_ReturnsValidTensor()
     {
         var layer = new RealGatedLinearRecurrenceLayer<float>(4, 32);
@@ -192,7 +192,7 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.Equal(32, decay.Length); // recurrenceDim defaults to modelDim
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

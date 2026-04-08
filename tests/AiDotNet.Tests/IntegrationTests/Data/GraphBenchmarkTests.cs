@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class GraphBenchmarkTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Qm9Options_DefaultValues()
     {
         var options = new Qm9DataLoaderOptions();
@@ -20,7 +20,7 @@ public class GraphBenchmarkTests
         Assert.Null(options.MaxSamples);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZincOptions_DefaultValues()
     {
         var options = new ZincDataLoaderOptions();
@@ -28,7 +28,7 @@ public class GraphBenchmarkTests
         Assert.True(options.UseSubset);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProteinOptions_DefaultValues()
     {
         var options = new ProteinDataLoaderOptions();
@@ -37,7 +37,7 @@ public class GraphBenchmarkTests
         Assert.Equal(384, options.NumClasses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Wikidata5mOptions_DefaultValues()
     {
         var options = new Wikidata5mDataLoaderOptions();
@@ -45,7 +45,7 @@ public class GraphBenchmarkTests
         Assert.Equal(128, options.EmbeddingDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemporalGraphOptions_DefaultValues()
     {
         var options = new TemporalGraphDataLoaderOptions();
@@ -54,7 +54,7 @@ public class GraphBenchmarkTests
         Assert.Equal(172, options.EdgeFeatureDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task ProteinDataLoader_LoadsCsvData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "protein_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -100,7 +100,7 @@ public class GraphBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task Wikidata5mDataLoader_LoadsTriplets()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "wikidata_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -137,7 +137,7 @@ public class GraphBenchmarkTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task TemporalGraphDataLoader_LoadsInteractions()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "temporal_test_" + Guid.NewGuid().ToString("N")[..8]);

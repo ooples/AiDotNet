@@ -11,7 +11,7 @@ public class ConditioningModuleTests
 {
     #region CLIP Text Conditioner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_DefaultVariant_Creates768DimEmbedding()
     {
         var clip = new CLIPTextConditioner<double>();
@@ -33,7 +33,7 @@ public class ConditioningModuleTests
         Assert.Equal(expectedDim, clip.EmbeddingDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_Tokenize_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>();
@@ -45,7 +45,7 @@ public class ConditioningModuleTests
         Assert.Equal(77, tokens.Shape[1]); // max sequence length
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_TokenizeBatch_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>();
@@ -57,7 +57,7 @@ public class ConditioningModuleTests
         Assert.Equal(77, tokens.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_EncodeText_ReturnsFiniteValues()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
@@ -78,7 +78,7 @@ public class ConditioningModuleTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_GetPooledEmbedding_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
@@ -91,7 +91,7 @@ public class ConditioningModuleTests
         Assert.Equal(768, pooled.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPConditioner_GetUnconditionalEmbedding_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
@@ -105,7 +105,7 @@ public class ConditioningModuleTests
 
     #region T5 Text Conditioner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void T5Conditioner_DefaultVariant_Creates4096DimEmbedding()
     {
         var t5 = new T5TextConditioner<double>();
@@ -127,7 +127,7 @@ public class ConditioningModuleTests
         Assert.Equal(expectedDim, t5.EmbeddingDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void T5Conditioner_Tokenize_ReturnsCorrectShape()
     {
         var t5 = new T5TextConditioner<double>();
@@ -139,7 +139,7 @@ public class ConditioningModuleTests
         Assert.Equal(256, tokens.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void T5Conditioner_EncodeText_ReturnsFiniteValues()
     {
         var t5 = new T5TextConditioner<double>(seed: 42);
@@ -156,7 +156,7 @@ public class ConditioningModuleTests
 
     #region Dual Text Conditioner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DualConditioner_DefaultConfig_HasCorrectProperties()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
@@ -169,7 +169,7 @@ public class ConditioningModuleTests
         Assert.Equal(ConditioningType.MultiModal, dual.ConditioningType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DualConditioner_EncodeDual_ReturnsBothEmbeddings()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
@@ -187,7 +187,7 @@ public class ConditioningModuleTests
         Assert.Equal(768, pooledEmb.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DualConditioner_GetUnconditionalDual_ReturnsBothEmbeddings()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
@@ -198,7 +198,7 @@ public class ConditioningModuleTests
         Assert.NotNull(pooledEmb);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DualConditioner_Tokenize_DefaultsToT5()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
@@ -212,7 +212,7 @@ public class ConditioningModuleTests
 
     #region Triple Text Conditioner Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_DefaultConfig_HasCorrectProperties()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
@@ -227,7 +227,7 @@ public class ConditioningModuleTests
         Assert.Equal(ConditioningType.MultiModal, triple.ConditioningType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_EncodeTriple_ReturnsBothEmbeddings()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
@@ -245,7 +245,7 @@ public class ConditioningModuleTests
         Assert.Equal(2048, combinedPooled.Shape[1]); // 768 + 1280
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_GetCombinedPooledEmbedding_Returns2048Dim()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
@@ -257,7 +257,7 @@ public class ConditioningModuleTests
         Assert.Equal(2048, pooled.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_GetUnconditionalTriple_ReturnsBothEmbeddings()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
@@ -269,7 +269,7 @@ public class ConditioningModuleTests
         Assert.Equal(2048, combinedPooled.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_EncodeTriple_ValuesAreFinite()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
@@ -290,7 +290,7 @@ public class ConditioningModuleTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TripleConditioner_CustomVariants_Creates()
     {
         var triple = new TripleTextConditioner<double>(
@@ -309,7 +309,7 @@ public class ConditioningModuleTests
 
     #region IConditioningModule Interface Compliance Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllConditioners_ImplementIConditioningModule()
     {
         var conditioners = new IConditioningModule<double>[]

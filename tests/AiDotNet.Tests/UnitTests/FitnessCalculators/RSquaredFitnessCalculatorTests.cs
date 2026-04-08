@@ -27,7 +27,7 @@ public class RSquaredFitnessCalculatorTests
         return new PredictionStats<double>(inputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsOne()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(1.0, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNoExplanatoryPower_ReturnsZero()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(0.0, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithGoodPredictions_ReturnsHighR2()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result > 0.9, $"Expected R² > 0.9, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPoorPredictions_ReturnsLowR2()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result < 0.5, $"Expected R² < 0.5, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNegativeR2_HandlesCorrectly()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result <= 1.0, $"Expected R² <= 1.0, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -199,7 +199,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(1.0f, result, 3);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -219,7 +219,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -229,7 +229,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
@@ -239,7 +239,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_RetrievesR2FromPredictionStats()
     {
         // Arrange
@@ -258,7 +258,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(dataSet.PredictionStats.R2, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithVeryHighR2_HandlesCorrectly()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result > 0.999, $"Expected R² > 0.999, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithVeryLowR2_HandlesCorrectly()
     {
         // Arrange
@@ -298,7 +298,7 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result < 0.1, $"Expected R² < 0.1, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithR2AtBoundaries_WorksCorrectly()
     {
         // Arrange

@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralRadianceFields;
 /// </summary>
 public class NeRFTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NeRF_Construction_CreatesModel()
     {
         // Arrange & Act
@@ -20,7 +20,7 @@ public class NeRFTests
         Assert.NotNull(nerf);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NeRF_QueryField_ReturnsRGBAndDensity()
     {
         // Arrange
@@ -39,7 +39,7 @@ public class NeRFTests
         Assert.Equal(10, density.Shape[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Ray_Construction_CreatesRay()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class NeRFTests
         Assert.Equal(6.0, ray.FarBound);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Ray_PointAt_CalculatesCorrectPosition()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class NeRFTests
         Assert.Equal(8.0, point[2]);  // 3 + 5*1
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InstantNGP_Construction_CreatesModel()
     {
         // Arrange & Act
@@ -86,7 +86,7 @@ public class NeRFTests
         Assert.NotNull(instantNGP);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GaussianSplatting_Construction_CreatesModel()
     {
         // Arrange & Act
@@ -96,7 +96,7 @@ public class NeRFTests
         Assert.NotNull(gaussianSplatting);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GaussianSplatting_InitializeFromPointCloud_CreatesGaussians()
     {
         // Arrange

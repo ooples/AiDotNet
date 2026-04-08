@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class GatedDeltaNetLayerTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
@@ -25,7 +25,7 @@ public class GatedDeltaNetLayerTests
         Assert.Equal(convKernel, layer.ConvKernelSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var layer = new GatedDeltaNetLayer<float>(16);
@@ -36,28 +36,28 @@ public class GatedDeltaNetLayerTests
         Assert.Equal(4, layer.ConvKernelSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new GatedDeltaNetLayer<float>(16, modelDimension: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new GatedDeltaNetLayer<float>(16, modelDimension: 64, numHeads: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenModelDimNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
             new GatedDeltaNetLayer<float>(16, modelDimension: 65, numHeads: 8));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsWhenConvKernelNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -100,7 +100,7 @@ public class GatedDeltaNetLayerTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -123,7 +123,7 @@ public class GatedDeltaNetLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var layer = new GatedDeltaNetLayer<float>(4, 32, 4);
@@ -132,7 +132,7 @@ public class GatedDeltaNetLayerTests
         Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResetState_ClearsInternalState()
     {
         var layer = new GatedDeltaNetLayer<float>(4, 32, 4);
@@ -146,7 +146,7 @@ public class GatedDeltaNetLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -172,14 +172,14 @@ public class GatedDeltaNetLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_ReturnsTrue()
     {
         var layer = new GatedDeltaNetLayer<float>(4, 32, 4);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var layer = new GatedDeltaNetLayer<float>(8, 64, 8, convKernelSize: 4);
@@ -196,7 +196,7 @@ public class GatedDeltaNetLayerTests
         Assert.Equal("4", metadata["ConvKernelSize"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetOutputProjectionWeights_ReturnsValidTensor()
     {
         int modelDim = 64;
@@ -209,7 +209,7 @@ public class GatedDeltaNetLayerTests
         Assert.Equal(new[] { modelDim, modelDim }, outputWeights.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

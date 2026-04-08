@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class CodeModelArchitectureSerializationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WriteAndReadAndValidate_MatchingArchitecture_DoesNotThrow()
     {
         var architecture = CreateArchitecture(maxSequenceLength: 16, vocabularySize: 32, useDataFlow: true, numEncoderLayers: 1, numDecoderLayers: 2);
@@ -22,7 +22,7 @@ public sealed class CodeModelArchitectureSerializationTests
             includeEncoderDecoderLayerCounts: true);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReadAndValidate_MismatchedArchitecture_Throws()
     {
         var written = CreateArchitecture(maxSequenceLength: 16, vocabularySize: 32, useDataFlow: true, numEncoderLayers: 1, numDecoderLayers: 2);

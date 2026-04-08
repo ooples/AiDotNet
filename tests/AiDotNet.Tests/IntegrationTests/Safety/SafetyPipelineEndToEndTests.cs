@@ -18,7 +18,7 @@ public class SafetyPipelineEndToEndTests
 {
     #region Full Pipeline Flow Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullPipeline_ToxicInput_BlocksContent()
     {
         var config = new SafetyConfig
@@ -36,7 +36,7 @@ public class SafetyPipelineEndToEndTests
         Assert.True(report.Findings.Count > 0, "Toxic content should produce findings");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullPipeline_JailbreakInput_DetectsAndBlocks()
     {
         var config = new SafetyConfig
@@ -53,7 +53,7 @@ public class SafetyPipelineEndToEndTests
         Assert.True(report.Findings.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullPipeline_PIIInput_DetectsExposure()
     {
         var config = new SafetyConfig
@@ -69,7 +69,7 @@ public class SafetyPipelineEndToEndTests
         Assert.Contains(report.Findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullPipeline_SafeContent_PassesAll()
     {
         var config = new SafetyConfig
@@ -88,7 +88,7 @@ public class SafetyPipelineEndToEndTests
         Assert.Empty(actionable);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FullPipeline_AllModulesEnabled_ProcessesComplex()
     {
         var config = new SafetyConfig
@@ -112,7 +112,7 @@ public class SafetyPipelineEndToEndTests
 
     #region EnforcePolicy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnforcePolicy_UnsafeInput_ThrowsOnBlock()
     {
         var config = new SafetyConfig { ThrowOnUnsafeInput = true };
@@ -128,7 +128,7 @@ public class SafetyPipelineEndToEndTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnforcePolicy_SafeInput_DoesNotThrow()
     {
         var config = new SafetyConfig
@@ -143,7 +143,7 @@ public class SafetyPipelineEndToEndTests
         pipeline.EnforcePolicy(report, isInput: true);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnforcePolicy_UnsafeOutput_WithThrowConfig_Throws()
     {
         var config = new SafetyConfig { ThrowOnUnsafeOutput = true };
@@ -163,7 +163,7 @@ public class SafetyPipelineEndToEndTests
 
     #region SafetyConfig Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Config_DefaultValues_AreCorrect()
     {
         var config = new SafetyConfig();
@@ -174,7 +174,7 @@ public class SafetyPipelineEndToEndTests
         Assert.False(config.EffectiveThrowOnUnsafeOutput);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Config_TextDefaults_AreCorrect()
     {
         var config = new SafetyConfig();
@@ -186,7 +186,7 @@ public class SafetyPipelineEndToEndTests
         Assert.False(config.Text.EffectiveCopyrightDetection);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Config_OverriddenValues_TakePrecedence()
     {
         var config = new SafetyConfig
@@ -200,7 +200,7 @@ public class SafetyPipelineEndToEndTests
         Assert.Equal(0.9, config.Text.EffectiveToxicityThreshold);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Config_DisabledConfig_CreatesEmptyPipeline()
     {
         var config = new SafetyConfig { Enabled = false };
@@ -213,7 +213,7 @@ public class SafetyPipelineEndToEndTests
 
     #region SafetyReport Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Report_Safe_HasCorrectProperties()
     {
         var report = SafetyReport.Safe(new[] { "ModuleA", "ModuleB" });
@@ -223,7 +223,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report.ModulesExecuted);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Report_FromPipeline_HasModuleInfo()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -233,7 +233,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report.ModulesExecuted);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Report_MultipleFindings_AggregatesAction()
     {
         var config = new SafetyConfig
@@ -254,7 +254,7 @@ public class SafetyPipelineEndToEndTests
 
     #region Pipeline Factory Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_DefaultConfig_CreatesPipeline()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -263,7 +263,7 @@ public class SafetyPipelineEndToEndTests
         Assert.True(pipeline.Modules.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_TextOnly_CreatesCorrectModules()
     {
         var config = new SafetyConfig
@@ -282,7 +282,7 @@ public class SafetyPipelineEndToEndTests
         Assert.True(pipeline.Modules.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_AllEnabled_RegistersManyModules()
     {
         var config = new SafetyConfig
@@ -306,7 +306,7 @@ public class SafetyPipelineEndToEndTests
 
     #region Multi-Modality Pipeline Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_EvaluateImage_Works()
     {
         var config = new SafetyConfig
@@ -325,7 +325,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_EvaluateAudio_Works()
     {
         var config = new SafetyConfig
@@ -350,7 +350,7 @@ public class SafetyPipelineEndToEndTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_EmptyText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -359,7 +359,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_VeryLongText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -369,7 +369,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_UnicodeText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -379,7 +379,7 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_SpecialCharacters_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();

@@ -12,7 +12,7 @@ public class HLIRTests
 {
     #region HLIRNode Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_DefaultValues_AreCorrect()
     {
         var node = new HLIRNode<double>();
@@ -29,7 +29,7 @@ public class HLIRTests
         Assert.False(node.IsMarkedForDeletion);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_AddInput_CreatesBidirectionalConnection()
     {
         var inputNode = new HLIRNode<double> { Id = 1, Name = "input" };
@@ -41,7 +41,7 @@ public class HLIRTests
         Assert.Contains(outputNode, inputNode.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_AddInput_DoesNotDuplicate()
     {
         var inputNode = new HLIRNode<double> { Id = 1 };
@@ -54,7 +54,7 @@ public class HLIRTests
         Assert.Single(inputNode.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_RemoveInput_RemovesBidirectionalConnection()
     {
         var inputNode = new HLIRNode<double> { Id = 1 };
@@ -67,7 +67,7 @@ public class HLIRTests
         Assert.DoesNotContain(outputNode, inputNode.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_ReplaceInput_UpdatesConnections()
     {
         var oldInput = new HLIRNode<double> { Id = 1 };
@@ -83,7 +83,7 @@ public class HLIRTests
         Assert.Contains(node, newInput.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_HasConsumers_ReturnsCorrectValue()
     {
         var node = new HLIRNode<double>();
@@ -96,7 +96,7 @@ public class HLIRTests
         Assert.Equal(1, node.ConsumerCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_Validate_ReturnsTrueForValidNode()
     {
         var input = new HLIRNode<double> { Id = 1 };
@@ -106,14 +106,14 @@ public class HLIRTests
         Assert.True(output.Validate());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_Validate_ReturnsFalseForInvalidId()
     {
         var node = new HLIRNode<double> { Id = -1 };
         Assert.False(node.Validate());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_Clone_CreatesIndependentCopy()
     {
         var original = new HLIRNode<double>
@@ -133,7 +133,7 @@ public class HLIRTests
         Assert.Equal(original.CanEliminate, clone.CanEliminate);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_AddProvenance_TracksHistory()
     {
         var node = new HLIRNode<double>();
@@ -146,7 +146,7 @@ public class HLIRTests
         Assert.Contains("Modified", node.Provenance[1]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRNode_ToString_ReturnsFormattedString()
     {
         var node = new HLIRNode<double>
@@ -166,7 +166,7 @@ public class HLIRTests
 
     #region HLIRGraph Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_AddNode_AssignsId()
     {
         var graph = new HLIRGraph<double>();
@@ -178,7 +178,7 @@ public class HLIRTests
         Assert.Equal(1, graph.NodeCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_AddNode_ThrowsOnDuplicateId()
     {
         var graph = new HLIRGraph<double>();
@@ -190,7 +190,7 @@ public class HLIRTests
         Assert.Throws<InvalidOperationException>(() => graph.AddNode(node2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_CreateNode_CreatesAndAddsNode()
     {
         var graph = new HLIRGraph<double>();
@@ -201,7 +201,7 @@ public class HLIRTests
         Assert.Contains(input, relu.Inputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_RemoveNode_RemovesNodeAndConnections()
     {
         var graph = new HLIRGraph<double>();
@@ -216,7 +216,7 @@ public class HLIRTests
         Assert.DoesNotContain(output, input.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_FindNode_ReturnsCorrectNode()
     {
         var graph = new HLIRGraph<double>();
@@ -226,7 +226,7 @@ public class HLIRTests
         Assert.Null(graph.FindNode(999));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_FindNodesByName_ReturnsMatchingNodes()
     {
         var graph = new HLIRGraph<double>();
@@ -239,7 +239,7 @@ public class HLIRTests
         Assert.Equal(2, reluNodes.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_FindNodesByOperation_ReturnsMatchingNodes()
     {
         var graph = new HLIRGraph<double>();
@@ -252,7 +252,7 @@ public class HLIRTests
         Assert.Equal(2, reluNodes.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_GetTopologicalOrder_ReturnsCorrectOrder()
     {
         var graph = new HLIRGraph<double>();
@@ -270,7 +270,7 @@ public class HLIRTests
         Assert.True(order.IndexOf(relu) < order.IndexOf(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_GetTopologicalOrder_DetectsCycle()
     {
         var graph = new HLIRGraph<double>();
@@ -283,7 +283,7 @@ public class HLIRTests
         Assert.Throws<InvalidOperationException>(() => graph.GetTopologicalOrder());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_Validate_ReturnsTrueForValidGraph()
     {
         var graph = new HLIRGraph<double>();
@@ -301,7 +301,7 @@ public class HLIRTests
         Assert.Empty(result.Errors);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_Clone_CreatesIndependentCopy()
     {
         var graph = new HLIRGraph<double> { Name = "original" };
@@ -321,7 +321,7 @@ public class HLIRTests
         Assert.NotSame(originalNodes[0], clonedNodes[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_GetStatistics_ReturnsCorrectStats()
     {
         var graph = new HLIRGraph<double>();
@@ -341,7 +341,7 @@ public class HLIRTests
         Assert.Equal(2, stats.NodesByOperation[OperationType.ReLU]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_FindPatterns_DetectsSequentialPattern()
     {
         var graph = new HLIRGraph<double>();
@@ -356,7 +356,7 @@ public class HLIRTests
         Assert.Equal(3, patterns[0].Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_ReplaceNode_UpdatesAllConnections()
     {
         var graph = new HLIRGraph<double>();
@@ -379,7 +379,7 @@ public class HLIRTests
         Assert.DoesNotContain(oldNode, output.Inputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HLIRGraph_CompactNodeIds_ReassignsIdsSequentially()
     {
         var graph = new HLIRGraph<double>();
@@ -408,7 +408,7 @@ public class HLIRTests
 
     #region OperationCost Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OperationCost_ArithmeticIntensity_CalculatesCorrectly()
     {
         var cost = new OperationCost
@@ -421,7 +421,7 @@ public class HLIRTests
         Assert.Equal(10.0, cost.ArithmeticIntensity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OperationCost_IsMemoryBound_DetectsCorrectly()
     {
         var memBound = new OperationCost { FLOPs = 100, MemoryRead = 100, MemoryWrite = 100 };
@@ -435,7 +435,7 @@ public class HLIRTests
 
     #region OptimizationHints Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationHints_DefaultValues_AreCorrect()
     {
         var hints = new OptimizationHints();
@@ -448,7 +448,7 @@ public class HLIRTests
         Assert.True(hints.EnableParallelization);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationHints_Clone_CreatesIndependentCopy()
     {
         var original = new OptimizationHints

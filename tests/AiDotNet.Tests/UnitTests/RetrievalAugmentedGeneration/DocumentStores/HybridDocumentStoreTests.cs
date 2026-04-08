@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidStores_CreatesHybridStore()
         {
             // Arrange
@@ -32,7 +32,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, hybridStore.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullVectorStore_ThrowsArgumentNullException()
         {
             // Arrange
@@ -43,7 +43,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 new HybridDocumentStore<float>(null!, keywordStore, 0.7f, 0.3f));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullKeywordStore_ThrowsArgumentNullException()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 new HybridDocumentStore<float>(vectorStore, null!, 0.7f, 0.3f));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDifferentWeights_CreatesStore()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Add Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithValidDocument_AddsToBothStores()
         {
             // Arrange
@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, keywordStore.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithNullDocument_ThrowsArgumentNullException()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.Add(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_MultipleDocuments_IncreasesCount()
         {
             // Arrange
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region AddBatch Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithValidDocuments_AddsToBothStores()
         {
             // Arrange
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, keywordStore.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithNullCollection_ThrowsArgumentNullException()
         {
             // Arrange
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.AddBatch(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -179,7 +179,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilar Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithDocuments_CombinesResultsFromBothStores()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithEmptyStores_ReturnsEmpty()
         {
             // Arrange
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.GetSimilar(null!, topK: 5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithZeroTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => hybridStore.GetSimilar(queryVector, topK: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_ReturnsAtMostTopK()
         {
             // Arrange
@@ -267,7 +267,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(results.Count <= 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithWeightedResults_AppliesWeightsCorrectly()
         {
             // Arrange
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilarWithFilters Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.All(results, r => Assert.Equal("science", r.Metadata["category"]));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithNullFilters_ThrowsArgumentNullException()
         {
             // Arrange
@@ -335,7 +335,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetById Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithExistingDocument_ReturnsDocument()
         {
             // Arrange
@@ -354,7 +354,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Test content", result.Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithNonExistingDocument_ReturnsNull()
         {
             // Arrange
@@ -369,7 +369,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Null(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -385,7 +385,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Remove Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithExistingDocument_RemovesFromBothStores()
         {
             // Arrange
@@ -405,7 +405,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, keywordStore.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithNonExistingDocument_ReturnsFalse()
         {
             // Arrange
@@ -420,7 +420,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.False(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -436,7 +436,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Clear Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_RemovesAllDocumentsFromBothStores()
         {
             // Arrange
@@ -460,7 +460,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, keywordStore.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_OnEmptyStore_DoesNotThrow()
         {
             // Arrange
@@ -477,7 +477,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetAll Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAll_WithDocuments_ReturnsAllDocuments()
         {
             // Arrange
@@ -502,7 +502,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains(results, d => d.Id == "doc3");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAll_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange

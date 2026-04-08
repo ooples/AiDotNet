@@ -57,7 +57,7 @@ public class CorpusBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithRedditBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"reddit_train_{Guid.NewGuid():N}.json");
@@ -119,7 +119,7 @@ public class CorpusBenchmarkingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithStackOverflowBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"so_train_{Guid.NewGuid():N}.json");

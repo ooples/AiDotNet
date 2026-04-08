@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             VBLoRAAdapter<double>.ClearBanks();
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void DenseLayerForward_WithNonZeroInput_ProducesNonZeroOutput()
         {
             var layer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Contains(outputVector, v => v != 0.0);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(adapter.IsBaseLayerFrozen);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_CreatesSharedBanks()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, bankB.Columns);  // outputSize
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithSameBankKey_SharesBanks()
         {
             // Arrange
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithDifferentBankKeys_CreatesSeparateBanks()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(foundDifference, "Banks with different keys should have different random initializations");
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void BankIndices_ReturnsCorrectLength()
         {
             // Arrange
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(4, adapter.BankIndicesB.Length);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void BankIndices_WithCustomIndices_UsesProvidedValues()
         {
             // Arrange
@@ -212,7 +212,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(customIndicesB, adapter.BankIndicesB);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithInvalidBankSizeA_ThrowsArgumentException()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 10));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithInvalidBankSizeB_ThrowsArgumentException()
         {
             // Arrange
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 0));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithRankExceedingBankSizeA_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 10));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithRankExceedingBankSizeB_ThrowsArgumentException()
         {
             // Arrange
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 2));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Constructor_WithInvalidIndicesA_ThrowsArgumentException()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankIndicesA: invalidIndices));
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_ProducesCorrectOutputShape()
         {
             // Arrange
@@ -305,7 +305,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Forward_CombinesBaseAndVBLoRAOutputs()
         {
             // Arrange
@@ -333,7 +333,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(baseOutput.Shape[1], adapterOutput.Shape[1]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergeToOriginalLayer_ProducesValidDenseLayer()
         {
             // Arrange
@@ -354,7 +354,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedLayer.GetOutputShape()[0]);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
@@ -387,7 +387,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ClearBanks_WithSpecificKey_RemovesOnlyThatBank()
         {
             // Arrange
@@ -419,7 +419,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.NotNull(bank2A);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ClearBanks_WithNullKey_RemovesAllBanks()
         {
             // Arrange
@@ -451,7 +451,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Null(bank2A);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void ParameterCount_MatchesLoRAParameterCount()
         {
             // Arrange

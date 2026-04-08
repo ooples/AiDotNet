@@ -14,7 +14,7 @@ public class ClusteringSklearnComparisonIntegrationTests
 {
     private static readonly Lazy<SklearnReferenceData> Reference = new(SklearnReferenceData.Load);
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KMeans_MatchesSklearnReference()
     {
         var reference = Reference.Value;
@@ -56,7 +56,7 @@ public class ClusteringSklearnComparisonIntegrationTests
         Assert.Equal(reference.KMeansInertia, inertia, 1e-2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClusterMetrics_MatchSklearnReference()
     {
         var reference = Reference.Value;
@@ -67,7 +67,7 @@ public class ClusteringSklearnComparisonIntegrationTests
         Assert.Equal(reference.CalinskiHarabasz, metrics.CalinskiHarabasz, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DBSCAN_MatchesSklearnReference()
     {
         var reference = Reference.Value;

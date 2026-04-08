@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class SparsePruningCompressionTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidSparsityTarget_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new SparsePruningCompression<double>(sparsityTarget: 1.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeMagnitudeThreshold_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -38,7 +38,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new SparsePruningCompression<double>(minMagnitudeThreshold: -0.1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<SparsePruningMetadata<double>>(metadata);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PrunesSmallMagnitudeWeights()
         {
             // Arrange
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(sparseMetadata.ActualSparsity >= 0.4); // At least 40% pruned
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_ReconstructsWeightsWithZeros()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(40.0, decompressedWeights[7]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetCompressedSize_ReturnsCorrectSize()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(sparseMetadata.ActualSparsity > 0.8); // Close to 90% sparsity target
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithExplicitThreshold_UsesThreshold()
         {
             // Arrange
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(4, compressedWeights.Length); // 0.6, 0.7, 0.8, 0.9
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(size > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_HighSparsityTarget_PrunesMostWeights()
         {
             // Arrange

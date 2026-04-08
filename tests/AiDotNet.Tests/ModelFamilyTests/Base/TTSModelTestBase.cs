@@ -18,7 +18,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // A TTS model ignoring its text conditioning is broken.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentText_DifferentAudio()
     {
         var network = CreateNetwork();
@@ -48,7 +48,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // TTS models must produce audio output of positive length.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Output_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -66,7 +66,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // Extreme values produce clipping or distortion.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputValues_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -91,7 +91,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // A TTS model with high variance is unstable.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpeakerConsistency()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

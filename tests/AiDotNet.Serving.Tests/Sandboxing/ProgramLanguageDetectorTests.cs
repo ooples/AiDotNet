@@ -6,14 +6,14 @@ namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class ProgramLanguageDetectorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Detect_EmptySource_ReturnsNull()
     {
         var detected = ProgramLanguageDetector.Detect("   ", Array.Empty<ProgramLanguage>(), preferredLanguage: null);
         Assert.Null(detected);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Detect_SqlSource_ReturnsSql()
     {
         var detected = ProgramLanguageDetector.Detect(
@@ -24,7 +24,7 @@ public sealed class ProgramLanguageDetectorTests
         Assert.Equal(ProgramLanguage.SQL, detected);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Detect_CSharpSource_ReturnsCSharp()
     {
         var detected = ProgramLanguageDetector.Detect(
@@ -35,7 +35,7 @@ public sealed class ProgramLanguageDetectorTests
         Assert.Equal(ProgramLanguage.CSharp, detected);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Detect_Tie_UsesPreferredLanguage()
     {
         var detected = ProgramLanguageDetector.Detect(
@@ -46,7 +46,7 @@ public sealed class ProgramLanguageDetectorTests
         Assert.Equal(ProgramLanguage.Java, detected);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Detect_NoStrongSignal_FallsBackToPreferredWhenAllowed()
     {
         var detected = ProgramLanguageDetector.Detect(

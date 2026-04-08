@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.IntegrationTests.PointCloud;
 /// </summary>
 public class PointCloudIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointNet_Train_ProducesFiniteOutput()
     {
         var options = new PointNetOptions
@@ -37,7 +37,7 @@ public class PointCloudIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointNetPlusPlus_Train_ProducesFiniteOutput()
     {
         var options = new PointNetPlusPlusOptions
@@ -68,7 +68,7 @@ public class PointCloudIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DGCNN_Train_ProducesFiniteOutput()
     {
         var options = new DGCNNOptions

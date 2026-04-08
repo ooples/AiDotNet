@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Allocations_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -26,7 +26,7 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Portfolio_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

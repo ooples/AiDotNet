@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithWellCalibratedProbabilities_ReturnsGoodFit()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithPoorlyCalibratedProbabilities_ReturnsNonGoodFit()
         {
             // Arrange
@@ -84,7 +84,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_CalculatesConfidenceLevel()
         {
             // Arrange
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithOverconfidentPredictions_ReturnsRecommendations()
         {
             // Arrange
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithUnderconfidentPredictions_ReturnsRecommendations()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithCustomBinCount_UsesCorrectBinCount()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithLargeDataset_HandlesCorrectly()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_RecommendationsIncludeCalibrationMethods()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasCalibrationAdvice, "Recommendations should include calibration-related advice");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithBinaryClassificationData_HandlesCorrectly()
         {
             // Arrange

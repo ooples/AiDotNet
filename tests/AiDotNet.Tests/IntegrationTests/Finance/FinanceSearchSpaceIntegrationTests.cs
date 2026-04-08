@@ -29,7 +29,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region FinancialSearchSpace - Domain-Aware Parameter Ranges
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_HasCommonParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -43,7 +43,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(searchSpace.ContainsKey("BatchSize"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_PatchTST_HasPatchSpecificParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -59,7 +59,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(16.0, ToDouble(patchRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_DeepAR_HasProbabilisticParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -74,7 +74,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Contains("StudentT", likelihoodRange.CategoricalValues.Cast<string>());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_NBEATS_HasStackParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -88,7 +88,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(ParameterType.Boolean, basisRange.Type);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_NeuralVaR_HasConfidenceLevel()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -103,7 +103,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.95, ToDouble(confRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TabNet_HasDecisionSteps()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -117,7 +117,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(10.0, ToDouble(stepsRange.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TabTransformer_HasEmbeddingDim()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -131,7 +131,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(64.0, ToDouble(embRange.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TFT_HasVariableSelection()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -141,7 +141,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_ITransformer_HasFeedForwardDim()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -155,7 +155,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(512.0, ToDouble(ffRange.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_LearningRate_UsesLogScale()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -166,7 +166,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Learning rate should use log scale for proper exploration of [0.0001, 0.1]");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_SmallerMaxLearningRate()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -179,7 +179,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Risk max LR should be <= forecast max LR");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_AllRanges_MinLessThanMax()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -203,7 +203,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_DefaultValues_WithinRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -225,7 +225,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_UnknownModelType_ReturnsDomainDefault()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -243,7 +243,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region FinancialSearchSpace - Deep Parameter Correctness
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_DeepAR_NumSamples_IntegerRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -256,7 +256,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(100.0, ToDouble(samplesRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_DeepAR_LikelihoodType_HasNegativeBinomial()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -269,7 +269,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal("Gaussian", (string)likelihoodRange.DefaultValue);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_NBEATS_NumStacks_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -282,7 +282,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(30.0, ToDouble(stackRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_NBEATS_BlocksPerStack_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -294,7 +294,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(5.0, ToDouble(blocksRange.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TabNet_RelaxationFactor_FloatRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -307,7 +307,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(1.5, ToDouble(relaxRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TabTransformer_EmbeddingDim_DefaultIs32()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -317,7 +317,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(32.0, ToDouble(embRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_PatchTST_AttentionHeads_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -330,7 +330,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(4.0, ToDouble(attnRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_ITransformer_FeedForwardDim_DefaultIs256()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -340,7 +340,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(256.0, ToDouble(ffRange.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_HiddenSize_SmallerThanForecasting()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -353,7 +353,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Risk HiddenSize max should be <= forecast HiddenSize max");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_FewerMaxLayers()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -366,7 +366,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Risk NumLayers max should be <= forecast NumLayers max");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_LearningRate_AlsoUsesLogScale()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -376,7 +376,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Risk learning rate should also use log scale");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Tabular_DropoutRate_MaxIs0_4()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -385,7 +385,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.4, ToDouble(tabNetDropout.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_DropoutRate_MaxIs0_5()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -394,7 +394,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.5, ToDouble(forecastDropout.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Tabular_BatchSize_DefaultIs64()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -403,7 +403,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(64.0, ToDouble(tabNetBatch.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_BatchSize_DefaultIs32()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -412,7 +412,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(32.0, ToDouble(forecastBatch.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_Epochs_MaxIs500()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -421,7 +421,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(500.0, ToDouble(epochs.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_Epochs_MaxIs300()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -430,7 +430,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(300.0, ToDouble(epochs.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Tabular_Epochs_MaxIs200()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -439,7 +439,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(200.0, ToDouble(epochs.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_AllRiskModels_DefaultValues_WithinRange()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -464,7 +464,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_AllRiskModels_MinLessThanMax()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -487,7 +487,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Forecasting_HiddenSize_DefaultIs128()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -496,7 +496,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(128.0, ToDouble(hidden.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Risk_HiddenSize_DefaultIs64()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -505,7 +505,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(64.0, ToDouble(hidden.DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_TFT_UseVariableSelection_DefaultIsTrue()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -515,7 +515,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(true, varSel.DefaultValue);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_NBEATS_UseInterpretableBasis_DefaultIsTrue()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -524,7 +524,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(true, basis.DefaultValue);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_DifferentModels_ProduceSeparateInstances()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -545,7 +545,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.001, ToDouble(patchTST3["LearningRate"].DefaultValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_Tabular_LearningRate_MaxIs0_05()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -554,7 +554,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.05, ToDouble(tabNetLR.MaxValue));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchSpace_ConfidenceLevel_StrictRange_NoOverflow()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -568,7 +568,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region FinancialDomain Enum Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialDomain_AllDomainsCreateSearchSpace()
     {
         var domains = Enum.GetValues(typeof(FinancialDomain)).Cast<FinancialDomain>();
@@ -582,7 +582,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialDomain_Forecasting_CustomModel_HasCommonParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -596,7 +596,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(defaultSpace.ContainsKey("BatchSize"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialDomain_Risk_CustomModel_HasRiskParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -618,7 +618,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region StockTradingEnvironment - Construction and Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Construction_ValidMarketData()
     {
         var prices = new Tensor<double>(new[] { 10, 1 });
@@ -639,7 +639,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.False(env.IsContinuousActionSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_MultiAsset_ThrowsArgumentException()
     {
         var prices = new Tensor<double>(new[] { 10, 2 });
@@ -648,7 +648,7 @@ public class FinanceSearchSpaceIntegrationTests
             new StockTradingEnvironment<double>(prices, 3, 10000.0, 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_WindowSizeTooLarge_ThrowsArgumentException()
     {
         var prices = new Tensor<double>(new[] { 5, 1 });
@@ -661,7 +661,7 @@ public class FinanceSearchSpaceIntegrationTests
             new StockTradingEnvironment<double>(prices, 5, 10000.0, 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_1DMarketData_ThrowsArgumentException()
     {
         var prices = new Tensor<double>(new[] { 10 });
@@ -670,7 +670,7 @@ public class FinanceSearchSpaceIntegrationTests
             new StockTradingEnvironment<double>(prices, 3, 10000.0, 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_ObservationDimension_Correct()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -691,7 +691,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region StockTradingEnvironment - Reset and Step Mechanics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Reset_ReturnsObservation()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -708,7 +708,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(observation.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Reset_ObservationLength_EqualsObservationDimension()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -724,7 +724,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, observation.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Reset_ContainsCashValue()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -741,7 +741,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(initialCapital, observation[observation.Length - 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Reset_PositionsAreZero()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -758,7 +758,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.0, observation[5]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_HoldAction_NoTradeExecuted()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -780,7 +780,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.0, reward);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_BuyAction_ExecutesTrade()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -805,7 +805,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(info.ContainsKey("positions"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_SellAction_ExecutesTrade()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -827,7 +827,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, obs.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_BuyThenSell_PortfolioChanges()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -854,7 +854,7 @@ public class FinanceSearchSpaceIntegrationTests
             $"After buy+sell with transaction costs, portfolio ({finalValue}) should be <= initial ({initialCapital})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_MultipleSteps_EventuallyDone()
     {
         var prices = new Tensor<double>(new[] { 10, 1 });
@@ -883,7 +883,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(reachedDone, "Episode should terminate after all market data is consumed");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_MaxEpisodeLength_EndsEarly()
     {
         var prices = new Tensor<double>(new[] { 50, 1 });
@@ -913,7 +913,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(5, stepsTaken);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_OneHotAction_Supported()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -933,7 +933,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.NotNull(obs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_OneHotSell_Supported()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -954,7 +954,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.NotNull(obs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_NullAction_ThrowsArgumentNullException()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -971,7 +971,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Throws<ArgumentNullException>(() => env.Step(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_UpwardTrend_BuyReturnsPositiveReward()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -995,7 +995,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(reward > 0, $"Expected positive reward in upward trend, got {reward}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_DownwardTrend_BuyReturnsNegativeReward()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1019,7 +1019,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(reward < 0, $"Expected negative reward in downward trend, got {reward}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_NoShortSelling_SellWithoutPosition_NoEffect()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1042,7 +1042,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(initialCapital, cash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Seed_ReproducibleRandomStart()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1068,7 +1068,7 @@ public class FinanceSearchSpaceIntegrationTests
         env.Close();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_DifferentSeeds_DifferentRandomStarts()
     {
         var data = FinanceTestHelpers.CreatePriceTensor<double>(steps: 100, assets: 1);
@@ -1094,7 +1094,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(differ, "Different seeds should produce different random start observations");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Close_DoesNotThrow()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1110,7 +1110,7 @@ public class FinanceSearchSpaceIntegrationTests
         env.Close();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_StepInfo_ContainsExpectedKeys()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1133,7 +1133,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(info.ContainsKey("positions"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_Float_SmokeTest()
     {
         var numOps = MathHelper.GetNumericOperations<float>();
@@ -1153,7 +1153,7 @@ public class FinanceSearchSpaceIntegrationTests
         env.Close();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_ResetMultipleTimes_EachResetFresh()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1180,7 +1180,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region PortfolioTradingEnvironment - Multi-Asset Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_Construction_ValidMultiAsset()
     {
         var prices = new Tensor<double>(new[] { 20, 3 });
@@ -1198,7 +1198,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(env.IsContinuousActionSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_ObservationDimension_Correct()
     {
         int numAssets = 3;
@@ -1219,7 +1219,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expected, env.ObservationSpaceDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_Reset_ReturnsCorrectDimension()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1236,7 +1236,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_EqualWeights_Step()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1259,7 +1259,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, obs.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_WrongActionLength_ThrowsArgumentException()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1278,7 +1278,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Throws<ArgumentException>(() => env.Step(weights));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_AllInOneAsset_Step()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1300,7 +1300,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.NotNull(obs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_NoShortSelling_NegativeWeightsClamped()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1322,7 +1322,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.NotNull(obs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_ZeroWeights_UniformFallback()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1344,7 +1344,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.NotNull(obs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_MultipleSteps_EventuallyDone()
     {
         var prices = new Tensor<double>(new[] { 15, 2 });
@@ -1374,7 +1374,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(reachedDone, "Portfolio episode should terminate");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioTrading_Float_SmokeTest()
     {
         var numOps = MathHelper.GetNumericOperations<float>();
@@ -1397,7 +1397,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region MarketMakingEnvironment - Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_Construction_ValidData()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1413,7 +1413,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(env.IsContinuousActionSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_MultiAsset_ThrowsArgumentException()
     {
         var prices = new Tensor<double>(new[] { 20, 2 });
@@ -1422,7 +1422,7 @@ public class FinanceSearchSpaceIntegrationTests
             new MarketMakingEnvironment<double>(prices, 3, 10000.0, 1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_Reset_ReturnsCorrectDimension()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1438,7 +1438,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_ActionMustHaveTwoElements()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1456,7 +1456,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Throws<ArgumentException>(() => env.Step(wrongAction));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_ValidAction_Steps()
     {
         var prices = new Tensor<double>(new[] { 20, 1 });
@@ -1478,7 +1478,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(info.ContainsKey("portfolioValue"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_WideSpread_StepsSuccessfully()
     {
         var prices = new Tensor<double>(new[] { 100, 1 });
@@ -1505,7 +1505,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(steps > 0, "Should have taken at least one step");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_TightSpread_StepsSuccessfully()
     {
         var prices = new Tensor<double>(new[] { 100, 1 });
@@ -1532,7 +1532,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(steps > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_MaxInventory_RespectsLimit()
     {
         var prices = new Tensor<double>(new[] { 200, 1 });
@@ -1562,7 +1562,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_Float_SmokeTest()
     {
         var numOps = MathHelper.GetNumericOperations<float>();
@@ -1582,7 +1582,7 @@ public class FinanceSearchSpaceIntegrationTests
         env.Close();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_NoShortSelling_CannotGoNegative()
     {
         var prices = new Tensor<double>(new[] { 100, 1 });
@@ -1615,7 +1615,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region TradingEnvironmentFactory - Factory Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesStockFromSeries()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1630,7 +1630,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(3, env.ActionSpaceSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesStockFromProvider()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1646,7 +1646,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesPortfolioEnvironment()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1668,7 +1668,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesPortfolioFromProviders()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1692,7 +1692,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesMarketMakingFromSeries()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1708,7 +1708,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(env.IsContinuousActionSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CreatesMarketMakingFromProvider()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1724,7 +1724,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_NullProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1736,7 +1736,7 @@ public class FinanceSearchSpaceIntegrationTests
                 tradeSize: numOps.One));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_NullPortfolioProviders_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1747,7 +1747,7 @@ public class FinanceSearchSpaceIntegrationTests
                 nullProviders, windowSize: 5, initialCapital: numOps.FromDouble(1000)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_NullMarketMakingProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1759,7 +1759,7 @@ public class FinanceSearchSpaceIntegrationTests
                 tradeSize: numOps.One));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_CustomPriceSelector_UsesOpen()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1773,7 +1773,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_Float_StockFromSeries()
     {
         var numOps = MathHelper.GetNumericOperations<float>();
@@ -1787,7 +1787,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TradingEnvironmentFactory_MismatchedSeriesLengths_ThrowsArgumentException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -1806,7 +1806,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region MarketDataProvider - Deep Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_Add_IncreasesCount()
     {
         var provider = new MarketDataProvider<double>();
@@ -1817,21 +1817,21 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(1, provider.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_AddNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
         Assert.Throws<ArgumentNullException>(() => provider.Add(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_AddRangeNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
         Assert.Throws<ArgumentNullException>(() => provider.AddRange(null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetAll_ReturnsList()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1842,7 +1842,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(10, all.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetRange_ReturnsCorrectSubset()
     {
         var start = new DateTime(2024, 1, 1);
@@ -1862,7 +1862,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetWindow_ReturnsCorrectLength()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(20);
@@ -1873,7 +1873,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(3, window.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetWindow_InvalidStart_ThrowsArgumentOutOfRange()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1884,7 +1884,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => provider.GetWindow(10, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetWindow_ZeroLength_ThrowsArgumentOutOfRange()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1894,7 +1894,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => provider.GetWindow(0, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_GetWindow_ExceedingLength_ClipsToAvailable()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1905,7 +1905,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(2, window.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_ToTensor_WithVolume_HasFiveColumns()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1917,7 +1917,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(5, tensor.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_ToTensor_WithoutVolume_HasFourColumns()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1929,7 +1929,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(4, tensor.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataProvider_Clear_ResetsCount()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
@@ -1941,7 +1941,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0, provider.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketDataPoint_PropertiesPreserved()
     {
         var ts = new DateTime(2024, 6, 15, 10, 30, 0);
@@ -1959,7 +1959,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region ParameterRange - Clone Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterRange_Clone_CopiesAllProperties()
     {
         var original = new ParameterRange
@@ -1982,7 +1982,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(original.Step, clone.Step);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterRange_Clone_CategoricalValues_DeepCopied()
     {
         var original = new ParameterRange
@@ -2004,7 +2004,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(3, original.CategoricalValues.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterRange_Clone_NullCategoricalValues_StaysNull()
     {
         var original = new ParameterRange
@@ -2023,7 +2023,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Cross-Domain Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossDomain_SearchSpace_AllModelTypes_HaveLearningRate()
     {
         var allModels = new[]
@@ -2050,7 +2050,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossDomain_SearchSpace_AllForecastingModels_HaveCommonParams()
     {
         var forecastModels = new[] { typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>), typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>),
@@ -2073,7 +2073,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossDomain_AllEnvironmentTypes_ResetAndStep()
     {
         var singleAssetData = FinanceTestHelpers.CreatePriceTensor<double>(steps: 40, assets: 1);
@@ -2106,7 +2106,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(mmEnv.ObservationSpaceDimension, mmStep.NextState.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossDomain_SearchSpace_DomainSpecificParams_DoNotLeak()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -2121,7 +2121,7 @@ public class FinanceSearchSpaceIntegrationTests
             "Risk model should not have forecasting-specific PatchLength");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossDomain_SearchSpace_TabularModels_SameBase()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -2139,7 +2139,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Transaction Cost Math Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExecuteTrade_BuyCost_ExactMath_CashDeductedCorrectly()
     {
         // Hand-calculated: Buy 10 units at price 50, transactionCost=0.01
@@ -2170,7 +2170,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expectedCash, actualCash, 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExecuteTrade_SellProceeds_ExactMath_CashCreditedCorrectly()
     {
         // First buy, then sell. Verify sell proceeds use |tradeValue| * (1 - txCost)
@@ -2203,7 +2203,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expectedCash, actualCash, 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExecuteTrade_BuyRejectsWhenInsufficientCash()
     {
         // Start with cash=100, try to buy 10 units at price=50
@@ -2233,7 +2233,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExecuteTrade_HoldDoesNotChangeCashOrPositions()
     {
         double initialCash = 10000.0;
@@ -2258,7 +2258,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransactionCost_RoundTrip_AlwaysLosesMoney()
     {
         // Buy then sell at the same price should always result in net loss
@@ -2293,7 +2293,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Portfolio Value and Reward Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioValue_AfterBuy_EqualsPositionValuePlusCash()
     {
         // After buying: portfolioValue = positions * price + cash
@@ -2320,7 +2320,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expectedPortfolioValue, actualPortfolioValue, 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reward_OnHold_WithNoPosition_IsZero()
     {
         // With no position and constant prices, reward should be 0
@@ -2340,7 +2340,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(0.0, reward, 10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reward_AfterPriceIncrease_WithPosition_IsPositive()
     {
         // Buy at price=100, price goes to 110. Reward should be positive.
@@ -2360,7 +2360,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(reward > 0, $"Reward should be positive when price increases with long position, got {reward}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reward_ExactValue_PercentageReturn()
     {
         // Verify reward = (currentValue - previousValue) / previousValue
@@ -2396,7 +2396,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(10010.0, (double)info["portfolioValue"], 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reward_WhenPreviousValueIsZero_ReturnsZero()
     {
         // Edge case: if portfolio value somehow becomes 0, reward should be 0 (not NaN/Infinity)
@@ -2421,7 +2421,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Observation Window Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildObservation_ContainsCorrectPriceWindow()
     {
         // Verify the observation vector has the correct price data from the market tensor
@@ -2452,7 +2452,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(10000.0, obs[4], 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildObservation_Dimension_MatchesFormula()
     {
         // ObservationSpaceDimension = (WindowSize * NumAssets) + NumAssets + 1
@@ -2470,7 +2470,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expectedDim, obs.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildObservation_AfterBuy_ShowsUpdatedPosition()
     {
         // After buying, observation should reflect the new position
@@ -2491,7 +2491,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(9500.0, nextState[posIndex + 1], 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BuildObservation_MultiAsset_InterleavedPricesCorrect()
     {
         // With 2 assets, verify prices are interleaved correctly: [t0_a0, t0_a1, t1_a0, t1_a1, ...]
@@ -2523,7 +2523,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Short Selling Constraints
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShortSelling_Disabled_SellClampsToCurrentPosition()
     {
         // With no short selling, selling more than you own should clamp to position
@@ -2549,7 +2549,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(10000.0, (double)info["cash"], 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShortSelling_Enabled_AllowsNegativePosition()
     {
         var data = new Tensor<double>(new[] { 20, 1 });
@@ -2570,7 +2570,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShortSelling_Disabled_PartialSell_ClampsCorrectly()
     {
         // Buy 5, then try to sell 5, then try to sell again (should be clamped)
@@ -2596,7 +2596,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Portfolio Rebalancing Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Portfolio_NormalizeWeights_AllNegative_NoShortSelling_FallsBackToUniform()
     {
         // When all weights are negative and short selling is disabled,
@@ -2629,7 +2629,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Portfolio_Rebalancing_ExactWeights_VerifyPositionSizes()
     {
         // Target 100% in asset 0, 0% in asset 1
@@ -2661,7 +2661,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Portfolio_SellsExecuteBeforeBuys_RebalancingUsesFreedCash()
     {
         // Verifies sells execute before buys so cash from sell proceeds is available.
@@ -2709,7 +2709,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Market Making Reward Scale Mismatch
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarketMaking_InventoryPenalty_ScaleMismatch_WithBaseReward()
     {
         // BUG PROBE: ComputeReward returns baseReward (percentage) - |position| * inventoryPenalty (absolute)
@@ -2764,7 +2764,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Episode and Reset Logic
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxEpisodeLength_TerminatesCorrectly()
     {
         var data = new Tensor<double>(new[] { 100, 1 });
@@ -2788,7 +2788,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(maxEpLen, stepsBeforeDone);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reset_RestoresInitialState()
     {
         var data = new Tensor<double>(new[] { 30, 1 });
@@ -2814,7 +2814,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Seed_ProducesReproducibleResults()
     {
         var data = new Tensor<double>(new[] { 30, 1 });
@@ -2838,7 +2838,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Step_AfterEndOfData_MarksEpisodeAsDone()
     {
         // Create minimal data: just enough for windowSize + 1 step
@@ -2863,7 +2863,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: StockTradingEnvironment Action Parsing
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_OneHotAction_PicksMaxIndex()
     {
         var data = new Tensor<double>(new[] { 20, 1 });
@@ -2884,7 +2884,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_ScalarAction_ConvertsToIndex()
     {
         var data = new Tensor<double>(new[] { 20, 1 });
@@ -2906,7 +2906,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StockTrading_SoftmaxLikeAction_PicksHighestProbability()
     {
         // Simulates a softmax output: [0.1, 0.7, 0.2] -> index 1 = buy
@@ -2931,7 +2931,7 @@ public class FinanceSearchSpaceIntegrationTests
 
     #region Deep Bug-Probing: Multiple Steps Portfolio Tracking
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultipleBuys_AccumulatePosition()
     {
         var data = new Tensor<double>(new[] { 20, 1 });
@@ -2956,7 +2956,7 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.Equal(expectedCash, (double)info["cash"], 6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioValue_ConsistentAcrossSteps_ConstantPrice()
     {
         // With constant prices and no transaction costs, portfolio value should
@@ -2981,7 +2981,7 @@ public class FinanceSearchSpaceIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PortfolioValue_WithTransactionCosts_MonotonicallyDecreasing_ConstantPrice()
     {
         // With constant prices and transaction costs, each trade reduces portfolio value

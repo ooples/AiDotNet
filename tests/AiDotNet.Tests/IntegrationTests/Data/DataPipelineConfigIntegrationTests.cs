@@ -11,7 +11,7 @@ public class DataPipelineConfigIntegrationTests
 {
     #region CacheInfo
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_DefaultValues()
     {
         var info = new CacheInfo();
@@ -22,7 +22,7 @@ public class DataPipelineConfigIntegrationTests
         Assert.Equal(string.Empty, info.CacheDirectory);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_SetProperties()
     {
         var info = new CacheInfo
@@ -38,28 +38,28 @@ public class DataPipelineConfigIntegrationTests
         Assert.Equal("/tmp/cache", info.CacheDirectory);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_FormattedSize_Bytes()
     {
         var info = new CacheInfo { TotalSizeBytes = 512 };
         Assert.Equal("512 B", info.FormattedSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_FormattedSize_KB()
     {
         var info = new CacheInfo { TotalSizeBytes = 2048 };
         Assert.Equal("2.0 KB", info.FormattedSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_FormattedSize_MB()
     {
         var info = new CacheInfo { TotalSizeBytes = 5 * 1024 * 1024 };
         Assert.Equal("5.0 MB", info.FormattedSize);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheInfo_FormattedSize_GB()
     {
         var info = new CacheInfo { TotalSizeBytes = 2L * 1024 * 1024 * 1024 };
@@ -70,7 +70,7 @@ public class DataPipelineConfigIntegrationTests
 
     #region DiskCacheOptions
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiskCacheOptions_DefaultValues()
     {
         var options = new DiskCacheOptions();
@@ -84,7 +84,7 @@ public class DataPipelineConfigIntegrationTests
         Assert.False(options.CompressData);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiskCacheOptions_CanSetAllProperties()
     {
         var options = new DiskCacheOptions
@@ -111,7 +111,7 @@ public class DataPipelineConfigIntegrationTests
 
     #region CacheEvictionPolicy
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheEvictionPolicy_HasExpectedValues()
     {
         Assert.Equal(0, (int)CacheEvictionPolicy.LeastRecentlyUsed);

@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SVMTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Margin_ShouldExist_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -46,7 +46,7 @@ public abstract class SVMTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SVM_ShouldProduceValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

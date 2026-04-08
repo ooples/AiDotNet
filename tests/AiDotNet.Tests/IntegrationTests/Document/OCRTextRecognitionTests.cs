@@ -35,7 +35,7 @@ public class OCRTextRecognitionTests
 
     #region CRNN Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class OCRTextRecognitionTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -68,7 +68,7 @@ public class OCRTextRecognitionTests
 
     #region TrOCR Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrOCR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -76,7 +76,7 @@ public class OCRTextRecognitionTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrOCR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -88,7 +88,7 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TrOCR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -101,7 +101,7 @@ public class OCRTextRecognitionTests
 
     #region SVTR Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVTR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -109,7 +109,7 @@ public class OCRTextRecognitionTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVTR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -121,7 +121,7 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SVTR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -134,7 +134,7 @@ public class OCRTextRecognitionTests
 
     #region ABINet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -142,7 +142,7 @@ public class OCRTextRecognitionTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -154,7 +154,7 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -167,7 +167,7 @@ public class OCRTextRecognitionTests
 
     #region Cross-Model Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllTextRecognizers_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();

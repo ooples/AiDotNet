@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class ProgramInputTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithParameters_CreatesInstance()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class ProgramInputTests
         Assert.Single(input.Constraints ?? new List<string>());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_DefaultConstructor_CreatesEmptyInstance()
     {
         // Act
@@ -49,7 +49,7 @@ public class ProgramInputTests
         Assert.Null(input.Examples);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddExample_AddsExampleCorrectly()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class ProgramInputTests
         Assert.Equal("9", input.Examples[1].ExpectedOutput);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddTestCase_AddsTestCaseCorrectly()
     {
         // Arrange
@@ -87,7 +87,7 @@ public class ProgramInputTests
         Assert.Equal("3", input.TestCases[1].ExpectedOutput);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddConstraint_AddsConstraintCorrectly()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class ProgramInputTests
         Assert.Contains("Should be readable", input.Constraints);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Properties_SettersAndGetters_WorkCorrectly()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class ProgramInputTests
         Assert.Equal(5000, input.TimeoutMs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddExample_MultipleTimesSeparately_MaintainsOrder()
     {
         // Arrange

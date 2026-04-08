@@ -15,7 +15,7 @@ public class TextToxicityIntegrationTests
 {
     #region RuleBasedToxicityDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_ExplicitThreat_DetectsToxicity()
     {
         var detector = new RuleBasedToxicityDetector<double>();
@@ -27,7 +27,7 @@ public class TextToxicityIntegrationTests
             f.Category == SafetyCategory.HateSpeech);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_HateSpeech_DetectsToxicity()
     {
         var detector = new RuleBasedToxicityDetector<double>();
@@ -36,7 +36,7 @@ public class TextToxicityIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_SafeText_NoFindings()
     {
         var detector = new RuleBasedToxicityDetector<double>();
@@ -45,7 +45,7 @@ public class TextToxicityIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_EmptyText_NoFindings()
     {
         var detector = new RuleBasedToxicityDetector<double>();
@@ -54,7 +54,7 @@ public class TextToxicityIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_CustomThreshold_RespectsConfig()
     {
         var strict = new RuleBasedToxicityDetector<double>(confidenceThreshold: 0.3);
@@ -68,7 +68,7 @@ public class TextToxicityIntegrationTests
             "Stricter threshold should detect at least as many findings");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RuleBased_MixedContent_DetectsToxicPortion()
     {
         var detector = new RuleBasedToxicityDetector<double>();
@@ -82,7 +82,7 @@ public class TextToxicityIntegrationTests
 
     #region EmbeddingToxicityDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_ToxicContent_ProcessesWithoutError()
     {
         var detector = new EmbeddingToxicityDetector<double>();
@@ -92,7 +92,7 @@ public class TextToxicityIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_SafeContent_NoFindings()
     {
         var detector = new EmbeddingToxicityDetector<double>();
@@ -101,7 +101,7 @@ public class TextToxicityIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Embedding_LowThreshold_MoreSensitive()
     {
         var sensitive = new EmbeddingToxicityDetector<double>(threshold: 0.3);
@@ -118,7 +118,7 @@ public class TextToxicityIntegrationTests
 
     #region ClassifierToxicityDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Classifier_ToxicContent_DetectsViolation()
     {
         var detector = new ClassifierToxicityDetector<double>();
@@ -127,7 +127,7 @@ public class TextToxicityIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Classifier_SafeContent_ProcessesWithoutError()
     {
         var detector = new ClassifierToxicityDetector<double>();
@@ -137,7 +137,7 @@ public class TextToxicityIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Classifier_CustomFeatureDim_Works()
     {
         var detector = new ClassifierToxicityDetector<double>(threshold: 0.5, featureDim: 128);
@@ -150,7 +150,7 @@ public class TextToxicityIntegrationTests
 
     #region EnsembleToxicityDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ensemble_StronglyToxic_DetectsViolation()
     {
         var detector = new EnsembleToxicityDetector<double>(0.3);
@@ -160,7 +160,7 @@ public class TextToxicityIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ensemble_SafeContent_NoFindings()
     {
         var detector = new EnsembleToxicityDetector<double>(0.5);
@@ -169,7 +169,7 @@ public class TextToxicityIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ensemble_CombinesMultipleDetectors()
     {
         var detector = new EnsembleToxicityDetector<double>(0.3);
@@ -180,7 +180,7 @@ public class TextToxicityIntegrationTests
         Assert.All(findings, f => Assert.True(f.Confidence > 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Ensemble_VaryingThresholds_AffectsDetection()
     {
         var strict = new EnsembleToxicityDetector<double>(0.2);
@@ -197,7 +197,7 @@ public class TextToxicityIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDetectors_SameInput_ProduceResults()
     {
         var toxicText = "I will murder you and kill everyone, you disgusting worthless garbage person";
@@ -220,7 +220,7 @@ public class TextToxicityIntegrationTests
         Assert.NotNull(ensembleFindings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDetectors_SafeInput_RuleBasedProducesNoFindings()
     {
         var safeText = "The conference was informative and the speakers were excellent.";

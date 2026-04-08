@@ -10,7 +10,7 @@ namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingCodeTaskExecutorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ExecuteAsync_Summarization_ReturnsSuccessfulResult()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);
@@ -53,7 +53,7 @@ public sealed class ServingCodeTaskExecutorTests
         Assert.Equal(ProgramLanguage.CSharp, result.Language);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ExecuteAsync_Canceled_Throws()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);
@@ -67,7 +67,7 @@ public sealed class ServingCodeTaskExecutorTests
                 cts.Token));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ExecuteAsync_NullRequest_Throws()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);

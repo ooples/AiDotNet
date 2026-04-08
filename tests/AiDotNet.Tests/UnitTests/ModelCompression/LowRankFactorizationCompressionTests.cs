@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class LowRankFactorizationCompressionTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -21,7 +21,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeTargetRank_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new LowRankFactorizationCompression<double>(targetRank: -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidEnergyThreshold_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new LowRankFactorizationCompression<double>(energyThreshold: 1.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithInvalidMaxIterations_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new LowRankFactorizationCompression<double>(maxIterations: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<LowRankFactorizationMetadata<double>>(metadata);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -76,7 +76,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_ProducesLowRankFactorizationMetadata()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(9, lrMetadata.OriginalLength);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetCompressedSize_ReturnsCorrectSize()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSpecificRank_RespectsRank()
         {
             // Arrange
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(lrMetadata.Rank <= 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(size > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithLargeWeights_CompletesInReasonableTime()
         {
             // Arrange

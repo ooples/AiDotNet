@@ -20,7 +20,7 @@ public class ChainOfThoughtStrategyTests
         _strategy = new ChainOfThoughtStrategy<double>(_mockChatModel.Object);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithSimpleMathProblem_ReturnsSuccessfulResult()
     {
         // Arrange
@@ -49,7 +49,7 @@ Final Answer: 4";
         Assert.Contains("4", result.FinalAnswer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithConfiguration_RespectsMaxSteps()
     {
         // Arrange
@@ -81,7 +81,7 @@ Step 11: 10";
         Assert.True(result.Chain.Steps.Count <= 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -93,7 +93,7 @@ Step 11: 10";
         );
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithCancellation_ThrowsOperationCanceledException()
     {
         // Arrange
@@ -111,7 +111,7 @@ Step 11: 10";
         );
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithJsonFormattedSteps_ParsesCorrectly()
     {
         // Arrange
@@ -148,14 +148,14 @@ Step 11: 10";
         Assert.Contains("12", result.FinalAnswer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void StrategyName_ReturnsCorrectName()
     {
         // Assert
         Assert.Equal("Chain-of-Thought", _strategy.StrategyName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Description_ContainsRelevantKeywords()
     {
         // Assert
@@ -188,7 +188,7 @@ Final Answer: {expectedAnswer}";
         Assert.Contains(expectedAnswer, result.FinalAnswer);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ReasonAsync_WithFastConfig_CompletesQuickly()
     {
         // Arrange

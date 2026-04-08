@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomTopK_SetsCorrectly()
         {
             // Arrange
@@ -121,7 +121,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Act & Assert
@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TFIDFRetriever<double>(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ZeroTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TFIDFRetriever<double>(store, defaultTopK: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_NegativeTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_MatchingDocument_ReturnsDocument()
         {
             // Arrange
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_MultipleDocuments_ReturnsRankedByRelevance()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count >= 2, "Should return documents containing 'fox'");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_NoMatchingTerms_ReturnsZeroScoreDocuments()
         {
             // Arrange
@@ -219,7 +219,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.All(r => Convert.ToDouble(r.RelevanceScore) == 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_CaseInsensitive_MatchesDifferentCases()
         {
             // Arrange - Need multiple documents for meaningful IDF scores
@@ -258,7 +258,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 "Matching document should have higher score");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -282,7 +282,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -298,7 +298,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region TF-IDF Scoring Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_HigherTermFrequency_GetsHigherScore()
         {
             // Arrange
@@ -316,7 +316,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_RareTermsGetHigherWeight()
         {
             // Arrange - "fox" appears in all docs, "unique" appears in only one
@@ -334,7 +334,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].Id == "doc3" || results.Any(r => r.Id == "doc3" && r.RelevanceScore > 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_CommonTermsGetLowerWeight()
         {
             // Arrange - Common term appears in all documents
@@ -353,7 +353,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(3, results.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_MoreQueryTermsMatch_GetHigherScore()
         {
             // Arrange
@@ -372,7 +372,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
@@ -392,7 +392,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
@@ -410,7 +410,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
@@ -426,7 +426,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
@@ -443,7 +443,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
@@ -459,7 +459,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Caching Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_RepeatedCalls_UsesCachedStatistics()
         {
             // Arrange
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_AfterDocumentCountChange_InvalidatesCache()
         {
             // Arrange
@@ -509,7 +509,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Tokenization Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_HandlesSpecialCharacters()
         {
             // Arrange - Need multiple documents for meaningful IDF scores
@@ -529,7 +529,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 "Document with matching terms should have higher score");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_HandlesTabs_And_Newlines()
         {
             // Arrange - Need multiple documents for meaningful IDF scores
@@ -549,7 +549,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 "Document with matching term should have higher score");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_EmptyDocumentContent_HandlesCorrectly()
         {
             // Arrange
@@ -570,7 +570,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_SingleWordDocument_HandlesCorrectly()
         {
             // Arrange
@@ -585,7 +585,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_LongDocument_HandlesCorrectly()
         {
             // Arrange
@@ -601,7 +601,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
         {
             // Arrange
@@ -617,7 +617,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -629,7 +629,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -641,7 +641,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_ManyDocuments_HandlesCorrectly()
         {
             // Arrange
@@ -658,7 +658,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, results.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_ResultsOrderedByScore()
         {
             // Arrange

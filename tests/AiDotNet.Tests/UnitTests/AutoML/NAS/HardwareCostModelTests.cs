@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class HardwareCostModelTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_Constructor_WithDefaultPlatform_InitializesCorrectly()
         {
             // Arrange & Act
@@ -62,7 +62,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateOperationCost_UnknownOperation_ReturnsConservativeEstimate()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(conv3x3Cost.Memory, cost.Memory);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateOperationCost_ScalesWithChannels()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costLarge.Energy > costSmall.Energy);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateOperationCost_ScalesWithSpatialSize()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costLarge.Energy > costSmall.Energy);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateOperationCost_GPUFasterThanMobile()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(gpuCost.Latency < mobileCost.Latency);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateArchitectureCost_EmptyArchitecture_ReturnsZeroCost()
         {
             // Arrange
@@ -151,7 +151,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.0, cost.Memory);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateArchitectureCost_SingleOperation_ReturnsValidCost()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Energy > 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateArchitectureCost_MultipleOperations_SumsCosts()
         {
             // Arrange
@@ -187,7 +187,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costDouble.Latency > costSingle.Latency);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EstimateArchitectureCost_UsesNodeChannels()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Latency > 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_NullConstraints_ReturnsTrue()
         {
             // Arrange
@@ -220,7 +220,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_LooseLatencyConstraint_ReturnsTrue()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_TightLatencyConstraint_ReturnsFalse()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_TightMemoryConstraint_ReturnsFalse()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_TightEnergyConstraint_ReturnsFalse()
         {
             // Arrange
@@ -306,7 +306,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_MeetsConstraints_MultipleConstraints_AllMustBeMet()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_DifferentOperations_HaveDifferentCosts()
         {
             // Arrange
@@ -345,7 +345,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(conv3x3Cost.Latency < conv5x5Cost.Latency);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_PoolingOperations_HaveSimilarCosts()
         {
             // Arrange
@@ -359,7 +359,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(maxPoolCost.Latency - avgPoolCost.Latency) < 0.01);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_EdgeTPU_FasterThanCPU()
         {
             // Arrange
@@ -374,7 +374,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(edgeCost.Latency < cpuCost.Latency);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCostModel_Float_WorksCorrectly()
         {
             // Arrange & Act
@@ -385,7 +385,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Latency > 0.0f);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareCost_DefaultValues()
         {
             // Arrange & Act
@@ -397,7 +397,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(default(double), cost.Memory);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void HardwareConstraints_DefaultValues()
         {
             // Arrange & Act

@@ -32,7 +32,7 @@ public class LeafBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithLeafBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");
@@ -108,7 +108,7 @@ public class LeafBenchmarkingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task EvaluateBenchmarksAsync_WithSeededSampling_IsDeterministicAndSeedAffectsSelection()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");

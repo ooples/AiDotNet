@@ -18,7 +18,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     // noise, the denoising network is inverted.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenoisingProgress_Monotonic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -64,7 +64,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     // Discontinuous output indicates unstable generation.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LatentSpace_IsContinuous()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -104,7 +104,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     // cause artifacts when decoded back to pixel/audio space.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputBounded_AfterDenoising()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

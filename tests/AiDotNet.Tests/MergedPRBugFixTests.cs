@@ -26,7 +26,7 @@ public class MergedPRBugFixTests
 {
     #region Evaluation PR #765 - PredictionTypeInference Integer Overflow Bug
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictionTypeInference_LargeClassRange_DoesNotOverflow()
     {
         // ARRANGE: Create a vector with class labels that span a large range
@@ -59,7 +59,7 @@ public class MergedPRBugFixTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictionTypeInference_ExtremeClassValues_DoesNotOverflow()
     {
         // ARRANGE: Extreme case - minimum and maximum integer values
@@ -78,7 +78,7 @@ public class MergedPRBugFixTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PredictionTypeInference_NormalClassRange_StillWorksCorrectly()
     {
         // ARRANGE: Normal multiclass scenario with small contiguous labels
@@ -103,7 +103,7 @@ public class MergedPRBugFixTests
 
     #region PromptEngineering PR #762 - GeneticOptimizer IndexOf Bug
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeneticOptimizer_TournamentSelect_WorksWithDuplicatePrompts()
     {
         // ARRANGE: Create optimizer and test with population containing duplicates
@@ -134,7 +134,7 @@ public class MergedPRBugFixTests
         Assert.True(callCount > 0, "Evaluator should have been called");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeneticOptimizer_OptimizesPrompts_ReturnsValidTemplate()
     {
         // ARRANGE
@@ -160,7 +160,7 @@ public class MergedPRBugFixTests
 
     #region TrainingMonitoring PR #755 - CSV Export Missing Data Bug
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrainingMonitor_CSVExport_EmptyMetricShowsEmpty_NotZero()
     {
         // ARRANGE: Create monitor with sparse metrics (not every step has every metric)
@@ -214,7 +214,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrainingMonitor_CSVExport_AllMetricsPresent_NoEmptyValues()
     {
         // ARRANGE: Create monitor where all metrics are present at all steps
@@ -266,7 +266,7 @@ public class MergedPRBugFixTests
 
     #region ProgramSynthesis PR #763 - Relative Error Comparison Bug
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputMatch_LargeNumbers_UsesRelativeComparison()
     {
         // ARRANGE: The old code used absolute tolerance (1e-6) which fails for large numbers
@@ -303,7 +303,7 @@ public class MergedPRBugFixTests
         Assert.False(result3, "1% relative error should not match");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputMatch_SmallNumbers_UsesAbsoluteComparison()
     {
         // Numbers near zero should use absolute comparison
@@ -328,7 +328,7 @@ public class MergedPRBugFixTests
 
     #region FineTuning PR #753 - Log Probability Always Zero Bug
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SupervisedFineTuning_CanBeInstantiated_WithSingleParameterConstructor()
     {
         // ARRANGE: The old SupervisedFineTuning only had a constructor with optional second parameter:
@@ -361,7 +361,7 @@ public class MergedPRBugFixTests
         Assert.IsAssignableFrom(typeof(FineTuning.FineTuningBase<double, double[], double[]>), sftInstance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FineTuningBase_ComputeLogProbability_ArrayOutputs_NotAlwaysZero()
     {
         // ARRANGE: The old code always returned 0.0 for log probability
@@ -408,7 +408,7 @@ public class MergedPRBugFixTests
             $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FineTuningBase_ComputeLogProbability_ScalarOutputs_NotAlwaysZero()
     {
         // ARRANGE: Use DPO with double[] types since we know it has the right constructor
@@ -439,7 +439,7 @@ public class MergedPRBugFixTests
             $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FineTuningBase_ComputeLogProbability_StringOutputs_NotAlwaysZero()
     {
         // ARRANGE: Use DPO with string types
@@ -469,7 +469,7 @@ public class MergedPRBugFixTests
             $"Similar strings should have higher log prob ({logProbSimilar}) than different ({logProbDifferent})");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DirectPreferenceOptimization_DPOLoss_VariesWithInputs()
     {
         // This test verifies that DPO loss actually varies based on inputs
@@ -517,7 +517,7 @@ public class MergedPRBugFixTests
 
     #region Diagnostics PR #777 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryTracker_EnforcesMaxHistorySize_PreventsUnboundedGrowth()
     {
         // ARRANGE: The old code had no limit on history size, causing memory leaks
@@ -551,7 +551,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProfilerSession_ThreadSafeRandomSampling_DoesNotCorrupt()
     {
         // ARRANGE: The old code used a single Random instance which is NOT thread-safe
@@ -599,7 +599,7 @@ public class MergedPRBugFixTests
         Assert.True(session.OperationCount > 0, "Some operations should be recorded");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProfilerSession_SampleVariance_UsesUnbiasedEstimator()
     {
         // ARRANGE: The old code used population variance (_m2 / _count)
@@ -638,7 +638,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProfilerSessionTimer_CleansUpCallStack_EvenWithExceptionOrder()
     {
         // ARRANGE: The old code only popped from call stack if timer was at top
@@ -666,7 +666,7 @@ public class MergedPRBugFixTests
         Assert.Equal(1, stats.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryTracker_MaxHistorySize_CanBeConfigured()
     {
         // ARRANGE
@@ -691,7 +691,7 @@ public class MergedPRBugFixTests
 
     #region ModelRegistry PR #774 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_GetModel_ReturnsClone_NotInternalState()
     {
         // ARRANGE: The old code returned the internal model object directly
@@ -729,7 +729,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_GetModelByStage_ReturnsClone_NotInternalState()
     {
         // ARRANGE
@@ -764,7 +764,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_DeleteModelVersion_ValidatesModelName()
     {
         // ARRANGE: Other methods validate model name, DeleteModelVersion should too
@@ -785,7 +785,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_LoadErrors_ExposedForDiagnostics()
     {
         // ARRANGE: The old code used Console.WriteLine for errors which is bad for production
@@ -807,7 +807,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_LineageTracking_WorksForNewModels()
     {
         // ARRANGE: The old code never populated _lineage dictionary
@@ -839,7 +839,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_LineageTracking_TracksParentForNewVersions()
     {
         // ARRANGE
@@ -872,7 +872,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModelRegistry_SearchModels_ReturnsClones()
     {
         // ARRANGE
@@ -931,7 +931,7 @@ public class MergedPRBugFixTests
 
     #region Metrics PR #773 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PSNR_ComputeBatch_ValidatesNullArguments()
     {
         // ARRANGE: The old code didn't validate null arguments in ComputeBatch
@@ -943,7 +943,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void STOI_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
@@ -955,7 +955,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SISDR_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
@@ -967,7 +967,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SISDR_Compute_HandlesEmptyTensors()
     {
         // ARRANGE: The old code would divide by zero in ComputeMean for empty tensors
@@ -981,7 +981,7 @@ public class MergedPRBugFixTests
         Assert.Equal(-100.0, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SNR_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
@@ -993,7 +993,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IoU3D_ComputeBoxIoU_ValidatesBoxCoordinates()
     {
         // ARRANGE: The old code didn't validate that min <= max for each dimension
@@ -1009,7 +1009,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentException>(() => iou3d.ComputeBoxIoU(validBoxB, invalidBoxA));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IoU3D_ComputeBoxIoU_ValidatesNullArguments()
     {
         // ARRANGE
@@ -1021,7 +1021,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChamferDistance_ComputeOneWay_ThrowsForEmptyTargetWithNonEmptySource()
     {
         // ARRANGE: The old code returned 0 for empty target, which is semantically wrong
@@ -1038,7 +1038,7 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentException>(() => chamfer.ComputeOneWay(source, target));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ChamferDistance_ComputeOneWay_ReturnsZeroForEmptySource()
     {
         // ARRANGE: Empty source is fine - no points to match means zero distance (vacuously true)
@@ -1059,7 +1059,7 @@ public class MergedPRBugFixTests
 
     #region Logging PR #772 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_AddScalars_ValidatesNullDictionary()
     {
         // ARRANGE: The old code didn't validate null arguments
@@ -1078,7 +1078,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_ValidatesNullArray()
     {
         // ARRANGE
@@ -1098,7 +1098,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_AddImage_ValidatesDataformats()
     {
         // ARRANGE: The old code silently used HWC for any invalid dataformats value
@@ -1120,7 +1120,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_AddImages_ValidatesNullArray()
     {
         // ARRANGE
@@ -1139,7 +1139,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_AddPrCurve_ValidatesArguments()
     {
         // ARRANGE
@@ -1162,7 +1162,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_LogWeights_ValidatesNullArray()
     {
         // ARRANGE
@@ -1181,7 +1181,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SummaryWriter_LogWeights_HandlesEmptyArray()
     {
         // ARRANGE: The old code would throw InvalidOperationException on Average() for empty array
@@ -1205,7 +1205,7 @@ public class MergedPRBugFixTests
 
     #region LanguageModels PR #771 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OpenAIChatModel_NullModelName_ThrowsArgumentNullException()
     {
         // ARRANGE: The old code would throw NullReferenceException in GetMaxContextTokens
@@ -1219,7 +1219,7 @@ public class MergedPRBugFixTests
                 modelName: null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OpenAIChatModel_EmptyModelName_ThrowsArgumentException()
     {
         // ARRANGE: The old code would silently use default context tokens for empty model names
@@ -1237,7 +1237,7 @@ public class MergedPRBugFixTests
                 modelName: "   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
     {
         // ARRANGE: The old code let maxTokens <= 0 through to base class
@@ -1258,7 +1258,7 @@ public class MergedPRBugFixTests
         Assert.Contains("Max tokens", ex2.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AnthropicChatModel_NullModelName_ThrowsArgumentNullException()
     {
         // ARRANGE: Same issue as OpenAIChatModel - null modelName caused NullReferenceException
@@ -1270,7 +1270,7 @@ public class MergedPRBugFixTests
                 modelName: null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AnthropicChatModel_EmptyModelName_ThrowsArgumentException()
     {
         // ARRANGE: Empty model name should be validated
@@ -1287,7 +1287,7 @@ public class MergedPRBugFixTests
                 modelName: "   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AzureOpenAIChatModel_NullApiVersion_ThrowsArgumentException()
     {
         // ARRANGE: The old code didn't validate apiVersion, causing invalid URL
@@ -1302,7 +1302,7 @@ public class MergedPRBugFixTests
                 apiVersion: null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AzureOpenAIChatModel_EmptyApiVersion_ThrowsArgumentException()
     {
         // ARRANGE: Empty apiVersion should also be rejected
@@ -1323,7 +1323,7 @@ public class MergedPRBugFixTests
                 apiVersion: "   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AzureOpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
     {
         // ARRANGE: Same issue as OpenAIChatModel - maxTokens <= 0 should be caught early
@@ -1338,7 +1338,7 @@ public class MergedPRBugFixTests
         Assert.Contains("Max tokens", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OpenAIChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
@@ -1356,7 +1356,7 @@ public class MergedPRBugFixTests
         Assert.Equal(1024, model.MaxGenerationTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AnthropicChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
@@ -1374,7 +1374,7 @@ public class MergedPRBugFixTests
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AzureOpenAIChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
@@ -1399,7 +1399,7 @@ public class MergedPRBugFixTests
 
     #region Interpretability PR #769 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetUniqueGroups_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE: The old code would throw NullReferenceException
@@ -1411,7 +1411,7 @@ public class MergedPRBugFixTests
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetGroupIndices_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE
@@ -1423,7 +1423,7 @@ public class MergedPRBugFixTests
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullVector()
     {
         // ARRANGE
@@ -1436,7 +1436,7 @@ public class MergedPRBugFixTests
         Assert.Equal("vector", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullIndices()
     {
         // ARRANGE
@@ -1449,7 +1449,7 @@ public class MergedPRBugFixTests
         Assert.Equal("indices", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
@@ -1461,7 +1461,7 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
@@ -1474,7 +1474,7 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullActualLabels()
     {
         // ARRANGE
@@ -1487,7 +1487,7 @@ public class MergedPRBugFixTests
         Assert.Equal("actualLabels", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
@@ -1500,7 +1500,7 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ComputePrecision_ThrowsForNullPredictions()
     {
         // ARRANGE
@@ -1513,7 +1513,7 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterpretabilityMetricsHelper_ValidFunctions_ReturnCorrectResults()
     {
         // ARRANGE
@@ -1538,7 +1538,7 @@ public class MergedPRBugFixTests
 
     #region InferenceOptimization PR #768 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationNode_AddInput_ThrowsForNullInputNode()
     {
         // ARRANGE
@@ -1550,7 +1550,7 @@ public class MergedPRBugFixTests
         Assert.Equal("inputNode", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationNode_RemoveInput_ThrowsForNullInputNode()
     {
         // ARRANGE
@@ -1562,7 +1562,7 @@ public class MergedPRBugFixTests
         Assert.Equal("inputNode", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationNode_ReplaceInput_ThrowsForNullOldInput()
     {
         // ARRANGE
@@ -1575,7 +1575,7 @@ public class MergedPRBugFixTests
         Assert.Equal("oldInput", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationNode_ReplaceInput_ThrowsForNullNewInput()
     {
         // ARRANGE
@@ -1588,7 +1588,7 @@ public class MergedPRBugFixTests
         Assert.Equal("newInput", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationGraph_FindNodeById_ThrowsForNullId()
     {
         // ARRANGE
@@ -1600,7 +1600,7 @@ public class MergedPRBugFixTests
         Assert.Equal("id", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationGraph_FindNodesByName_ThrowsForNullName()
     {
         // ARRANGE
@@ -1612,7 +1612,7 @@ public class MergedPRBugFixTests
         Assert.Equal("name", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IRDataTypeExtensions_FromSystemType_ThrowsForNullType()
     {
         // ARRANGE
@@ -1624,7 +1624,7 @@ public class MergedPRBugFixTests
         Assert.Equal("type", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_IsBroadcastCompatible_ThrowsForNullOther()
     {
         // ARRANGE
@@ -1639,7 +1639,7 @@ public class MergedPRBugFixTests
         Assert.Equal("other", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphOptimizer_Optimize_ThrowsForNullGraph()
     {
         // ARRANGE
@@ -1651,7 +1651,7 @@ public class MergedPRBugFixTests
         Assert.Equal("graph", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GraphOptimizer_AddPass_ThrowsForNullPass()
     {
         // ARRANGE
@@ -1663,7 +1663,7 @@ public class MergedPRBugFixTests
         Assert.Equal("pass", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationNode_AddInputRemoveInput_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
@@ -1685,7 +1685,7 @@ public class MergedPRBugFixTests
         Assert.DoesNotContain(node, inputNode.Outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OptimizationGraph_FindNodesByIdAndName_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
@@ -1710,7 +1710,7 @@ public class MergedPRBugFixTests
         Assert.Null(notFound);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorType_IsBroadcastCompatible_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
@@ -1725,7 +1725,7 @@ public class MergedPRBugFixTests
         Assert.False(type1.IsBroadcastCompatible(type4)); // Not compatible (4 != 5)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IRDataTypeExtensions_FromSystemType_ValidTypes_ReturnsCorrectDataType()
     {
         // ACT & ASSERT
@@ -1743,7 +1743,7 @@ public class MergedPRBugFixTests
 
     #region HyperparameterOptimization PR #767 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrialPruner_ReportAndCheckPrune_ThrowsForNullTrial()
     {
         // ARRANGE
@@ -1755,7 +1755,7 @@ public class MergedPRBugFixTests
         Assert.Equal("trial", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrialPruner_ReportAndCheckPruneString_ThrowsForNullTrialId()
     {
         // ARRANGE
@@ -1767,7 +1767,7 @@ public class MergedPRBugFixTests
         Assert.Equal("trialId", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrialPruner_MarkComplete_ThrowsForNullTrialId()
     {
         // ARRANGE
@@ -1779,7 +1779,7 @@ public class MergedPRBugFixTests
         Assert.Equal("trialId", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ContinuousDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
@@ -1791,7 +1791,7 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IntegerDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
@@ -1803,7 +1803,7 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CategoricalDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
@@ -1815,7 +1815,7 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrialPruner_ReportAndCheckPrune_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
@@ -1833,7 +1833,7 @@ public class MergedPRBugFixTests
         Assert.False(shouldPrune2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ParameterDistribution_Sample_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
@@ -1853,7 +1853,7 @@ public class MergedPRBugFixTests
         Assert.Contains(categoricalSample, categoricalDist.Choices);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperparameterSearchSpace_AddMethods_ValidateInputs()
     {
         // ARRANGE
@@ -1876,7 +1876,7 @@ public class MergedPRBugFixTests
         Assert.True(searchSpace.Parameters.ContainsKey("use_dropout"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperparameterSearchSpace_AddContinuous_ThrowsForInvalidRange()
     {
         // ARRANGE
@@ -1887,7 +1887,7 @@ public class MergedPRBugFixTests
         Assert.Contains("less than", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperparameterSearchSpace_AddInteger_ThrowsForInvalidStep()
     {
         // ARRANGE
@@ -1898,7 +1898,7 @@ public class MergedPRBugFixTests
         Assert.Contains("positive", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EarlyStopping_Check_WorksCorrectly()
     {
         // ARRANGE
@@ -1930,7 +1930,7 @@ public class MergedPRBugFixTests
         Assert.True(earlyStopping.ShouldStop);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrialPruner_Strategies_WorkCorrectly()
     {
         // ARRANGE - Test median pruning strategy
@@ -1957,7 +1957,7 @@ public class MergedPRBugFixTests
 
     #region ExperimentTracking PR #766 - Production Bug Fixes
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_GetExperiment_ThrowsForNullExperimentId()
     {
         // ARRANGE
@@ -1977,7 +1977,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_GetRun_ThrowsForNullRunId()
     {
         // ARRANGE
@@ -1997,7 +1997,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_SearchRuns_ThrowsForInvalidMaxResults()
     {
         // ARRANGE
@@ -2020,7 +2020,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_StartRun_PersistsExperimentTimestamp()
     {
         // ARRANGE
@@ -2056,7 +2056,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentRun_LogArtifact_ThrowsForEmptyExtractedFilename()
     {
         // ARRANGE
@@ -2068,7 +2068,7 @@ public class MergedPRBugFixTests
         Assert.Contains("explicit artifact path", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentRun_GetLatestMetric_ThrowsForNullMetricName()
     {
         // ARRANGE
@@ -2080,7 +2080,7 @@ public class MergedPRBugFixTests
         Assert.Equal("metricName", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_DeleteExperiment_RemovesFromMemoryEvenIfDirectoryDeletionFails()
     {
         // ARRANGE
@@ -2104,7 +2104,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentRun_LogMetric_ThreadSafe()
     {
         // ARRANGE
@@ -2145,7 +2145,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_ListRuns_ThrowsForNullExperimentId()
     {
         // ARRANGE
@@ -2165,7 +2165,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_DeleteExperiment_ThrowsForNullExperimentId()
     {
         // ARRANGE
@@ -2185,7 +2185,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperimentTracker_DeleteRun_ThrowsForNullRunId()
     {
         // ARRANGE
@@ -2209,7 +2209,7 @@ public class MergedPRBugFixTests
 
     #region DistributedTraining PR #764 - Communication and Parameter Analysis Bugs
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CommunicationManager_Broadcast_ThrowsForInvalidRoot()
     {
         // ARRANGE
@@ -2230,7 +2230,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CommunicationManager_Scatter_ThrowsForInvalidRoot()
     {
         // ARRANGE
@@ -2251,7 +2251,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CommunicationManager_ReduceScatter_ThrowsForNullData()
     {
         // ARRANGE
@@ -2272,7 +2272,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ParameterAnalyzer_CalculateDistributionStats_NullGroups_ThrowsArgumentNullException()
     {
         // ARRANGE
@@ -2284,7 +2284,7 @@ public class MergedPRBugFixTests
                 (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>)null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ParameterAnalyzer_CalculateDistributionStats_EmptyGroups_ReturnsEmptyDict()
     {
         // ARRANGE
@@ -2298,7 +2298,7 @@ public class MergedPRBugFixTests
         Assert.Empty(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ShardingConfiguration_CreateDefault_ThrowsForNullBackend()
     {
         // ACT & ASSERT
@@ -2308,7 +2308,7 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ShardingConfiguration_CreateForHighBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
@@ -2318,7 +2318,7 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ShardingConfiguration_CreateForLowBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
@@ -2328,7 +2328,7 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InMemoryCommunicationBackend_Receive_PreservesMessageOnSizeMismatch()
     {
         // ARRANGE - This tests that the Receive method validates size BEFORE dequeuing
@@ -2363,7 +2363,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InMemoryCommunicationBackend_AllReduce_SingleProcess_DoesNotModifyData()
     {
         // ARRANGE - Test single process optimization path
@@ -2393,7 +2393,7 @@ public class MergedPRBugFixTests
 
     #region Reasoning PR #760 - Search Algorithm and Model Bugs
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReasoningChain_AddStep_ThrowsForNullStep()
     {
         // ARRANGE
@@ -2405,7 +2405,7 @@ public class MergedPRBugFixTests
         Assert.Equal("step", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReasoningChain_AddStep_SetsStepNumberCorrectly()
     {
         // ARRANGE
@@ -2423,7 +2423,7 @@ public class MergedPRBugFixTests
         Assert.Equal(2, chain.Steps.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MonteCarloTreeSearch_Constructor_ThrowsForNegativeExplorationConstant()
     {
         // ACT & ASSERT
@@ -2432,7 +2432,7 @@ public class MergedPRBugFixTests
         Assert.Equal("explorationConstant", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MonteCarloTreeSearch_Constructor_ThrowsForZeroSimulations()
     {
         // ACT & ASSERT
@@ -2441,7 +2441,7 @@ public class MergedPRBugFixTests
         Assert.Equal("numSimulations", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MonteCarloTreeSearch_Constructor_AcceptsValidParameters()
     {
         // ACT - should not throw
@@ -2454,7 +2454,7 @@ public class MergedPRBugFixTests
         Assert.Equal("Monte Carlo Tree Search (MCTS)", mcts.AlgorithmName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
     {
         // ARRANGE - Create a simple tree structure
@@ -2486,7 +2486,7 @@ public class MergedPRBugFixTests
         Assert.Equal("Second step", path[2]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ThoughtNode_IsLeaf_ReturnsTrueForNodeWithNoChildren()
     {
         // ARRANGE
@@ -2496,7 +2496,7 @@ public class MergedPRBugFixTests
         Assert.True(node.IsLeaf());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ThoughtNode_IsRoot_ReturnsTrueForNodeWithNoParent()
     {
         // ARRANGE
@@ -2508,7 +2508,7 @@ public class MergedPRBugFixTests
         Assert.False(child.IsRoot());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReasoningConfig_DefaultValues_AreReasonable()
     {
         // ARRANGE & ACT
@@ -2529,7 +2529,7 @@ public class MergedPRBugFixTests
 
     #region Serialization PR #759 - VectorJsonConverter and TensorJsonConverter Validation Bugs
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VectorJsonConverter_NegativeLength_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with negative length that should be rejected
@@ -2549,7 +2549,7 @@ public class MergedPRBugFixTests
         Assert.Contains("-5", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VectorJsonConverter_ZeroLength_AcceptsValidEmptyVector()
     {
         // ARRANGE: JSON with zero length is valid
@@ -2567,7 +2567,7 @@ public class MergedPRBugFixTests
         Assert.Equal(0, result.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorJsonConverter_NegativeDimension_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with negative dimension that should be rejected
@@ -2588,7 +2588,7 @@ public class MergedPRBugFixTests
         Assert.Contains("-3", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorJsonConverter_EmptyShape_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with empty shape array — the converter normalizes [] to [1] (scalar),
@@ -2608,7 +2608,7 @@ public class MergedPRBugFixTests
         Assert.Contains("Tensor data length mismatch", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorJsonConverter_ValidShape_DeserializesCorrectly()
     {
         // ARRANGE: Valid tensor JSON
@@ -2629,7 +2629,7 @@ public class MergedPRBugFixTests
         Assert.Equal(6, result.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorJsonConverter_AllZeroDimensions_ValidButEmpty()
     {
         // ARRANGE: Tensor with zero dimension is valid but results in empty tensor
@@ -2647,7 +2647,7 @@ public class MergedPRBugFixTests
         Assert.Equal(0, result.Length); // 2 * 0 * 3 = 0 elements
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VectorJsonConverter_RoundTrip_PreservesData()
     {
         // ARRANGE: Create a vector, serialize it, then deserialize
@@ -2670,7 +2670,7 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TensorJsonConverter_RoundTrip_PreservesData()
     {
         // ARRANGE: Create a tensor, serialize it, then deserialize

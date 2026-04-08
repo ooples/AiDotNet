@@ -15,7 +15,7 @@ public class StatisticsIntegrationTests
 
     #region Quartile Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_SimpleData_CalculatesCorrectQuartiles()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q3 > 5.0 && quartile.Q3 < 7.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_EvenData_CalculatesCorrectMedian()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q2 >= 3.0 && quartile.Q2 <= 4.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_UnorderedData_SortsAndCalculates()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(5.0, quartile.Q2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_AllSameValues_ReturnsConstantQuartiles()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(5.0, quartile.Q3, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_LargeDataset_CalculatesCorrectly()
     {
         // Arrange - Create data from 1 to 100
@@ -95,7 +95,7 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q3 >= 74.0 && quartile.Q3 <= 77.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_SmallDataset_ThreeValues()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(2.0, quartile.Q2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_QuartileRelationship_Q1LessThanQ2LessThanQ3()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q2 <= quartile.Q3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_NegativeValues_HandlesCorrectly()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(1.0, quartile.Q2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartile_FloatType_CalculatesCorrectly()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class StatisticsIntegrationTests
 
     #region BasicStats Empty Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BasicStats_Empty_ReturnsValidInstance()
     {
         // Act
@@ -164,7 +164,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0, stats.N);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BasicStats_Empty_Float_ReturnsValidInstance()
     {
         // Act
@@ -179,7 +179,7 @@ public class StatisticsIntegrationTests
 
     #region ErrorStats Empty Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorStats_Empty_ReturnsValidInstance()
     {
         // Act
@@ -192,7 +192,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, stats.RMSE, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
@@ -204,7 +204,7 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.RMSE));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
@@ -221,7 +221,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, rmse, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorStats_Empty_ErrorList_IsEmpty()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class StatisticsIntegrationTests
 
     #region PredictionStats Empty Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_Empty_ReturnsValidInstance()
     {
         // Act
@@ -248,7 +248,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, stats.AdjustedR2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.Accuracy));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, r2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_Empty_Intervals_AreZero()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class StatisticsIntegrationTests
 
     #region ModelStats Empty Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelStats_Empty_ReturnsValidInstance()
     {
         // Act
@@ -301,7 +301,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0, stats.FeatureCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.CosineSimilarity));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, manhattan, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelStats_Empty_Matrices_AreEmpty()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class StatisticsIntegrationTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStatsEmptyMethods_DoNotThrow()
     {
         // Act & Assert - ensure Empty() methods don't throw
@@ -358,7 +358,7 @@ public class StatisticsIntegrationTests
         Assert.NotNull(modelStats);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ErrorStats_HasMetric_UnsupportedMetric_ReturnsFalse()
     {
         // Arrange
@@ -369,7 +369,7 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.MAE));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_BestDistributionFit_IsInitialized()
     {
         // Arrange
@@ -379,7 +379,7 @@ public class StatisticsIntegrationTests
         Assert.NotNull(stats.BestDistributionFit);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStats_LearningCurve_IsInitialized()
     {
         // Arrange

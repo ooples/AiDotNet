@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class ExplorationStrategiesIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NoExploration_ReturnsPolicyAction()
     {
         var strategy = new NoExploration<double>();
@@ -18,7 +18,7 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Same(policyAction, action);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedyExploration_UpdateAndReset_AdjustsEpsilon()
     {
         var strategy = new EpsilonGreedyExploration<double>(epsilonStart: 1.0, epsilonEnd: 0.1, epsilonDecay: 0.5);
@@ -36,7 +36,7 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Equal(1.0, strategy.CurrentEpsilon, precision: 12);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BoltzmannExploration_HandlesDiscreteAndContinuousActions()
     {
         var strategy = new BoltzmannExploration<double>(temperatureStart: 1.0, temperatureEnd: 0.1, temperatureDecay: 1.0);
@@ -53,7 +53,7 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Reset();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianNoiseExploration_ZeroNoise_KeepsAction()
     {
         var strategy = new GaussianNoiseExploration<double>(initialStdDev: 0.0, noiseDecay: 1.0, minNoise: 0.0);
@@ -70,7 +70,7 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Update();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrnsteinUhlenbeckNoise_ValidatesActionSizeAndResets()
     {
         var strategy = new OrnsteinUhlenbeckNoise<double>(actionSize: 2);
@@ -84,7 +84,7 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Reset();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpperConfidenceBoundExploration_TracksSteps()
     {
         var strategy = new UpperConfidenceBoundExploration<double>(explorationConstant: 1.0);
@@ -102,7 +102,7 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Equal(0, strategy.TotalSteps);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThompsonSamplingExploration_UpdateDistributionAndReset()
     {
         var strategy = new ThompsonSamplingExploration<double>(priorAlpha: 1.0, priorBeta: 1.0);

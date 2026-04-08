@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultCapacity_CreatesStore()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomCapacity_CreatesStore()
         {
             // Arrange & Act
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroCapacity_ThrowsArgumentException()
         {
             // Act & Assert
@@ -43,7 +43,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 new FAISSDocumentStore<float>(initialCapacity: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeCapacity_ThrowsArgumentException()
         {
             // Act & Assert
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Add Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_FirstDocument_SetsDimension()
         {
             // Arrange
@@ -70,7 +70,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(384, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithValidDocument_IncreasesCount()
         {
             // Arrange
@@ -84,7 +84,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, store.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithNullDocument_ThrowsArgumentNullException()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.Add(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithNullEmbedding_ThrowsArgumentException()
         {
             // Arrange
@@ -109,7 +109,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.Add(doc));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithEmptyDocumentId_ThrowsArgumentException()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.Add(doc));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithMismatchedDimension_ThrowsArgumentException()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains("dimension mismatch", exception.Message.ToLower());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_WithDuplicateId_UpdatesDocument()
         {
             // Arrange
@@ -158,7 +158,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Updated content", retrieved.Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Add_MultipleDocuments_MaintainsIndexing()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region AddBatch Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithValidDocuments_IncreasesCount()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, store.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_FirstBatch_SetsDimension()
         {
             // Arrange
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(384, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithNullCollection_ThrowsArgumentNullException()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.AddBatch(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -242,7 +242,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.AddBatch(new List<VectorDocument<float>>()));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithMismatchedDimensionsInBatch_ThrowsArgumentException()
         {
             // Arrange
@@ -257,7 +257,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.AddBatch(docs));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithMismatchedDimensionFromExisting_ThrowsArgumentException()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.AddBatch(docs));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AddBatch_WithLargeNumberOfDocuments_Succeeds()
         {
             // Arrange
@@ -293,7 +293,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilar Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithMatchingDocuments_ReturnsTopK()
         {
             // Arrange
@@ -316,7 +316,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id); // Should match most similar
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
@@ -330,7 +330,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
         {
             // Arrange
@@ -340,7 +340,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.GetSimilar(null!, topK: 5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithZeroTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -351,7 +351,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.GetSimilar(queryVector, topK: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_OrdersByRelevanceDescending()
         {
             // Arrange
@@ -378,7 +378,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_ReturnsAtMostTopK()
         {
             // Arrange
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilarWithFilters Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
         {
             // Arrange
@@ -426,7 +426,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithNoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
@@ -445,7 +445,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithMultipleFilters_AppliesAll()
         {
             // Arrange
@@ -477,7 +477,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilarWithFilters_WithNullFilters_ThrowsArgumentNullException()
         {
             // Arrange
@@ -493,7 +493,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetById Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithExistingDocument_ReturnsDocument()
         {
             // Arrange
@@ -510,7 +510,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Test content", result.Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithNonExistingDocument_ReturnsNull()
         {
             // Arrange
@@ -523,7 +523,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Null(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -533,7 +533,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.GetById(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetById_WithEmptyId_ThrowsArgumentException()
         {
             // Arrange
@@ -547,7 +547,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Remove Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithExistingDocument_ReturnsTrue()
         {
             // Arrange
@@ -563,7 +563,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithNonExistingDocument_ReturnsFalse()
         {
             // Arrange
@@ -576,7 +576,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.False(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_LastDocument_ResetsDimensionAndIndex()
         {
             // Arrange
@@ -595,7 +595,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(5, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_MiddleDocument_RebuildsIndex()
         {
             // Arrange
@@ -617,7 +617,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.NotNull(store.GetById("doc3"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Remove_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -631,7 +631,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Clear Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_RemovesAllDocuments()
         {
             // Arrange
@@ -650,7 +650,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.DocumentCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_ResetsVectorDimensionAndIndex()
         {
             // Arrange
@@ -669,7 +669,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(5, store.VectorDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Clear_OnEmptyStore_DoesNotThrow()
         {
             // Arrange
@@ -684,7 +684,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetAll Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAll_WithDocuments_ReturnsAllDocuments()
         {
             // Arrange
@@ -706,7 +706,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains(results, d => d.Id == "doc3");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAll_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
@@ -719,7 +719,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetAll_DoesNotIncludeEmbeddings()
         {
             // Arrange
@@ -739,7 +739,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Double Type Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Store_WithDoubleType_WorksCorrectly()
         {
             // Arrange
@@ -759,7 +759,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.NotNull(retrieved);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetSimilar_WithDoubleType_CalculatesCorrectly()
         {
             // Arrange

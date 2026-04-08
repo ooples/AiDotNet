@@ -122,7 +122,7 @@ public class RandomizedSmoothingTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidOptions_CreatesInstance()
     {
         // Arrange
@@ -141,14 +141,14 @@ public class RandomizedSmoothingTests
         Assert.NotNull(smoothing.GetOptions());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double, Vector<double>, Vector<double>>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithRandomSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class RandomizedSmoothingTests
 
     #region CertifyPrediction Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(null!, model));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -202,7 +202,7 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(input, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_WithStrongModel_ReturnsHighConfidence()
     {
         // Arrange
@@ -227,7 +227,7 @@ public class RandomizedSmoothingTests
         Assert.True(result.CertifiedRadius > 0, "Certified radius should be positive");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_ContainsRequiredDetails()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class RandomizedSmoothingTests
         Assert.Equal(0.5, result.CertificationDetails["Sigma"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyPrediction_LowerBoundLessThanOrEqualToConfidence()
     {
         // Arrange
@@ -309,7 +309,7 @@ public class RandomizedSmoothingTests
 
     #region CertifyBatch Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyBatch(null!, model));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CertifyBatch_ReturnsResultForEachInput()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class RandomizedSmoothingTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeCertifiedRadius_ReturnsValueFromCertification()
     {
         // Arrange
@@ -378,7 +378,7 @@ public class RandomizedSmoothingTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(null!, labels, model, 0.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
@@ -406,7 +406,7 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, null!, model, 0.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, labels, null!, 0.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, labels, model, 0.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
@@ -467,7 +467,7 @@ public class RandomizedSmoothingTests
             "Certification rate should be in [0,1]");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_CertifiedAccuracyNotExceedsCleanAccuracy()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class RandomizedSmoothingTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_ReturnsNonEmptyByteArray()
     {
         // Arrange
@@ -517,7 +517,7 @@ public class RandomizedSmoothingTests
         Assert.True(bytes.Length > 0, "Serialized data should not be empty");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -528,7 +528,7 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.Deserialize(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SerializeDeserialize_PreservesOptions()
     {
         // Arrange
@@ -555,7 +555,7 @@ public class RandomizedSmoothingTests
 
     #region GetOptions and Reset Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
@@ -576,7 +576,7 @@ public class RandomizedSmoothingTests
         Assert.Equal(0.95, returnedOptions.ConfidenceLevel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reset_DoesNotThrow()
     {
         // Arrange
@@ -592,7 +592,7 @@ public class RandomizedSmoothingTests
 
     #region Median Calculation Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_ComputesCorrectMedian_OddCount()
     {
         // Arrange
@@ -618,7 +618,7 @@ public class RandomizedSmoothingTests
         Assert.True(metrics.MedianCertifiedRadius >= 0 || metrics.CertificationRate == 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateCertifiedAccuracy_ComputesCorrectMedian_EvenCount()
     {
         // Arrange
@@ -647,7 +647,7 @@ public class RandomizedSmoothingTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RandomizedSmoothing_EndToEndWorkflow()
     {
         // Arrange

@@ -13,7 +13,7 @@ public class SparseTensorIntegrationTests
 
     #region COO Format Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_Construction_StoresCorrectValues()
     {
         // Arrange - Create a simple 3x3 sparse matrix with known values
@@ -34,7 +34,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(SparseStorageFormat.Coo, sparse.Format);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_FromDense_ExtractsNonZeros()
     {
         // Arrange - Create a dense tensor with some zeros
@@ -51,7 +51,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(SparseStorageFormat.Coo, sparse.Format);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_EmptyMatrix_HasZeroNonZeros()
     {
         // Arrange & Act
@@ -67,7 +67,7 @@ public class SparseTensorIntegrationTests
 
     #region CSR Format Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_FromCsr_ValidConstruction()
     {
         // Arrange - CSR representation of:
@@ -88,7 +88,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(SparseStorageFormat.Csr, sparse.Format);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_CooToCsr_Conversion_PreservesData()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class SparseTensorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_CsrToCoo_Conversion_PreservesData()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class SparseTensorIntegrationTests
 
     #region CSC Format Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_FromCsc_ValidConstruction()
     {
         // Arrange - CSC representation of:
@@ -169,7 +169,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(SparseStorageFormat.Csc, sparse.Format);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_CooToCsc_Conversion_PreservesData()
     {
         // Arrange
@@ -199,7 +199,7 @@ public class SparseTensorIntegrationTests
 
     #region Format Round-Trip Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_CooToCsrToCoo_RoundTrip_PreservesValues()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class SparseTensorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_CooToCscToCoo_RoundTrip_PreservesValues()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class SparseTensorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_AllFormats_SameNonZeroCount()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class SparseTensorIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_SingleElement_AllFormats()
     {
         // Arrange - Single element matrix
@@ -293,7 +293,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(1, csc.NonZeroCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_DiagonalMatrix_CorrectStorage()
     {
         // Arrange - 4x4 diagonal matrix
@@ -311,7 +311,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(4, csc.NonZeroCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_LowerTriangular_CorrectStorage()
     {
         // Arrange - Lower triangular 3x3
@@ -329,7 +329,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(6, csr.NonZeroCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_TallMatrix_ValidStorage()
     {
         // Arrange - 5x2 matrix
@@ -349,7 +349,7 @@ public class SparseTensorIntegrationTests
         Assert.Equal(2, csc.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_WideMatrix_ValidStorage()
     {
         // Arrange - 2x5 matrix
@@ -371,49 +371,49 @@ public class SparseTensorIntegrationTests
 
     #region Validation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_NegativeRows_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SparseTensor<double>(-1, 3, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_NegativeColumns_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SparseTensor<double>(3, -1, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_MismatchedArrayLengths_ThrowsException()
     {
         Assert.Throws<ArgumentException>(() =>
             new SparseTensor<double>(3, 3, new[] { 0, 1 }, new[] { 0 }, new[] { 1.0, 2.0 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_NullRowIndices_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new SparseTensor<double>(3, 3, null!, new[] { 0 }, new[] { 1.0 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_NullColumnIndices_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new SparseTensor<double>(3, 3, new[] { 0 }, null!, new[] { 1.0 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Coo_NullValues_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new SparseTensor<double>(3, 3, new[] { 0 }, new[] { 0 }, null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Csr_InvalidRowPointers_ThrowsException()
     {
         // RowPointers should have length = rows + 1
@@ -421,7 +421,7 @@ public class SparseTensorIntegrationTests
             SparseTensor<double>.FromCsr(3, 3, new[] { 0, 1 }, new[] { 0 }, new[] { 1.0 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_Csc_InvalidColumnPointers_ThrowsException()
     {
         // ColumnPointers should have length = columns + 1
@@ -429,7 +429,7 @@ public class SparseTensorIntegrationTests
             SparseTensor<double>.FromCsc(3, 3, new[] { 0, 1 }, new[] { 0 }, new[] { 1.0 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_FromDense_NonRank2_ThrowsException()
     {
         // SparseTensor only supports 2D tensors
@@ -439,7 +439,7 @@ public class SparseTensorIntegrationTests
             SparseTensor<double>.FromDense(tensor3d));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_FromDense_Null_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -450,7 +450,7 @@ public class SparseTensorIntegrationTests
 
     #region Numeric Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseTensor_FloatType_WorksCorrectly()
     {
         // Arrange

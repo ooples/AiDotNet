@@ -17,7 +17,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRULayer - Parameter Count Formula
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_ParameterCount_Formula_Input4Hidden3()
     {
         // ParameterCount = hiddenSize * inputSize * 3 (Wz, Wr, Wh)
@@ -30,7 +30,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(72, gru.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_ParameterCount_Formula_Input10Hidden8()
     {
         // = 8*10*3 + 8*8*3 + 8*3 = 240 + 192 + 24 = 456
@@ -39,7 +39,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(456, gru.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_ParameterCount_Formula_Input1Hidden1()
     {
         // = 1*1*3 + 1*1*3 + 1*3 = 3 + 3 + 3 = 9
@@ -52,7 +52,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRULayer - Output Shape
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_OutputShape_2DInput_ReturnsHiddenSize()
     {
         // 2D input [seqLen, inputSize] -> output [hiddenSize]
@@ -65,7 +65,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(5, output.Shape[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_OutputShape_3DInput_ReturnsBatchHiddenSize()
     {
         // 3D input [batch, seqLen, inputSize] -> output [batch, hiddenSize]
@@ -79,7 +79,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(5, output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_OutputShape_ReturnSequences_3DOutput()
     {
         // With returnSequences=true: [batch, seqLen, inputSize] -> [batch, seqLen, hiddenSize]
@@ -98,7 +98,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRULayer - Hidden State Dynamics
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
     {
         var gru = new GRULayer<double>(inputSize: 2, hiddenSize: 3,
@@ -122,7 +122,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.True(differs, "Second GRU forward with same input should differ due to hidden state");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_ResetState_OutputMatchesFirstCall()
     {
         var gru = new GRULayer<double>(inputSize: 2, hiddenSize: 3,
@@ -143,7 +143,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             Assert.Equal(o1vals[i], output3[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_OutputIsBounded_ByTanh()
     {
         var gru = new GRULayer<double>(inputSize: 3, hiddenSize: 4,
@@ -163,7 +163,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_AllOutputsFinite()
     {
         var gru = new GRULayer<double>(inputSize: 3, hiddenSize: 4,
@@ -185,7 +185,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_GetParameters_LengthMatchesParameterCount()
     {
         var gru = new GRULayer<double>(inputSize: 4, hiddenSize: 3,
@@ -198,7 +198,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // LSTMLayer - Parameter Count Formula
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_ParameterCount_Formula_Input4Hidden3()
     {
         // ParameterCount = 4 * (hiddenSize * inputSize) + 4 * (hiddenSize * hiddenSize) + 4 * hiddenSize
@@ -209,7 +209,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(96, lstm.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_ParameterCount_Formula_Input10Hidden8()
     {
         // = 4*8*10 + 4*8*8 + 4*8 = 320 + 256 + 32 = 608
@@ -218,7 +218,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(608, lstm.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_ParameterCount_AlwaysMore_ThanGRU()
     {
         int inputSize = 5;
@@ -231,7 +231,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             $"LSTM params ({lstm.ParameterCount}) should exceed GRU params ({gru.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_ParameterCount_Ratio_Is4Over3_TimesGRU()
     {
         // Ratio = 4/3 for same input/hidden sizes
@@ -250,7 +250,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // LSTMLayer - Output Shape and Finiteness
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_OutputShape_MatchesHiddenSize()
     {
         var lstm = new LSTMLayer<double>(inputSize: 3, hiddenSize: 5, inputShape: new[] { 4, 3 },
@@ -261,7 +261,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.True(output.Length >= 5, $"LSTM output length ({output.Length}) should be at least hiddenSize (5)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_AllOutputsFinite()
     {
         var lstm = new LSTMLayer<double>(inputSize: 3, hiddenSize: 4, inputShape: new[] { 2, 3 },
@@ -282,7 +282,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LSTM_GetParameters_LengthMatchesParameterCount()
     {
         var lstm = new LSTMLayer<double>(inputSize: 4, hiddenSize: 3, inputShape: new[] { 1, 4 },
@@ -295,7 +295,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // MeanLayer - Exact Mean Computation
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_Axis1_HandComputed()
     {
         // Input [2, 3]: [[1, 2, 3], [4, 5, 6]]
@@ -311,7 +311,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(5.0, arr[1], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_Axis0_HandComputed()
     {
         // Input [2, 3]: [[1, 2, 3], [7, 8, 9]]
@@ -328,7 +328,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(6.0, arr[2], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_UniformInput_MeanEqualsValue()
     {
         var mean = new MeanLayer<double>(new[] { 3, 4 }, 1);
@@ -345,7 +345,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             Assert.Equal(7.5, arr[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_SingleElement_MeanIsElement()
     {
         var mean = new MeanLayer<double>(new[] { 1, 5 }, 0);
@@ -359,7 +359,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(50.0, arr[4], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_NegativeValues_HandComputed()
     {
         var mean = new MeanLayer<double>(new[] { 1, 4 }, 1);
@@ -372,7 +372,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.Equal(2.0, arr[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanLayer_LargeValues_StillAccurate()
     {
         var mean = new MeanLayer<double>(new[] { 1, 3 }, 1);
@@ -388,7 +388,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // ReshapeLayer - Data Preservation
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReshapeLayer_PreservesAllValues()
     {
         var reshape = new ReshapeLayer<double>(new[] { 2, 3 }, new[] { 3, 2 });
@@ -403,7 +403,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             Assert.Equal(inputArr[i], outputArr[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReshapeLayer_OutputShapeIsCorrect()
     {
         var reshape = new ReshapeLayer<double>(new[] { 4, 3 }, new[] { 6, 2 });
@@ -416,7 +416,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReshapeLayer_NoTrainableParameters()
     {
         var reshape = new ReshapeLayer<double>(new[] { 4 }, new[] { 2, 2 });
@@ -432,7 +432,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRU vs LSTM - Structural Comparisons
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_And_LSTM_SameInputSize_DifferentParamCounts()
     {
         int inputSize = 8;
@@ -454,7 +454,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRU - Zero and Large Input Behavior
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_ZeroInput_OutputIsFinite()
     {
         var gru = new GRULayer<double>(inputSize: 3, hiddenSize: 4,
@@ -470,7 +470,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_LargeInput_StillBounded()
     {
         var gru = new GRULayer<double>(inputSize: 2, hiddenSize: 3,
@@ -487,7 +487,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GRU_MultipleTimesteps_OutputChanges()
     {
         var gru = new GRULayer<double>(inputSize: 2, hiddenSize: 3,

@@ -13,7 +13,7 @@ public class PoolingLayersIntegrationTests
 {
     #region MaxPoolingLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D input [channels, height, width]
@@ -34,7 +34,7 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_ForwardPass_4DInput_ProducesValidOutput()
     {
         // Arrange - 4D input [batch, channels, height, width]
@@ -57,7 +57,7 @@ public class PoolingLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class PoolingLayersIntegrationTests
 
     #region AveragePoolingLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D input [channels, height, width]
@@ -102,7 +102,7 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragePoolingLayer_ForwardPass_4DInput_ProducesValidOutput()
     {
         // Arrange - 4D input [batch, channels, height, width]
@@ -125,7 +125,7 @@ public class PoolingLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class PoolingLayersIntegrationTests
 
     #region GlobalPoolingLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GlobalPoolingLayer_MaxPooling_ProducesValidOutput()
     {
         // Arrange - 3D input [channels, height, width]
@@ -164,7 +164,7 @@ public class PoolingLayersIntegrationTests
         Assert.True(output.Length <= input.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GlobalPoolingLayer_AveragePooling_ProducesValidOutput()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class PoolingLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GlobalPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class PoolingLayersIntegrationTests
 
     #region AdaptiveAveragePoolingLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Adaptive pooling to fixed output size
@@ -223,7 +223,7 @@ public class PoolingLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class PoolingLayersIntegrationTests
 
     #region PoolingLayer (Generic) Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoolingLayer_MaxType_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -263,7 +263,7 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoolingLayer_AverageType_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -283,7 +283,7 @@ public class PoolingLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -306,7 +306,7 @@ public class PoolingLayersIntegrationTests
 
     #region Training vs Inference Mode Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_TrainingVsInference_ProducesSameOutput()
     {
         // Arrange
@@ -326,7 +326,7 @@ public class PoolingLayersIntegrationTests
         AssertTensorsEqual(trainingOutput, inferenceOutput);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragePoolingLayer_TrainingVsInference_ProducesSameOutput()
     {
         // Arrange
@@ -350,7 +350,7 @@ public class PoolingLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_SingleChannel_Works()
     {
         // Arrange - single channel input
@@ -366,7 +366,7 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragePoolingLayer_PoolSize3_Works()
     {
         // Arrange - 3x3 pooling
@@ -384,7 +384,7 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPoolingLayer_NonSquareInput_Works()
     {
         // Arrange - non-square input

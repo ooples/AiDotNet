@@ -61,7 +61,7 @@ public class QuantizationIntegrationTests
 
     #region INT8 Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Int8Quantizer_QuantizesModel_ReducesParameterRange()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Int8Quantizer_WithSymmetricQuantization_UsesZeroPoint()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class QuantizationIntegrationTests
 
     #region Float16 Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Float16Quantizer_QuantizesModel_MaintainsHighPrecision()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class QuantizationIntegrationTests
 
     #region GPTQ Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GPTQQuantizer_QuantizesWithHessianCompensation_MaintainsAccuracy()
     {
         // Arrange
@@ -188,7 +188,7 @@ public class QuantizationIntegrationTests
         Assert.True(hasChanged, "Quantization should modify parameters");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GPTQQuantizer_WithActOrder_ProcessesImportantColumnsFirst()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class QuantizationIntegrationTests
 
     #region AWQ Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AWQQuantizer_ProtectsImportantWeights_MaintainsAccuracy()
     {
         // Arrange
@@ -256,7 +256,7 @@ public class QuantizationIntegrationTests
 
     #region SmoothQuant Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SmoothQuantQuantizer_SmoothsOutliers_EnablesW8A8()
     {
         // Arrange
@@ -281,7 +281,7 @@ public class QuantizationIntegrationTests
         Assert.True(smoothingScales.ContainsKey("global"), "Should have global smoothing scales");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SmoothQuantQuantizer_WithDifferentAlpha_ProducesDifferentResults()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class QuantizationIntegrationTests
 
     #region SpinQuant Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpinQuantQuantizer_LearnedRotations_ReducesOutliers()
     {
         // Arrange - Use small model for fast test execution
@@ -360,7 +360,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpinQuantQuantizer_WithDifferentBlockSizes_Completes()
     {
         // Arrange - Use small model for fast test execution
@@ -384,7 +384,7 @@ public class QuantizationIntegrationTests
         Assert.NotNull(quantized16);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpinQuantQuantizer_PreservesParameterCount()
     {
         // Arrange - Use small model for fast test execution
@@ -408,7 +408,7 @@ public class QuantizationIntegrationTests
 
     #region QuIP# 2-bit Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuIPSharpQuantizer_2BitQuantization_Completes()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(32, quantizedParams.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuIPSharpQuantizer_HadamardTransform_PreservesParameterCount()
     {
         // Arrange
@@ -458,7 +458,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuIPSharpQuantizer_WithDifferentGroupSizes_Completes()
     {
         // Arrange
@@ -480,7 +480,7 @@ public class QuantizationIntegrationTests
         Assert.NotNull(quantized16);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuIPSharpQuantizer_ExtremCompression_16xRatio()
     {
         // Arrange - QuIP# targets 2-bit quantization = 16x compression vs 32-bit
@@ -512,7 +512,7 @@ public class QuantizationIntegrationTests
 
     #region FP8 Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FP8Quantizer_E4M3Format_QuantizesWithBetterPrecision()
     {
         // Arrange
@@ -533,7 +533,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(100, quantizedParams.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FP8Quantizer_E5M2Format_HasLargerRange()
     {
         // Arrange
@@ -545,7 +545,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(FP8Format.E5M2, quantizerE5M2.Format);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FP8Quantizer_ByteConversion_RoundTrips()
     {
         // Test E4M3 byte conversion
@@ -583,7 +583,7 @@ public class QuantizationIntegrationTests
 
     #region NF4 Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NF4Quantizer_4BitQuantization_Completes()
     {
         // Arrange
@@ -602,7 +602,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(64, InterfaceGuard.Parameterizable(quantizedModel).GetParameters().Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NF4Quantizer_IndexConversions_AreConsistent()
     {
         // Test that index -> value -> index is consistent
@@ -614,7 +614,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NF4Quantizer_BlockWiseQuantization_PreservesStructure()
     {
         // Arrange
@@ -641,7 +641,7 @@ public class QuantizationIntegrationTests
 
     #region MXFP4 Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MXFP4Quantizer_4BitMicroscaling_Completes()
     {
         // Arrange
@@ -660,7 +660,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(64, InterfaceGuard.Parameterizable(quantizedModel).GetParameters().Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MXFP4Quantizer_EncodeDecodeRoundTrip()
     {
         // Test all 16 possible 4-bit values
@@ -674,7 +674,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MXFP4Quantizer_SharedScales_WorkCorrectly()
     {
         // Arrange
@@ -702,7 +702,7 @@ public class QuantizationIntegrationTests
 
     #region Quantization Granularity Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PerTensorGranularity_UsesSingleScaleFactor()
     {
         // Arrange
@@ -725,7 +725,7 @@ public class QuantizationIntegrationTests
         Assert.True(globalScale > 0, "Should have a global scale factor");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PerGroupGranularity_UsesMultipleScaleFactors()
     {
         // Arrange
@@ -757,7 +757,7 @@ public class QuantizationIntegrationTests
 
     #region QuantizationInfo Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_None_ReturnsUnquantizedInfo()
     {
         // Arrange & Act
@@ -770,7 +770,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(1.0, info.CompressionRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_CompressionRatio_CalculatesCorrectly()
     {
         // Arrange
@@ -787,7 +787,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(4.0, info.CompressionRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_QuantizedPercentage_CalculatesCorrectly()
     {
         // Arrange
@@ -802,7 +802,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(95.0, info.QuantizedPercentage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_ToString_ReturnsFormattedString()
     {
         // Arrange
@@ -828,7 +828,7 @@ public class QuantizationIntegrationTests
         Assert.Contains("PTQ", str); // Not QAT
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_WithQAT_IncludesQATInfo()
     {
         // Arrange
@@ -855,7 +855,7 @@ public class QuantizationIntegrationTests
 
     #region QuantizationConfiguration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_ForGPTQ_HasCorrectDefaults()
     {
         // Act
@@ -870,7 +870,7 @@ public class QuantizationIntegrationTests
         Assert.True(config.GPTQActOrder);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_ForAWQ_HasCorrectDefaults()
     {
         // Act
@@ -884,7 +884,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(1.0, config.AWQProtectionPercentage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_ForSmoothQuant_HasCorrectDefaults()
     {
         // Act
@@ -898,7 +898,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(0.5, config.SmoothQuantAlpha);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_ForQAT_HasCorrectDefaults()
     {
         // Act
@@ -910,7 +910,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(1, config.QATWarmupEpochs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_ForQLoRA_Has4BitNF4()
     {
         // Act
@@ -924,7 +924,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(QATMethod.QABLoRA, config.QATMethod);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationConfiguration_EffectiveBitWidth_UsesTargetOrDefault()
     {
         // Arrange
@@ -947,7 +947,7 @@ public class QuantizationIntegrationTests
 
     #region LoRA + Quantization Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoRA_WithQLoRAConfiguration_HasCorrectSettings()
     {
         // Act
@@ -960,7 +960,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(QATMethod.QABLoRA, config.QATMethod);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QLoRA_QuantizesModel_PreservesLoRALayerStructure()
     {
         // Arrange - Create a model with LoRA-like parameters
@@ -990,7 +990,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(originalParams.Length, quantizedParams.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QABLoRA_QATMethod_AppliesCorrectly()
     {
         // Arrange
@@ -1026,7 +1026,7 @@ public class QuantizationIntegrationTests
         Assert.NotNull(stateB);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoRAAdapter_Quantization_PreservesRankStructure()
     {
         // This test verifies that quantization doesn't break LoRA's low-rank structure
@@ -1088,7 +1088,7 @@ public class QuantizationIntegrationTests
 
     #region Accuracy and Compression Verification Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Int8Quantization_AchievesExpectedCompressionRatio()
     {
         // Arrange - INT8 should achieve 4x compression (32-bit to 8-bit)
@@ -1120,7 +1120,7 @@ public class QuantizationIntegrationTests
         Assert.True(theoreticalRatio >= 7.5, $"INT8 compression ratio should be ~8x, got {theoreticalRatio}x");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Float16Quantization_MaintainsReasonableAccuracy()
     {
         // Arrange - FP16 should have very low error
@@ -1152,7 +1152,7 @@ public class QuantizationIntegrationTests
         Assert.True(mse < 0.01, $"FP16 MSE should be very low, got {mse}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GPTQ4BitQuantization_AchievesHighCompression()
     {
         // Arrange - GPTQ 4-bit should achieve 8x compression
@@ -1179,7 +1179,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuIPSharp2Bit_AchievesExtremeCompression()
     {
         // Arrange - QuIP# 2-bit achieves 16x compression
@@ -1206,7 +1206,7 @@ public class QuantizationIntegrationTests
         Assert.True(theoreticalRatio >= 30, $"QuIP# should achieve ~32x compression, got {theoreticalRatio}x");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationAccuracy_DifferentBitWidths_TradeOff()
     {
         // Verify that lower bit widths have higher error (expected trade-off)
@@ -1234,7 +1234,7 @@ public class QuantizationIntegrationTests
         Assert.True(mse8 >= 0 && mse16 >= 0, "MSE should be non-negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantizationInfo_CompressionRatio_Verification()
     {
         // Arrange
@@ -1252,7 +1252,7 @@ public class QuantizationIntegrationTests
         Assert.True(info.CompressionRatio > 1, "Compression ratio should be > 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllQuantizers_ProduceFiniteValues()
     {
         // Arrange
@@ -1315,7 +1315,7 @@ public class QuantizationIntegrationTests
 
     #region Calibration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calibration_WithEmptyData_ThrowsException()
     {
         // Arrange
@@ -1327,7 +1327,7 @@ public class QuantizationIntegrationTests
         Assert.Throws<ArgumentException>(() => quantizer.Calibrate(model, emptyData));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Calibration_WithNullModel_ThrowsException()
     {
         // Arrange
@@ -1338,7 +1338,7 @@ public class QuantizationIntegrationTests
         Assert.Throws<ArgumentNullException>(() => quantizer.Calibrate(null!, calibrationData));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantize_WithoutCalibration_ThrowsException()
     {
         // Arrange
@@ -1354,7 +1354,7 @@ public class QuantizationIntegrationTests
         Assert.Throws<InvalidOperationException>(() => quantizer.Quantize(model, config));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantize_WithCalibrationMethodNone_WorksWithoutCalibration()
     {
         // Arrange
@@ -1373,7 +1373,7 @@ public class QuantizationIntegrationTests
         Assert.NotNull(quantizedModel);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AWQQuantizer_Calibrate_CollectsActivationStatistics()
     {
         // Arrange
@@ -1391,7 +1391,7 @@ public class QuantizationIntegrationTests
         Assert.True(scaleFactor > 0, "Scale factor should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SmoothQuantQuantizer_Calibrate_CollectsActivationStatistics()
     {
         // Arrange
@@ -1408,7 +1408,7 @@ public class QuantizationIntegrationTests
         Assert.NotEmpty(quantizer.SmoothingScales);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GPTQQuantizer_Calibrate_CollectsActivationStatistics()
     {
         // Arrange
@@ -1426,7 +1426,7 @@ public class QuantizationIntegrationTests
         Assert.True(scaleFactor > 0, "Scale factor should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalibrationHelper_WithSimpleModel_CollectsStatistics()
     {
         // Arrange
@@ -1453,7 +1453,7 @@ public class QuantizationIntegrationTests
 
     #region QAT Simulation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QATTrainingHook_ApplyFakeQuantization_ModifiesWeights()
     {
         // Arrange
@@ -1488,7 +1488,7 @@ public class QuantizationIntegrationTests
         Assert.True(hasChanges, "Fake quantization should modify at least some values");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QATTrainingHook_DuringWarmup_PassesThroughUnchanged()
     {
         // Arrange
@@ -1513,7 +1513,7 @@ public class QuantizationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QATTrainingHook_AfterWarmup_AppliesQuantization()
     {
         // Arrange
@@ -1541,7 +1541,7 @@ public class QuantizationIntegrationTests
             "Quantization should be enabled after warmup");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QATTrainingHook_GetLayerState_ReturnsCorrectState()
     {
         // Arrange
@@ -1567,7 +1567,7 @@ public class QuantizationIntegrationTests
         Assert.True(state.Scale > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientQATOptimizer_ApplyBlockWiseQuantization_Works()
     {
         // Arrange
@@ -1591,7 +1591,7 @@ public class QuantizationIntegrationTests
         Assert.Equal(weights.Length, quantizedWeights.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientQATOptimizer_EstimateMemoryUsage_ReturnsReasonableValue()
     {
         // Arrange

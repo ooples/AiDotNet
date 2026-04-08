@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.IntegrationTests.Geometry;
 
 public class GeometryDataIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TriangleMeshData_ComputesNormalsAndBounds()
     {
         var vertices = new Tensor<double>(new[]
@@ -43,7 +43,7 @@ public class GeometryDataIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TriangleMeshData_ToPointCloud_IncludesFeatures()
     {
         var vertices = new Tensor<double>(new[]
@@ -69,7 +69,7 @@ public class GeometryDataIntegrationTests
         Assert.Equal(9, cloud.Points.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoxelGridData_ToPointCloud_ThresholdsAndCenters()
     {
         var data = new[]

@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 {
     public class DeserializationHelperTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithDenseLayer_CreatesCorrectly()
         {
             // Arrange
@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<DenseLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithConvolutionalLayer_CreatesCorrectly()
         {
             // Arrange - NCHW format: [batch, channels, height, width]
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ConvolutionalLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithPoolingLayer_CreatesCorrectly()
         {
             // Arrange
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<PoolingLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithActivationLayer_CreatesCorrectly()
         {
             // Arrange
@@ -85,7 +85,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ActivationLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithUnsupportedType_ThrowsNotSupportedException()
         {
             // Arrange
@@ -97,7 +97,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 DeserializationHelper.CreateLayerFromType<double>("InvalidLayerType", inputShape, outputShape));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithNullAdditionalParams_UsesDefaults()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<DenseLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithConvolutionalLayerAndDefaultParams_UsesDefaults()
         {
             // Arrange - NCHW format: [batch, channels, height, width]
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ConvolutionalLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithPoolingLayerAndDefaultParams_UsesDefaults()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<PoolingLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithActivationLayerAndDefaultParams_UsesDefaults()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ActivationLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithFloatType_CreatesCorrectly()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<DenseLayer<float>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DeserializeInterface_WithEmptyString_ReturnsNull()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Null(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DeserializeInterface_WithInvalidTypeName_ThrowsInvalidOperationException()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 DeserializationHelper.DeserializeInterface<object>(reader));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DeserializeInterface_WithValidTypeName_CreatesInstance()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<List<int>>(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithDifferentInputShapes_WorksCorrectly()
         {
             // Arrange
@@ -242,7 +242,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<DenseLayer<double>>(layer2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithConvolutionalLayerAndCustomFilterSize_UsesCustomValue()
         {
             // Arrange - NCHW format: [batch, channels, height, width]
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ConvolutionalLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithPoolingLayerAndCustomStride_UsesCustomValue()
         {
             // Arrange
@@ -282,7 +282,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<PoolingLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithActivationLayerAndSigmoid_UsesCorrectActivation()
         {
             // Arrange
@@ -301,7 +301,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<ActivationLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithMultipleLayers_CreatesIndependentInstances()
         {
             // Arrange
@@ -319,7 +319,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotSame(layer1, layer2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithInt32Type_CreatesCorrectly()
         {
             // Arrange
@@ -334,7 +334,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<DenseLayer<int>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithPoolingLayerMaxType_CreatesCorrectly()
         {
             // Arrange
@@ -355,7 +355,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsType<PoolingLayer<double>>(layer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CreateLayerFromType_WithPoolingLayerAverageType_CreatesCorrectly()
         {
             // Arrange

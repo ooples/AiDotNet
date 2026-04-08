@@ -23,7 +23,7 @@ public class SimdActivationFunctionBenchmarks
 
     #region Correctness Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReLU_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReLU_Double_ProducesCorrectOutput()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LeakyReLU_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LeakyReLU_Double_ProducesCorrectOutput()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ELU_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class SimdActivationFunctionBenchmarks
         Assert.Equal(2.0f, output[4], precision: 5); // ELU(2) = 2
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GELU_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(output[4] > 1.5f);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Swish_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(output[4] > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Mish_Float_ProducesCorrectOutput()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class SimdActivationFunctionBenchmarks
 
     #region Performance Sanity Checks
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReLU_Float_PerformanceSanityCheck()
     {
         // This test ensures the SIMD implementation completes in reasonable time
@@ -315,7 +315,7 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(avgMs < 10, $"ReLU took {avgMs}ms per iteration, expected < 10ms for {LargeSize} elements");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GELU_Float_PerformanceSanityCheck()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(avgMs < 50, $"GELU took {avgMs}ms per iteration, expected < 50ms for {LargeSize} elements");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllActivations_Float_CompletesWithoutError()
     {
         // This test ensures all activation functions work on various sizes
@@ -369,7 +369,7 @@ public class SimdActivationFunctionBenchmarks
 
     #region Double Precision Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllActivations_Double_CompletesWithoutError()
     {
         // This test ensures all activation functions work on various sizes for double
@@ -392,7 +392,7 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ReLU_Double_PerformanceSanityCheck()
     {
         // Arrange

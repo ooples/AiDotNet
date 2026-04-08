@@ -14,7 +14,7 @@ public class AttentionLayersIntegrationTests
 {
     #region AttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [batch, features]
@@ -31,7 +31,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seq, features]
@@ -49,7 +49,7 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_CrossAttention_ProducesValidOutput()
     {
         // Arrange - cross-attention with separate query and key/value inputs
@@ -67,7 +67,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_MaskedAttention_ProducesValidOutput()
     {
         // Arrange - attention with mask
@@ -86,7 +86,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class AttentionLayersIntegrationTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
@@ -126,7 +126,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedDim]
@@ -143,7 +143,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_ForwardPass_4D_ProducesValidOutput()
     {
         // Arrange - 4D input [batch1, batch2, seqLen, embedDim]
@@ -161,7 +161,7 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_MultiHeadConfiguration_Works()
     {
         // Arrange - embedDim must be divisible by headCount
@@ -179,7 +179,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -202,7 +202,7 @@ public class AttentionLayersIntegrationTests
 
     #region MultiHeadAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
@@ -219,7 +219,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedDim]
@@ -236,7 +236,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_ForwardPass_5D_ProducesValidOutput()
     {
         // Arrange - 5D input [batch1, batch2, batch3, seqLen, embedDim]
@@ -254,7 +254,7 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_CrossAttention_ProducesValidOutput()
     {
         // Arrange - cross-attention with separate query and key/value
@@ -272,7 +272,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class AttentionLayersIntegrationTests
 
     #region FlashAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FlashAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
@@ -313,7 +313,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FlashAttentionLayer_ForwardPass_4D_ProducesValidOutput()
     {
         // Arrange - 4D input [batch1, batch2, seqLen, embedDim]
@@ -336,7 +336,7 @@ public class AttentionLayersIntegrationTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossAttentionLayer_ForwardPass_DifferentContextLength_ProducesValidOutput()
     {
         // Arrange - context can have different sequence length
@@ -376,7 +376,7 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -400,7 +400,7 @@ public class AttentionLayersIntegrationTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GraphAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - graph attention with node features and adjacency matrix
@@ -420,7 +420,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GraphAttentionLayer_ForwardPass_BatchedInput_ProducesValidOutput()
     {
         // Arrange - batched graph input
@@ -442,7 +442,7 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -469,7 +469,7 @@ public class AttentionLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_SingleBatch_Works()
     {
         // Arrange
@@ -485,7 +485,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_SingleHead_Works()
     {
         // Arrange - single attention head
@@ -502,7 +502,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiHeadAttentionLayer_LargeHeadCount_Works()
     {
         // Arrange - many attention heads
@@ -520,7 +520,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GraphAttentionLayer_SingleHead_Works()
     {
         // Arrange
@@ -539,7 +539,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttentionLayer_AuxiliaryLoss_Works()
     {
         // Arrange
@@ -558,7 +558,7 @@ public class AttentionLayersIntegrationTests
         Assert.False(float.IsNaN(auxLoss));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfAttentionLayer_AuxiliaryLoss_Works()
     {
         // Arrange

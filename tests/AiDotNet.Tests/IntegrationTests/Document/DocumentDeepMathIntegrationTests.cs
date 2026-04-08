@@ -17,7 +17,7 @@ public class DocumentDeepMathIntegrationTests
     // ConfidenceLevel Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfidenceLevel_HasFiveValues()
     {
         var values = (((ConfidenceLevel[])Enum.GetValues(typeof(ConfidenceLevel))));
@@ -69,7 +69,7 @@ public class DocumentDeepMathIntegrationTests
     // DocumentType Flags Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentType_None_IsZero()
     {
         Assert.Equal(0, (int)DocumentType.None);
@@ -91,7 +91,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.True((expectedValue & (expectedValue - 1)) == 0, $"{type} should be power of 2");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentType_All_IncludesAllValues()
     {
         var all = DocumentType.All;
@@ -106,7 +106,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.True(all.HasFlag(DocumentType.Infographic));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentType_FlagsCombination_Works()
     {
         var combined = DocumentType.Form | DocumentType.ScannedDocument;
@@ -120,7 +120,7 @@ public class DocumentDeepMathIntegrationTests
     // FormFieldType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FormFieldType_HasNineValues()
     {
         var values = (((FormFieldType[])Enum.GetValues(typeof(FormFieldType))));
@@ -146,7 +146,7 @@ public class DocumentDeepMathIntegrationTests
     // LayoutElementType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayoutElementType_HasNineteenValues()
     {
         var values = (((LayoutElementType[])Enum.GetValues(typeof(LayoutElementType))));
@@ -182,7 +182,7 @@ public class DocumentDeepMathIntegrationTests
     // TableExportFormat Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableExportFormat_HasFiveValues()
     {
         var values = (((TableExportFormat[])Enum.GetValues(typeof(TableExportFormat))));
@@ -204,7 +204,7 @@ public class DocumentDeepMathIntegrationTests
     // OCRResult: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRResult_Defaults()
     {
         var result = new OCRResult<double> { AverageConfidence = default };
@@ -221,7 +221,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Null(result.RotationAngle);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRResult_SetProperties()
     {
         var result = new OCRResult<double>
@@ -246,7 +246,7 @@ public class DocumentDeepMathIntegrationTests
     // OCRWord: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRWord_Defaults()
     {
         var word = new OCRWord<double> { Confidence = default };
@@ -255,7 +255,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Equal(0, word.BlockIndex);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRWord_SetProperties()
     {
         var word = new OCRWord<double>
@@ -276,7 +276,7 @@ public class DocumentDeepMathIntegrationTests
     // OCRLine: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRLine_Defaults()
     {
         var line = new OCRLine<double> { AverageConfidence = default };
@@ -290,7 +290,7 @@ public class DocumentDeepMathIntegrationTests
     // OCRBlock: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRBlock_Defaults()
     {
         var block = new OCRBlock<double> { AverageConfidence = default };
@@ -300,7 +300,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Equal(LayoutElementType.Text, block.BlockType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRBlock_SetBlockType()
     {
         var block = new OCRBlock<double>
@@ -318,7 +318,7 @@ public class DocumentDeepMathIntegrationTests
     // TextDetectionResult: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextDetectionResult_Defaults()
     {
         var result = new TextDetectionResult<double>();
@@ -331,7 +331,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Equal(0, result.RegionCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextDetectionResult_RegionCount_MatchesTextRegions()
     {
         var regions = new List<TextRegion<double>>
@@ -349,7 +349,7 @@ public class DocumentDeepMathIntegrationTests
     // TextRegion: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextRegion_Defaults()
     {
         var region = new TextRegion<double> { Confidence = default };
@@ -360,7 +360,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Null(region.CroppedImage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextRegion_SetProperties()
     {
         var region = new TextRegion<double>

@@ -27,7 +27,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NOTEARSLinear_FindsCausalStructure()
     {
         var algo = new NOTEARSLinear<double>();
@@ -36,7 +36,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NOTEARSNonlinear_FindsCausalStructure()
     {
         var algo = new NOTEARSNonlinear<double>();
@@ -45,7 +45,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NOTEARSLowRank_FindsCausalStructure()
     {
         var algo = new NOTEARSLowRank<double>();
@@ -54,7 +54,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NOTEARSSobolev_FindsCausalStructure()
     {
         var algo = new NOTEARSSobolev<double>();
@@ -63,7 +63,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DAGMALinear_FindsCausalStructure()
     {
         var algo = new DAGMALinear<double>();
@@ -72,7 +72,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DAGMANonlinear_FindsCausalStructure()
     {
         var algo = new DAGMANonlinear<double>();
@@ -81,7 +81,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GOLEM_FindsCausalStructure()
     {
         var algo = new GOLEMAlgorithm<double>();
@@ -90,7 +90,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCSL_FindsCausalStructure()
     {
         var algo = new MCSLAlgorithm<double>();
@@ -99,7 +99,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NoCurl_FindsCausalStructure()
     {
         var algo = new NoCurlAlgorithm<double>();
@@ -108,7 +108,7 @@ public class ContinuousOptimizationCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CORL_FindsCausalStructure()
     {
         var algo = new CORLAlgorithm<double>();

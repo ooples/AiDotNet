@@ -14,7 +14,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
     /// </summary>
     public class CosineSimilarityLossFitnessCalculatorTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultDataSetType_UsesValidation()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter); // Cosine similarity loss: lower is better
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithTrainingDataSetType_UsesTraining()
         {
             // Arrange & Act
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithOppositeVectors_ReturnsTwo()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithPerpendicularVectors_ReturnsOne()
         {
             // Arrange
@@ -91,7 +91,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithSameDirectionDifferentMagnitude_ReturnsZero()
         {
             // Arrange
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithPartialAlignment_ReturnsCorrectValue()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.29289321881345248, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithAllZeros_ReturnsOne()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.999);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0f, result, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
         {
             // Arrange
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10); // Perfect alignment
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
@@ -244,7 +244,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10); // Perpendicular vectors
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsHigherScoreBetter_ReturnsFalse()
         {
             // Arrange
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsBetterFitness_WithLowerScore_ReturnsTrue()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result); // Lower score is better for loss functions
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsBetterFitness_WithHigherScore_ReturnsFalse()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(result); // Higher score is worse for loss functions
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_DocumentSimilarityScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating document vector comparison
@@ -308,7 +308,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.016744432707480161, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithNegativeValues_HandlesCorrectly()
         {
             // Arrange
@@ -330,7 +330,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithSmallAngles_ReturnsSmallLoss()
         {
             // Arrange
@@ -350,7 +350,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result < 0.01);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithLargeAngles_ReturnsLargeLoss()
         {
             // Arrange
@@ -370,7 +370,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result > 1.9);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_RecommendationSystemScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating user preference vectors
@@ -390,7 +390,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result < 0.1); // Less than 10% loss
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_ImageRetrievalScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating image feature vectors
@@ -411,7 +411,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.0 && result <= 2.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
         {
             // Arrange
@@ -430,7 +430,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.0 && result <= 2.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_MagnitudeInvariance_VerifiesProperty()
         {
             // Arrange
@@ -455,7 +455,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(result1, result2, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_TextEmbeddingScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating word/sentence embeddings

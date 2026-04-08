@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(Math.Abs(actual - expected) <= tol, $"Actual {actual} != Expected {expected}");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ReLU_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ReLU);
@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.ActivationFunctions
             AssertClose(fn.Derivative(-1.0), 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Sigmoid_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Sigmoid);
@@ -33,28 +33,28 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(dy > 0.0 && dy < 0.3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Tanh_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Tanh);
             AssertClose(fn.Activate(0.0), 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Identity_Activate()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Linear);
             AssertClose(fn.Activate(3.14), 3.14);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void LeakyRelu_Activate()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.LeakyReLU);
             Assert.True(fn.Activate(-2.0) < 0 && fn.Activate(2.0) > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ELU_SELU_Activate()
         {
             var elu = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ELU);
@@ -63,7 +63,7 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(selu.Activate(-1.0) < 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Softplus_SoftSign_Swish_GELU()
         {
             var sp = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Softplus);
@@ -76,7 +76,7 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(ge.Activate(1.0) > 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Vector_Softmax_Factory()
         {
             var vfn = ActivationFunctionFactory<double>.CreateVectorActivationFunction(ActivationFunction.Softmax);
@@ -87,7 +87,7 @@ namespace AiDotNet.Tests.ActivationFunctions
         // IdentityActivation.Activate(Tensor<T>) — PR change coverage
         // ----------------------------------------------------------------
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IdentityActivation_TensorActivate_ReturnsSameReference()
         {
             // The new override must return the exact same object (no allocation).
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the exact same tensor reference — no copy.");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IdentityActivation_TensorActivate_With1DTensor_ReturnsSameReference()
         {
             var fn = new IdentityActivation<double>();
@@ -116,7 +116,7 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the same reference for 1-D tensors.");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IdentityActivation_TensorActivate_With3DTensor_ReturnsSameReference()
         {
             var fn = new IdentityActivation<double>();
@@ -130,7 +130,7 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the same reference for 3-D tensors.");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IdentityActivation_TensorActivate_DataIsUnchanged()
         {
             // Even though it's the same reference, verify values are untouched.
@@ -144,7 +144,7 @@ namespace AiDotNet.Tests.ActivationFunctions
                 Assert.Equal(data[i], output.GetFlat(i));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IdentityActivation_TensorActivate_WithFloatType_ReturnsSameReference()
         {
             var fn = new IdentityActivation<float>();

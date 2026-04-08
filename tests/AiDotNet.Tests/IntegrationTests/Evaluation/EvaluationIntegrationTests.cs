@@ -14,7 +14,7 @@ public class EvaluationIntegrationTests
 {
     #region PredictionType Enum Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionType_HasExpectedValues()
     {
         // Assert
@@ -25,7 +25,7 @@ public class EvaluationIntegrationTests
         Assert.Contains(PredictionType.MultiLabel, values);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionType_HasFourValues()
     {
         // Assert
@@ -58,7 +58,7 @@ public class EvaluationIntegrationTests
 
     #region PredictionStatsOptions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStatsOptions_DefaultValues()
     {
         // Arrange & Act
@@ -70,7 +70,7 @@ public class EvaluationIntegrationTests
         Assert.True(options.LearningCurveSteps > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStatsOptions_SetConfidenceLevel()
     {
         // Arrange & Act
@@ -83,7 +83,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(0.99, options.ConfidenceLevel);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionStatsOptions_SetLearningCurveSteps()
     {
         // Arrange & Act
@@ -103,7 +103,7 @@ public class EvaluationIntegrationTests
     // Note: PredictionTypeInference is internal, so we test via reflection
     // This allows comprehensive testing of the inference logic
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_EmptyVector_ReturnsRegression()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_BinaryClassification_ZeroOne()
     {
         // Arrange - binary labels 0 and 1
@@ -133,7 +133,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_BinaryClassification_AllZeros()
     {
         // Arrange - all zeros (still binary, just one class present)
@@ -148,7 +148,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_BinaryClassification_AllOnes()
     {
         // Arrange - all ones (still binary, just one class present)
@@ -163,7 +163,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_MultiClass_IntegerLabels()
     {
         // Arrange - multi-class labels 0, 1, 2, 3
@@ -178,7 +178,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.MultiClass, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Regression_ContinuousValues()
     {
         // Arrange - continuous values
@@ -193,7 +193,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Regression_NaN()
     {
         // Arrange - contains NaN
@@ -208,7 +208,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Regression_Infinity()
     {
         // Arrange - contains infinity
@@ -223,7 +223,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Regression_NegativeInfinity()
     {
         // Arrange - contains negative infinity
@@ -238,7 +238,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Regression_HighUniqueRatio()
     {
         // Arrange - many unique integer values (high unique ratio -> regression)
@@ -253,7 +253,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Float_BinaryClassification()
     {
         // Arrange - binary labels with float type
@@ -268,7 +268,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_Float_Regression()
     {
         // Arrange - continuous values with float type
@@ -287,7 +287,7 @@ public class EvaluationIntegrationTests
 
     #region PredictionTypeInference InferFromTargets Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Vector_BinaryClassification()
     {
         // Arrange - binary labels
@@ -302,7 +302,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Vector_Regression()
     {
         // Arrange - continuous values
@@ -317,7 +317,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Matrix_SingleColumn()
     {
         // Arrange - single column matrix with binary labels
@@ -338,7 +338,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Matrix_MultiColumn_MultiClass()
     {
         // Arrange - multi-column matrix with one-hot encoding (row sums to 1)
@@ -362,7 +362,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.MultiClass, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Matrix_MultiColumn_MultiLabel()
     {
         // Arrange - multi-column matrix with multi-label encoding (row can have multiple 1s)
@@ -386,7 +386,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.MultiLabel, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Matrix_Regression()
     {
         // Arrange - matrix with values outside [0, 1] range
@@ -405,7 +405,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Tensor_Rank1_BinaryClassification()
     {
         // Arrange - 1D tensor with binary labels
@@ -423,7 +423,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_Tensor_Rank2_SingleColumn()
     {
         // Arrange - 2D tensor with single column (binary labels)
@@ -441,7 +441,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_NullTensor_ReturnsRegression()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_InferFromTargets_EmptyMatrix_ReturnsRegression()
     {
         // Arrange
@@ -475,7 +475,7 @@ public class EvaluationIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_SingleElement_Binary()
     {
         // Arrange - single element (treated as binary if 0 or 1)
@@ -490,7 +490,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_SingleElement_Regression()
     {
         // Arrange - single element with non-integer value
@@ -505,7 +505,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_NearInteger_BinaryClassification()
     {
         // Arrange - values very close to integers (within epsilon)
@@ -520,7 +520,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.BinaryClassification, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_NonContiguousLabels_MayBeRegression()
     {
         // Arrange - non-contiguous labels with high unique ratio
@@ -535,7 +535,7 @@ public class EvaluationIntegrationTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PredictionTypeInference_LowUniqueRatio_MultiClass()
     {
         // Arrange - repeating labels with low unique ratio

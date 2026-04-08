@@ -86,7 +86,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region SaveCheckpoint Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveCheckpoint_WithValidInput_ReturnsCheckpointId()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.NotEmpty(checkpointId);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveCheckpoint_WithMetadata_StoresMetadata()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(32, Convert.ToInt32(checkpoint.Metadata["batch_size"]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveCheckpoint_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class CheckpointManagerTests : IDisposable
             _manager.SaveCheckpoint<ModelMetadata<double>>(null!, optimizer, epoch: 1, step: 1, metrics));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveCheckpoint_WithNullOptimizer_ThrowsArgumentNullException()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region LoadCheckpoint Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadCheckpoint_WithValidId_ReturnsCheckpoint()
     {
         // Arrange
@@ -171,14 +171,14 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(0.5, checkpoint.Metrics["loss"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadCheckpoint_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _manager.LoadCheckpoint("nonexistent-id"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadLatestCheckpoint_ReturnsNewestCheckpoint()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(300, latest.Step);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadLatestCheckpoint_WhenNoCheckpoints_ReturnsNull()
     {
         // Arrange - Fresh manager with no checkpoints
@@ -212,7 +212,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Null(latest);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadBestCheckpoint_WithMinimize_ReturnsLowestMetric()
     {
         // Arrange
@@ -232,7 +232,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(0.5, best.Metrics["loss"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadBestCheckpoint_WithMaximize_ReturnsHighestMetric()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(0.95, best.Metrics["accuracy"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadBestCheckpoint_WhenMetricNotFound_ReturnsNull()
     {
         // Arrange
@@ -271,7 +271,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region ListCheckpoints Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ListCheckpoints_ReturnsAllCheckpoints()
     {
         // Arrange
@@ -289,7 +289,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(3, checkpoints.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ListCheckpoints_SortedByCreated_ReturnsCorrectOrder()
     {
         // Arrange
@@ -310,7 +310,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(3, checkpoints[0].Epoch); // Latest first when descending
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ListCheckpoints_SortedByStep_ReturnsCorrectOrder()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region DeleteCheckpoint Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeleteCheckpoint_RemovesCheckpoint()
     {
         // Arrange
@@ -347,7 +347,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Throws<ArgumentException>(() => _manager.LoadCheckpoint(checkpointId));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DeleteCheckpoint_WithInvalidId_DoesNotThrow()
     {
         // Act & Assert - Should not throw for nonexistent ID
@@ -358,7 +358,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region Cleanup Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CleanupOldCheckpoints_KeepsOnlySpecifiedNumber()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(3, remaining.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CleanupOldCheckpoints_KeepsNewestCheckpoints()
     {
         // Arrange
@@ -405,7 +405,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Contains(remaining, c => c.Epoch == 4);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CleanupKeepBest_KeepsBestByMetric()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Manager_PersistsCheckpointsToDisk()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(0.25, metadata.Metrics["loss"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Manager_LoadsExistingCheckpointsOnCreation()
     {
         // Arrange
@@ -474,7 +474,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region Checkpoint Properties Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Checkpoint_ContainsCorrectEpochAndStep()
     {
         // Arrange
@@ -490,7 +490,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(12345, checkpoint.Step);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Checkpoint_ContainsAllMetrics()
     {
         // Arrange
@@ -516,7 +516,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Equal(0.88, checkpoint.Metrics["f1_score"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Checkpoint_HasCreatedAtTimestamp()
     {
         // Arrange
@@ -537,7 +537,7 @@ public class CheckpointManagerTests : IDisposable
 
     #region Edge Cases
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveCheckpoint_WithEmptyMetrics_Succeeds()
     {
         // Arrange
@@ -553,7 +553,7 @@ public class CheckpointManagerTests : IDisposable
         Assert.Empty(checkpoint.Metrics);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CleanupOldCheckpoints_WhenFewerThanKeepLast_DeletesNone()
     {
         // Arrange

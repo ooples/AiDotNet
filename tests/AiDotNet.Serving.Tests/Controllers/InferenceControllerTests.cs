@@ -11,7 +11,7 @@ namespace AiDotNet.Serving.Tests.Controllers;
 
 public sealed class InferenceControllerTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task Predict_ReturnsNotFound_WhenModelDoesNotExist()
     {
         var controller = CreateController(
@@ -26,7 +26,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task Predict_ReturnsBadRequest_WhenFeaturesMissing()
     {
         var controller = CreateController(
@@ -38,7 +38,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<BadRequestObjectResult>(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task Predict_ReturnsOk_WithPredictions_ForDoubleModel()
     {
         var controller = CreateController(
@@ -60,7 +60,7 @@ public sealed class InferenceControllerTests
         Assert.Equal(new[] { 10.0, 20.0 }, response.Predictions[1]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetStatistics_ReturnsOk()
     {
         var controller = CreateController(
@@ -73,7 +73,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<Dictionary<string, object>>(ok.Value);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPerformanceMetrics_ReturnsOk()
     {
         var controller = CreateController(
@@ -86,7 +86,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<Dictionary<string, object>>(ok.Value);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerateWithSpeculativeDecoding_ReturnsNotImplemented_WhenModelExists()
     {
         var controller = CreateController(

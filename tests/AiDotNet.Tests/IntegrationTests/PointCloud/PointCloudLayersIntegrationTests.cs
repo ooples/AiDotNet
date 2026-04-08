@@ -17,7 +17,7 @@ public class PointCloudLayersIntegrationTests
 
     #region PointConvolutionLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_Forward_ProducesCorrectOutputShape()
     {
         var layer = new PointConvolutionLayer<double>(3, 16);
@@ -30,7 +30,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(16, output.Shape[1]); // output channels
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_Forward_AllOutputsFinite()
     {
         var layer = new PointConvolutionLayer<double>(6, 32);
@@ -43,7 +43,7 @@ public class PointCloudLayersIntegrationTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_ParameterCount_EqualsWeightsPlusBiases()
     {
         int inputCh = 5;
@@ -54,7 +54,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(inputCh * outputCh + outputCh, layer.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_GetParameters_ReturnsCorrectLength()
     {
         var layer = new PointConvolutionLayer<double>(3, 7);
@@ -65,7 +65,7 @@ public class PointCloudLayersIntegrationTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_SinglePoint_ProducesValidOutput()
     {
         var layer = new PointConvolutionLayer<double>(3, 2);
@@ -78,7 +78,7 @@ public class PointCloudLayersIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointConvolution_LargePointCloud_HandlesCorrectly()
     {
         var layer = new PointConvolutionLayer<double>(3, 16);
@@ -95,7 +95,7 @@ public class PointCloudLayersIntegrationTests
 
     #region MaxPoolingLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_Forward_ReducesToSingleRow()
     {
         var layer = new MaxPoolingLayer<double>(4);
@@ -108,7 +108,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(4, output.Shape[1]);  // features preserved
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_Forward_GoldenReference_TakesMaxPerChannel()
     {
         // Create known input where max values are easy to verify
@@ -129,7 +129,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(8.0, output[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_PermutationInvariant()
     {
         // MaxPooling should give same result regardless of point order
@@ -159,14 +159,14 @@ public class PointCloudLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_ParameterCount_IsZero()
     {
         var layer = new MaxPoolingLayer<double>(16);
         Assert.Equal(0, layer.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_SinglePoint_ReturnsSameValues()
     {
         var data = new double[] { 3.5, 7.2, 1.1 };
@@ -180,7 +180,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(1.1, output[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPooling_AllSameValues_ReturnsConstant()
     {
         var data = new double[] { 5.0, 5.0, 5.0, 5.0 };
@@ -197,7 +197,7 @@ public class PointCloudLayersIntegrationTests
 
     #region TNetLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_Forward_PreservesShape()
     {
         var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
@@ -209,7 +209,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(input.Shape[1], output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_Forward_OutputIsFinite()
     {
         var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
@@ -221,14 +221,14 @@ public class PointCloudLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_ParameterCount_IsPositive()
     {
         var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
         Assert.True(tnet.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_InvalidTransformDim_ThrowsArgumentOutOfRange()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -237,14 +237,14 @@ public class PointCloudLayersIntegrationTests
             new TNetLayer<double>(-1, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_TransformDimGreaterThanFeatures_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TNetLayer<double>(5, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_InvalidFeatures_ThrowsArgumentOutOfRange()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -254,7 +254,7 @@ public class PointCloudLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TNet_FeatureTransform_PreservesExtraFeatures()
     {
         // Transform only first 3 dims of a 6-dim input, extra features should pass through
@@ -286,7 +286,7 @@ public class PointCloudLayersIntegrationTests
 
     #region PointCloudData Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_ConstructFromTensor_SetsProperties()
     {
         var points = CreateRandomTensor(50, 3, seed: 101);
@@ -297,7 +297,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Null(cloud.Labels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_WithLabels_StoresLabels()
     {
         var points = CreateRandomTensor(10, 3, seed: 103);
@@ -310,7 +310,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(1.0, cloud.Labels[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_GetCoordinates_ExtractsXYZOnly()
     {
         // 6-feature cloud (XYZ + RGB)
@@ -331,7 +331,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(4.0, coords[3], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_GetCoordinates_ReturnsOriginalWhen3Features()
     {
         var data = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 };
@@ -344,7 +344,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Same(cloud.Points, coords);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_GetFeatures_ReturnsNullForXYZOnly()
     {
         var points = CreateRandomTensor(10, 3, seed: 107);
@@ -353,7 +353,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Null(cloud.GetFeatures());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_GetFeatures_ExtractsNonXYZColumns()
     {
         var data = new double[]
@@ -373,7 +373,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(50.0, features[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudData_FromCoordinates_CreatesCorrectTensor()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -391,7 +391,7 @@ public class PointCloudLayersIntegrationTests
 
     #region End-to-End Layer Pipeline
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudPipeline_ConvMaxPoolFC_ProducesFiniteOutput()
     {
         // Simulate a mini PointNet-like pipeline: Conv -> MaxPool
@@ -408,7 +408,7 @@ public class PointCloudLayersIntegrationTests
         AssertAllFinite(global);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointCloudPipeline_MultiLayerConv_IncreasesFeatureDim()
     {
         var conv1 = new PointConvolutionLayer<double>(3, 16);

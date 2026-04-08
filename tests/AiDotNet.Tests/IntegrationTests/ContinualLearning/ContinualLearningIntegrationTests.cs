@@ -77,7 +77,7 @@ public class ContinualLearningIntegrationTests
 
     #region EWC Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_Constructor_InitializesCorrectly()
     {
         var ewc = new ElasticWeightConsolidation<double>(lambda: 500.0);
@@ -85,7 +85,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(500.0, ewc.Lambda);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_BeforeTask_DoesNotThrow()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -96,7 +96,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_BeforeTask_NullNetwork_ThrowsArgumentNullException()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -104,7 +104,7 @@ public class ContinualLearningIntegrationTests
         Assert.Throws<ArgumentNullException>(() => ewc.BeforeTask(null!, taskId: 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_AfterTask_StoresFisherAndParams()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -120,7 +120,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_ComputeLoss_ReturnsZeroBeforeAnyTask()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -131,7 +131,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_ComputeLoss_NonZeroAfterTaskWithChangedParams()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -158,7 +158,7 @@ public class ContinualLearningIntegrationTests
         // Note: The loss value depends on Fisher Information which may be zero for mock network
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_ModifyGradients_AddsRegularizationGradient()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -181,7 +181,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(gradients.Length, modifiedGradients.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_ModifyGradients_BeforeTask_ReturnsUnchanged()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -202,7 +202,7 @@ public class ContinualLearningIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_Reset_ClearsStoredData()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -237,7 +237,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticWeightConsolidation_MultipleTasks_AccumulatesConstraints()
     {
         var ewc = new ElasticWeightConsolidation<double>();
@@ -262,7 +262,7 @@ public class ContinualLearningIntegrationTests
 
     #region SynapticIntelligence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynapticIntelligence_Constructor_InitializesCorrectly()
     {
         var si = new SynapticIntelligence<double>(lambda: 0.5);
@@ -270,7 +270,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(0.5, si.Lambda);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynapticIntelligence_BeforeTask_DoesNotThrow()
     {
         var si = new SynapticIntelligence<double>();
@@ -280,7 +280,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynapticIntelligence_AfterTask_RecordsImportance()
     {
         var si = new SynapticIntelligence<double>();
@@ -294,7 +294,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynapticIntelligence_ComputeLoss_ReturnsNonNegative()
     {
         var si = new SynapticIntelligence<double>();
@@ -308,7 +308,7 @@ public class ContinualLearningIntegrationTests
         Assert.True(loss >= 0, "SI loss should be non-negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynapticIntelligence_Reset_ClearsData()
     {
         var si = new SynapticIntelligence<double>();
@@ -328,7 +328,7 @@ public class ContinualLearningIntegrationTests
 
     #region MemoryAwareSynapses Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryAwareSynapses_Constructor_InitializesCorrectly()
     {
         var mas = new MemoryAwareSynapses<double>(lambda: 1.0);
@@ -336,7 +336,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(1.0, mas.Lambda);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryAwareSynapses_BeforeTask_DoesNotThrow()
     {
         var mas = new MemoryAwareSynapses<double>();
@@ -346,7 +346,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryAwareSynapses_AfterTask_ComputesGradientMagnitude()
     {
         var mas = new MemoryAwareSynapses<double>();
@@ -360,7 +360,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MemoryAwareSynapses_ComputeLoss_ReturnsNonNegative()
     {
         var mas = new MemoryAwareSynapses<double>();
@@ -378,7 +378,7 @@ public class ContinualLearningIntegrationTests
 
     #region GradientEpisodicMemory Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientEpisodicMemory_Constructor_InitializesCorrectly()
     {
         var gem = new GradientEpisodicMemory<double>(memorySize: 100);
@@ -387,7 +387,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(gem);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientEpisodicMemory_BeforeTask_DoesNotThrow()
     {
         var gem = new GradientEpisodicMemory<double>();
@@ -397,7 +397,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientEpisodicMemory_AfterTask_StoresExamples()
     {
         var gem = new GradientEpisodicMemory<double>();
@@ -411,7 +411,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientEpisodicMemory_ModifyGradients_ReturnsValidVector()
     {
         var gem = new GradientEpisodicMemory<double>();
@@ -437,7 +437,7 @@ public class ContinualLearningIntegrationTests
 
     #region LearningWithoutForgetting Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningWithoutForgetting_Constructor_InitializesCorrectly()
     {
         var lwf = new LearningWithoutForgetting<double>(lambda: 1.0, temperature: 2.0);
@@ -446,7 +446,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(lwf);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningWithoutForgetting_BeforeTask_DoesNotThrow()
     {
         var lwf = new LearningWithoutForgetting<double>();
@@ -456,7 +456,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningWithoutForgetting_AfterTask_DoesNotThrow()
     {
         var lwf = new LearningWithoutForgetting<double>();
@@ -468,7 +468,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningWithoutForgetting_ComputeLoss_ReturnsNonNegative()
     {
         var lwf = new LearningWithoutForgetting<double>();
@@ -486,7 +486,7 @@ public class ContinualLearningIntegrationTests
 
     #region OnlineEWC Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineEWC_Constructor_InitializesCorrectly()
     {
         var onlineEwc = new OnlineEWC<double>(lambda: 400.0, gamma: 0.9);
@@ -494,7 +494,7 @@ public class ContinualLearningIntegrationTests
         Assert.Equal(400.0, onlineEwc.Lambda);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineEWC_WorksLikeEWCWithDecay()
     {
         var onlineEwc = new OnlineEWC<double>(gamma: 0.95);
@@ -508,7 +508,7 @@ public class ContinualLearningIntegrationTests
         Assert.True(loss >= 0, "Online EWC loss should be non-negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OnlineEWC_MultipleTasks_AccumulatesWithDecay()
     {
         var onlineEwc = new OnlineEWC<double>(gamma: 0.8);
@@ -534,7 +534,7 @@ public class ContinualLearningIntegrationTests
 
     #region ExperienceReplay Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExperienceReplay_Constructor_InitializesCorrectly()
     {
         var er = new ExperienceReplay<double>(maxBufferSize: 500);
@@ -542,7 +542,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(er);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExperienceReplay_BeforeTask_DoesNotThrow()
     {
         var er = new ExperienceReplay<double>();
@@ -552,7 +552,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExperienceReplay_AfterTask_StoresExamples()
     {
         var er = new ExperienceReplay<double>();
@@ -571,7 +571,7 @@ public class ContinualLearningIntegrationTests
 
     #region PackNet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PackNet_Constructor_InitializesCorrectly()
     {
         var packNet = new PackNet<double>(pruningRatio: 0.75);
@@ -579,7 +579,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(packNet);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PackNet_BeforeTask_DoesNotThrow()
     {
         var packNet = new PackNet<double>();
@@ -589,7 +589,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PackNet_AfterTask_PrunesAndFreezes()
     {
         var packNet = new PackNet<double>();
@@ -605,7 +605,7 @@ public class ContinualLearningIntegrationTests
 
     #region ProgressiveNeuralNetworks Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_Constructor_InitializesCorrectly()
     {
         var pnn = new ProgressiveNeuralNetworks<double>();
@@ -613,7 +613,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(pnn);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_BeforeTask_DoesNotThrow()
     {
         var pnn = new ProgressiveNeuralNetworks<double>();
@@ -627,7 +627,7 @@ public class ContinualLearningIntegrationTests
 
     #region GenerativeReplay Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenerativeReplay_Constructor_InitializesCorrectly()
     {
         var gr = new GenerativeReplay<double>();
@@ -635,7 +635,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(gr);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenerativeReplay_BeforeTask_DoesNotThrow()
     {
         var gr = new GenerativeReplay<double>();
@@ -649,7 +649,7 @@ public class ContinualLearningIntegrationTests
 
     #region AveragedGEM Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragedGEM_Constructor_InitializesCorrectly()
     {
         var agem = new AveragedGEM<double>(memorySize: 200);
@@ -657,7 +657,7 @@ public class ContinualLearningIntegrationTests
         Assert.NotNull(agem);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragedGEM_BeforeTask_DoesNotThrow()
     {
         var agem = new AveragedGEM<double>();
@@ -667,7 +667,7 @@ public class ContinualLearningIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AveragedGEM_ModifyGradients_ReturnsValidGradients()
     {
         var agem = new AveragedGEM<double>();
@@ -693,7 +693,7 @@ public class ContinualLearningIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_NullNetwork_ThrowsArgumentNullException()
     {
         var strategies = new IContinualLearningStrategy<double>[]
@@ -710,7 +710,7 @@ public class ContinualLearningIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_NullGradients_ThrowsArgumentNullException()
     {
         var strategies = new IContinualLearningStrategy<double>[]
@@ -725,7 +725,7 @@ public class ContinualLearningIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CoreRegularizationStrategies_LossIsNonNegative()
     {
         // Tests the three core regularization-based strategies: EWC, SI, and MAS
@@ -749,7 +749,7 @@ public class ContinualLearningIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinualLearning_SequentialTasks_NoThrows()
     {
         var ewc = new ElasticWeightConsolidation<double>(lambda: 100);

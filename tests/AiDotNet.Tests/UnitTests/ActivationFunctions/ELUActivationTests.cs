@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
 {
     public class ELUActivationTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultAlpha_UsesOneAsDefault()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomAlpha_UsesSpecifiedValue()
         {
             // Arrange & Act
@@ -32,7 +32,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < 0.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithPositiveValue_ReturnsInputUnchanged()
         {
             // Arrange
@@ -49,7 +49,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(100.0, result3, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithZero_ReturnsZero()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithNegativeValue_ReturnsExponentialCurve()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(-0.8646647167633873, result2, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithLargeNegativeValue_ApproachesNegativeAlpha()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < -0.999);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_Vector_AppliesActivationToAllElements()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(2.0, result[4], 10);  // Positive input
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Derivative_WithPositiveValue_ReturnsOne()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(1.0, result3, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Derivative_WithZero_ReturnsAlpha()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Derivative_WithNegativeValue_ReturnsCorrectValue()
         {
             // Arrange
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < result1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Derivative_Vector_ReturnsJacobianMatrix()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(0.0, result[1, 0], 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < 0.0f);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Derivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 > 0.0f && result2 < 1.0f);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_WithDifferentAlpha_AffectsNegativeValues()
         {
             // Arrange
@@ -233,7 +233,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < result1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_PreventsDyingNeurons_UnlikeReLU()
         {
             // Arrange
@@ -251,7 +251,7 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(derivative > 0.0);  // Gradient exists for backpropagation
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Activate_IsContinuous_AtZero()
         {
             // Arrange

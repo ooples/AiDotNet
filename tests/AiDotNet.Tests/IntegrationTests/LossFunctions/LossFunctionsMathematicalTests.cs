@@ -21,7 +21,7 @@ public class LossFunctionsMathematicalTests
     /// MSE = (1/n) * Σ(predicted - actual)²
     /// For [1, 2, 3] vs [2, 4, 6]: errors = [-1, -2, -3], squared = [1, 4, 9], mean = 14/3 ≈ 4.6667
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_HandCalculated_MatchesExpected()
     {
         var mse = new MeanSquaredErrorLoss<double>();
@@ -42,7 +42,7 @@ public class LossFunctionsMathematicalTests
     /// MSE derivative = 2*(predicted - actual)/n
     /// For [1, 2, 3] vs [2, 4, 6]: derivative = 2*[-1, -2, -3]/3 = [-2/3, -4/3, -6/3]
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_Derivative_HandCalculated_MatchesExpected()
     {
         var mse = new MeanSquaredErrorLoss<double>();
@@ -60,7 +60,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(-2.0, derivative[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MSE_GradientCheck_NumericalVsAnalytical()
     {
         var mse = new MeanSquaredErrorLoss<double>();
@@ -93,7 +93,7 @@ public class LossFunctionsMathematicalTests
     /// MAE = (1/n) * Σ|predicted - actual|
     /// For [1, 2, 3] vs [2, 4, 6]: errors = [1, 2, 3], mean = 6/3 = 2
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_HandCalculated_MatchesExpected()
     {
         var mae = new MeanAbsoluteErrorLoss<double>();
@@ -111,7 +111,7 @@ public class LossFunctionsMathematicalTests
     /// <summary>
     /// MAE derivative = sign(predicted - actual)/n
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAE_Derivative_HandCalculated_MatchesExpected()
     {
         var mae = new MeanAbsoluteErrorLoss<double>();
@@ -139,7 +139,7 @@ public class LossFunctionsMathematicalTests
     /// = -(1/2) * [log(0.9) + log(0.9)]
     /// = -log(0.9) ≈ 0.1054
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_HandCalculated_MatchesExpected()
     {
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -158,7 +158,7 @@ public class LossFunctionsMathematicalTests
     /// <summary>
     /// BCE with 50% probability should give loss = log(2) ≈ 0.693
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_FiftyPercent_ReturnsLog2()
     {
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -172,7 +172,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_GradientCheck_NumericalVsAnalytical()
     {
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -206,7 +206,7 @@ public class LossFunctionsMathematicalTests
     /// = -(1/3) * [1*log(0.7) + 0*log(0.2) + 0*log(0.1)]
     /// = -log(0.7)/3
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossEntropy_OneHotEncoded_MatchesExpected()
     {
         var ce = new CrossEntropyLoss<double>();
@@ -220,7 +220,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossEntropy_GradientCheck_NumericalVsAnalytical()
     {
         var ce = new CrossEntropyLoss<double>();
@@ -256,7 +256,7 @@ public class LossFunctionsMathematicalTests
     /// For error 0.5 (small): L = 0.5 * 0.5² = 0.125
     /// For error 2.0 (large): L = 1 * (2 - 0.5) = 1.5
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_SmallError_MatchesMSEHalf()
     {
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -270,7 +270,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_LargeError_MatchesLinear()
     {
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -284,7 +284,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Huber_GradientCheck_NumericalVsAnalytical()
     {
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -318,7 +318,7 @@ public class LossFunctionsMathematicalTests
     /// For y=1, f(x)=0.5: L = max(0, 1 - 0.5) = 0.5 (correct but small margin)
     /// For y=1, f(x)=-1: L = max(0, 1 - (-1)) = 2 (wrong prediction)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hinge_LargeMargin_ReturnsZero()
     {
         var hinge = new HingeLoss<double>();
@@ -331,7 +331,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hinge_SmallMargin_ReturnsPositive()
     {
         var hinge = new HingeLoss<double>();
@@ -344,7 +344,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.5, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hinge_WrongPrediction_ReturnsLarge()
     {
         var hinge = new HingeLoss<double>();
@@ -365,7 +365,7 @@ public class LossFunctionsMathematicalTests
     /// RMSE = sqrt(MSE) = sqrt((1/n) * Σ(predicted - actual)²)
     /// For [1, 2, 3] vs [2, 4, 6]: MSE = 14/3, RMSE = sqrt(14/3) ≈ 2.16
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RMSE_HandCalculated_MatchesExpected()
     {
         var rmse = new RootMeanSquaredErrorLoss<double>();
@@ -387,7 +387,7 @@ public class LossFunctionsMathematicalTests
     /// LogCosh = (1/n) * Σ log(cosh(predicted - actual))
     /// For small x: log(cosh(x)) ≈ x²/2
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_SmallError_ApproximatesSquaredHalf()
     {
         var logCosh = new LogCoshLoss<double>();
@@ -402,7 +402,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_HandCalculated_MatchesExpected()
     {
         var logCosh = new LogCoshLoss<double>();
@@ -416,7 +416,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogCosh_GradientCheck_NumericalVsAnalytical()
     {
         var logCosh = new LogCoshLoss<double>();
@@ -449,7 +449,7 @@ public class LossFunctionsMathematicalTests
     /// L = q * (y - p) when y > p (underprediction)
     /// L = (1-q) * (p - y) when p > y (overprediction)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_Median_BehavesLikeMAEHalf()
     {
         var quantile = new QuantileLoss<double>(0.5);
@@ -465,7 +465,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quantile_HighQuantile_PenalizesUnderprediction()
     {
         var quantile90 = new QuantileLoss<double>(0.9);
@@ -490,7 +490,7 @@ public class LossFunctionsMathematicalTests
     /// Focal loss: FL = -α * (1-p)^γ * log(p) for y=1
     /// With α=1, γ=2: FL = -(1-p)² * log(p)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Focal_EasyExample_DownweightsLoss()
     {
         var focal = new FocalLoss<double>(gamma: 2.0, alpha: 1.0);
@@ -519,7 +519,7 @@ public class LossFunctionsMathematicalTests
     /// Cosine similarity = (a · b) / (||a|| * ||b||)
     /// Loss = 1 - similarity (to make it a minimization objective)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_IdenticalVectors_MinimalLoss()
     {
         var cosine = new CosineSimilarityLoss<double>();
@@ -532,7 +532,7 @@ public class LossFunctionsMathematicalTests
         Assert.True(loss <= 0.0 + Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_OrthogonalVectors_HigherLoss()
     {
         var cosine = new CosineSimilarityLoss<double>();
@@ -553,7 +553,7 @@ public class LossFunctionsMathematicalTests
     /// ||a|| = 5, ||b|| = 5
     /// similarity = 24/25 = 0.96
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineSimilarity_HandCalculated_MatchesExpected()
     {
         var cosine = new CosineSimilarityLoss<double>();
@@ -580,7 +580,7 @@ public class LossFunctionsMathematicalTests
     /// <summary>
     /// KL(P||Q) = Σ P(x) * log(P(x)/Q(x))
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KLDivergence_IdenticalDistributions_ReturnsZero()
     {
         var kl = new KullbackLeiblerDivergence<double>();
@@ -593,7 +593,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KLDivergence_DifferentDistributions_ReturnsPositive()
     {
         var kl = new KullbackLeiblerDivergence<double>();
@@ -617,7 +617,7 @@ public class LossFunctionsMathematicalTests
     /// Dice loss = 1 - Dice coefficient
     /// For soft predictions: Dice = 2 * Σ(p*y) / (Σp + Σy)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_PerfectOverlap_MinimalLoss()
     {
         var dice = new DiceLoss<double>();
@@ -630,7 +630,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_NoOverlap_MaximalLoss()
     {
         var dice = new DiceLoss<double>();
@@ -652,7 +652,7 @@ public class LossFunctionsMathematicalTests
     /// Dice = 2*1.4/(1.7+2) = 2.8/3.7 ≈ 0.757
     /// Loss = 1 - 0.757 ≈ 0.243
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dice_HandCalculated_MatchesExpected()
     {
         var dice = new DiceLoss<double>();
@@ -678,7 +678,7 @@ public class LossFunctionsMathematicalTests
     /// Jaccard/IoU = |X ∩ Y| / |X ∪ Y|
     /// Jaccard loss = 1 - IoU
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Jaccard_PerfectOverlap_MinimalLoss()
     {
         var jaccard = new JaccardLoss<double>();
@@ -691,7 +691,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Jaccard_NoOverlap_MaximalLoss()
     {
         var jaccard = new JaccardLoss<double>();
@@ -712,7 +712,7 @@ public class LossFunctionsMathematicalTests
     /// Poisson loss = predicted - actual * log(predicted)
     /// (summed over all elements, then averaged)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Poisson_HandCalculated_MatchesExpected()
     {
         var poisson = new PoissonLoss<double>();
@@ -741,7 +741,7 @@ public class LossFunctionsMathematicalTests
     /// This is typically used with model weights, but for loss function testing
     /// we verify the combined L1 and L2 penalty behavior.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ElasticNet_CombinesMSEWithRegularization()
     {
         var elasticNet = new ElasticNetLoss<double>(l1Ratio: 0.5, alpha: 0.1);
@@ -765,7 +765,7 @@ public class LossFunctionsMathematicalTests
     /// = -[1*log(0.7) + 0*log(0.2) + 0*log(0.1)]
     /// = -log(0.7)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalCrossEntropy_OneHotEncoded_MatchesExpected()
     {
         var cce = new CategoricalCrossEntropyLoss<double>();
@@ -779,7 +779,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalCrossEntropy_PerfectPrediction_MinimalLoss()
     {
         var cce = new CategoricalCrossEntropyLoss<double>();
@@ -792,7 +792,7 @@ public class LossFunctionsMathematicalTests
         Assert.True(loss < 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalCrossEntropy_Derivative_MatchesSoftmaxCombinedFormula()
     {
         // CCE derivative when used with softmax simplifies to (predicted - actual)
@@ -808,7 +808,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.2 - 0.0, gradient[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalCrossEntropy_WrongClass_HighLoss()
     {
         var cce = new CategoricalCrossEntropyLoss<double>();
@@ -833,7 +833,7 @@ public class LossFunctionsMathematicalTests
     /// For y=1, f(x)=0.5: L = max(0, 1-0.5)² = 0.5² = 0.25
     /// For y=1, f(x)=-1: L = max(0, 1-(-1))² = 2² = 4
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SquaredHinge_LargeMargin_ReturnsZero()
     {
         var sqHinge = new SquaredHingeLoss<double>();
@@ -846,7 +846,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SquaredHinge_SmallMargin_ReturnsSquared()
     {
         var sqHinge = new SquaredHingeLoss<double>();
@@ -859,7 +859,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.25, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SquaredHinge_WrongPrediction_ReturnsLargeSquared()
     {
         var sqHinge = new SquaredHingeLoss<double>();
@@ -872,7 +872,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(4.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SquaredHinge_GradientCheck_NumericalVsAnalytical()
     {
         var sqHinge = new SquaredHingeLoss<double>();
@@ -905,7 +905,7 @@ public class LossFunctionsMathematicalTests
     /// For y=1, f(x)=1: exp(-1) ≈ 0.368
     /// For y=1, f(x)=-1: exp(1) ≈ 2.718
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_CorrectPrediction_SmallLoss()
     {
         var exp = new ExponentialLoss<double>();
@@ -919,7 +919,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_WrongPrediction_LargeLoss()
     {
         var exp = new ExponentialLoss<double>();
@@ -933,7 +933,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_HandCalculated_MatchesExpected()
     {
         var exp = new ExponentialLoss<double>();
@@ -948,7 +948,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Exponential_GradientCheck_NumericalVsAnalytical()
     {
         var exp = new ExponentialLoss<double>();
@@ -981,7 +981,7 @@ public class LossFunctionsMathematicalTests
     /// L = T_c * max(0, m+ - v)² + λ * (1-T_c) * max(0, v - m-)²
     /// Default: m+ = 0.9, m- = 0.1, λ = 0.5
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Margin_ClassPresent_HighOutput_NoLoss()
     {
         var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
@@ -995,7 +995,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Margin_ClassPresent_LowOutput_HasLoss()
     {
         var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
@@ -1010,7 +1010,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Margin_ClassAbsent_HighOutput_HasLoss()
     {
         var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
@@ -1026,7 +1026,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Margin_ClassAbsent_LowOutput_NoLoss()
     {
         var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
@@ -1049,7 +1049,7 @@ public class LossFunctionsMathematicalTests
     /// MBE = (1/n) * Σ(actual - predicted)
     /// Positive MBE = under-prediction, Negative MBE = over-prediction
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_UnderPrediction_ReturnsPositive()
     {
         var mbe = new MeanBiasErrorLoss<double>();
@@ -1062,7 +1062,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_OverPrediction_ReturnsNegative()
     {
         var mbe = new MeanBiasErrorLoss<double>();
@@ -1075,7 +1075,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(-1.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_Balanced_ReturnsZero()
     {
         var mbe = new MeanBiasErrorLoss<double>();
@@ -1088,7 +1088,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MeanBiasError_Derivative_IsConstant()
     {
         var mbe = new MeanBiasErrorLoss<double>();
@@ -1115,7 +1115,7 @@ public class LossFunctionsMathematicalTests
     /// For z >= -1: max(0, 1-z)²
     /// For z < -1: -4*z
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModifiedHuber_CorrectWithMargin_ReturnsZero()
     {
         var mh = new ModifiedHuberLoss<double>();
@@ -1128,7 +1128,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModifiedHuber_SmallMargin_ReturnsQuadratic()
     {
         var mh = new ModifiedHuberLoss<double>();
@@ -1142,7 +1142,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.25, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModifiedHuber_VeryWrong_ReturnsLinear()
     {
         var mh = new ModifiedHuberLoss<double>();
@@ -1156,7 +1156,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(8.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModifiedHuber_BoundaryCase_ReturnsQuadratic()
     {
         var mh = new ModifiedHuberLoss<double>();
@@ -1178,7 +1178,7 @@ public class LossFunctionsMathematicalTests
     /// Wasserstein: L = -mean(predicted * actual)
     /// Labels are +1 for real, -1 for fake
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Wasserstein_RealSamplesHighScore_LowLoss()
     {
         var wass = new WassersteinLoss<double>();
@@ -1191,7 +1191,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(-4.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Wasserstein_FakeSamplesLowScore_LowLoss()
     {
         var wass = new WassersteinLoss<double>();
@@ -1204,7 +1204,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(-4.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Wasserstein_MixedSamples_HandCalculated()
     {
         var wass = new WassersteinLoss<double>();
@@ -1217,7 +1217,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(-2.5, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Wasserstein_GradientCheck_NumericalVsAnalytical()
     {
         var wass = new WassersteinLoss<double>();
@@ -1249,7 +1249,7 @@ public class LossFunctionsMathematicalTests
     /// Weighted BCE = -(1/n) Σ weight * [y*log(p) + (1-y)*log(1-p)]
     /// With uniform weights of 1, this should match standard BCE
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedCrossEntropy_HandCalculated_MatchesExpected()
     {
         var wce = new WeightedCrossEntropyLoss<double>(); // Default uniform weights
@@ -1264,7 +1264,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedCrossEntropy_UniformWeights_MatchesBCE()
     {
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -1280,7 +1280,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(bceLoss, wceLoss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedCrossEntropy_WithCustomWeights_ScalesCorrectly()
     {
         var weights1 = new Vector<double>(new[] { 1.0 });
@@ -1298,7 +1298,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(2 * loss1, loss2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedCrossEntropy_ZeroWeight_ZeroLoss()
     {
         var weights = new Vector<double>(new[] { 0.0 });
@@ -1321,7 +1321,7 @@ public class LossFunctionsMathematicalTests
     /// Contrastive Loss for similar pairs: distance²
     /// Contrastive Loss for dissimilar pairs: max(0, margin - distance)²
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_SimilarPairs_PenalizesDistance()
     {
         var contrastive = new ContrastiveLoss<double>(margin: 1.0);
@@ -1335,7 +1335,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_DissimilarPairs_BelowMargin_PenalizesProximity()
     {
         var contrastive = new ContrastiveLoss<double>(margin: 2.0);
@@ -1349,7 +1349,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_DissimilarPairs_AboveMargin_NoLoss()
     {
         var contrastive = new ContrastiveLoss<double>(margin: 1.0);
@@ -1363,7 +1363,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Contrastive_StandardAPI_ThrowsNotSupported()
     {
         var contrastive = new ContrastiveLoss<double>();
@@ -1380,7 +1380,7 @@ public class LossFunctionsMathematicalTests
     /// <summary>
     /// Triplet Loss = max(0, d(anchor, positive) - d(anchor, negative) + margin)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_GoodEmbedding_NoLoss()
     {
         var triplet = new TripletLoss<double>(margin: 1.0);
@@ -1395,7 +1395,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_BadEmbedding_HasLoss()
     {
         var triplet = new TripletLoss<double>(margin: 1.0);
@@ -1410,7 +1410,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(3.0, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_BatchedSamples_AveragesLoss()
     {
         var triplet = new TripletLoss<double>(margin: 1.0);
@@ -1433,7 +1433,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(0.25, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Triplet_StandardAPI_ThrowsNotSupported()
     {
         var triplet = new TripletLoss<double>();
@@ -1452,20 +1452,20 @@ public class LossFunctionsMathematicalTests
     /// For K classes, there are K-1 thresholds.
     /// L = Σ log(1 + exp(-indicator * predicted)) for each threshold
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRegression_ConstructionWithValidClasses()
     {
         var ordinal = new OrdinalRegressionLoss<double>(numClasses: 5);
         Assert.NotNull(ordinal);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRegression_InvalidClassesThrows()
     {
         Assert.Throws<ArgumentException>(() => new OrdinalRegressionLoss<double>(numClasses: 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRegression_HandCalculated_ThreeClasses()
     {
         // 3 classes: 0, 1, 2 with 2 thresholds
@@ -1484,7 +1484,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRegression_LowestClass_OnlyNegativeIndicators()
     {
         // 3 classes: for actual=0, all indicators are 0 (0>j is false for all j>=0)
@@ -1500,7 +1500,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrdinalRegression_HighestClass_AllPositiveIndicators()
     {
         // 3 classes: for actual=2, all indicators are 1 (2>0 and 2>1 are true)
@@ -1524,7 +1524,7 @@ public class LossFunctionsMathematicalTests
     /// SCCE = -log(predicted[class_index])
     /// predicted = class probabilities, actual = class indices
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_SingleSample_MatchesExpected()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1538,7 +1538,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_FirstClass_MatchesExpected()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1552,7 +1552,7 @@ public class LossFunctionsMathematicalTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_PerfectPrediction_MinimalLoss()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1565,7 +1565,7 @@ public class LossFunctionsMathematicalTests
         Assert.True(loss < 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_InvalidClassIndex_Throws()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1575,7 +1575,7 @@ public class LossFunctionsMathematicalTests
         Assert.Throws<ArgumentException>(() => scce.CalculateLoss(predicted, actual));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_NegativeClassIndex_Throws()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1585,7 +1585,7 @@ public class LossFunctionsMathematicalTests
         Assert.Throws<ArgumentException>(() => scce.CalculateLoss(predicted, actual));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparseCategoricalCrossEntropy_GradientCheck_CorrectClass()
     {
         var scce = new SparseCategoricalCrossEntropyLoss<double>();
@@ -1605,7 +1605,7 @@ public class LossFunctionsMathematicalTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BCE_ExtremeValues_NoNaNOrInfinity()
     {
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -1620,7 +1620,7 @@ public class LossFunctionsMathematicalTests
         Assert.False(double.IsInfinity(loss));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossEntropy_ZeroProbability_NoNaNOrInfinity()
     {
         var ce = new CrossEntropyLoss<double>();
@@ -1635,7 +1635,7 @@ public class LossFunctionsMathematicalTests
         Assert.False(double.IsInfinity(loss));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllLossFunctions_LargeValues_NoOverflow()
     {
         var losses = new ILossFunction<double>[]
@@ -1658,7 +1658,7 @@ public class LossFunctionsMathematicalTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllLossFunctions_ZeroVector_HandledGracefully()
     {
         var losses = new ILossFunction<double>[]

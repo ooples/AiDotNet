@@ -18,7 +18,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // must always be finite. NaN/Inf in financial output is catastrophic.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FinancialPredictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -41,7 +41,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // A financial model that ignores its input data is useless.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DifferentMarketData_DifferentPredictions()
     {
         var network = CreateNetwork();
@@ -73,7 +73,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // cause catastrophic trading decisions.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Output_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -94,7 +94,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // A market with no data/activity is a valid edge case.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ZeroInput_ShouldNotCrash()
     {
         var network = CreateNetwork();

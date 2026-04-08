@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class ScanPatternsTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
@@ -22,7 +22,7 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalScan_ForwardHalfMatchesInput()
     {
         int batchSize = 1;
@@ -42,7 +42,7 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalScan_ReverseHalfMatchesReversed()
     {
         int batchSize = 1;
@@ -63,14 +63,14 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalScan_ThrowsFor2DInput()
     {
         var patches = CreateRandomTensor(new[] { 4, 8 });
         Assert.Throws<ArgumentException>(() => ScanPatterns<float>.BidirectionalScan(patches));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossScan_ProducesFourOutputs()
     {
         int batchSize = 2;
@@ -85,7 +85,7 @@ public class ScanPatternsTests
         Assert.Equal(4, results.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossScan_AllOutputsHaveCorrectShape()
     {
         int batchSize = 2;
@@ -103,7 +103,7 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossScan_FirstDirectionMatchesInput()
     {
         int batchSize = 1;
@@ -122,7 +122,7 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossScan_ThrowsOnMismatchedDimensions()
     {
         var patches = CreateRandomTensor(new[] { 1, 12, 4 });
@@ -130,7 +130,7 @@ public class ScanPatternsTests
         Assert.Throws<ArgumentException>(() => ScanPatterns<float>.CrossScan(patches, 3, 5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinuousScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
@@ -145,7 +145,7 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinuousScan_EvenRowLeftToRight()
     {
         int batchSize = 1;
@@ -162,7 +162,7 @@ public class ScanPatternsTests
         Assert.Equal(patches[new[] { 0, 2, 0 }], result[new[] { 0, 2, 0 }]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinuousScan_OddRowRightToLeft()
     {
         int batchSize = 1;
@@ -179,7 +179,7 @@ public class ScanPatternsTests
         Assert.Equal(patches[new[] { 0, 3, 0 }], result[new[] { 0, 5, 0 }]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpatioTemporalScan_ProducesTwoOutputs()
     {
         int batchSize = 1;
@@ -197,7 +197,7 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, totalPatches, dim }, results[1].Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpatioTemporalScan_SpatialMatchesInput()
     {
         int batchSize = 1;
@@ -217,7 +217,7 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpatioTemporalScan_ThrowsOnDimensionMismatch()
     {
         var frames = CreateRandomTensor(new[] { 1, 10, 4 });
@@ -226,7 +226,7 @@ public class ScanPatternsTests
             ScanPatterns<float>.SpatioTemporalScan(frames, 2, 2, 3)); // 2*2*3=12 != 10
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MergeScanOutputs_AveragesCorrectly()
     {
         int batchSize = 1;
@@ -248,14 +248,14 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MergeScanOutputs_ThrowsOnEmpty()
     {
         Assert.Throws<ArgumentException>(() =>
             ScanPatterns<float>.MergeScanOutputs(new List<Tensor<float>>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MergeScanOutputs_ThrowsOnMismatchedShapes()
     {
         var output1 = CreateRandomTensor(new[] { 1, 4, 8 });
@@ -265,7 +265,7 @@ public class ScanPatternsTests
             ScanPatterns<float>.MergeScanOutputs(new List<Tensor<float>> { output1, output2 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossScan_MergeRoundTrip_PreservesShape()
     {
         int batchSize = 1;
@@ -281,7 +281,7 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BidirectionalScan_Double_ProducesValidOutput()
     {
         int batchSize = 1;

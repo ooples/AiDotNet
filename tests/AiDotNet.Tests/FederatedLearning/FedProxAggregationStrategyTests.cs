@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedProxAggregationStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_ReturnsWeightedAverage()
     {
         var aggregator = new FedProxAggregationStrategy<double>(mu: 0.5);

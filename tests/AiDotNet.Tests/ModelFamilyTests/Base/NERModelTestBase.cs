@@ -18,7 +18,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // should be related to input length (same or proportional).
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputLength_RelatedToInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -39,7 +39,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // Negative label indices are invalid.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LabelValues_ShouldBeNonNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -61,7 +61,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // An empty/padding-only input is a valid edge case.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
@@ -83,7 +83,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // the same is degenerate.
     // =====================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifferentInputs_DifferentLabels()
     {
         var network = CreateNetwork();

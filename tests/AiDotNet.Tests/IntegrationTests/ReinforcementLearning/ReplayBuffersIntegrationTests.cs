@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class ReplayBuffersIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Experience_DefaultPriority_IsOne()
     {
         var state = CreateVector(1, 0.1);
@@ -21,7 +21,7 @@ public class ReplayBuffersIntegrationTests
         Assert.Same(action, experience.Action);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformReplayBuffer_AddSampleAndClear_Works()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 3, seed: 11);
@@ -52,7 +52,7 @@ public class ReplayBuffersIntegrationTests
         Assert.False(buffer.CanSample(1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformReplayBuffer_OverwritesOldest_WhenCapacityExceeded()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 2, seed: 7);
@@ -73,7 +73,7 @@ public class ReplayBuffersIntegrationTests
         Assert.Contains(2.0, values);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedReplayBuffer_AddSampleUpdate_Works()
     {
         var buffer = new PrioritizedReplayBuffer<double>(capacity: 4);

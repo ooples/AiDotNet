@@ -16,7 +16,7 @@ public class RLHFAlignmentTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidOptions_CreatesInstance()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -27,13 +27,13 @@ public class RLHFAlignmentTests
         Assert.NotNull(alignment.GetOptions());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new RLHFAlignment<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomOptions_PreservesOptions()
     {
         var options = new AlignmentMethodOptions<double>
@@ -67,7 +67,7 @@ public class RLHFAlignmentTests
 
     #region AlignModel Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignModel_WithValidData_ReturnsAlignedModel()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -80,7 +80,7 @@ public class RLHFAlignmentTests
         Assert.NotNull(alignedModel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignModel_SetsRewardModelTrained()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -95,7 +95,7 @@ public class RLHFAlignmentTests
         Assert.True(alignment.IsRewardModelTrained);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignModel_AlignedModelProducesPredictions()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -111,7 +111,7 @@ public class RLHFAlignmentTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignModel_AlignedModelOutputsClampedTo01()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -129,7 +129,7 @@ public class RLHFAlignmentTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignModel_WithEmptyFeedback_StillWorks()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -146,7 +146,7 @@ public class RLHFAlignmentTests
 
     #region EvaluateAlignment Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_WithNullModel_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -156,7 +156,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(null!, evalData));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_WithNullEvaluationData_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -166,7 +166,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(model, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_ReturnsValidMetrics()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -187,7 +187,7 @@ public class RLHFAlignmentTests
         Assert.InRange(metrics.OverallAlignmentScore, 0.0, 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_HonestyScoreIsOne()
     {
         // The IsHonest method always returns true (placeholder)
@@ -201,7 +201,7 @@ public class RLHFAlignmentTests
         Assert.Equal(1.0, metrics.HonestyScore);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_OverallScoreIsAverageOfThreeScores()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -215,7 +215,7 @@ public class RLHFAlignmentTests
         Assert.Equal(expectedOverall, metrics.OverallAlignmentScore, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_WithReferenceScores_ComputesPreferenceMatch()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -238,7 +238,7 @@ public class RLHFAlignmentTests
         Assert.True(metrics.PreferenceMatchRate >= 0.0 && metrics.PreferenceMatchRate <= 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateAlignment_WithoutRewardModel_UsesDefaultScore()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -264,7 +264,7 @@ public class RLHFAlignmentTests
 
     #region ApplyConstitutionalPrinciples Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_WithNullModel_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -274,7 +274,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(null!, principles));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_WithNullPrinciples_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -284,7 +284,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(model, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_ReturnsWrappedModel()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -298,7 +298,7 @@ public class RLHFAlignmentTests
         Assert.NotSame(model, constitutionalModel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_WrappedModelProducesPredictions()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -314,7 +314,7 @@ public class RLHFAlignmentTests
         Assert.Equal(3, output.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_WithEmptyPrinciples_Works()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -327,7 +327,7 @@ public class RLHFAlignmentTests
         Assert.NotNull(constitutionalModel);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyConstitutionalPrinciples_ModelMetadataPreserved()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -345,7 +345,7 @@ public class RLHFAlignmentTests
 
     #region PerformRedTeaming Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_WithNullModel_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -355,7 +355,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(null!, prompts));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_WithNullPrompts_ThrowsArgumentNullException()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -365,7 +365,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(model, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_WithEmptyPrompts_ReturnsEmptyResults()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -381,7 +381,7 @@ public class RLHFAlignmentTests
         Assert.Empty(results.Vulnerabilities);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_ReturnsValidResults()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -403,7 +403,7 @@ public class RLHFAlignmentTests
         Assert.InRange(results.SuccessRate, 0.0, 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_DetectsHighVarianceVulnerability()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -420,7 +420,7 @@ public class RLHFAlignmentTests
         Assert.Equal("HighVariance", results.VulnerabilityTypes[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_DetectsExtremeBiasVulnerability()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -437,7 +437,7 @@ public class RLHFAlignmentTests
         Assert.Equal("ExtremeBias", results.VulnerabilityTypes[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_NoVulnerabilityForNormalOutput()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -454,7 +454,7 @@ public class RLHFAlignmentTests
         Assert.Equal("None", results.VulnerabilityTypes[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_CreatesVulnerabilityReports()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -475,7 +475,7 @@ public class RLHFAlignmentTests
         Assert.NotEmpty(report.Recommendations);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PerformRedTeaming_CalculatesCorrectSuccessRate()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -499,7 +499,7 @@ public class RLHFAlignmentTests
 
     #region GetOptions Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetOptions_ReturnsSameOptions()
     {
         var options = new AlignmentMethodOptions<double> { LearningRate = 0.002 };
@@ -514,7 +514,7 @@ public class RLHFAlignmentTests
 
     #region Reset Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reset_CompletesWithoutError()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -528,7 +528,7 @@ public class RLHFAlignmentTests
 
     #region Serialization Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Serialize_ReturnsNonEmptyBytes()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -540,7 +540,7 @@ public class RLHFAlignmentTests
         Assert.NotEmpty(bytes);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -548,7 +548,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentNullException>(() => alignment.Deserialize(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_RestoresOptions()
     {
         var options = new AlignmentMethodOptions<double>
@@ -570,7 +570,7 @@ public class RLHFAlignmentTests
         Assert.Equal(0.15, restored.KLCoefficient);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_ResetsRewardModel()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -590,7 +590,7 @@ public class RLHFAlignmentTests
         Assert.False(alignment.IsRewardModelTrained);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SerializeDeserialize_RoundTrip()
     {
         var options = new AlignmentMethodOptions<double>
@@ -623,7 +623,7 @@ public class RLHFAlignmentTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_NullPath_ThrowsException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -631,7 +631,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentException>(() => alignment.SaveModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_EmptyPath_ThrowsException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -639,7 +639,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentException>(() => alignment.SaveModel(string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_WhitespacePath_ThrowsException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -647,7 +647,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentException>(() => alignment.SaveModel("   "));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_NullPath_ThrowsException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -655,7 +655,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentException>(() => alignment.LoadModel(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_EmptyPath_ThrowsException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -663,7 +663,7 @@ public class RLHFAlignmentTests
         Assert.Throws<ArgumentException>(() => alignment.LoadModel(string.Empty));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LoadModel_NonExistentFile_ThrowsFileNotFoundException()
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
@@ -671,7 +671,7 @@ public class RLHFAlignmentTests
         Assert.Throws<FileNotFoundException>(() => alignment.LoadModel("nonexistent_file.json"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveAndLoadModel_PreservesState()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"rlhf_test_{Guid.NewGuid()}.json");
@@ -703,7 +703,7 @@ public class RLHFAlignmentTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SaveModel_CreatesDirectory()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"rlhf_test_dir_{Guid.NewGuid()}");
@@ -728,7 +728,7 @@ public class RLHFAlignmentTests
 
     #region AlignmentFeedbackData Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_ValidatePreferences_EmptyPreferences_ReturnsTrue()
     {
         var data = new AlignmentFeedbackData<double>();
@@ -736,7 +736,7 @@ public class RLHFAlignmentTests
         Assert.True(data.ValidatePreferences());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_ValidatePreferences_ValidPreferences_ReturnsTrue()
     {
         var data = new AlignmentFeedbackData<double>
@@ -748,7 +748,7 @@ public class RLHFAlignmentTests
         Assert.True(data.ValidatePreferences());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_ValidatePreferences_OutOfBoundsPreferred_ReturnsFalse()
     {
         var data = new AlignmentFeedbackData<double>
@@ -760,7 +760,7 @@ public class RLHFAlignmentTests
         Assert.False(data.ValidatePreferences());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_ValidatePreferences_NegativeIndex_ReturnsFalse()
     {
         var data = new AlignmentFeedbackData<double>
@@ -772,7 +772,7 @@ public class RLHFAlignmentTests
         Assert.False(data.ValidatePreferences());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_ValidatePreferences_SameIndex_ReturnsFalse()
     {
         var data = new AlignmentFeedbackData<double>
@@ -784,7 +784,7 @@ public class RLHFAlignmentTests
         Assert.False(data.ValidatePreferences());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_EnsurePreferencesValid_ValidPreferences_NoException()
     {
         var data = new AlignmentFeedbackData<double>
@@ -797,7 +797,7 @@ public class RLHFAlignmentTests
         data.EnsurePreferencesValid();
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_EnsurePreferencesValid_InvalidPreferences_ThrowsException()
     {
         var data = new AlignmentFeedbackData<double>
@@ -809,7 +809,7 @@ public class RLHFAlignmentTests
         Assert.Throws<InvalidOperationException>(() => data.EnsurePreferencesValid());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentFeedbackData_EnsurePreferencesValid_PreferencesWithEmptyOutputs_ThrowsException()
     {
         var data = new AlignmentFeedbackData<double>
@@ -825,7 +825,7 @@ public class RLHFAlignmentTests
 
     #region AlignmentMetrics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentMetrics_DefaultValues()
     {
         var metrics = new AlignmentMetrics<double>();
@@ -839,7 +839,7 @@ public class RLHFAlignmentTests
         Assert.NotNull(metrics.AdditionalMetrics);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentMetrics_AdditionalMetrics_CanAdd()
     {
         var metrics = new AlignmentMetrics<double>();
@@ -852,7 +852,7 @@ public class RLHFAlignmentTests
 
     #region RedTeamingResults Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RedTeamingResults_DefaultValues()
     {
         var results = new RedTeamingResults<double>();
@@ -871,7 +871,7 @@ public class RLHFAlignmentTests
 
     #region VulnerabilityReport Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VulnerabilityReport_DefaultValues()
     {
         var report = new VulnerabilityReport();
@@ -884,7 +884,7 @@ public class RLHFAlignmentTests
         Assert.NotNull(report.Recommendations);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VulnerabilityReport_CanSetProperties()
     {
         var report = new VulnerabilityReport
@@ -909,7 +909,7 @@ public class RLHFAlignmentTests
 
     #region AlignmentMethodOptions Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AlignmentMethodOptions_DefaultValues()
     {
         var options = new AlignmentMethodOptions<double>();

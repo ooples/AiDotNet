@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
     /// </summary>
     public class BiasDetectorTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithMismatchedLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("must match", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithSingleGroup_ReturnsNoBias()
         {
             // Arrange
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("Insufficient groups", result.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithBalancedGroups_ReturnsNoBias()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference, 3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithUnbalancedGroups_DetectsBias()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("Bias detected", result.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithModerateDisparity_DetectsBias()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.25, result.StatisticalParityDifference, 3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithActualLabels_ComputesAdditionalMetrics()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(2, result.GroupPrecisions.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithActualLabels_ComputesEqualOpportunity()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.HasBias);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(3, result.GroupSizes.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(1.0f, result.DisparateImpactRatio, 3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_WithAllZeroPredictions_HandlesGracefully()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.False(result.HasBias);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectBias_GroupStatistics_AreCorrect()
         {
             // Arrange

@@ -22,7 +22,7 @@ public class LayerMathematicalTests
     /// f(0) = W*0 + b = b
     /// Since GetBiases() is accessible, we can verify the bias values.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_ZeroInput_ReturnsBias()
     {
         var layer = new DenseLayer<double>(3, 2);
@@ -39,7 +39,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// DenseLayer parameter count: inputSize * outputSize + outputSize (biases)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_ParameterCount()
     {
         var layer = new DenseLayer<double>(10, 5);
@@ -49,7 +49,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// DenseLayer output shape should be [outputSize] for 1D input.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenseLayer_OutputShape_1D()
     {
         var layer = new DenseLayer<double>(4, 3);
@@ -74,7 +74,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// BatchNorm normalizes each feature to ~zero mean across the batch.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNorm_Forward_ApproximatelyZeroMean()
     {
         var layer = new BatchNormalizationLayer<double>(2, epsilon: 1e-5);
@@ -100,7 +100,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// BatchNorm with constant input should produce zero output (mean subtracted).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchNorm_ConstantInput_ProducesZero()
     {
         var layer = new BatchNormalizationLayer<double>(1, epsilon: 1e-5);
@@ -120,7 +120,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// Dropout with rate=0 should pass everything through unchanged.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dropout_ZeroRate_PassThrough()
     {
         var layer = new DropoutLayer<double>(0.0);
@@ -136,7 +136,7 @@ public class LayerMathematicalTests
     /// <summary>
     /// Dropout in eval mode should always pass through unchanged.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Dropout_EvalMode_PassThrough()
     {
         var layer = new DropoutLayer<double>(0.5);

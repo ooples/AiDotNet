@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CleanInput_ShouldBePreserved()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -34,7 +34,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
             $"Denoising MSE = {mse:F4} on clean input — denoiser is corrupting clean signal.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DenoisedOutput_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

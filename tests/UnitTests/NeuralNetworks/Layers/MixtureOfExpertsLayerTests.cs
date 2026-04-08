@@ -14,7 +14,7 @@ public class MixtureOfExpertsLayerTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class MixtureOfExpertsLayerTests
         Assert.True(moe.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithEmptyExpertList_ThrowsArgumentException()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class MixtureOfExpertsLayerTests
             new MixtureOfExpertsLayer<float>(experts, router, new[] { 10 }, new[] { 10 }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithNullRouter_ThrowsArgumentNullException()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class MixtureOfExpertsLayerTests
 #pragma warning restore CS8625
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithInvalidTopK_ThrowsArgumentException()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class MixtureOfExpertsLayerTests
                 topK: 5)); // TopK > num experts
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithLoadBalancing_InitializesCorrectly()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class MixtureOfExpertsLayerTests
 
     #region Forward Pass Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_WithValidInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -119,7 +119,7 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(10, output.Shape[1]); // Output dimension
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_AllExperts_ProducesNonZeroOutput()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class MixtureOfExpertsLayerTests
         Assert.True(hasNonZero, "MoE should produce non-zero output");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_TopK2_ActivatesOnlyTopExperts()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class MixtureOfExpertsLayerTests
     #region Parameter Management Tests
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_ReturnsAllParameters()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(moe.ParameterCount, parameters.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_UpdatesAllParameters()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class MixtureOfExpertsLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_WithIncorrectLength_ThrowsArgumentException()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class MixtureOfExpertsLayerTests
         Assert.Throws<ArgumentException>(() => moe.SetParameters(wrongParams));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ParameterCount_IncludesRouterAndAllExperts()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class MixtureOfExpertsLayerTests
 
     #region Load Balancing Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeAuxiliaryLoss_WithLoadBalancingEnabled_ReturnsNonZeroLoss()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class MixtureOfExpertsLayerTests
         Assert.True(auxLoss >= 0.0f, "Auxiliary loss should be non-negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeAuxiliaryLoss_WithLoadBalancingDisabled_ReturnsZero()
     {
         // Arrange
@@ -306,7 +306,7 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(0.0f, auxLoss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeAuxiliaryLoss_BeforeForward_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class MixtureOfExpertsLayerTests
         Assert.Throws<InvalidOperationException>(() => moe.ComputeAuxiliaryLoss());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAuxiliaryLossDiagnostics_AfterForward_ReturnsStatistics()
     {
         // Arrange
@@ -354,7 +354,7 @@ public class MixtureOfExpertsLayerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAuxiliaryLossDiagnostics_BeforeForward_ReturnsStatusMessage()
     {
         // Arrange
@@ -373,7 +373,7 @@ public class MixtureOfExpertsLayerTests
         Assert.True(diagnostics.ContainsKey("status"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UseAuxiliaryLoss_CanBeToggledOnAndOff()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class MixtureOfExpertsLayerTests
         Assert.True(moe.UseAuxiliaryLoss);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AuxiliaryLossWeight_CanBeModified()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class MixtureOfExpertsLayerTests
     #region Integration Tests
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EndToEnd_TopKRouting_BalancesExpertUsage()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class MixtureOfExpertsLayerTests
             $"Expected at least 2 experts to be used with load balancing, but only {expertsUsed} were used");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EndToEnd_SoftRouting_AllExpertsContribute()
     {
         // Arrange

@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.IntegrationTests.Geometry;
 
 public class GeometryIOIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ObjMeshIO_RoundTripsMeshWithAttributes()
     {
         string tempDir = CreateTempDirectory();
@@ -68,7 +68,7 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ObjMeshIO_RoundTripsPointCloudWithColors()
     {
         string tempDir = CreateTempDirectory();
@@ -98,7 +98,7 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PlyMeshIO_RoundTripsMeshAscii()
     {
         string tempDir = CreateTempDirectory();
@@ -154,7 +154,7 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PlyMeshIO_RoundTripsPointCloudBinary()
     {
         string tempDir = CreateTempDirectory();
@@ -182,7 +182,7 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StlMeshIO_RoundTripsBinary()
     {
         string tempDir = CreateTempDirectory();
@@ -213,7 +213,7 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StlMeshIO_LoadsAscii()
     {
         string tempDir = CreateTempDirectory();

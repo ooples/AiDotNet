@@ -10,7 +10,7 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PaddingStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MinimalPaddingStrategy_ShouldPadToMaxLength()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class PaddingStrategyTests
         Assert.Equal(1.0, attentionMask[2, 3]); // Actual data (last element)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MinimalPaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
@@ -72,7 +72,7 @@ public class PaddingStrategyTests
         Assert.Equal(9.0, unpaddedVectors[2][3]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketPaddingStrategy_ShouldPadToNearestBucket()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class PaddingStrategyTests
         Assert.NotNull(attentionMask);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketPaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class PaddingStrategyTests
         Assert.Equal(2, unpaddedVectors[1].Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_ShouldPadToFixedSize()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class PaddingStrategyTests
         Assert.NotNull(attentionMask);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_ShouldThrow_WhenVectorExceedsFixedSize()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class PaddingStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.PadBatch(vectors, out _));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class PaddingStrategyTests
         Assert.Equal(4, unpaddedVectors[1].Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PaddingStrategies_ShouldThrow_WhenVectorsArrayEmpty()
     {
         // Arrange
@@ -193,7 +193,7 @@ public class PaddingStrategyTests
 
     #region PR #758 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_Constructor_ThrowsOnNonPositiveFixedLength()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -202,7 +202,7 @@ public class PaddingStrategyTests
             new FixedSizePaddingStrategy(fixedLength: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketPaddingStrategy_Constructor_ThrowsOnNullOrEmptyBucketSizes()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -211,7 +211,7 @@ public class PaddingStrategyTests
             new BucketPaddingStrategy(Array.Empty<int>()));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MinimalPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
@@ -262,7 +262,7 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MinimalPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange
@@ -281,7 +281,7 @@ public class PaddingStrategyTests
         Assert.Contains("-1", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class PaddingStrategyTests
         Assert.Contains("-5", ex.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FixedSizePaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange

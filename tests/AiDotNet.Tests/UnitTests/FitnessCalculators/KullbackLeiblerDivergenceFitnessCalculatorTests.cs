@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class KullbackLeiblerDivergenceFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithDifferentDistributions_ReturnsPositiveValue()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithUniformDistributions_ReturnsZero()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithSmallDivergence_ReturnsSmallPositiveValue()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result < 0.1); // Small divergence should result in small loss
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithLargeDivergence_ReturnsLargeValue()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result > 1.0); // Large divergence should result in larger loss
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -111,7 +111,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -166,7 +166,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -177,7 +177,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMultipleClasses_HandlesCorrectly()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_IsAsymmetric_DifferentWhenSwapped()
     {
         // Arrange

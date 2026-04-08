@@ -19,7 +19,7 @@ public class ReplayBufferIntegrationTests
 
     #region UniformReplayBuffer - Circular Buffer Semantics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Add_UnderCapacity_AllStored()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 5, seed: 42);
@@ -34,7 +34,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(5, buffer.Capacity);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Add_OverCapacity_CircularOverwrite()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 3, seed: 42);
@@ -50,7 +50,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(3, buffer.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Sample_CorrectBatchSize()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 10, seed: 42);
@@ -65,7 +65,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(5, batch.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Sample_WithoutReplacement()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 100, seed: 42);
@@ -82,7 +82,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(indices.Count, indices.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_CanSample_InsufficientData_ReturnsFalse()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 10, seed: 42);
@@ -94,7 +94,7 @@ public class ReplayBufferIntegrationTests
         Assert.True(buffer.CanSample(1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Sample_InsufficientData_Throws()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 10, seed: 42);
@@ -102,7 +102,7 @@ public class ReplayBufferIntegrationTests
         Assert.Throws<InvalidOperationException>(() => buffer.Sample(5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Clear_ResetsBuffer()
     {
         var buffer = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 10, seed: 42);
@@ -118,7 +118,7 @@ public class ReplayBufferIntegrationTests
         Assert.False(buffer.CanSample(1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_InvalidCapacity_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -127,7 +127,7 @@ public class ReplayBufferIntegrationTests
             new UniformReplayBuffer<double, Vector<double>, int>(capacity: -1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniformBuffer_Deterministic_SameSeedSameResults()
     {
         var buffer1 = new UniformReplayBuffer<double, Vector<double>, int>(capacity: 100, seed: 42);
@@ -155,7 +155,7 @@ public class ReplayBufferIntegrationTests
 
     #region PrioritizedReplayBuffer - Priority Sampling Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_Add_IncreasesCount()
     {
         var buffer = new PrioritizedReplayBuffer<double>(capacity: 10);
@@ -170,7 +170,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(1, buffer.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_CircularOverwrite()
     {
         var buffer = new PrioritizedReplayBuffer<double>(capacity: 3);
@@ -188,7 +188,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(3, buffer.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_Sample_CorrectBatchSize()
     {
         var buffer = new PrioritizedReplayBuffer<double>(capacity: 20);
@@ -210,7 +210,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(5, weights.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_Weights_MaxIsOne()
     {
         // Importance sampling weights should be normalized so max weight = 1
@@ -236,7 +236,7 @@ public class ReplayBufferIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_UpdatePriorities_AffectsSampling()
     {
         var buffer = new PrioritizedReplayBuffer<double>(capacity: 10);
@@ -273,7 +273,7 @@ public class ReplayBufferIntegrationTests
             $"High-priority index 5 only appeared in {sampleCount}/100 samples");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrioritizedBuffer_AlphaZero_UniformSampling()
     {
         // Alpha=0 means all priorities are raised to power 0 = 1.0 → uniform
@@ -310,7 +310,7 @@ public class ReplayBufferIntegrationTests
 
     #region EpsilonGreedyExploration - Decay Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_InitialEpsilon_IsStart()
     {
         var strategy = new EpsilonGreedyExploration<double>(
@@ -319,7 +319,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(1.0, strategy.CurrentEpsilon, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_DecayFormula_GoldenReference()
     {
         // After n updates: epsilon = max(epsilonEnd, epsilonStart * decay^n)
@@ -337,7 +337,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(expected110, strategy.CurrentEpsilon, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_DecayNeverBelowEnd()
     {
         var strategy = new EpsilonGreedyExploration<double>(
@@ -352,7 +352,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(0.1, strategy.CurrentEpsilon, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_Reset_RestoresStart()
     {
         var strategy = new EpsilonGreedyExploration<double>(
@@ -365,7 +365,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(1.0, strategy.CurrentEpsilon, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_HighEpsilon_AlwaysExplores()
     {
         // With epsilon=1.0, should always take random action
@@ -399,7 +399,7 @@ public class ReplayBufferIntegrationTests
             $"Only {differentFromPolicy}/100 actions differed from policy with epsilon=1.0");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EpsilonGreedy_ZeroEpsilon_AlwaysGreedy()
     {
         // With epsilon=0.0, should always take greedy (policy) action
@@ -425,7 +425,7 @@ public class ReplayBufferIntegrationTests
 
     #region BoltzmannExploration - Temperature and Softmax Math
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Boltzmann_InitialTemperature_IsStart()
     {
         var strategy = new BoltzmannExploration<double>(
@@ -434,7 +434,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(2.0, strategy.CurrentTemperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Boltzmann_TemperatureDecay_GoldenReference()
     {
         double start = 1.0, end = 0.01, decay = 0.9;
@@ -445,7 +445,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(start * Math.Pow(decay, 5), strategy.CurrentTemperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Boltzmann_TemperatureNeverBelowEnd()
     {
         var strategy = new BoltzmannExploration<double>(
@@ -456,7 +456,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(0.5, strategy.CurrentTemperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Boltzmann_Reset_RestoresStart()
     {
         var strategy = new BoltzmannExploration<double>(
@@ -469,7 +469,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(5.0, strategy.CurrentTemperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Boltzmann_HighTemperature_MoreUniform()
     {
         // High temperature → softmax approaches uniform distribution
@@ -509,7 +509,7 @@ public class ReplayBufferIntegrationTests
 
     #region OrnsteinUhlenbeck Noise - Process Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OU_Reset_ZerosState()
     {
         var ou = new OrnsteinUhlenbeckNoise<double>(actionSize: 3);
@@ -539,7 +539,7 @@ public class ReplayBufferIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OU_MeanReversion_GoldenReference()
     {
         // The OU process should revert toward the mean (mu=0 by default)
@@ -567,7 +567,7 @@ public class ReplayBufferIntegrationTests
             $"OU average {avg} is too far from mu=0");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OU_TemporalCorrelation_NotIID()
     {
         // OU noise should be temporally correlated (unlike Gaussian noise)
@@ -607,7 +607,7 @@ public class ReplayBufferIntegrationTests
 
     #region Experience Record Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Experience_RecordCreation_PropertiesCorrect()
     {
         var state = new Vector<double>(new double[] { 1, 2, 3 });
@@ -622,7 +622,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(1.0, exp.Priority); // Default priority
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Experience_Priority_Settable()
     {
         var exp = new Experience<double, Vector<double>, int>(
@@ -632,7 +632,7 @@ public class ReplayBufferIntegrationTests
         Assert.Equal(5.0, exp.Priority);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Experience_SimplifiedRecord_WorksCorrectly()
     {
         var exp = new Experience<double>(

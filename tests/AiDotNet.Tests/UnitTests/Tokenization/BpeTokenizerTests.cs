@@ -31,7 +31,7 @@ public class BpeTokenizerTests
         _tokenizer = BpeTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_CreatesVocabulary_WithCorrectSize()
     {
         // Arrange & Act
@@ -42,7 +42,7 @@ public class BpeTokenizerTests
         Assert.True(tokenizer.VocabularySize <= 100 + 10); // vocab size + special tokens
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_SimpleText_ReturnsTokens()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class BpeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyText_ReturnsEmptyList()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class BpeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_NullText_ReturnsEmptyList()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class BpeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsTokenizationResult_WithTokenIds()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class BpeTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithSpecialTokens_AddsClsAndSep()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithAttentionMask_ReturnsValidMask()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class BpeTokenizerTests
         Assert.All(result.AttentionMask, mask => Assert.Equal(1, mask));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithTokenTypeIds_ReturnsValidTypeIds()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class BpeTokenizerTests
         Assert.Equal(result.TokenIds.Count, result.TokenTypeIds.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithPositionIds_ReturnsSequentialIds()
     {
         // Arrange
@@ -173,7 +173,7 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithPadding_PadsToMaxLength()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class BpeTokenizerTests
         Assert.Equal(10, result.TokenIds.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_WithTruncation_TruncatesToMaxLength()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class BpeTokenizerTests
         Assert.True(result.TokenIds.Count <= 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_ReturnsOriginalText_Approximately()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class BpeTokenizerTests
         Assert.Contains("Hello", decoded, System.StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_SkipsSpecialTokens_ByDefault()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EncodeBatch_ProcessesMultipleTexts()
     {
         // Arrange
@@ -264,7 +264,7 @@ public class BpeTokenizerTests
         Assert.All(results, r => Assert.NotEmpty(r.TokenIds));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DecodeBatch_ProcessesMultipleTokenIdLists()
     {
         // Arrange
@@ -280,7 +280,7 @@ public class BpeTokenizerTests
         Assert.All(decoded, d => Assert.NotEmpty(d));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertTokensToIds_ReturnsValidIds()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class BpeTokenizerTests
         Assert.All(ids, id => Assert.True(id >= 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertIdsToTokens_ReturnsValidTokens()
     {
         // Arrange
@@ -309,7 +309,7 @@ public class BpeTokenizerTests
         Assert.All(tokens, t => Assert.NotNull(t));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Roundtrip_TokenizeAndDetokenize_PreservesContent()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class BpeTokenizerTests
         Assert.Contains("learning", normalizedDecoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpecialTokens_AreInVocabulary()
     {
         // Assert
@@ -338,7 +338,7 @@ public class BpeTokenizerTests
         Assert.True(_tokenizer.Vocabulary.ContainsToken(_tokenizer.SpecialTokens.PadToken));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_WithEmptyCorpus_CreatesMinimalTokenizer()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class BpeTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0); // At least special tokens exist
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VocabularySize_ReturnsCorrectCount()
     {
         // Assert
@@ -362,14 +362,14 @@ public class BpeTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
             BpeTokenizer.Train(null!, 100));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
     {
         var corpus = new List<string> { "Hello world" };

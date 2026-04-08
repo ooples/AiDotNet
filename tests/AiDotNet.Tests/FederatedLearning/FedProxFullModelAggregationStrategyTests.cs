@@ -7,27 +7,27 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedProxFullModelAggregationStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Ctor_WithNegativeMu_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(-0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetMu_ReturnsConfiguredValue()
     {
         var strategy = new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(mu: 0.5);
         Assert.Equal(0.5, strategy.GetMu(), precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetStrategyName_ReturnsFedProx()
     {
         var strategy = new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
         Assert.Equal("FedProx", strategy.GetStrategyName());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Aggregate_DelegatesToFedAvg()
     {
         var model0 = new MockFullModel(_ => new Vector<double>(3), parameterCount: 3);

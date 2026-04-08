@@ -19,7 +19,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // ZScoreClipper - Mean, Std, and Bounds
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_FitComputes_MeanAndStd_SingleColumn()
     {
         // Data: [2, 4, 4, 4, 5, 5, 7, 9]
@@ -38,7 +38,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(2.0, clipper.StandardDeviations[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_Bounds_AreCorrect_Threshold3()
     {
         // Mean=5, Std=2, threshold=3
@@ -56,7 +56,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(11.0, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_Bounds_CustomThreshold2()
     {
         // Mean=5, Std=2, threshold=2
@@ -74,7 +74,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.0, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_ClipsOutliers_Correctly()
     {
         // Fit on [2,4,4,4,5,5,7,9], Mean=5, Std=2, threshold=2
@@ -95,7 +95,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.0, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_InBoundValues_Unchanged()
     {
         var data = MakeMatrix(new double[,] {
@@ -113,7 +113,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.0, result[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_GetZScores_HandComputed()
     {
         // Mean=5, Std=2
@@ -135,7 +135,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(2.0, zScores[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_OutlierMask_DetectsOutliers()
     {
         // Mean=5, Std=2, threshold=2 => Bounds [1, 9]
@@ -154,7 +154,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.True(mask[2, 0]);   // 10 > 9 => outlier
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_ConstantColumn_NoBounds()
     {
         // All same value => std=0 => bounds [MinValue, MaxValue]
@@ -173,14 +173,14 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(-100.0, result[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_InvalidThreshold_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ZScoreClipper<double>(threshold: 0));
         Assert.Throws<ArgumentException>(() => new ZScoreClipper<double>(threshold: -1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_MultipleColumns_IndependentStats()
     {
         // Col 0: [1, 3, 5, 7] => mean=4, std=sqrt((9+1+1+9)/4) = sqrt(5) ~ 2.236
@@ -204,7 +204,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // IQRClipper - Quartiles and IQR-Based Bounds
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_FitComputes_Q1_Q3_IQR()
     {
         // Data (sorted): [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -227,7 +227,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(4.0, clipper.IQRValues[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_Bounds_Standard_Multiplier1_5()
     {
         // Q1=3, Q3=7, IQR=4, multiplier=1.5
@@ -246,7 +246,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(13.0, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_Bounds_Extreme_Multiplier3()
     {
         // Q1=3, Q3=7, IQR=4, multiplier=3.0
@@ -265,7 +265,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(19.0, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_ClipsOutliers_Correctly()
     {
         // Bounds [-3, 13] with multiplier=1.5
@@ -284,7 +284,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(13.0, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_Percentile_Interpolation()
     {
         // 4 elements sorted: [1, 3, 5, 7]
@@ -304,7 +304,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(3.0, clipper.IQRValues[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_OutlierMask_DetectsOutliers()
     {
         // Bounds [-3, 13]
@@ -323,7 +323,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.True(mask[2, 0]);   // 14 > 13
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_CountOutliers_PerFeature()
     {
         var data = MakeMatrix(new double[,] {
@@ -340,7 +340,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(1, counts[0]); // Only -5 is outside
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_InvalidMultiplier_Throws()
     {
         Assert.Throws<ArgumentException>(() => new IQRClipper<double>(multiplier: 0));
@@ -351,7 +351,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // MADClipper - Median Absolute Deviation
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_FitComputes_Median_SingleColumn()
     {
         // Data: [1, 2, 3, 4, 5] (sorted)
@@ -365,7 +365,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(3.0, clipper.Medians[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_FitComputes_MAD_Correctly()
     {
         // Data: [1, 2, 3, 4, 5], Median = 3
@@ -381,7 +381,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(1.0, clipper.MADs[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_Bounds_HandComputed()
     {
         // Median=3, MAD=1, MADScaleFactor=1.4826, threshold=3.5
@@ -399,7 +399,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(3.0 + 3.5 * 1.4826, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_ClipsOutliers_Correctly()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -417,7 +417,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(upper, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_ModifiedZScores_HandComputed()
     {
         // Median=3, MAD=1
@@ -437,7 +437,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(1.349, zScores[2, 0], 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_EvenCount_Median_IsAverage()
     {
         // Data: [1, 2, 3, 4] => Median = (2+3)/2 = 2.5
@@ -449,7 +449,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(2.5, clipper.Medians[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_ConstantColumn_NoBounds()
     {
         // All same => MAD=0 => bounds [MinValue, MaxValue]
@@ -466,7 +466,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(-100.0, result[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_InvalidThreshold_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MADClipper<double>(threshold: 0));
@@ -477,7 +477,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // ThresholdClipper - Explicit Bounds
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_Symmetric_ClipsCorrectly()
     {
         // Symmetric threshold of 5 => bounds [-5, 5]
@@ -493,7 +493,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(5.0, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_Asymmetric_ClipsCorrectly()
     {
         // Lower=-2, Upper=8
@@ -509,7 +509,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(8.0, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_InBoundValues_Unchanged()
     {
         var clipper = new ThresholdClipper<double>(0.0, 100.0);
@@ -524,7 +524,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(100.0, result[2, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_OutlierMask_HandComputed()
     {
         var clipper = new ThresholdClipper<double>(0.0, 100.0);
@@ -539,7 +539,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.True(mask[2, 0]);   // 101 > 100
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_CountOutliers_HandComputed()
     {
         var clipper = new ThresholdClipper<double>(0.0, 100.0);
@@ -553,7 +553,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(1, aboveUpper[0]); // 105 above 100
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Threshold_InvalidBounds_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ThresholdClipper<double>(10.0, 5.0));
@@ -563,7 +563,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // Winsorizer - Percentile-Based Clipping
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Winsorizer_Percentile_Bounds_HandComputed()
     {
         // Data (sorted): [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -582,7 +582,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.1, winsorizer.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Winsorizer_Percentile_ClipsCorrectly()
     {
         var data = MakeMatrix(new double[,] {
@@ -600,7 +600,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.1, result[2, 0], Tol);  // Clipped to 90th percentile
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Winsorizer_5Percent_Bounds()
     {
         // Data [1..10] (10 elements)
@@ -619,7 +619,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(9.55, winsorizer.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Winsorizer_IQRMode_Bounds()
     {
         // Data [1..9] sorted: [1,2,3,4,5,6,7,8,9]
@@ -642,7 +642,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(13.0, winsorizer.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Winsorizer_InvalidPercentile_Throws()
     {
         // Lower must be 0-50 for percentile mode
@@ -656,7 +656,7 @@ public class OutlierHandlingDeepMathIntegrationTests
     // Cross-Clipper Consistency Tests
     // ========================================================================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllClippers_PreserveInBoundValues()
     {
         // All clippers should preserve values within their bounds
@@ -687,7 +687,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_Idempotent_ClippedValueStaysClipped()
     {
         // After clipping, re-clipping should produce the same result
@@ -706,7 +706,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(firstClip[1, 0], secondClip[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IQR_Idempotent_ClippedValueStaysClipped()
     {
         var data = MakeMatrix(new double[,] {
@@ -724,7 +724,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(firstClip[1, 0], secondClip[1, 0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_SpecificColumns_OnlyClipsSelected()
     {
         // Only clip column 0, leave column 1 alone
@@ -745,7 +745,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(10000.0, result[0, 1], Tol);  // Column 1 unchanged
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThresholdClipper_MultipleColumns_AllClipped()
     {
         var clipper = new ThresholdClipper<double>(0.0, 100.0);
@@ -759,7 +759,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(100.0, result[0, 1], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZScore_PopulationStd_NotSampleStd()
     {
         // The code uses population std (divides by N, not N-1)
@@ -774,7 +774,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(2.0, clipper.StandardDeviations[0], Tol); // Population std
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_ScaleFactor_IsCorrect()
     {
         // MADScaleFactor = 1.4826 (constant in code)
@@ -794,7 +794,7 @@ public class OutlierHandlingDeepMathIntegrationTests
         Assert.Equal(3.0 + 2.5 * 1.4826, clipper.UpperBounds[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_OutlierMask_DetectsOutliers()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });

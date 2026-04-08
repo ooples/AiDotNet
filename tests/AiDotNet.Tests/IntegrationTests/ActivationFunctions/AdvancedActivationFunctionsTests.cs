@@ -16,7 +16,7 @@ public class AdvancedActivationFunctionsTests
 
     #region Swish / SiLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_ActivateZero_ReturnsZero()
     {
         var swish = new SwishActivation<double>();
@@ -24,7 +24,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_LargePositive_ApproachesInput()
     {
         var swish = new SwishActivation<double>();
@@ -33,7 +33,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > 9.9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_NegativeInput_AllowsSomeNegative()
     {
         var swish = new SwishActivation<double>();
@@ -43,7 +43,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > -0.5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwishActivation_Derivative_AtZero_IsHalf()
     {
         var swish = new SwishActivation<double>();
@@ -52,7 +52,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.5, deriv, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SiLUActivation_MatchesSwish()
     {
         var silu = new SiLUActivation<double>();
@@ -69,7 +69,7 @@ public class AdvancedActivationFunctionsTests
 
     #region Mish Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MishActivation_ActivateZero_ReturnsZero()
     {
         var mish = new MishActivation<double>();
@@ -77,7 +77,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MishActivation_LargePositive_ApproachesInput()
     {
         var mish = new MishActivation<double>();
@@ -86,7 +86,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > 9.9);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MishActivation_NegativeInput_AllowsSomeNegative()
     {
         var mish = new MishActivation<double>();
@@ -94,7 +94,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result < 0.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MishActivation_Derivative_NotNaN()
     {
         var mish = new MishActivation<double>();
@@ -110,7 +110,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SELU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SELUActivation_ActivatePositive_ReturnsScaledInput()
     {
         var selu = new SELUActivation<double>();
@@ -120,7 +120,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result < 1.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SELUActivation_ActivateZero_ReturnsZero()
     {
         var selu = new SELUActivation<double>();
@@ -128,7 +128,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SELUActivation_ActivateNegative_ReturnsBoundedNegative()
     {
         var selu = new SELUActivation<double>();
@@ -138,7 +138,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > -2.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SELUActivation_DerivativePositive_IsLambda()
     {
         var selu = new SELUActivation<double>();
@@ -152,7 +152,7 @@ public class AdvancedActivationFunctionsTests
 
     #region CELU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CELUActivation_ActivatePositive_ReturnsInput()
     {
         var celu = new CELUActivation<double>(1.0);
@@ -160,7 +160,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CELUActivation_ActivateNegative_ReturnsBoundedNegative()
     {
         var celu = new CELUActivation<double>(1.0);
@@ -170,7 +170,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > -1.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CELUActivation_ActivateZero_ReturnsZero()
     {
         var celu = new CELUActivation<double>(1.0);
@@ -178,7 +178,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CELUActivation_DifferentAlpha_AffectsNegativeRange()
     {
         var celu1 = new CELUActivation<double>(0.5);
@@ -193,7 +193,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SoftPlus Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftPlusActivation_AlwaysPositive()
     {
         var sp = new SoftPlusActivation<double>();
@@ -205,7 +205,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftPlusActivation_ActivateZero_ReturnsLn2()
     {
         var sp = new SoftPlusActivation<double>();
@@ -214,7 +214,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(Math.Log(2), result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftPlusActivation_LargePositive_ApproachesInput()
     {
         var sp = new SoftPlusActivation<double>();
@@ -223,7 +223,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(20.0, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftPlusActivation_DerivativeIsSigmoid()
     {
         var sp = new SoftPlusActivation<double>();
@@ -236,7 +236,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SoftSign Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftSignActivation_ActivateZero_ReturnsZero()
     {
         var ss = new SoftSignActivation<double>();
@@ -244,7 +244,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftSignActivation_OutputBoundedNegOneToOne()
     {
         var ss = new SoftSignActivation<double>();
@@ -257,7 +257,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftSignActivation_KnownValue()
     {
         var ss = new SoftSignActivation<double>();
@@ -266,7 +266,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftSignActivation_IsOddFunction()
     {
         var ss = new SoftSignActivation<double>();
@@ -279,7 +279,7 @@ public class AdvancedActivationFunctionsTests
 
     #region HardSwish Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSwishActivation_ActivateZero_ReturnsZero()
     {
         var hs = new HardSwishActivation<double>();
@@ -287,7 +287,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSwishActivation_LargePositive_ReturnsInput()
     {
         var hs = new HardSwishActivation<double>();
@@ -295,7 +295,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HardSwishActivation_LargeNegative_ReturnsZero()
     {
         var hs = new HardSwishActivation<double>();
@@ -307,7 +307,7 @@ public class AdvancedActivationFunctionsTests
 
     #region ReLU6 Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLU6Activation_PositiveBelow6_ReturnsInput()
     {
         var relu6 = new ReLU6Activation<double>();
@@ -315,7 +315,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLU6Activation_Above6_Returns6()
     {
         var relu6 = new ReLU6Activation<double>();
@@ -323,7 +323,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(6.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLU6Activation_Negative_ReturnsZero()
     {
         var relu6 = new ReLU6Activation<double>();
@@ -331,7 +331,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLU6Activation_DerivativeInRange_ReturnsOne()
     {
         var relu6 = new ReLU6Activation<double>();
@@ -339,7 +339,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, deriv, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReLU6Activation_DerivativeAbove6_ReturnsZero()
     {
         var relu6 = new ReLU6Activation<double>();
@@ -351,7 +351,7 @@ public class AdvancedActivationFunctionsTests
 
     #region PReLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLUActivation_PositiveInput_ReturnsInput()
     {
         var prelu = new PReLUActivation<double>(0.01);
@@ -359,7 +359,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PReLUActivation_NegativeInput_ReturnsScaled()
     {
         var prelu = new PReLUActivation<double>(0.25);
@@ -371,7 +371,7 @@ public class AdvancedActivationFunctionsTests
 
     #region ThresholdedReLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThresholdedReLUActivation_AboveThreshold_ReturnsInput()
     {
         var trelu = new ThresholdedReLUActivation<double>(1.0);
@@ -379,7 +379,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThresholdedReLUActivation_BelowThreshold_ReturnsZero()
     {
         var trelu = new ThresholdedReLUActivation<double>(1.0);
@@ -387,7 +387,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ThresholdedReLUActivation_Negative_ReturnsZero()
     {
         var trelu = new ThresholdedReLUActivation<double>(1.0);
@@ -399,7 +399,7 @@ public class AdvancedActivationFunctionsTests
 
     #region RReLU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RReLUActivation_PositiveInput_ReturnsInput()
     {
         var rrelu = new RReLUActivation<double>(0.125, 0.333);
@@ -407,7 +407,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RReLUActivation_NegativeInput_ReturnsScaledBetweenBounds()
     {
         var rrelu = new RReLUActivation<double>(0.125, 0.333);
@@ -421,7 +421,7 @@ public class AdvancedActivationFunctionsTests
 
     #region ISRU Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ISRUActivation_ActivateZero_ReturnsZero()
     {
         var isru = new ISRUActivation<double>(1.0);
@@ -429,7 +429,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ISRUActivation_OutputBounded()
     {
         var isru = new ISRUActivation<double>(1.0);
@@ -446,7 +446,7 @@ public class AdvancedActivationFunctionsTests
 
     #region LiSHT Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LiSHTActivation_ActivateZero_ReturnsZero()
     {
         var lisht = new LiSHTActivation<double>();
@@ -454,7 +454,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LiSHTActivation_PositiveInput_ReturnsPositive()
     {
         var lisht = new LiSHTActivation<double>();
@@ -463,7 +463,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LiSHTActivation_NegativeInput_ReturnsPositive()
     {
         var lisht = new LiSHTActivation<double>();
@@ -472,7 +472,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LiSHTActivation_IsEvenFunction()
     {
         var lisht = new LiSHTActivation<double>();
@@ -485,7 +485,7 @@ public class AdvancedActivationFunctionsTests
 
     #region BentIdentity Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BentIdentityActivation_ActivateZero_ReturnsZero()
     {
         var bi = new BentIdentityActivation<double>();
@@ -493,7 +493,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BentIdentityActivation_LargePositive_ApproachesInput()
     {
         var bi = new BentIdentityActivation<double>();
@@ -501,7 +501,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result > 99.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BentIdentityActivation_Derivative_NotNaN()
     {
         var bi = new BentIdentityActivation<double>();
@@ -517,7 +517,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SignActivation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SignActivation_PositiveInput_ReturnsOne()
     {
         var sign = new SignActivation<double>();
@@ -525,7 +525,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SignActivation_NegativeInput_ReturnsMinusOne()
     {
         var sign = new SignActivation<double>();
@@ -533,7 +533,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SignActivation_Zero_ReturnsZero()
     {
         var sign = new SignActivation<double>();
@@ -545,7 +545,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SquashActivation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SquashActivation_OutputBounded()
     {
         var squash = new SquashActivation<double>();
@@ -562,7 +562,7 @@ public class AdvancedActivationFunctionsTests
 
     #region ScaledTanh Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanhActivation_ActivateZero_ReturnsZero()
     {
         var st = new ScaledTanhActivation<double>(1.0);
@@ -570,7 +570,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScaledTanhActivation_DifferentBeta_AffectsScale()
     {
         var st1 = new ScaledTanhActivation<double>(0.5);
@@ -585,7 +585,7 @@ public class AdvancedActivationFunctionsTests
 
     #region SQRBF Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBFActivation_ActivateZero_ReturnsOne()
     {
         var sqrbf = new SQRBFActivation<double>(1.0);
@@ -593,7 +593,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SQRBFActivation_LargeInput_ApproachesZero()
     {
         var sqrbf = new SQRBFActivation<double>(1.0);
@@ -605,7 +605,7 @@ public class AdvancedActivationFunctionsTests
 
     #region Softmax Variants Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftmaxActivation_VectorOutput_LogProbabilities()
     {
         var lsm = new LogSoftmaxActivation<double>();
@@ -618,7 +618,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftminActivation_VectorOutput_SumsToOne()
     {
         var sm = new SoftminActivation<double>();
@@ -633,7 +633,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftminActivation_SmallestInputGetsLargestProbability()
     {
         var sm = new SoftminActivation<double>();
@@ -644,7 +644,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(result[0] > result[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparsemaxActivation_VectorOutput_SumsToOne()
     {
         var sm = new SparsemaxActivation<double>();
@@ -659,7 +659,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparsemaxActivation_ProducesSparseOutput()
     {
         var sm = new SparsemaxActivation<double>();
@@ -674,7 +674,7 @@ public class AdvancedActivationFunctionsTests
         Assert.True(zeroCount >= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TaylorSoftmaxActivation_VectorOutput_AllPositive()
     {
         var tsm = new TaylorSoftmaxActivation<double>(2);
@@ -686,7 +686,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogSoftminActivation_VectorOutput_AllNonPositive()
     {
         var lsm = new LogSoftminActivation<double>();
@@ -698,7 +698,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SphericalSoftmaxActivation_VectorOutput_AllPositive()
     {
         var ssm = new SphericalSoftmaxActivation<double>();
@@ -714,7 +714,7 @@ public class AdvancedActivationFunctionsTests
 
     #region BinarySpiking Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinarySpikingActivation_AboveThreshold_ReturnsOne()
     {
         var bs = new BinarySpikingActivation<double>();
@@ -722,7 +722,7 @@ public class AdvancedActivationFunctionsTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BinarySpikingActivation_BelowThreshold_ReturnsZero()
     {
         var bs = new BinarySpikingActivation<double>();
@@ -734,7 +734,7 @@ public class AdvancedActivationFunctionsTests
 
     #region GumbelSoftmax Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GumbelSoftmaxActivation_VectorOutput_AllPositive()
     {
         var gs = new GumbelSoftmaxActivation<double>(1.0, seed: 42);
@@ -750,7 +750,7 @@ public class AdvancedActivationFunctionsTests
 
     #region MaxoutActivation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxoutActivation_ReturnsMaxOfPieces()
     {
         var maxout = new MaxoutActivation<double>(2);
@@ -766,7 +766,7 @@ public class AdvancedActivationFunctionsTests
 
     #region HierarchicalSoftmax Activation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HierarchicalSoftmaxActivation_VectorOutput_AllPositive()
     {
         var hs = new HierarchicalSoftmaxActivation<double>(4);
@@ -782,7 +782,7 @@ public class AdvancedActivationFunctionsTests
 
     #region Vector and Tensor Operations Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllScalarActivations_VectorActivate_PreservesLength()
     {
         var activations = new IActivationFunction<double>[]
@@ -822,7 +822,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllScalarActivations_Derivative_NoNaN()
     {
         var activations = new IActivationFunction<double>[]
@@ -855,7 +855,7 @@ public class AdvancedActivationFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllScalarActivations_TensorActivate_PreservesShape()
     {
         var activations = new IActivationFunction<double>[]

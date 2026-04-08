@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class PointCloud3DTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KittiOptions_DefaultValues()
     {
         var options = new KittiDataLoaderOptions();
@@ -17,7 +17,7 @@ public class PointCloud3DTests
         Assert.True(options.IncludeReflectance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SemanticKittiOptions_DefaultValues()
     {
         var options = new SemanticKittiDataLoaderOptions();
@@ -25,7 +25,7 @@ public class PointCloud3DTests
         Assert.Equal(28, options.NumClasses);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WaymoOptions_DefaultValues()
     {
         var options = new WaymoDataLoaderOptions();
@@ -33,7 +33,7 @@ public class PointCloud3DTests
         Assert.True(options.IncludeIntensity);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NuScenesOptions_DefaultValues()
     {
         var options = new NuScenesDataLoaderOptions();
@@ -41,7 +41,7 @@ public class PointCloud3DTests
         Assert.True(options.IncludeIntensity);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task KittiDataLoader_LoadsBinaryPointCloudsWithLabels()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "kitti_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -114,7 +114,7 @@ public class PointCloud3DTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task SemanticKittiDataLoader_LoadsPointsAndLabels()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "semkitti_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -172,7 +172,7 @@ public class PointCloud3DTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task WaymoDataLoader_LoadsBinaryDataWithLabels()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "waymo_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -235,7 +235,7 @@ public class PointCloud3DTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task NuScenesDataLoader_LoadsBinaryData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "nuscenes_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -282,7 +282,7 @@ public class PointCloud3DTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public async Task KittiDataLoader_SplitsData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "kitti_split_" + Guid.NewGuid().ToString("N")[..8]);

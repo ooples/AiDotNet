@@ -5,13 +5,13 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class SecureAggregationVectorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ThrowsForNonPositiveParameterCount()
     {
         Assert.Throws<ArgumentException>(() => new SecureAggregationVector<double>(parameterCount: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeneratePairwiseSecrets_FiltersInvalidClientIds_AndMasksCancelInSum()
     {
         var secureAggregation = new SecureAggregationVector<double>(parameterCount: 2, randomSeed: 123);
@@ -32,7 +32,7 @@ public class SecureAggregationVectorTests
         Assert.Equal(6.0, sum[1], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MaskUpdate_ThrowsForInvalidInputs()
     {
         var secureAggregation = new SecureAggregationVector<double>(parameterCount: 2, randomSeed: 1);
@@ -43,7 +43,7 @@ public class SecureAggregationVectorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => secureAggregation.MaskUpdate(0, new Vector<double>(2), clientWeight: 0.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateSecurely_ThrowsWhenWeightsMissingOrInvalid()
     {
         var secureAggregation = new SecureAggregationVector<double>(parameterCount: 1, randomSeed: 5);
@@ -60,14 +60,14 @@ public class SecureAggregationVectorTests
         Assert.Throws<ArgumentException>(() => secureAggregation.AggregateSecurely(maskedUpdates, clientWeights: new Dictionary<int, double> { [0] = -1.0, [1] = 0.0 }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GeneratePairwiseSecrets_UsesSecureRandom_WhenSeedNotProvided()
     {
         using var secureAggregation = new SecureAggregationVector<double>(parameterCount: 1);
         secureAggregation.GeneratePairwiseSecrets(new List<int> { 0, 1 });
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Dispose_MakesInstanceUnusable()
     {
         var secureAggregation = new SecureAggregationVector<double>(parameterCount: 1, randomSeed: 7);

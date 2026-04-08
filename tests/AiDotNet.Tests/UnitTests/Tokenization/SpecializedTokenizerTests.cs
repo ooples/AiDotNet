@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Tokenization;
 /// </summary>
 public class PhonemeTokenizerTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateARPAbet_CreatesValidTokenizer()
     {
         // Act
@@ -22,7 +22,7 @@ public class PhonemeTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_SimpleWord_ReturnsPhonemes()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyText_ReturnsEmpty()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class PhonemeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_MultipleWords_AddsSeparators()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class PhonemeTokenizerTests
         Assert.Contains("<space>", tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsValidTokenIds()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Vocabulary_ContainsARPAbetPhonemes()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class PhonemeTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("B"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_ReturnsPhonemeString()
     {
         // Arrange
@@ -105,7 +105,7 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_Digraph_UsesCorrectPhoneme()
     {
         // Arrange
@@ -127,7 +127,7 @@ public class PhonemeTokenizerTests
 /// </summary>
 public class MidiTokenizerTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateREMI_CreatesValidTokenizer()
     {
         // Act
@@ -138,7 +138,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_NoteEvent_ReturnsTokens()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class MidiTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_EmptyText_ReturnsEmpty()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class MidiTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_RestEvent_ReturnsTimeShift()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_BarEvent_ReturnsBarToken()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class MidiTokenizerTests
         Assert.Equal("Bar", tokens[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TokenizeNotes_SingleNote_ReturnsTokens()
     {
         // Arrange
@@ -215,7 +215,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TokenizeNotes_EmptyList_ReturnsEmpty()
     {
         // Arrange
@@ -229,7 +229,7 @@ public class MidiTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TokenizeNotes_MultipleNotes_IncludesPosition()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Position_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TokenizeNotes_CrossingBarLine_IncludesBar()
     {
         // Arrange
@@ -266,7 +266,7 @@ public class MidiTokenizerTests
         Assert.Contains("Bar", tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsValidTokenIds()
     {
         // Arrange
@@ -280,7 +280,7 @@ public class MidiTokenizerTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Vocabulary_ContainsPitchTokens()
     {
         // Arrange
@@ -292,7 +292,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_127"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Vocabulary_ContainsVelocityTokens()
     {
         // Arrange
@@ -305,7 +305,7 @@ public class MidiTokenizerTests
 
     // CPWord Strategy Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateCPWord_CreatesValidTokenizer()
     {
         // Act
@@ -316,7 +316,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CPWord_TokenizeNotes_SingleNote_ReturnsCompoundToken()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Note_60_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CPWord_TokenizeNotes_MultipleNotes_IncludesTimeShift()
     {
         // Arrange
@@ -354,7 +354,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CPWord_Vocabulary_ContainsCompoundTokens()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Bar"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CPWord_Encode_ReturnsValidTokenIds()
     {
         // Arrange
@@ -382,7 +382,7 @@ public class MidiTokenizerTests
 
     // SimpleNote Strategy Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateSimpleNote_CreatesValidTokenizer()
     {
         // Act
@@ -393,7 +393,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleNote_TokenizeNotes_SingleNote_ReturnsPitchAndDuration()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleNote_TokenizeNotes_MultipleNotes_IncludesRest()
     {
         // Arrange
@@ -433,7 +433,7 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Rest_"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleNote_Vocabulary_ContainsPitchTokens()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_127"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleNote_Vocabulary_ContainsDurationTokens()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Duration_16"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleNote_Encode_ReturnsValidTokenIds()
     {
         // Arrange
@@ -472,7 +472,7 @@ public class MidiTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateREMI_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
@@ -481,7 +481,7 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateREMI(ticksPerBeat: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateREMI_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
@@ -490,7 +490,7 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateREMI(numVelocityBins: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateCPWord_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
@@ -499,7 +499,7 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateCPWord(ticksPerBeat: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateCPWord_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
@@ -508,7 +508,7 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateCPWord(numVelocityBins: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateSimpleNote_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
@@ -539,14 +539,14 @@ public class SentencePieceTokenizerTests
         _tokenizer = SentencePieceTokenizer.Train(corpus, 500);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Train_CreatesVocabulary()
     {
         // Assert
         Assert.True(_tokenizer.VocabularySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_ReturnsTokens()
     {
         // Arrange
@@ -559,7 +559,7 @@ public class SentencePieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Tokenize_UsesSentencePieceMarker()
     {
         // Arrange
@@ -574,7 +574,7 @@ public class SentencePieceTokenizerTests
         Assert.Contains("\u2581", joinedTokens);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Decode_RemovesMarker()
     {
         // Arrange
@@ -588,7 +588,7 @@ public class SentencePieceTokenizerTests
         Assert.DoesNotContain("\u2581", decoded);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Roundtrip_PreservesContent()
     {
         // Arrange - Use text from training corpus to ensure tokens are in vocabulary
@@ -603,7 +603,7 @@ public class SentencePieceTokenizerTests
         Assert.Contains("learning", decoded.ToLowerInvariant());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Encode_ReturnsValidResult()
     {
         // Arrange

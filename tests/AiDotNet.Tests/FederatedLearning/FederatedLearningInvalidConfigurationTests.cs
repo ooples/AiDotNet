@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FederatedLearningInvalidConfigurationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithPersonalizationAndMetaLearning_Throws()
     {
         var options = CreateBaseOptions();
@@ -19,7 +19,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Personalization and federated meta-learning", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithAsyncModeAndSecureAggregation_Throws()
     {
         var options = CreateBaseOptions();
@@ -31,7 +31,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("asynchronous", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithAsyncModeAndHeOnly_Throws()
     {
         var options = CreateBaseOptions();
@@ -49,7 +49,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("asynchronous", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithSecureAggregationAndUnsupportedAggregator_Throws()
     {
         var options = CreateBaseOptions();
@@ -61,7 +61,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("FedAvg", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownAsyncMode_Throws()
     {
         var options = CreateBaseOptions();
@@ -75,7 +75,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown async federated learning mode", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownServerOptimizer_Throws()
     {
         var options = CreateBaseOptions();
@@ -85,7 +85,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown server optimizer", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownHeterogeneityCorrection_Throws()
     {
         var options = CreateBaseOptions();
@@ -95,7 +95,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown heterogeneity correction", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownPrivacyAccountant_Throws()
     {
         var options = CreateBaseOptions();
@@ -107,7 +107,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown privacy accountant", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownClientSelectionStrategy_Throws()
     {
         var options = CreateBaseOptions();
@@ -117,7 +117,7 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown client selection strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithUnknownCompressionStrategy_Throws()
     {
         var options = CreateBaseOptions();

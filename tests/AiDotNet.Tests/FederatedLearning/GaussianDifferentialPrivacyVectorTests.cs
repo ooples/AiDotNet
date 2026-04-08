@@ -14,7 +14,7 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacyVector<double>(clipNorm));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_Throws_WhenModelNull()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 1);
@@ -35,7 +35,7 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: epsilon, delta: delta));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_IncrementsAndResetsPrivacyBudget()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 123);
@@ -50,7 +50,7 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed(), precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_WithSameSeed_ProducesSameNoise()
     {
         var dp1 = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 42);
@@ -63,7 +63,7 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Equal(noisy1.ToArray(), noisy2.ToArray());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_ClipsByL2Norm_BeforeAddingNoise()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 7);

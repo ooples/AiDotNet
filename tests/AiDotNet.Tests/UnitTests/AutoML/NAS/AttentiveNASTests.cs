@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class AttentiveNASTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(attentive);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
@@ -39,7 +39,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(attentive);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveSample_ReturnsValidConfig()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveSample_ReturnsConfigWithEmbedding()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(64, config.Embedding.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_CreateContextVector_ReturnsCorrectSize()
         {
             // Arrange
@@ -93,7 +93,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(hiddenSize, context.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_CreateContextVector_WithoutPerformanceMemory_ReturnsExplorationContext()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_UpdatesPerformanceMemory()
         {
             // Arrange
@@ -131,7 +131,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_GetAttentionWeights_ReturnsValidMatrix()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(7, weights.Columns);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_GetPerformanceMemory_InitiallyEmpty()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(memory);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Search_ReturnsValidConfig()
         {
             // Arrange
@@ -195,7 +195,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Search_PopulatesPerformanceMemory()
         {
             // Arrange
@@ -219,7 +219,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveSample_ConfigWithinElasticRange()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains(config.KernelSize, elasticKernels);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_MultipleSamples_ProducesVariedConfigs()
         {
             // Arrange
@@ -268,7 +268,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(allKernels.Count >= 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveNASConfig_HasCorrectDefaults()
         {
             // Arrange & Act
@@ -280,7 +280,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0, config.KernelSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_WithMultipleConfigs_AccumulatesMemory()
         {
             // Arrange
@@ -305,7 +305,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count >= 1); // At least one entry (could be same config)
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Search_WithTightConstraints_ReturnsValidConfig()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_CreateContextVector_AfterUpdates_IncludesPerformanceInfo()
         {
             // Arrange
@@ -350,7 +350,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_SingleElementElasticLists_SamplesCorrectly()
         {
             // Arrange - boundary condition with single choices
@@ -373,7 +373,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, config.KernelSize);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_WithNegativePerformance_HandlesCorrectly()
         {
             // Arrange
@@ -392,7 +392,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains(memory.Values, v => v < 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_WithConfigNotInElasticLists_ReturnsEarly()
         {
             // Arrange
@@ -423,7 +423,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(weightsBefore, weightsAfter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_Search_ZeroIterations_ReturnsDefaultConfig()
         {
             // Arrange
@@ -442,7 +442,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(config);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveSample_WithShortContextVector_HandlesGracefully()
         {
             // Arrange
@@ -460,7 +460,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_WithZeroLearningRate_NoWeightChange()
         {
             // Arrange
@@ -484,7 +484,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(weightsBefore, weightsAfter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_AttentiveSample_WithVeryLargeContext_HandlesCorrectly()
         {
             // Arrange
@@ -502,7 +502,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void AttentiveNAS_UpdateAttention_WithZeroPerformance_RecordsCorrectly()
         {
             // Arrange

@@ -49,7 +49,7 @@ public class NeuralNetworkBaseIntegrationTests
         return network;
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NeuralNetworkBase_ForwardWithFeatures_ReturnsExpectedShapes()
     {
         TestNeuralNetwork network = BuildNetwork();
@@ -69,7 +69,7 @@ public class NeuralNetworkBaseIntegrationTests
 
     // ComputeInputGradient test removed — method deleted in tape-based autodiff migration
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NeuralNetworkBase_ParameterCount_UpdatesWhenLayersChange()
     {
         var architecture = new NeuralNetworkArchitecture<float>(

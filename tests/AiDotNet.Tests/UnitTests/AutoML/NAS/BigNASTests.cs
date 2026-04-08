@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class BigNASTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(bignas);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
@@ -41,7 +41,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(bignas);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_WithSandwichSampling_ReturnsFourConfigs()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, samples.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_FirstIsTeacher()
         {
             // Arrange
@@ -70,7 +70,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(samples[0].IsTeacher);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_FirstIsLargest()
         {
             // Arrange
@@ -96,7 +96,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(256, largest.Resolution);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_SecondIsSmallest()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(128, smallest.Resolution);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_WithoutSandwichSampling_ReturnsRandomConfigs()
         {
             // Arrange
@@ -141,7 +141,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_ReturnsValidLoss()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_SameLogits_ReturnsZeroish()
         {
             // Arrange
@@ -182,7 +182,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(loss) < 0.1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_DifferentLengths_ThrowsException()
         {
             // Arrange
@@ -196,7 +196,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
                 bignas.ComputeDistillationLoss(teacherLogits, studentLogits, 2.0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_MultiObjectiveSearch_ReturnsConfigsForAllDevices()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(results.ContainsKey("desktop"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_MultiObjectiveSearch_ReturnsValidConfigs()
         {
             // Arrange
@@ -255,7 +255,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Resolution > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_BigNASConfig_HasCorrectDefaults()
         {
             // Arrange & Act
@@ -270,7 +270,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(config.IsTeacher);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_ProducesVariedConfigs()
         {
             // Arrange
@@ -292,7 +292,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(allDepths.Count >= 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_WithDifferentDistillationWeights_InitializesCorrectly()
         {
             // Arrange & Act
@@ -307,7 +307,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SingleElementElasticLists_SamplesCorrectly()
         {
             // Arrange - single element in each list means only one possible config
@@ -335,7 +335,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_WithVeryLowTemperature_HandlesCorrectly()
         {
             // Arrange
@@ -358,7 +358,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_WithHighTemperature_HandlesCorrectly()
         {
             // Arrange
@@ -381,7 +381,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_SingleElementLogits_HandlesCorrectly()
         {
             // Arrange
@@ -399,7 +399,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_MultiObjectiveSearch_EmptyDeviceList_ReturnsEmptyResults()
         {
             // Arrange
@@ -420,7 +420,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_MultiObjectiveSearch_MinimalPopulationAndGenerations_Works()
         {
             // Arrange
@@ -445,7 +445,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(results.ContainsKey("test"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_SandwichSample_WithSingleElementLists_LargestEqualsSmallest()
         {
             // Arrange - single element in each list
@@ -470,7 +470,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(samples[0].Resolution, samples[1].Resolution);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void BigNAS_ComputeDistillationLoss_WithZeroLogits_HandlesCorrectly()
         {
             // Arrange

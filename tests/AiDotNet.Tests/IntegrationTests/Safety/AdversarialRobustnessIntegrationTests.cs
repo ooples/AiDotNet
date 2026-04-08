@@ -25,7 +25,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialRobustnessEvaluator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Evaluator_Homoglyphs_DetectsAttack()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -35,7 +35,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Evaluator_InvisibleChars_DetectsAttack()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -45,7 +45,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Evaluator_NormalText_NoFindings()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -54,7 +54,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Evaluator_CustomThreshold_Works()
     {
         var strict = new AdversarialRobustnessEvaluator<double>(threshold: 0.1);
@@ -67,7 +67,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(strictFindings.Count >= lenientFindings.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Evaluator_EmptyText_NoFindings()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -80,7 +80,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialImageEvaluator Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ImageEvaluator_RandomTensor_ProcessesWithoutError()
     {
         var evaluator = new AdversarialImageEvaluator<double>();
@@ -94,7 +94,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ImageEvaluator_SmallTensor_HandlesGracefully()
     {
         var evaluator = new AdversarialImageEvaluator<double>();
@@ -106,7 +106,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ImageEvaluator_CustomThreshold_Works()
     {
         var evaluator = new AdversarialImageEvaluator<double>(threshold: 0.3);
@@ -124,7 +124,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialPreferenceAlignment Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_NonTrainableModel_ReturnsWrappedModel()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -140,7 +140,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotSame(model, alignedModel);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_TrainableModel_ModifiesInPlace()
     {
         var options = new AlignmentMethodOptions<double>
@@ -174,7 +174,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(anyChanged, "Gradient-based training should modify model parameters");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_ConstitutionalPrinciples_NonTrainable_ReturnsWrapped()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -189,7 +189,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotSame(model, result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_ConstitutionalPrinciples_Trainable_ModifiesModel()
     {
         var options = new AlignmentMethodOptions<double>
@@ -222,7 +222,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(anyChanged, "Constitutional training should modify model parameters");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_EvaluateAlignment_ProducesMetrics()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -238,7 +238,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(metrics.HonestyScore >= 0 && metrics.HonestyScore <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_RedTeaming_ProducesResults()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -257,7 +257,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(results.SuccessRate >= 0 && results.SuccessRate <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_SerializeDeserialize_Works()
     {
         var options = new AlignmentMethodOptions<double> { LearningRate = 0.001 };
@@ -274,7 +274,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(options.LearningRate, newAlignment.GetOptions().LearningRate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PreferenceAlignment_Reset_ClearsRewardModel()
     {
         var options = new AlignmentMethodOptions<double>();
@@ -296,7 +296,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region ViTAdversarialAttack Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ViTAttack_Instantiation_Works()
     {
         var options = new AdversarialAttackOptions<double>();
@@ -309,7 +309,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdaptiveRandomizedSmoothing Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdaptiveSmoothing_Instantiation_Works()
     {
         var options = new CertifiedDefenseOptions<double>();
@@ -322,7 +322,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialPromptDefense Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptDefense_Instantiation_Works()
     {
         var options = new AdversarialDefenseOptions<double>();

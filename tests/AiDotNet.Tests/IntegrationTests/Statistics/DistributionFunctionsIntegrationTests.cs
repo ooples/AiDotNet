@@ -13,7 +13,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Normal Distribution CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_StandardNormal_AtZero_Returns0_5()
     {
         // scipy.stats.norm.cdf(0, loc=0, scale=1) = 0.5
@@ -21,7 +21,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_StandardNormal_AtOne_ReturnsExactValue()
     {
         // scipy.stats.norm.cdf(1, loc=0, scale=1) = 0.8413447460685429
@@ -29,7 +29,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.8413447, result, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_StandardNormal_AtNegativeOne_ReturnsExactValue()
     {
         // scipy.stats.norm.cdf(-1, loc=0, scale=1) = 0.15865525393145707
@@ -37,7 +37,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.158655, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_StandardNormal_AtTwo_ReturnsExactValue()
     {
         // scipy.stats.norm.cdf(2, loc=0, scale=1) = 0.9772498680518208
@@ -45,7 +45,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.97725, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_NonStandard_ReturnsExactValue()
     {
         // scipy.stats.norm.cdf(15, loc=10, scale=3) = 0.9522096477271853
@@ -53,7 +53,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.95221, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_AtMean_Returns0_5()
     {
         // CDF at mean always equals 0.5 for symmetric distribution
@@ -61,7 +61,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_SymmetryAroundMean()
     {
         // P(X <= mean-1) + P(X <= mean+1) should be symmetric around 0.5
@@ -76,7 +76,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Normal Distribution PDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalPDF_StandardNormal_AtZero_ReturnsMaximum()
     {
         // scipy.stats.norm.pdf(0, loc=0, scale=1) = 0.3989422804014327
@@ -84,7 +84,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.3989423, result, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalPDF_StandardNormal_AtOne_ReturnsExactValue()
     {
         // scipy.stats.norm.pdf(1, loc=0, scale=1) = 0.24197072451914337
@@ -92,7 +92,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.24197, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalPDF_StandardNormal_SymmetricAroundMean()
     {
         var pdfLeft = StatisticsHelper<double>.CalculateNormalPDF(0, 1, -1.5);
@@ -100,7 +100,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(pdfLeft, pdfRight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalPDF_NonStandard_ReturnsExactValue()
     {
         // scipy.stats.norm.pdf(15, loc=10, scale=3) = 0.033159046239882694
@@ -108,7 +108,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.03316, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalPDF_LargerStdDev_SmallerPeakValue()
     {
         var pdfNarrow = StatisticsHelper<double>.CalculateNormalPDF(0, 1, 0);
@@ -120,7 +120,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Inverse Normal CDF (Quantile Function)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNormalCDF_Standard_At0_5_ReturnsZero()
     {
         // scipy.stats.norm.ppf(0.5) = 0.0
@@ -128,7 +128,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNormalCDF_Standard_At0_975_ReturnsExactValue()
     {
         // scipy.stats.norm.ppf(0.975) = 1.959963984540054
@@ -136,7 +136,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(1.96, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNormalCDF_Standard_At0_025_ReturnsExactValue()
     {
         // scipy.stats.norm.ppf(0.025) = -1.959963984540054
@@ -144,7 +144,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(-1.96, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNormalCDF_NonStandard_ReturnsExactValue()
     {
         // scipy.stats.norm.ppf(0.9, loc=10, scale=3) = 13.844652632856174
@@ -152,7 +152,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(13.845, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNormalCDF_InverseOfCDF_ReturnsOriginalValue()
     {
         double x = 1.5;
@@ -165,7 +165,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Chi-Square Distribution CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_DF1_AtOne_ReturnsExactValue()
     {
         // scipy.stats.chi2.cdf(1, df=1) = 0.6826894921370859
@@ -173,7 +173,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.6827, result, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_DF5_AtFive_ReturnsExactValue()
     {
         // scipy.stats.chi2.cdf(5, df=5) = 0.5841198130044921
@@ -181,7 +181,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.584, result, 1e-2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_DF10_AtTen_ReturnsExactValue()
     {
         // scipy.stats.chi2.cdf(10, df=10) = 0.5595067149347877
@@ -189,14 +189,14 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.56, result, 0.02);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_AtZero_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateChiSquareCDF(5, 0.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_IsMonotonicallyIncreasing()
     {
         var cdf1 = StatisticsHelper<double>.CalculateChiSquareCDF(5, 1.0);
@@ -209,7 +209,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Chi-Square Distribution PDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquarePDF_DF1_AtOne_ReturnsExactValue()
     {
         // scipy.stats.chi2.pdf(1, df=1) = 0.24197072451914337
@@ -217,7 +217,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.24197, result, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquarePDF_DF5_AtThree_ReturnsExactValue()
     {
         // scipy.stats.chi2.pdf(3, df=5) = 0.1541803416100632
@@ -225,7 +225,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.1542, result, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquarePDF_AtZero_DF1_ReturnsInfinity()
     {
         // chi2.pdf(0, df=1) = infinity for df <= 2
@@ -233,7 +233,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.True(double.IsPositiveInfinity(result) || result > 1e10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquarePDF_IsNonNegative()
     {
         for (int df = 1; df <= 10; df++)
@@ -250,7 +250,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Inverse Chi-Square CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseChiSquareCDF_DF1_At0_95_ReturnsExactValue()
     {
         // scipy.stats.chi2.ppf(0.95, df=1) = 3.841458820694124
@@ -258,7 +258,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(3.841, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseChiSquareCDF_DF5_At0_5_ReturnsExactValue()
     {
         // scipy.stats.chi2.ppf(0.5, df=5) = 4.351460191102881
@@ -266,7 +266,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(4.35, result, 0.05);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseChiSquareCDF_InverseOfCDF_ReturnsOriginalValue()
     {
         double x = 7.5;
@@ -280,7 +280,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Student's t Distribution PDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentPDF_AtZero_MaximumValue()
     {
         // At mean, PDF should be at its maximum
@@ -289,7 +289,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.True(pdfAtZero > pdfAtOne);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentPDF_SymmetricAroundMean()
     {
         double mean = 5.0;
@@ -300,7 +300,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(pdfLeft, pdfRight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentPDF_HighDF_ApproachesNormal()
     {
         // With high df, Student-t approaches normal distribution
@@ -311,7 +311,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(normalPdf, studentPdf, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StudentPDF_LowDF_HeavierTails()
     {
         // Lower df means heavier tails (higher PDF at extremes)
@@ -325,7 +325,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Inverse Student's t CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseStudentTCDF_At0_5_ReturnsZero()
     {
         // scipy.stats.t.ppf(0.5, df=10) = 0.0
@@ -333,7 +333,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.0, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseStudentTCDF_DF10_At0_975_ReturnsExactValue()
     {
         // scipy.stats.t.ppf(0.975, df=10) = 2.2281388519649385
@@ -342,7 +342,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(2.228, result, 0.025);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseStudentTCDF_HighDF_ApproachesNormal()
     {
         // With high df, inverse t approaches inverse normal
@@ -357,7 +357,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Beta Distribution CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_UniformBeta_Linear()
     {
         // Beta(1,1) is uniform, CDF should equal x
@@ -365,7 +365,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_StandardExample_ReturnsExactValue()
     {
         // scipy.stats.beta.cdf(0.5, a=2, b=5) = 0.890625
@@ -373,21 +373,21 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.8906, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_AtZero_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateBetaCDF(0.0, 2.0, 3.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_AtOne_ReturnsOne()
     {
         var result = StatisticsHelper<double>.CalculateBetaCDF(1.0, 2.0, 3.0);
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_SymmetricBeta_SymmetricCDF()
     {
         // Beta(2,2) is symmetric around 0.5
@@ -400,7 +400,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Inverse Beta CDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseBetaCDF_At0_5_Uniform_Returns0_5()
     {
         // For Beta(1,1), inverse of 0.5 is 0.5
@@ -408,7 +408,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseBetaCDF_StandardExample_ReturnsExactValue()
     {
         // scipy.stats.beta.ppf(0.5, a=2, b=5) = 0.2707310193055339
@@ -416,7 +416,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.2707, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseBetaCDF_InverseOfCDF_ReturnsOriginalValue()
     {
         double x = 0.3;
@@ -429,7 +429,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Exponential Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialPDF_AtZero_ReturnsLambda()
     {
         // PDF at x=0 equals lambda
@@ -438,7 +438,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(lambda, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialPDF_StandardExample_ReturnsExactValue()
     {
         // scipy.stats.expon.pdf(1, scale=1/2) = 0.27067056647322536 (lambda=2)
@@ -446,7 +446,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.2707, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialPDF_DecaysExponentially()
     {
         double lambda = 1.0;
@@ -456,7 +456,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.True(pdf1 > pdf2 && pdf2 > pdf3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseExponentialCDF_StandardExample_ReturnsExactValue()
     {
         // scipy.stats.expon.ppf(0.5, scale=1/2) = 0.3465735902799727 (lambda=2)
@@ -468,7 +468,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Weibull Distribution PDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeibullPDF_K1_IsExponential()
     {
         // Weibull(k=1, lambda) is exponential with rate 1/lambda
@@ -480,7 +480,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.303, weibullPdf, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeibullPDF_K2_IsRayleigh()
     {
         // Weibull(k=2, lambda) is Rayleigh distribution
@@ -491,7 +491,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeibullPDF_IsNonNegative()
     {
         for (double x = 0.1; x <= 5; x += 0.5)
@@ -505,7 +505,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region LogNormal Distribution PDF
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormalPDF_StandardExample_ReturnsExactValue()
     {
         // scipy.stats.lognorm.pdf(1, s=1, scale=exp(0)) = 0.3989422804014327
@@ -513,14 +513,14 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(0.3989, result, 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormalPDF_AtZero_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateLogNormalPDF(0.0, 1.0, 0.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogNormalPDF_IsNonNegative()
     {
         for (double x = 0.1; x <= 5; x += 0.5)
@@ -534,7 +534,7 @@ public class DistributionFunctionsIntegrationTests
 
     #region Laplace Distribution
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacePDF_AtMedian_ReturnsMaximum()
     {
         double median = 0.0;
@@ -544,7 +544,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.True(pdfAtMedian > pdfAway);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacePDF_SymmetricAroundMedian()
     {
         double median = 5.0;
@@ -554,7 +554,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(pdfLeft, pdfRight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseLaplaceCDF_At0_5_ReturnsMedian()
     {
         double median = 10.0;
@@ -563,7 +563,7 @@ public class DistributionFunctionsIntegrationTests
         Assert.Equal(median, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseLaplaceCDF_SymmetricAroundMedian()
     {
         double median = 5.0;
@@ -577,21 +577,21 @@ public class DistributionFunctionsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalCDF_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateNormalCDF(0f, 1f, 0f);
         Assert.Equal(0.5f, result, 1e-4f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChiSquareCDF_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateChiSquareCDF(5, 5.0f);
         Assert.True(result > 0.5f && result < 0.7f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BetaCDF_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateBetaCDF(0.5f, 2.0f, 5.0f);

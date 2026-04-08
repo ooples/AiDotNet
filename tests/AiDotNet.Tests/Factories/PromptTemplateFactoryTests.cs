@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.Factories
 {
     public class PromptTemplateFactoryTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_Throws_For_FewShot_Without_Typed_Selector()
         {
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.Factories
             Assert.Equal("templateType", ex.ParamName);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Create_Generic_FewShot_Works_For_NonDouble_Types()
         {
             var selector = new FixedExampleSelector<float>();

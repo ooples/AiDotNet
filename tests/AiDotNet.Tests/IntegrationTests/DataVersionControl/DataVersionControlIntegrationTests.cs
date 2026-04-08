@@ -59,7 +59,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithExplicitStorageDirectory_CreatesInstance()
     {
         // Test basic constructor with explicit storage directory
@@ -67,7 +67,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(dvc);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomStorageDirectory_CreatesDirectory()
     {
         var customStorage = Path.Combine(_testDirectory, "custom_storage");
@@ -82,7 +82,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region CreateDatasetVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithValidFile_ReturnsHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -94,7 +94,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithDescription_StoresDescription()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -106,7 +106,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("My description", version.Description);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_MultipleVersions_IncrementsVersionNumber()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -127,7 +127,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(3, version3.Version);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithTags_StoresTags()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -145,7 +145,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("api", version.Tags["source"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithNullDatasetName_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -155,7 +155,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetVersion(null!, dataPath));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithEmptyDataPath_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -164,7 +164,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetVersion("test", ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetVersion_WithDirectory_ComputesHashCorrectly()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -182,7 +182,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetDatasetVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetVersion_WithoutVersionHash_ReturnsLatest()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -198,7 +198,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("v2", latest.Description);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetVersion_WithSpecificHash_ReturnsCorrectVersion()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -214,7 +214,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("First", version.Description);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetVersion_WithNonexistentDataset_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -223,7 +223,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.GetDatasetVersion("nonexistent"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetVersion_WithNonexistentHash_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -238,7 +238,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetLatestDatasetVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetLatestDatasetVersion_ReturnsHighestVersionNumber()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -260,7 +260,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ListDatasetVersions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListDatasetVersions_ReturnsAllVersionsDescending()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -280,7 +280,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(1, versions[2].Version);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListDatasetVersions_IncludesVersionInfo()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -299,7 +299,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ListDatasets Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListDatasets_ReturnsAllDatasetNames()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -319,7 +319,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Contains("dataset_gamma", datasets);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListDatasets_WithFilter_ReturnsMatchingDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -340,7 +340,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("training_data", trainingDatasets[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListDatasets_WithTagFilter_ReturnsMatchingDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -360,7 +360,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ComputeDatasetHash Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeDatasetHash_SameContent_ReturnsSameHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -374,7 +374,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeDatasetHash_DifferentContent_ReturnsDifferentHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -387,7 +387,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEqual(hash1, hash2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeDatasetHash_Directory_ComputesHashOfAllFiles()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -401,7 +401,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeDatasetHash_NullPath_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -410,7 +410,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.ComputeDatasetHash(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComputeDatasetHash_NonexistentPath_ThrowsFileNotFoundException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -423,7 +423,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region VerifyDatasetIntegrity Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VerifyDatasetIntegrity_UnchangedFile_ReturnsTrue()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -435,7 +435,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.True(isValid);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VerifyDatasetIntegrity_ModifiedFile_ReturnsFalse()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -455,7 +455,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region LinkDatasetToRun Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinkDatasetToRun_CreatesLink()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -468,7 +468,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Contains("run_001", runs);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinkDatasetToRun_WithInvalidRunId_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -479,7 +479,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.LinkDatasetToRun("dataset", hash, ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetForRun_ReturnsLinkedDataset()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -493,7 +493,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, dataset.Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetForRun_WithUnlinkedRun_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -506,7 +506,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region TagDatasetVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TagDatasetVersion_CreatesTag()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -519,7 +519,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, taggedVersion.Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TagDatasetVersion_MultipleTagsOnSameVersion_AllTagsWork()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -539,7 +539,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, v3.Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TagDatasetVersion_WithEmptyTag_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -550,7 +550,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.TagDatasetVersion("dataset", hash, ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetByTag_WithNonexistentTag_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -565,7 +565,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region CompareDatasetVersions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompareDatasetVersions_IdenticalVersions_NoChanges()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -578,7 +578,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(0, comparison.RecordsRemoved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompareDatasetVersions_DifferentSizes_DetectsSchemaChange()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -594,7 +594,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(comparison.SchemaChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompareDatasetVersions_DifferentHashes_DetectsModification()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -613,7 +613,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region RecordDatasetLineage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecordDatasetLineage_StoresLineageInfo()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -640,7 +640,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("test_user", retrieved.Creator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetLineage_WithNoRecordedLineage_ReturnsDefaultLineage()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -654,7 +654,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Null(lineage.SourceDataset);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RecordDatasetLineage_WithNullLineage_ThrowsArgumentNullException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -669,7 +669,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region DeleteDatasetVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteDatasetVersion_RemovesVersion()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -686,7 +686,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash2, versions[0].Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteDatasetVersion_RemovesAssociatedTags()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -703,7 +703,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.GetDatasetByTag("dataset", "old_tag"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteDatasetVersion_LastVersion_RemovesDataset()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -716,7 +716,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.DoesNotContain("dataset", datasets);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteDatasetVersion_NonexistentVersion_DoesNotThrow()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -731,7 +731,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetDatasetStatistics Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetStatistics_ReturnsBasicStats()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -750,7 +750,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Snapshot Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetSnapshot_ReturnsSnapshotId()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -770,7 +770,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(snapshotId);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetSnapshot_ReturnsSnapshotMetadata()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -793,7 +793,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("My experiment", snapshot.Description);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAllDatasetsInSnapshot_ReturnsAllDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -821,7 +821,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash3, datasets["validation"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetSnapshot_WithEmptyDatasets_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -830,7 +830,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetSnapshot("empty_snapshot", new Dictionary<string, string>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateDatasetSnapshot_WithNullName_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -841,7 +841,7 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetSnapshot(null!, new Dictionary<string, string> { { "dataset", hash } }));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDatasetSnapshot_WithNonexistentSnapshot_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -854,7 +854,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DataVersionControl_PersistsAcrossInstances()
     {
         var dataPath = CreateTestFile("persist_test.csv", "persistent data");
@@ -875,7 +875,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, tagged.Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DataVersionControl_PersistsRunLinks()
     {
         var dataPath = CreateTestFile("run_link_test.csv", "data");
@@ -894,7 +894,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, dataset.Hash);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DataVersionControl_PersistsSnapshots()
     {
         var dataPath1 = CreateTestFile("snap1.csv", "data1");
@@ -925,7 +925,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DataVersionControl_ConcurrentVersionCreation_IsThreadSafe()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
@@ -956,7 +956,7 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Model Classes Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DatasetVersion_HasCorrectDefaults()
     {
         var version = new DatasetVersion<double>();
@@ -968,7 +968,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(version.Tags);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DatasetLineage_HasCorrectDefaults()
     {
         var lineage = new DatasetLineage();
@@ -981,7 +981,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(lineage.UsedInRuns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DatasetComparison_HasCorrectDefaults()
     {
         var comparison = new DatasetComparison<double>();
@@ -995,7 +995,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(comparison.StatisticalChanges);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DatasetStatistics_HasCorrectDefaults()
     {
         var stats = new DatasetStatistics<double>();
@@ -1007,7 +1007,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(stats.CategoricalStats);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NumericColumnStats_SupportsNullableValues()
     {
         var stats = new NumericColumnStats<double>();
@@ -1034,7 +1034,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(48.0, stats.Median);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CategoricalColumnStats_HasCorrectDefaults()
     {
         var stats = new CategoricalColumnStats();
@@ -1045,7 +1045,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(stats.ValueCounts);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DatasetSnapshot_HasCorrectDefaults()
     {
         var snapshot = new DatasetSnapshot();

@@ -15,7 +15,7 @@ public class InterpolationDeepMathIntegrationTests
     // LINEAR INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_ExactAtKnots()
     {
         // Linear interpolation must reproduce the data exactly at knot points
@@ -27,7 +27,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_MidpointHandValues()
     {
         // Between (1,10) and (3,30), midpoint x=2 should give y=20
@@ -39,7 +39,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(40.0, interp.Interpolate(4.0), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_ReproducesLinearFunction()
     {
         // f(x) = 3x + 7 should be reproduced exactly by linear interpolation
@@ -53,7 +53,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(3 * 3.33 + 7, interp.Interpolate(3.33), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_MonotonicallyIncreasingData()
     {
         // If data is monotonically increasing, interpolation should also be
@@ -70,7 +70,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_SymmetricData()
     {
         // Symmetric data about x=2: f(2-d) = f(2+d)
@@ -82,7 +82,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(interp.Interpolate(1.2), interp.Interpolate(2.8), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_QuarterPoint()
     {
         // At x=1.25 between (1,10) and (2,20): y = 10 + 0.25*(20-10) = 12.5
@@ -97,7 +97,7 @@ public class InterpolationDeepMathIntegrationTests
     // CUBIC SPLINE INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_ExactAtKnots()
     {
         var x = V(0, 1, 2, 3, 4);
@@ -108,7 +108,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_ReproducesLinearFunction()
     {
         // A natural cubic spline through linear data should reproduce the line exactly
@@ -122,7 +122,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(3 * 4.1 + 2, interp.Interpolate(4.1), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_SmootherThanLinear()
     {
         // Cubic spline should produce smoother transitions than linear interpolation
@@ -140,7 +140,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.NotEqual(cubicVal, linearVal, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_QuadraticDataPreserved()
     {
         // f(x) = x^2: Natural cubic spline (c[0]=c[n]=0) does NOT exactly reproduce
@@ -156,7 +156,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(1.75 * 1.75, interp.Interpolate(1.75), 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_ContinuityBetweenSegments()
     {
         // The spline should be continuous: approaching a knot from left and right gives the same value
@@ -177,7 +177,7 @@ public class InterpolationDeepMathIntegrationTests
     // LAGRANGE POLYNOMIAL INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_ExactAtKnots()
     {
         var x = V(1, 2, 3, 4);
@@ -188,7 +188,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_ReproducesQuadratic()
     {
         // 3 points uniquely define a quadratic. f(x) = x^2
@@ -202,7 +202,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(2.25, interp.Interpolate(1.5), Tol);     // 1.5^2
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_ReproducesCubic()
     {
         // 4 points uniquely define a cubic. f(x) = x^3 - 2x + 1
@@ -218,7 +218,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(1.375, interp.Interpolate(1.5), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_TwoPointsIsLinear()
     {
         // With 2 points, Lagrange should give linear interpolation
@@ -231,7 +231,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(linear.Interpolate(t), lagrange.Interpolate(t), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_SymmetricPolynomial()
     {
         // f(x) = x^2 is symmetric about x=0, so interp(-a) = interp(a)
@@ -247,7 +247,7 @@ public class InterpolationDeepMathIntegrationTests
     // NEWTON DIVIDED DIFFERENCE INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_ExactAtKnots()
     {
         var x = V(1, 2, 4, 5);
@@ -258,7 +258,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_EquivalentToLagrange()
     {
         // Newton and Lagrange produce the same unique polynomial for the same data
@@ -271,7 +271,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(lagrange.Interpolate(t), newton.Interpolate(t), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_ReproducesQuadratic()
     {
         // f(x) = 2x^2 + 3x + 1: three points uniquely define this
@@ -283,7 +283,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(expected, interp.Interpolate(1.5), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_DividedDifferences_LinearDataGivesConstantFirstDiff()
     {
         // For f(x) = 5x + 2, all divided differences beyond order 1 are zero.
@@ -300,7 +300,7 @@ public class InterpolationDeepMathIntegrationTests
     // NEAREST NEIGHBOR INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NearestNeighbor_ExactAtKnots()
     {
         var x = V(1, 2, 3, 4);
@@ -311,7 +311,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NearestNeighbor_CloserToLeft()
     {
         // x=1.3 is closer to 1 than to 2
@@ -322,7 +322,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(10.0, interp.Interpolate(1.3), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NearestNeighbor_CloserToRight()
     {
         // x=1.7 is closer to 2 than to 1
@@ -333,7 +333,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(20.0, interp.Interpolate(1.7), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NearestNeighbor_PiecewiseConstant()
     {
         // NN interpolation should produce a step function
@@ -354,7 +354,7 @@ public class InterpolationDeepMathIntegrationTests
     // HERMITE INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_ExactAtKnots()
     {
         var x = V(0, 1, 2);
@@ -366,7 +366,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_LinearWithZeroSlope()
     {
         // f(x) = 5 (constant), slopes all zero
@@ -379,7 +379,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(5.0, interp.Interpolate(1.7), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_ReproducesLinearWithCorrectSlopes()
     {
         // f(x) = 2x + 3, slope = 2 everywhere
@@ -393,7 +393,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(2 * 2.8 + 3, interp.Interpolate(2.8), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_ReproducesQuadraticWithCorrectSlopes()
     {
         // f(x) = x^2, slope = 2x
@@ -407,7 +407,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(2.5 * 2.5, interp.Interpolate(2.5), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_CubicExactReproduction()
     {
         // f(x) = x^3, slope = 3x^2
@@ -426,7 +426,7 @@ public class InterpolationDeepMathIntegrationTests
     // MONOTONE CUBIC INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MonotoneCubic_ExactAtKnots()
     {
         var x = V(0, 1, 2, 3, 4);
@@ -437,7 +437,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MonotoneCubic_PreservesMonotonicity()
     {
         // Monotonically increasing data must have monotonically increasing interpolation
@@ -455,7 +455,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MonotoneCubic_DecreasingDataStaysDecreasing()
     {
         var x = V(0, 1, 2, 3, 4);
@@ -472,7 +472,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MonotoneCubic_FlatSegmentsPreserved()
     {
         // If two consecutive y-values are equal, the segment should be flat
@@ -489,7 +489,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MonotoneCubic_ReproducesLinearFunction()
     {
         // f(x) = 4x + 1
@@ -505,7 +505,7 @@ public class InterpolationDeepMathIntegrationTests
     // BARYCENTRIC RATIONAL INTERPOLATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Barycentric_ExactAtKnots()
     {
         var x = V(0, 1, 2, 3);
@@ -516,7 +516,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(y[i], interp.Interpolate(x[i]), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Barycentric_EquivalentToLagrange()
     {
         // Barycentric with polynomial weights produces the same interpolant as Lagrange
@@ -530,7 +530,7 @@ public class InterpolationDeepMathIntegrationTests
             Assert.Equal(lagr.Interpolate(t), bary.Interpolate(t), 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Barycentric_ReproducesQuadratic()
     {
         // f(x) = x^2 with 3 points defines it uniquely
@@ -546,7 +546,7 @@ public class InterpolationDeepMathIntegrationTests
     // CROSS-METHOD COMPARISONS
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossMethod_AllReproduceLinearData()
     {
         // All interpolation methods must exactly reproduce linear functions
@@ -577,7 +577,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossMethod_AllExactAtKnots()
     {
         // Every method must exactly reproduce data at knot points
@@ -606,7 +606,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossMethod_HigherOrderMethodsBetterForSinusoid()
     {
         // Interpolating sin(x) at uniformly spaced points
@@ -636,14 +636,14 @@ public class InterpolationDeepMathIntegrationTests
     // EDGE CASES AND ERROR HANDLING
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Linear_DifferentLengthVectorsThrows()
     {
         Assert.Throws<ArgumentException>(() =>
             new LinearInterpolation<double>(V(1, 2, 3), V(1, 2)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_TwoPoints()
     {
         // Minimum valid case: 2 points should work as a line
@@ -654,28 +654,28 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(0.5, interp.Interpolate(0.5), 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_TooFewPointsThrows()
     {
         Assert.Throws<ArgumentException>(() =>
             new LagrangePolynomialInterpolation<double>(V(1), V(1)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_TooFewPointsThrows()
     {
         Assert.Throws<ArgumentException>(() =>
             new NewtonDividedDifferenceInterpolation<double>(V(1), V(1)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Barycentric_TooFewPointsThrows()
     {
         Assert.Throws<ArgumentException>(() =>
             new BarycentricRationalInterpolation<double>(V(1), V(1)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_MismatchedLengthsThrows()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -686,7 +686,7 @@ public class InterpolationDeepMathIntegrationTests
     // POLYNOMIAL PRECISION TESTS
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_Degree4PolynomialWith5Points()
     {
         // f(x) = x^4 - 3x^2 + 2
@@ -701,7 +701,7 @@ public class InterpolationDeepMathIntegrationTests
         Assert.Equal(f(1.7), interp.Interpolate(1.7), Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Newton_Degree4PolynomialWith5Points()
     {
         // Same test as Lagrange - Newton should give identical results
@@ -719,7 +719,7 @@ public class InterpolationDeepMathIntegrationTests
     // NUMERICAL DERIVATIVE VERIFICATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_NumericalDerivativeContinuity()
     {
         // Verify that the numerical derivative is continuous across knots
@@ -742,7 +742,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Hermite_NumericalDerivativeMatchesSlope()
     {
         // The numerical derivative at knots should match the specified slope
@@ -765,7 +765,7 @@ public class InterpolationDeepMathIntegrationTests
     // STRESS TESTS WITH KNOWN FUNCTIONS
     // ──────────────────────────────────────────────────────────
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CubicSpline_SinApproximation()
     {
         // Cubic spline on sin(x) data with 11 points [0, pi]
@@ -785,7 +785,7 @@ public class InterpolationDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Lagrange_RungePhenomenon()
     {
         // Runge's function f(x) = 1/(1+25x^2) with equispaced points

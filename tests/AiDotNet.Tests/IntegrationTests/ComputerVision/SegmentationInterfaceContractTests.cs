@@ -41,7 +41,7 @@ public class SegmentationInterfaceContractTests
 
     #region ISemanticSegmentation Contract — GetClassMap and GetProbabilityMap
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_GetClassMap_ReturnsNonEmpty()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -50,7 +50,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(classMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_GetProbabilityMap_ReturnsNonEmpty()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -59,7 +59,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(probMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegNeXt_GetClassMap_ReturnsNonEmpty()
     {
         var model = new SegNeXt<double>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
@@ -68,7 +68,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(classMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InternImage_GetClassMap_ReturnsNonEmpty()
     {
         var model = new InternImage<double>(Arch(), numClasses: 5, modelSize: InternImageModelSize.Tiny);
@@ -77,7 +77,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(classMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_GetClassMap_ReturnsNonEmpty()
     {
         var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
@@ -86,7 +86,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(classMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_GetClassMap_ReturnsNonEmpty()
     {
         var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
@@ -95,7 +95,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(classMap.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiffCutSegmentation_GetClassMap_ReturnsNonEmpty()
     {
         var model = new DiffCutSegmentation<double>(Arch(), numClasses: 5);
@@ -108,7 +108,7 @@ public class SegmentationInterfaceContractTests
 
     #region IPromptableSegmentation Contract — SetImage, SegmentFromPoints/Box/Mask
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -122,7 +122,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result.Masks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_PromptableInterface_SegmentFromBox()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -133,7 +133,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result.Masks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_PromptableInterface_SegmentFromMask()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -144,7 +144,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result.Masks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_PromptableInterface_SegmentEverything()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -154,7 +154,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(results);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM21_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.BasePlus);
@@ -164,7 +164,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAMHQ_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SAMHQ<double>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
@@ -174,7 +174,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FastSAM_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new FastSAM<double>(Arch(), numClasses: 1);
@@ -184,7 +184,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MobileSAM_PromptableInterface_SegmentFromBox()
     {
         var model = new MobileSAM<double>(Arch(), numClasses: 1);
@@ -194,7 +194,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientSAM_PromptableInterface_SegmentEverything()
     {
         var model = new EfficientSAM<double>(Arch(), numClasses: 1);
@@ -204,7 +204,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(results);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegGPT_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SegGPT<double>(Arch(), numClasses: 5, modelSize: SegGPTModelSize.ViTLarge);
@@ -214,7 +214,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SEEM_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SEEM<double>(Arch(), numClasses: 5, modelSize: SEEMModelSize.Tiny);
@@ -228,7 +228,7 @@ public class SegmentationInterfaceContractTests
 
     #region IPanopticSegmentation Contract — SegmentPanoptic, NumStuffClasses, NumThingClasses
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_PanopticInterface_SegmentPanoptic()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -241,7 +241,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result.InstanceMap);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KMaXDeepLab_PanopticInterface_SegmentPanoptic()
     {
         var model = new KMaXDeepLab<double>(Arch(), numClasses: 5, modelSize: KMaXDeepLabModelSize.R50);
@@ -250,7 +250,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ODISE_PanopticInterface_SegmentPanoptic()
     {
         var model = new ODISE<double>(Arch(), numClasses: 5, modelSize: ODISEModelSize.Base);
@@ -259,7 +259,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneFormer_PanopticInterface_SegmentPanoptic()
     {
         var model = new OneFormer<double>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
@@ -268,7 +268,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaskDINO_PanopticInterface_SegmentPanoptic()
     {
         var model = new MaskDINO<double>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
@@ -281,7 +281,7 @@ public class SegmentationInterfaceContractTests
 
     #region IVideoSegmentation Contract — InitializeTracking, PropagateToFrame, ResetTracking
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DEVA_VideoInterface_TrackingLifecycle()
     {
         var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
@@ -296,7 +296,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => video.ResetTracking()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EfficientTAM_VideoInterface_TrackingLifecycle()
     {
         var model = new EfficientTAM<double>(Arch(), numClasses: 5, modelSize: EfficientTAMModelSize.Small);
@@ -308,7 +308,7 @@ public class SegmentationInterfaceContractTests
         video.ResetTracking();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UniVS_VideoInterface_TrackingLifecycle()
     {
         var model = new UniVS<double>(Arch(), numClasses: 5, modelSize: UniVSModelSize.R50);
@@ -320,7 +320,7 @@ public class SegmentationInterfaceContractTests
         video.ResetTracking();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DEVA_VideoInterface_MultiFramePropagation()
     {
         var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
@@ -335,7 +335,7 @@ public class SegmentationInterfaceContractTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DEVA_VideoInterface_AddCorrection()
     {
         var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
@@ -350,7 +350,7 @@ public class SegmentationInterfaceContractTests
 
     #region IMedicalSegmentation Contract — SegmentSlice, SegmentVolume, SupportedModalities
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NnUNet_MedicalInterface_SegmentSlice()
     {
         var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
@@ -364,7 +364,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result.Labels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransUNet_MedicalInterface_SegmentSlice()
     {
         var model = new TransUNet<double>(Arch(), numClasses: 5, modelSize: TransUNetModelSize.Base);
@@ -373,7 +373,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwinUNETR_MedicalInterface_SegmentSlice()
     {
         var model = new SwinUNETR<double>(Arch(), numClasses: 5, modelSize: SwinUNETRModelSize.Base);
@@ -382,7 +382,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MedSAM_MedicalInterface_SegmentSlice()
     {
         var model = new MedSAM<double>(Arch(), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
@@ -391,7 +391,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MedNeXt_MedicalInterface_SegmentSlice()
     {
         var model = new MedNeXt<double>(Arch(), numClasses: 5, modelSize: MedNeXtModelSize.Small);
@@ -400,7 +400,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BiomedParse_MedicalInterface_SegmentSlice()
     {
         var model = new BiomedParse<double>(Arch(), numClasses: 5);
@@ -413,7 +413,7 @@ public class SegmentationInterfaceContractTests
 
     #region IOpenVocabSegmentation Contract
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAN_OpenVocabInterface_SegmentWithText()
     {
         var model = new SAN<double>(Arch(), numClasses: 5);
@@ -422,7 +422,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CATSeg_OpenVocabInterface_SegmentWithText()
     {
         var model = new CATSeg<double>(Arch(), numClasses: 5);
@@ -431,7 +431,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SED_OpenVocabInterface_SegmentWithText()
     {
         var model = new SED<double>(Arch(), numClasses: 5);
@@ -440,7 +440,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GroundedSAM2_OpenVocabInterface_SegmentWithText()
     {
         var model = new GroundedSAM2<double>(Arch(), numClasses: 5);
@@ -453,7 +453,7 @@ public class SegmentationInterfaceContractTests
 
     #region IReferringSegmentation Contract
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LISA_ReferringInterface_SegmentFromExpression()
     {
         var model = new LISA<double>(Arch(), numClasses: 5);
@@ -462,7 +462,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VideoLISA_ReferringInterface_SegmentFromExpression()
     {
         var model = new VideoLISA<double>(Arch(), numClasses: 5);
@@ -471,7 +471,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GLaMM_ReferringInterface_SegmentFromExpression()
     {
         var model = new GLaMM<double>(Arch(), numClasses: 5);
@@ -480,7 +480,7 @@ public class SegmentationInterfaceContractTests
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PixelLM_ReferringInterface_SegmentFromExpression()
     {
         var model = new PixelLM<double>(Arch(), numClasses: 5);
@@ -493,7 +493,7 @@ public class SegmentationInterfaceContractTests
 
     #region Model Metadata and Parameter Counts
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_ParameterCount_PositiveAndModelSizeDependent()
     {
         var b0 = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -504,35 +504,35 @@ public class SegmentationInterfaceContractTests
             $"B3 ({b3.ParameterCount}) should have more params than B0 ({b0.ParameterCount})");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_ParameterCount_Positive()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_ParameterCount_Positive()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NnUNet_ParameterCount_Positive()
     {
         var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_ParameterCount_Positive()
     {
         var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_ParameterCount_Positive()
     {
         var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
@@ -543,7 +543,7 @@ public class SegmentationInterfaceContractTests
 
     #region GetModelMetadata
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_GetModelMetadata_ContainsRequiredFields()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 21, modelSize: SegFormerModelSize.B2);
@@ -555,7 +555,7 @@ public class SegmentationInterfaceContractTests
         Assert.Equal(21, meta.AdditionalInfo["NumClasses"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_GetModelMetadata_ContainsRequiredFields()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -565,7 +565,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(meta.AdditionalInfo.ContainsKey("ModelName"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_GetModelMetadata_ContainsModelName()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -578,7 +578,7 @@ public class SegmentationInterfaceContractTests
 
     #region Dispose Lifecycle — Double Dispose, Use-After-Dispose
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_DoubleDispose_DoesNotThrow()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -586,7 +586,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_DoubleDispose_DoesNotThrow()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -594,7 +594,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_DoubleDispose_DoesNotThrow()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -602,7 +602,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NnUNet_DoubleDispose_DoesNotThrow()
     {
         var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
@@ -610,7 +610,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VisionMamba_DoubleDispose_DoesNotThrow()
     {
         var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
@@ -618,7 +618,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PIDNet_DoubleDispose_DoesNotThrow()
     {
         var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
@@ -626,7 +626,7 @@ public class SegmentationInterfaceContractTests
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DEVA_DoubleDispose_DoesNotThrow()
     {
         var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
@@ -638,7 +638,7 @@ public class SegmentationInterfaceContractTests
 
     #region Multiple Consecutive Predictions (stateful regression)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_MultiplePredictions_AllReturnOutput()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -651,7 +651,7 @@ public class SegmentationInterfaceContractTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_MultiplePredictions_AllReturnOutput()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -664,7 +664,7 @@ public class SegmentationInterfaceContractTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NnUNet_MultiplePredictions_AllReturnOutput()
     {
         var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
@@ -677,7 +677,7 @@ public class SegmentationInterfaceContractTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_MultiplePredictions_AllReturnOutput()
     {
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
@@ -694,7 +694,7 @@ public class SegmentationInterfaceContractTests
 
     #region Segment() method (ISegmentationModel)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_Segment_EquivalentToPredict()
     {
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -705,7 +705,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(segResult.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mask2Former_Segment_EquivalentToPredict()
     {
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
@@ -718,7 +718,7 @@ public class SegmentationInterfaceContractTests
 
     #region ISegmentationModel Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SegFormer_ISegmentationModel_Properties()
     {
         var model = new SegFormer<double>(Arch(64, 48, 3), numClasses: 21, modelSize: SegFormerModelSize.B0);
@@ -730,7 +730,7 @@ public class SegmentationInterfaceContractTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAM_ISegmentationModel_Properties()
     {
         var model = new SAM<double>(Arch(32, 32, 3), numClasses: 1, modelSize: SAMModelSize.ViTBase);

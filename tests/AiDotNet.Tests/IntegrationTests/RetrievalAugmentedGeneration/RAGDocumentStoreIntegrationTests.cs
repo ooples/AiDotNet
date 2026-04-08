@@ -19,7 +19,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Construction and Basic Operations
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Construction_ValidDimension()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
@@ -28,14 +28,14 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal(3, store.VectorDimension);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_InvalidDimension_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new InMemoryDocumentStore<double>(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new InMemoryDocumentStore<double>(-1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddSingle_IncreasesCount()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
@@ -49,7 +49,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal(1, store.DocumentCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddNull_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
@@ -57,7 +57,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Throws<ArgumentNullException>(() => store.Add(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddEmptyId_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
@@ -72,7 +72,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region GetById Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetById_ReturnsCorrectDocument()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -92,7 +92,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("second content", retrieved.Content);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetById_NonExistent_ReturnsNull()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -101,7 +101,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetById_EmptyId_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -114,7 +114,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Remove Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Remove_ExistingDoc_ReturnsTrue()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -129,7 +129,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Null(store.GetById("doc1"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Remove_NonExistent_ReturnsFalse()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -139,7 +139,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.False(removed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Remove_EmptyId_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -151,7 +151,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Clear Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Clear_RemovesAllDocuments()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -170,7 +170,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Null(store.GetById("d2"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_Clear_ResetsVectorDimension()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 5);
@@ -188,7 +188,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region GetAll Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetAll_ReturnsAllDocuments()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -208,7 +208,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Contains(all, d => d.Id == "d3");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetAll_EmptyStore_ReturnsEmpty()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -222,7 +222,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Similarity Search Tests - Cosine Similarity Golden References
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_OrthogonalVectors_CorrectOrder()
     {
         // Query = [1, 0, 0]
@@ -250,7 +250,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.True(scoreA > 0.9, $"Expected score > 0.9 for identical vector, got {scoreA}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_SimilarVectors_RankedByAngle()
     {
         // Query = [1, 0]
@@ -279,7 +279,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("D", results[3].Id);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_TopK_LimitsResults()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -297,7 +297,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal(3, results.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_EmptyStore_ReturnsEmpty()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -308,7 +308,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Empty(results);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_InvalidTopK_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -317,7 +317,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Throws<ArgumentException>(() => store.GetSimilar(query, topK: 0).ToList());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_GetSimilar_NegativeEmbeddings_HandledCorrectly()
     {
         // Query = [-1, 0]
@@ -341,7 +341,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Batch Operations Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddBatch_AddsMultipleDocuments()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -361,7 +361,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.NotNull(store.GetById("d3"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddBatch_EmptyList_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -370,7 +370,7 @@ public class RAGDocumentStoreIntegrationTests
             store.AddBatch(new List<VectorDocument<double>>()));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddBatch_NullList_Throws()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -379,7 +379,7 @@ public class RAGDocumentStoreIntegrationTests
             store.AddBatch(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddBatch_Searchable()
     {
         // Verify that batch-added documents are searchable
@@ -405,7 +405,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Metadata Filtering Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_MetadataFilter_StringEquality()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -430,7 +430,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.All(results, r => Assert.True(r.Id == "d1" || r.Id == "d3"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_MetadataFilter_NoMatch_ReturnsEmpty()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -446,7 +446,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Empty(results);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_MetadataFilter_BooleanEquality()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -471,7 +471,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Document Lifecycle Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_AddRemoveAdd_WorksCorrectly()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -495,7 +495,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("updated", retrieved.Content);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_RemoveThenSearch_DoesNotReturnRemoved()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -514,7 +514,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("d1", results[0].Id);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_ClearThenAdd_WorksCorrectly()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -537,7 +537,7 @@ public class RAGDocumentStoreIntegrationTests
 
     #region Stress and Edge Case Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_ManyDocuments_SearchStillWorks()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
@@ -562,7 +562,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("doc0", results[0].Id);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_DocumentMetadata_Preserved()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -585,7 +585,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal(true, retrieved.Metadata["verified"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_DuplicateId_OverwritesSilently()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -604,7 +604,7 @@ public class RAGDocumentStoreIntegrationTests
         Assert.Equal("updated", retrieved.Content);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_SearchResults_HaveRelevanceScores()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
@@ -625,7 +625,7 @@ public class RAGDocumentStoreIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InMemoryStore_SearchResults_DoNotMutateStoredDocs()
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);

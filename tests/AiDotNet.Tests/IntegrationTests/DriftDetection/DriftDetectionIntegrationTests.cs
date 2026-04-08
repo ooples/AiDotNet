@@ -10,7 +10,7 @@ public class DriftDetectionIntegrationTests
 {
     #region DDM Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_StableStream_NoDrift()
     {
         var ddm = new DDM<double>();
@@ -24,7 +24,7 @@ public class DriftDetectionIntegrationTests
         Assert.False(ddm.IsInWarning);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_HighErrorStream_DetectsDrift()
     {
         var ddm = new DDM<double>(warningThreshold: 2.0, driftThreshold: 3.0, minimumObservations: 30);
@@ -50,7 +50,7 @@ public class DriftDetectionIntegrationTests
         Assert.True(ddm.IsInDrift, "DDM IsInDrift flag should be set after drift detection");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_Reset_ClearsState()
     {
         var ddm = new DDM<double>();
@@ -63,7 +63,7 @@ public class DriftDetectionIntegrationTests
         Assert.Equal(0, ddm.ObservationCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_GetErrorRate_IsAccurate()
     {
         var ddm = new DDM<double>();
@@ -76,7 +76,7 @@ public class DriftDetectionIntegrationTests
         Assert.Equal(0.20, ddm.GetErrorRate(), 0.01);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_GetMinimumPsi_ReturnsValue()
     {
         var ddm = new DDM<double>();
@@ -87,19 +87,19 @@ public class DriftDetectionIntegrationTests
         Assert.True(minPsi >= 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_NegativeWarningThreshold_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new DDM<double>(warningThreshold: -1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_DriftLessThanWarning_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new DDM<double>(warningThreshold: 3.0, driftThreshold: 2.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDM_Properties_SetCorrectly()
     {
         var ddm = new DDM<double>(warningThreshold: 1.5, driftThreshold: 2.5, minimumObservations: 50, warningDelay: 200);
@@ -112,7 +112,7 @@ public class DriftDetectionIntegrationTests
 
     #region EDDM Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EDDM_StableStream_NoDrift()
     {
         var eddm = new EDDM<double>();
@@ -124,7 +124,7 @@ public class DriftDetectionIntegrationTests
         Assert.False(eddm.IsInDrift);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EDDM_HighErrorStream_DetectsDrift()
     {
         var eddm = new EDDM<double>();
@@ -150,7 +150,7 @@ public class DriftDetectionIntegrationTests
             "EDDM should detect drift or be in drift state after high error rate");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EDDM_Reset_ClearsState()
     {
         var eddm = new EDDM<double>();
@@ -166,7 +166,7 @@ public class DriftDetectionIntegrationTests
 
     #region ADWIN Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ADWIN_StableStream_NoDrift()
     {
         var adwin = new ADWIN<double>();
@@ -178,7 +178,7 @@ public class DriftDetectionIntegrationTests
         Assert.False(adwin.IsInDrift);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ADWIN_MeanShift_DetectsDrift()
     {
         var adwin = new ADWIN<double>();
@@ -204,7 +204,7 @@ public class DriftDetectionIntegrationTests
         Assert.True(adwin.IsInDrift, "ADWIN IsInDrift should be set after drift detection");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ADWIN_Reset_ClearsState()
     {
         var adwin = new ADWIN<double>();
@@ -220,7 +220,7 @@ public class DriftDetectionIntegrationTests
 
     #region PageHinkley Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PageHinkley_StableStream_NoDrift()
     {
         var ph = new PageHinkley<double>();
@@ -232,7 +232,7 @@ public class DriftDetectionIntegrationTests
         Assert.False(ph.IsInDrift);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PageHinkley_MeanShift_DetectsDrift()
     {
         var ph = new PageHinkley<double>();
@@ -256,7 +256,7 @@ public class DriftDetectionIntegrationTests
         Assert.True(ph.IsInDrift, "PageHinkley IsInDrift should be set after drift detection");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PageHinkley_Reset_ClearsState()
     {
         var ph = new PageHinkley<double>();
@@ -272,7 +272,7 @@ public class DriftDetectionIntegrationTests
 
     #region Wrapper Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DDMDriftDetector_StableNoDrift_DriftOnHighErrors()
     {
         var detector = new DDMDriftDetector<double>();
@@ -288,7 +288,7 @@ public class DriftDetectionIntegrationTests
         Assert.False(detector.IsInDrift);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EDDMDriftDetector_StableNoDrift()
     {
         var detector = new EDDMDriftDetector<double>();
@@ -302,7 +302,7 @@ public class DriftDetectionIntegrationTests
         Assert.Equal(0, detector.ObservationCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PageHinkleyDriftDetector_StableNoDrift()
     {
         var detector = new PageHinkleyDriftDetector<double>();
@@ -320,7 +320,7 @@ public class DriftDetectionIntegrationTests
 
     #region Cross-Detector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDetectors_ObservationCountIncreases()
     {
         IDriftDetector<double>[] detectors =

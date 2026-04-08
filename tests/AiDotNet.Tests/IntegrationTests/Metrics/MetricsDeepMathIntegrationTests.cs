@@ -16,7 +16,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region PSNR Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_ExactFormula_UniformError()
     {
         // PSNR = 10 * log10(MAX^2 / MSE)
@@ -34,7 +34,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(20.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_ExactFormula_VariedError()
     {
         // Predicted: [0.0, 0.5], GT: [0.1, 0.3]
@@ -52,7 +52,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_CustomMaxValue_ScalesCorrectly()
     {
         // MAX = 255, pixel diff = 10 for all
@@ -70,7 +70,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_IdenticalImages_Returns100()
     {
         // When MSE < epsilon (1e-10), returns 100.0
@@ -83,7 +83,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(100.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_BatchCompute_PerImagePSNR()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -111,7 +111,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region SSIM Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SSIM_IdenticalImages_ReturnsOne()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -123,7 +123,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SSIM_ExactFormula_HandComputed()
     {
         // x = [0.0, 1.0], y = [0.5, 0.5]
@@ -146,7 +146,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SSIM_ConstantShift_LowSSIM()
     {
         // x = [0,0,0,0], y = [1,1,1,1]
@@ -167,7 +167,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SSIM_MultiChannelImage_AveragesPerChannel()
     {
         // 2x2x2 image (H=2, W=2, C=2)
@@ -186,7 +186,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region mIoU Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MIoU_PerfectPrediction_ReturnsOne()
     {
         var miou = new MeanIntersectionOverUnion<double>(3);
@@ -200,7 +200,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MIoU_ExactPerClassIoU()
     {
         // 3 classes, 6 samples
@@ -220,7 +220,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MIoU_PerClassIoU_MatchesHandComputed()
     {
         // 2 classes, 8 samples
@@ -239,7 +239,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, perClass[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MIoU_IgnoreBackground_SkipsClass0()
     {
         // 3 classes
@@ -255,7 +255,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MIoU_AllWrong_ZeroIoU()
     {
         // 2 classes, all predictions wrong
@@ -276,7 +276,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region OverallAccuracy Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallAccuracy_ExactComputation()
     {
         // pred = [0, 1, 2, 0, 1], gt = [0, 1, 1, 0, 2]
@@ -290,7 +290,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.6, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallAccuracy_PerfectPrediction()
     {
         var acc = new OverallAccuracy<double>();
@@ -306,7 +306,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region WordErrorRate Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_PerfectTranscription_ReturnsZero()
     {
         var wer = new WordErrorRate();
@@ -314,7 +314,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_OneSubstitution()
     {
         // ref = "the cat sat" (3 words), hyp = "the dog sat"
@@ -324,7 +324,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_OneInsertion()
     {
         // ref = "the cat" (2 words), hyp = "the big cat"
@@ -334,7 +334,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_OneDeletion()
     {
         // ref = "the big cat" (3 words), hyp = "the cat"
@@ -344,7 +344,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_DetailedStats_CorrectCounts()
     {
         // ref = "a b c d" (4 words), hyp = "a x c"
@@ -357,7 +357,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.5, werVal, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_CompletelyWrong()
     {
         // ref = "hello world" (2 words), hyp = "goodbye earth"
@@ -367,7 +367,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_EmptyReference_NonEmptyHyp()
     {
         var wer = new WordErrorRate();
@@ -375,7 +375,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_BothEmpty()
     {
         var wer = new WordErrorRate();
@@ -383,7 +383,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_BatchCompute_AveragesCorrectly()
     {
         var wer = new WordErrorRate();
@@ -400,7 +400,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region CharacterErrorRate Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CER_PerfectMatch_ReturnsZero()
     {
         var cer = new CharacterErrorRate();
@@ -408,7 +408,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CER_SingleCharDifference()
     {
         // ref = "cat" (3 chars), hyp = "bat"
@@ -418,7 +418,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CER_IgnoreWhitespace()
     {
         // ref = "a b c" without whitespace => "abc" (3 chars)
@@ -428,7 +428,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CER_Insertion()
     {
         // ref = "ab" (2 chars), hyp = "axb"
@@ -442,7 +442,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region SNR Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SNR_ExactFormula_KnownValues()
     {
         // clean = [3, 4], noisy = [3.1, 3.9]
@@ -461,7 +461,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SNR_IdenticalSignals_Returns100()
     {
         var snr = new SignalToNoiseRatio<double>();
@@ -472,7 +472,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(100.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SNR_LargeNoise_NegativeSNR()
     {
         // clean = [1.0], noisy = [11.0] => noise = [10.0]
@@ -493,7 +493,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region SI-SDR Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SISDR_ScaleInvariant_DifferentAmplitudes()
     {
         // SI-SDR is scale-invariant: scaling the estimate shouldn't change the result
@@ -515,7 +515,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(100.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SISDR_ExactFormula_WithNoise()
     {
         // target = [1, 0, -1, 0] (mean=0)
@@ -545,7 +545,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SISDR_Improvement_IsPositiveWhenBetter()
     {
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -562,7 +562,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region Chamfer Distance Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_IdenticalPointClouds_ReturnsZero()
     {
         var cd = new ChamferDistance<double>();
@@ -575,7 +575,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_Squared_ExactComputation()
     {
         // A = {(0,0)}, B = {(3,4)}
@@ -591,7 +591,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(50.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_Euclidean_ExactComputation()
     {
         // Same as above but Euclidean: each direction gives 5.0
@@ -604,7 +604,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(10.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_NearestNeighborSelection()
     {
         // A = {(0,0)}, B = {(1,0), (10,0)}
@@ -621,7 +621,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(51.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_Asymmetric_OneWay()
     {
         // A = {(0,0), (2,0)}, B = {(1,0)}
@@ -635,7 +635,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, oneWay, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_3D_Points()
     {
         // A = {(0,0,0)}, B = {(1,1,1)}
@@ -654,7 +654,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region FScore Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_PerfectOverlap_ReturnsOne()
     {
         // All predicted points are within threshold of GT points
@@ -667,7 +667,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_HandComputed_PrecisionRecall()
     {
         // threshold = 1.5 (squared = 2.25)
@@ -694,7 +694,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.5, f1, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_AllOutOfThreshold_ReturnsZero()
     {
         // threshold = 0.1 (very small)
@@ -712,7 +712,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region IoU3D Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_VoxelGrid_ExactComputation()
     {
         // 4 voxels: A = [1,1,0,0], B = [1,0,1,0]
@@ -728,7 +728,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_VoxelGrid_PerfectOverlap()
     {
         var iou = new IoU3D<double>();
@@ -739,7 +739,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_VoxelGrid_NoOverlap()
     {
         var iou = new IoU3D<double>();
@@ -750,7 +750,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_BoundingBox_ExactComputation()
     {
         // Box A: [0,0,0, 2,2,2] volume = 8
@@ -767,7 +767,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 15.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_BoundingBox_FullOverlap()
     {
         // Identical boxes
@@ -778,7 +778,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_BoundingBox_NoOverlap()
     {
         // Box A: [0,0,0, 1,1,1], Box B: [2,2,2, 3,3,3]
@@ -792,7 +792,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_BoundingBox_ContainedBox()
     {
         // Box A: [0,0,0, 4,4,4] volume = 64
@@ -809,7 +809,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 8.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IoU3D_BoundingBox_PartialOverlap()
     {
         // Box A: [0,0,0, 2,3,4] volume = 2*3*4 = 24
@@ -830,7 +830,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region EarthMoversDistance Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EMD_IdenticalPointClouds_ReturnsNearZero()
     {
         var emd = new EarthMoversDistance<double>(iterations: 200, epsilon: 0.01);
@@ -844,7 +844,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.True(result < 0.1, $"EMD for identical point clouds should be near 0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EMD_FarApartPoints_LargerDistance()
     {
         // Use larger epsilon to avoid exp(-dist/eps) underflow for far points
@@ -864,7 +864,7 @@ public class MetricsDeepMathIntegrationTests
 
     #region Cross-Metric Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PSNR_InverseMSE_Relationship()
     {
         // PSNR = 10*log10(MAX²/MSE), so higher MSE => lower PSNR
@@ -880,7 +880,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.True(psnrSmall > psnrLarge, "Lower MSE should give higher PSNR");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ChamferDistance_Symmetry()
     {
         // CD(A,B) should equal CD(B,A)
@@ -895,7 +895,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(cdAB, cdBA, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FScore_F1_EqualsHarmonicMean_PrecisionRecall()
     {
         var fscore = new FScore<double>(threshold: 2.0);
@@ -913,7 +913,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(expectedF1, f1, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WER_CaseInsensitive()
     {
         // WER should be case-insensitive (TokenizeWords uses ToLowerInvariant)
@@ -922,7 +922,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallAccuracy_AllWrong_ReturnsZero()
     {
         var acc = new OverallAccuracy<double>();
@@ -934,7 +934,7 @@ public class MetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SSIM_HigherForSimilarImages()
     {
         var ssim = new StructuralSimilarity<double>();

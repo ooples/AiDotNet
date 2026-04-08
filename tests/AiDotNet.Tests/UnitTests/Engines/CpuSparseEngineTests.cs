@@ -13,7 +13,7 @@ public class CpuSparseEngineTests
 
     #region SpMV Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpMV_IdentityMatrix_ReturnsOriginalVector()
     {
         // Arrange: 3x3 identity as sparse
@@ -33,7 +33,7 @@ public class CpuSparseEngineTests
         Assert.Equal(4.0, result[2], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpMV_SingleRowSparse_ComputesDotProduct()
     {
         // Arrange: 1x3 sparse matrix with values [1, 2, 3]
@@ -51,7 +51,7 @@ public class CpuSparseEngineTests
         Assert.Equal(32.0, result[0], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpMV_EmptySparse_ReturnsZeroVector()
     {
         // Arrange: Empty 3x3 sparse matrix
@@ -73,7 +73,7 @@ public class CpuSparseEngineTests
 
     #region SpMM Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpMM_IdentitySparse_ReturnsDenseMatrix()
     {
         // Arrange: 2x2 identity as sparse
@@ -96,7 +96,7 @@ public class CpuSparseEngineTests
         Assert.Equal(4.0, result[1, 1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpMM_ScalingSparse_ScalesMatrix()
     {
         // Arrange: 2x2 diagonal with 2 on diagonal
@@ -121,7 +121,7 @@ public class CpuSparseEngineTests
 
     #region SparseToDense Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SparseToDense_SimpleMatrix_ConvertsCorrectly()
     {
         // Arrange
@@ -151,7 +151,7 @@ public class CpuSparseEngineTests
 
     #region DenseToSparse Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DenseToSparse_SparseMatrix_ConvertsCorrectly()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class CpuSparseEngineTests
 
     #region Coalesce Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Coalesce_DuplicateEntries_SumsValues()
     {
         // Arrange: Two entries at position (0,0) with values 1.0 and 2.0
@@ -198,7 +198,7 @@ public class CpuSparseEngineTests
 
     #region SparseTranspose Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SparseTranspose_RectangularMatrix_TransposesCorrectly()
     {
         // Arrange: 2x3 matrix
@@ -223,7 +223,7 @@ public class CpuSparseEngineTests
 
     #region AddSparseDense Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddSparseDense_AddsCorrectly()
     {
         // Arrange

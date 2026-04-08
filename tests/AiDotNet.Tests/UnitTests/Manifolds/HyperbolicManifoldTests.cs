@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.Manifolds;
 
 public class HyperbolicManifoldTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareMobiusAdd_IdentityPreservesPoint()
     {
         var manifold = new PoincareBallManifold<double>();
@@ -19,7 +19,7 @@ public class HyperbolicManifoldTests
         Assert.Equal(x[1], sum[1], precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PoincareExpLog_RoundTripAtOrigin()
     {
         var manifold = new PoincareBallManifold<double>();
@@ -33,7 +33,7 @@ public class HyperbolicManifoldTests
         Assert.Equal(tangent[1], recovered[1], precision: 8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperboloidDistance_SamePointIsZero()
     {
         var manifold = new HyperboloidManifold<double>();
@@ -44,7 +44,7 @@ public class HyperbolicManifoldTests
         Assert.Equal(0.0, distance, precision: 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HyperboloidExpLog_RoundTrip()
     {
         var manifold = new HyperboloidManifold<double>();

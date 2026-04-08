@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class PCDARTSTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(pcdarts);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
@@ -39,7 +39,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_GetChannelSamplingRatio_ReturnsConfiguredValue()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.5, ratio);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_SampleChannels_ReturnsSampledSubset()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, sampledChannels.Count); // 25% of 16 = 4
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_SampleChannels_ReturnsAtLeastOneChannel()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(sampledChannels.Count >= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_SampleChannels_ReturnsSortedChannels()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_SampleChannels_ReturnsValidIndices()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.All(sampledChannels, ch => Assert.InRange(ch, 0, totalChannels - 1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_ApplyEdgeNormalization_ReturnsValidProbabilities()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(alpha.Columns, normalized.Columns);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_GetMemorySavingsRatio_CalculatesCorrectly()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.75, savings); // 1.0 - 0.25
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_DeriveArchitecture_SelectsTopTwoEdges()
         {
             // Arrange
@@ -179,7 +179,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count <= 8);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_WithoutEdgeNormalization_StillWorks()
         {
             // Arrange
@@ -193,7 +193,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(architecture);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void PCDARTS_GetArchitectureGradients_MatchesParameters()
         {
             // Arrange

@@ -16,14 +16,14 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkSuiteRegistry: GetAvailableSuites
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAvailableSuites_ReturnsNonEmpty()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
         Assert.NotEmpty(suites);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAvailableSuites_Contains23Suites()
     {
         // Registry has 23 defined descriptors
@@ -31,7 +31,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(23, suites.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAvailableSuites_SortedByKindThenDisplayName()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -56,7 +56,7 @@ public class BenchmarkingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAvailableSuites_AllHaveNonEmptyDisplayName()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -68,7 +68,7 @@ public class BenchmarkingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetAvailableSuites_AllHaveNonEmptyDescription()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -119,7 +119,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(expectedKind, BenchmarkSuiteRegistry.GetSuiteKind(suite));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSuiteKind_9DatasetSuites_14ReasoningSuites()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -178,14 +178,14 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.NotNull(benchmark);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateReasoningBenchmark_DatasetSuite_ThrowsNotSupported()
     {
         Assert.Throws<NotSupportedException>(() =>
             BenchmarkSuiteRegistry.CreateReasoningBenchmark(BenchmarkSuite.LEAF));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateReasoningBenchmark_MultipleCalls_ReturnDistinctInstances()
     {
         var b1 = BenchmarkSuiteRegistry.CreateReasoningBenchmark(BenchmarkSuite.GSM8K);
@@ -199,14 +199,14 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkReport: OverallStatus Logic
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_EmptySuites_Skipped()
     {
         var report = new BenchmarkReport();
         Assert.Equal(BenchmarkExecutionStatus.Skipped, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_AllSucceeded_Succeeded()
     {
         var report = new BenchmarkReport
@@ -221,7 +221,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Succeeded, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_AnyFailed_Failed()
     {
         var report = new BenchmarkReport
@@ -237,7 +237,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Failed, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_AllSkipped_Skipped()
     {
         var report = new BenchmarkReport
@@ -252,7 +252,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Skipped, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_MixSucceededAndSkipped_Succeeded()
     {
         // Not all skipped + no failures = succeeded
@@ -268,7 +268,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Succeeded, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_FailedTakesPriority_OverSucceeded()
     {
         // Failed takes priority over all other statuses
@@ -285,7 +285,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Failed, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_SingleFailed_Failed()
     {
         var report = new BenchmarkReport
@@ -299,7 +299,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Failed, report.OverallStatus);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OverallStatus_SingleSucceeded_Succeeded()
     {
         var report = new BenchmarkReport
@@ -317,7 +317,7 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkReport: Duration Computation
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TotalDuration_ComputedFromStartAndEnd()
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -332,7 +332,7 @@ public class BenchmarkingDeepMathIntegrationTests
         Assert.Equal(TimeSpan.FromMinutes(90), report.TotalDuration);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BenchmarkSuiteReport_Duration_ComputedFromStartAndEnd()
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -351,7 +351,7 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkSuiteDescriptor Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BenchmarkSuiteDescriptor_AllSuitesHaveMatchingSuiteProperty()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -370,7 +370,7 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkMetricValue Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BenchmarkMetricValue_DefaultValue_Zero()
     {
         var metric = new BenchmarkMetricValue();
@@ -381,7 +381,7 @@ public class BenchmarkingDeepMathIntegrationTests
     // BenchmarkCategoryResult Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BenchmarkCategoryResult_DefaultAccuracy_Zero()
     {
         var result = new BenchmarkCategoryResult();

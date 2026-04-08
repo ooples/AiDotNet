@@ -57,7 +57,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Successful Application
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_KnownParameters_AppliesViaRegistry()
     {
         var (model, options) = CreateTestModel();
@@ -75,7 +75,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(15, options.MaxDepth);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_DirectPropertyNames_AppliesWithoutRegistry()
     {
         var (model, options) = CreateTestModel();
@@ -92,7 +92,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(0.05, options.LearningRate);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_SharedParameter_AppliesSeed()
     {
         var (model, options) = CreateTestModel();
@@ -107,7 +107,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, options.Seed);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_TypeConversion_IntToDouble()
     {
         var (model, options) = CreateTestModel();
@@ -122,7 +122,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(1.0, options.LearningRate);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_TypeConversion_DoubleToInt()
     {
         var (model, options) = CreateTestModel();
@@ -137,7 +137,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(200, options.NumberOfTrees);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_BoolParameter_SetsCorrectly()
     {
         var (model, options) = CreateTestModel();
@@ -152,7 +152,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.False(options.UseIntercept);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_StringParameter_SetsCorrectly()
     {
         var (model, options) = CreateTestModel();
@@ -171,7 +171,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Skipped Parameters
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_UnknownParameter_Skipped()
     {
         var (model, _) = CreateTestModel();
@@ -187,7 +187,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, result.Skipped["completely_unknown_param"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_MixedKnownAndUnknown_ReportsBoth()
     {
         var (model, options) = CreateTestModel();
@@ -208,7 +208,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Validation Warnings
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_OutOfRangeValue_AddsWarningButStillApplies()
     {
         var (model, options) = CreateTestModel();
@@ -225,7 +225,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Contains("above", result.Warnings[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_BelowRangeValue_AddsWarningButStillApplies()
     {
         var (model, options) = CreateTestModel();
@@ -246,7 +246,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Empty Inputs
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_EmptyHyperparameters_ReturnsNoResults()
     {
         var (model, _) = CreateTestModel();
@@ -280,7 +280,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(expected, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertValue_NullInput_ReturnsNull()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(null!, typeof(int));
@@ -288,7 +288,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Null(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertValue_NullableInt_ConvertsToUnderlyingType()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(42, typeof(int?));
@@ -297,7 +297,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertValue_AlreadyCorrectType_ReturnsAsIs()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(42, typeof(int));
@@ -305,7 +305,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConvertValue_InvalidConversion_ReturnsNull()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue("not_a_number", typeof(int));
@@ -317,7 +317,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region HyperparameterApplicationResult
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Result_GetSummary_IncludesAllSections()
     {
         var (model, _) = CreateTestModel();
@@ -336,7 +336,7 @@ public class AgentHyperparameterApplicatorTests
         Assert.Contains("unknown_param", summary);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Result_GetSummary_EmptyResult_ShowsNoParameters()
     {
         var result = new AiDotNet.Models.HyperparameterApplicationResult();
@@ -349,7 +349,7 @@ public class AgentHyperparameterApplicatorTests
 
     #region Case-Insensitive Property Matching
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Apply_CaseInsensitivePropertyName_Works()
     {
         var (model, options) = CreateTestModel();

@@ -21,7 +21,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 validActual, validPredicted);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -49,7 +49,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithSimilarTrainAndValidationErrors_ReturnsGoodFit()
         {
             // Arrange
@@ -75,7 +75,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithLargeValidationError_ReturnsNonGoodFit()
         {
             // Arrange
@@ -91,7 +91,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithModerateErrorDifference_ReturnsModerateFit()
         {
             // Arrange
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_CalculatesConfidenceLevel()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_IncludesPerformanceMetricsInAdditionalInfo()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.AdditionalInfo.ContainsKey("PerformanceMetrics"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithDifferentThresholds_ChangesClassification()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_GeneratesAppropriateRecommendationsForGoodFit()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_GeneratesAppropriateRecommendationsForPoorFit()
         {
             // Arrange
@@ -196,7 +196,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange

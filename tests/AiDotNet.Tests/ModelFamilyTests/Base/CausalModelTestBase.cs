@@ -33,7 +33,7 @@ public abstract class CausalModelTestBase
         return (x, y);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TreatmentEffect_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -49,7 +49,7 @@ public abstract class CausalModelTestBase
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -62,7 +62,7 @@ public abstract class CausalModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clone_ShouldProduceSameEstimates()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -76,7 +76,7 @@ public abstract class CausalModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -86,7 +86,7 @@ public abstract class CausalModelTestBase
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -96,7 +96,7 @@ public abstract class CausalModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parameters_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

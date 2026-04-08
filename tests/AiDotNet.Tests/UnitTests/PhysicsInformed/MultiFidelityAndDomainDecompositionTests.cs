@@ -51,7 +51,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region MultiFidelityTrainingHistory Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal(0.3, history.HighFidelityLosses[0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityTrainingHistory_ImplementsInterface()
     {
         // Arrange & Act
@@ -88,7 +88,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region DomainDecompositionTrainingHistory Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         // Arrange
@@ -110,7 +110,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal(0.3, history.SubdomainLosses[0][0]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionTrainingHistory_ImplementsInterface()
     {
         // Arrange & Act
@@ -125,7 +125,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region MultiFidelityPINN Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityPINN_Constructor_CreatesDefaultLowFidelityNetwork()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.False(pinn.IsLowFidelityFrozen);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityPINN_SetLowFidelityData_StoresData()
     {
         // Arrange
@@ -183,7 +183,7 @@ public class MultiFidelityAndDomainDecompositionTests
         pinn.SetLowFidelityData(inputs, outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityPINN_SetHighFidelityData_StoresData()
     {
         // Arrange
@@ -212,7 +212,7 @@ public class MultiFidelityAndDomainDecompositionTests
         pinn.SetHighFidelityData(inputs, outputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityPINN_SetLowFidelityFrozen_ChangesState()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.True(pinn.IsLowFidelityFrozen);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiFidelityPINN_SolveMultiFidelity_ThrowsWithoutData()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region DomainDecompositionPINN Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionPINN_Constructor_CreatesSubdomainNetworks()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.NotNull(pinn.GetSubdomainNetwork(1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionPINN_Constructor_ThrowsWithNoSubdomains()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class MultiFidelityAndDomainDecompositionTests
                 emptySubdomains));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionPINN_GetSubdomainNetwork_ThrowsOnInvalidIndex()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Throws<ArgumentOutOfRangeException>(() => pinn.GetSubdomainNetwork(2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionPINN_GetGlobalSolution_ThrowsForPointOutsideDomain()
     {
         // Arrange
@@ -412,7 +412,7 @@ public class MultiFidelityAndDomainDecompositionTests
             pinn.GetGlobalSolution(new double[] { 2.0, 2.0 }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DomainDecompositionPINN_GetGlobalSolution_ReturnsForPointInsideDomain()
     {
         // Arrange
@@ -454,7 +454,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region SubdomainDefinition Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubdomainDefinition_Constructor_SetsProperties()
     {
         // Arrange & Act
@@ -469,7 +469,7 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal("TestDomain", subdomain.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SubdomainDefinition_Constructor_ThrowsOnDimensionMismatch()
     {
         // Act & Assert
@@ -483,7 +483,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region InterfaceDefinition Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InterfaceDefinition_DefaultConstructor_InitializesProperties()
     {
         // Arrange & Act

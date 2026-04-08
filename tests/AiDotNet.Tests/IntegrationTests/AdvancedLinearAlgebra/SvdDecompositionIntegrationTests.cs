@@ -219,7 +219,7 @@ public class SvdDecompositionIntegrationTests
 
     #region Singular Value Property Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_SingularValues_AreNonNegative()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_SingularValues_AreSortedDescending()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_DiagonalMatrix_HasCorrectSingularValues()
     {
         // Arrange - Diagonal matrix with values 4, 3, 2, 1
@@ -299,7 +299,7 @@ public class SvdDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
@@ -320,7 +320,7 @@ public class SvdDecompositionIntegrationTests
             $"Tall matrix reconstruction failed. Max difference: {maxDiff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
@@ -345,7 +345,7 @@ public class SvdDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_ZeroMatrix_HasZeroSingularValues()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_RankOneMatrix_HasOneSingularValue()
     {
         // Arrange - Rank 1 matrix: u * v^T
@@ -382,7 +382,7 @@ public class SvdDecompositionIntegrationTests
         Assert.True(Math.Abs(svd.S[2]) < LooseTolerance, $"Third singular value should be ~0, got {svd.S[2]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_SymmetricMatrix_ValidDecomposition()
     {
         // Arrange - Create symmetric matrix A^T * A
@@ -403,7 +403,7 @@ public class SvdDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SvdDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange

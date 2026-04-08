@@ -101,7 +101,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region DefaultFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_Constructor_InitializesSuccessfully()
     {
         // Act
@@ -111,7 +111,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_WithGoodFitData_ReturnsGoodFitOrValidResult()
     {
         // Arrange
@@ -127,7 +127,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_WithOverfitData_DetectsOverfitOrHighVariance()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class BasicFitDetectorIntegrationTests
             $"Expected Overfit, HighVariance, or Unstable but got {result.FitType}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_WithUnderfitData_DetectsUnderfitOrHighBias()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class BasicFitDetectorIntegrationTests
             $"Expected Underfit, HighBias, PoorFit, or VeryPoorFit but got {result.FitType}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_ReturnsConfidenceLevelBetweenZeroAndOne()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.True(result.ConfidenceLevel <= 1.0, "Confidence level should be <= 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_ReturnsRecommendationsList()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_IsConsistentAcrossMultipleCalls()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region HoldoutValidationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoldoutValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -224,7 +224,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoldoutValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoldoutValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -257,7 +257,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoldoutValidationFitDetector_DetectFit_WithOverfitData_DetectsIssue()
     {
         // Arrange
@@ -276,7 +276,7 @@ public class BasicFitDetectorIntegrationTests
             $"Expected problematic fit type for overfit data, got {result.FitType}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HoldoutValidationFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region KFoldCrossValidationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -305,7 +305,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -325,7 +325,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotEmpty(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_DetectFit_IncludesMetricsInRecommendations()
     {
         // Arrange
@@ -356,7 +356,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.Contains(result.Recommendations, r => r.Contains("R2") || r.Contains("Validation"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_DetectFit_WithHighVarianceData_DetectsVariance()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region CrossValidationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -390,7 +390,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossValidationFitDetector_DetectFit_ReturnsValidConfidenceAndRecommendations()
     {
         // Arrange
@@ -442,7 +442,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region BootstrapFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BootstrapFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -452,7 +452,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BootstrapFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -469,7 +469,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BootstrapFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -485,7 +485,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BootstrapFitDetector_DetectFit_WithUnderfitData_DetectsIssue()
     {
         // Arrange
@@ -510,7 +510,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region JackknifeFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JackknifeFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -520,7 +520,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JackknifeFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -537,7 +537,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JackknifeFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -553,7 +553,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JackknifeFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -572,7 +572,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region StratifiedKFoldCrossValidationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StratifiedKFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -582,7 +582,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StratifiedKFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -599,7 +599,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StratifiedKFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -615,7 +615,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StratifiedKFoldCrossValidationFitDetector_DetectFit_ReturnsNonEmptyRecommendations()
     {
         // Arrange
@@ -633,7 +633,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region TimeSeriesCrossValidationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -643,7 +643,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -678,7 +678,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllBasicDetectors_WithSameData_ProduceValidResults()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class BasicFitDetectorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllBasicDetectors_WithOverfitData_DetectProblems()
     {
         // Arrange
@@ -740,7 +740,7 @@ public class BasicFitDetectorIntegrationTests
 
     #region AdditionalInfo Dictionary Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange
@@ -754,7 +754,7 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.AdditionalInfo);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KFoldCrossValidationFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange

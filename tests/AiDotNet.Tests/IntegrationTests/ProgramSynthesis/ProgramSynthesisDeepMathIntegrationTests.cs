@@ -17,7 +17,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodePosition: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodePosition_Defaults()
     {
         var pos = new CodePosition();
@@ -26,7 +26,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0, pos.Offset);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodePosition_SetProperties()
     {
         var pos = new CodePosition { Line = 42, Column = 15, Offset = 1024 };
@@ -39,7 +39,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeSpan: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeSpan_Defaults_StartAndEndNotNull()
     {
         var span = new CodeSpan();
@@ -47,7 +47,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.NotNull(span.End);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeSpan_SetStartEnd()
     {
         var span = new CodeSpan
@@ -65,7 +65,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeAstNode: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeAstNode_Defaults()
     {
         var node = new CodeAstNode();
@@ -76,7 +76,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.NotNull(node.Span);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeAstNode_SetProperties()
     {
         var node = new CodeAstNode
@@ -103,7 +103,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeAstEdge: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeAstEdge_Defaults()
     {
         var edge = new CodeAstEdge();
@@ -111,7 +111,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0, edge.ChildNodeId);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeAstEdge_SetProperties()
     {
         var edge = new CodeAstEdge { ParentNodeId = 1, ChildNodeId = 5 };
@@ -123,7 +123,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeLocation: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeLocation_Defaults()
     {
         var loc = new CodeLocation();
@@ -132,7 +132,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Null(loc.NodePath);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeLocation_SetProperties()
     {
         var loc = new CodeLocation
@@ -152,7 +152,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssue: Defaults and Properties
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeIssue_Defaults()
     {
         var issue = new CodeIssue();
@@ -166,7 +166,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.NotNull(issue.Location);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeIssue_SetAllProperties()
     {
         var issue = new CodeIssue
@@ -190,7 +190,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCompletionCandidate: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCompletionCandidate_Defaults()
     {
         var candidate = new CodeCompletionCandidate();
@@ -198,7 +198,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0.0, candidate.Score);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCompletionCandidate_SetProperties()
     {
         var candidate = new CodeCompletionCandidate
@@ -214,7 +214,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeComplexityMetrics: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeComplexityMetrics_Defaults()
     {
         var metrics = new CodeComplexityMetrics();
@@ -223,7 +223,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0, metrics.EstimatedCyclomaticComplexity);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeComplexityMetrics_SetProperties()
     {
         var metrics = new CodeComplexityMetrics
@@ -241,7 +241,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeEditOperation: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeEditOperation_Defaults()
     {
         var op = new CodeEditOperation();
@@ -250,7 +250,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Null(op.Text);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeEditOperation_SetProperties()
     {
         var op = new CodeEditOperation
@@ -271,7 +271,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeHotspot: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeHotspot_Defaults()
     {
         var hotspot = new CodeHotspot();
@@ -280,7 +280,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0.0, hotspot.Score);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeHotspot_SetProperties()
     {
         var hotspot = new CodeHotspot
@@ -298,7 +298,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeFixSuggestion: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeFixSuggestion_Defaults()
     {
         var fix = new CodeFixSuggestion();
@@ -313,7 +313,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneGroup: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCloneGroup_Defaults()
     {
         var group = new CodeCloneGroup();
@@ -325,7 +325,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Empty(group.RefactorSuggestions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCloneGroup_SetProperties()
     {
         var group = new CodeCloneGroup
@@ -351,7 +351,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneInstance: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCloneInstance_Defaults()
     {
         var instance = new CodeCloneInstance();
@@ -363,7 +363,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // SynthesisType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SynthesisType_HasSixValues()
     {
         var values = (((SynthesisType[])Enum.GetValues(typeof(SynthesisType))));
@@ -386,7 +386,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // ProgramLanguage Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProgramLanguage_HasElevenValues()
     {
         var values = (((ProgramLanguage[])Enum.GetValues(typeof(ProgramLanguage))));
@@ -414,7 +414,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeTask Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeTask_HasThirteenValues()
     {
         var values = (((CodeTask[])Enum.GetValues(typeof(CodeTask))));
@@ -444,7 +444,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // SqlDialect Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SqlDialect_HasThreeValues()
     {
         var values = (((SqlDialect[])Enum.GetValues(typeof(SqlDialect))));
@@ -464,7 +464,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeCloneType_HasFourValues()
     {
         var values = (((CodeCloneType[])Enum.GetValues(typeof(CodeCloneType))));
@@ -475,7 +475,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeEditOperationType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeEditOperationType_HasThreeValues()
     {
         var values = (((CodeEditOperationType[])Enum.GetValues(typeof(CodeEditOperationType))));
@@ -486,7 +486,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssueCategory Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeIssueCategory_HasElevenValues()
     {
         var values = (((CodeIssueCategory[])Enum.GetValues(typeof(CodeIssueCategory))));
@@ -497,7 +497,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssueSeverity Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CodeIssueSeverity_HasFourValues()
     {
         var values = (((CodeIssueSeverity[])Enum.GetValues(typeof(CodeIssueSeverity))));

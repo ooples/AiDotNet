@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests;
 
 public class ModelArtifactServiceTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateKeyResponse_Throws_WhenArtifactNull()
     {
         var service = CreateService(modelDirectory: "models");
@@ -16,7 +16,7 @@ public class ModelArtifactServiceTests
         Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateKeyResponse_ReturnsBase64KeyMaterial()
     {
         var service = CreateService(modelDirectory: "models");
@@ -51,7 +51,7 @@ public class ModelArtifactServiceTests
         Assert.Equal("modelName", ex.ParamName);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPlainArtifactPath_Throws_WhenModelNotFound()
     {
         var service = CreateService(modelDirectory: "models");
@@ -59,7 +59,7 @@ public class ModelArtifactServiceTests
         Assert.Throws<FileNotFoundException>(() => service.GetPlainArtifactPath("missing"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPlainArtifactPath_Throws_WhenModelHasNoSourcePath()
     {
         var repo = new TestModelRepository();
@@ -70,7 +70,7 @@ public class ModelArtifactServiceTests
         Assert.Throws<InvalidOperationException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPlainArtifactPath_Throws_WhenSourcePathOutsideConfiguredDirectory()
     {
         var workDir = CreateWorkDir();
@@ -90,7 +90,7 @@ public class ModelArtifactServiceTests
         Assert.Throws<InvalidOperationException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPlainArtifactPath_Throws_WhenSourceFileMissing()
     {
         var workDir = CreateWorkDir();
@@ -107,7 +107,7 @@ public class ModelArtifactServiceTests
         Assert.Throws<FileNotFoundException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetPlainArtifactPath_ReturnsFullPath_WhenSourceFileValid()
     {
         var workDir = CreateWorkDir();
@@ -127,7 +127,7 @@ public class ModelArtifactServiceTests
         Assert.Equal(Path.GetFullPath(file), result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetOrCreateEncryptedArtifact_UsesStoreAndCachesPerModelName()
     {
         var workDir = CreateWorkDir();
@@ -155,7 +155,7 @@ public class ModelArtifactServiceTests
         Assert.EndsWith(Path.Combine(".protected"), protector.LastOutputDirectory!, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RemoveProtectedArtifact_NoOps_WhenNameBlank()
     {
         var store = new InMemoryModelArtifactStore();
@@ -176,7 +176,7 @@ public class ModelArtifactServiceTests
         Assert.True(store.TryGet("m", out _));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RemoveProtectedArtifact_RemovesArtifact_WhenNameProvided()
     {
         var store = new InMemoryModelArtifactStore();

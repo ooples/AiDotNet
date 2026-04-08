@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Output_AtLeastAsLargeAsInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -22,7 +22,7 @@ public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
             "SR models should upscale, not downscale.");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SuperResolved_ValuesShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

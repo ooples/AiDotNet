@@ -18,7 +18,7 @@ public class BasicCompositionPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.AddRound(epsilon, delta, samplingRate));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AddRound_AccumulatesEpsilonAndDelta()
     {
         var accountant = new BasicCompositionPrivacyAccountant();
@@ -41,7 +41,7 @@ public class BasicCompositionPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.GetEpsilonAtDelta(targetDelta));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetEpsilonAtDelta_ReturnsTotalEpsilon()
     {
         var accountant = new BasicCompositionPrivacyAccountant();

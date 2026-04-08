@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new FLARERetriever<double>(null!, retriever));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new FLARERetriever<double>(generator, null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GenerateWithActiveRetrieval Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 flare.GenerateWithActiveRetrieval(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -211,7 +211,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 flare.GenerateWithActiveRetrieval("   "));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithConfidentResponse_StopsAfterOneIteration()
         {
             // Arrange
@@ -229,7 +229,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(retriever.RetrievalCallCount >= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithUncertainResponse_TriggersAdditionalRetrieval()
         {
             // Arrange - Generator produces uncertainty phrases that should trigger re-retrieval
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(retriever.RetrievalCallCount >= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_RespectsMaxIterations()
         {
             // Arrange - Generator always produces uncertain responses
@@ -271,7 +271,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 $"Expected at most 10 retrieval calls but got {retriever.RetrievalCallCount}");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_ReturnsNonEmptyResult()
         {
             // Arrange
@@ -316,7 +316,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(generator.GeneratePrompts.Count >= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithHighRelevanceDocuments_CalculatesHigherConfidence()
         {
             // Arrange - Documents with high relevance scores
@@ -355,7 +355,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Missing Information Extraction Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithMissingInfoPattern_ExtractsMissingTopic()
         {
             // Arrange - Response contains pattern that should extract missing info
@@ -406,7 +406,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithEmptyDocuments_HandlesGracefully()
         {
             // Arrange
@@ -421,7 +421,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithDocumentsWithoutRelevanceScores_UsesDefaultConfidence()
         {
             // Arrange - Documents without relevance scores
@@ -452,7 +452,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should use 0.5 default for relevance calculation
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithThresholdZero_AlwaysRetrievesMore()
         {
             // Arrange - Threshold 0 means any confidence passes
@@ -468,7 +468,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // With threshold 0, even low confidence should pass
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_WithThresholdOne_RequiresHighConfidence()
         {
             // Arrange - Threshold 1.0 requires perfect confidence
@@ -488,7 +488,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Document Deduplication Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GenerateWithActiveRetrieval_DoesNotDuplicateDocuments()
         {
             // Arrange - Retriever always returns the same documents

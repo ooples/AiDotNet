@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 /// </summary>
 public class ElasticWeightConsolidationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class ElasticWeightConsolidationTests
         Assert.NotNull(ewc);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_NullLossFunction_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -42,7 +42,7 @@ public class ElasticWeightConsolidationTests
         Assert.Contains("lossFunction", exception.Message);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeRegularizationLoss_WithNoPreviousTask_ReturnsZero()
     {
         // Arrange

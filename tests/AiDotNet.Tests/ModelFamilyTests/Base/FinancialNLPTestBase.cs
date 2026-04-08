@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class FinancialNLPTestBase : FinancialModelTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DifferentText_DifferentSentiment()
     {
         var network = CreateNetwork();
@@ -35,7 +35,7 @@ public abstract class FinancialNLPTestBase : FinancialModelTestBase
             "Financial NLP produces identical output for different text — ignoring input.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SentimentScores_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

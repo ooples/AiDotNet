@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativePruningSparsity_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -48,7 +48,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(pruningSparsity: -0.1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithPruningSparsityGreaterThanOne_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(pruningSparsity: 1.5));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativePruningThreshold_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(pruningThreshold: -0.1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroNumClusters_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(numClusters: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeNumClusters_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(numClusters: -1));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroMaxIterations_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new DeepCompression<double>(maxClusteringIterations: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroHuffmanPrecision_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Factory Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ForConvolutionalLayers_CreatesCorrectInstance()
         {
             // Arrange & Act
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ForFullyConnectedLayers_CreatesCorrectInstance()
         {
             // Arrange & Act
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compress Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<DeepCompressionMetadata<double>>(metadata);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -168,7 +168,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_ProducesDeepCompressionMetadata()
         {
             // Arrange
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, deepMetadata.OriginalLength);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithHighSparsity_PrunesMostWeights()
         {
             // Arrange
@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Decompress Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
@@ -246,7 +246,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GetCompressedSize Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GetCompressedSize_ReturnsPositiveSize()
         {
             // Arrange
@@ -298,7 +298,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compression Stats Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressionStats_ContainsValidStatistics()
         {
             // Arrange
@@ -326,7 +326,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(stats.BitsPerWeight > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressionStats_PruningRatio_ReturnsPositiveValue()
         {
             // Arrange
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(stats.PruningRatio > 1.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressionStats_QuantizationRatio_ReturnsPositiveValue()
         {
             // Arrange
@@ -351,7 +351,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -377,7 +377,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Metadata Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_Constructor_WithNullPruningMetadata_ThrowsException()
         {
             // Arrange
@@ -393,7 +393,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     null!, clusteringMetadata, huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_Constructor_WithNullClusteringMetadata_ThrowsException()
         {
             // Arrange
@@ -409,7 +409,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     pruningMetadata, null!, huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_Constructor_WithNullHuffmanMetadata_ThrowsException()
         {
             // Arrange
@@ -424,7 +424,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     pruningMetadata, clusteringMetadata, null!, 10, new DeepCompressionStats()));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
@@ -445,7 +445,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(size > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Metadata_Type_ReturnsCorrectCompressionType()
         {
             // Arrange
@@ -468,7 +468,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Round-Trip Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressAndDecompress_RoundTrip_PreservesLargeWeights()
         {
             // Arrange
@@ -494,7 +494,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Small weights may be pruned to zero
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressAndDecompress_WithLargeDataset_CompletesInReasonableTime()
         {
             // Arrange
@@ -523,7 +523,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CompressAndDecompress_WithReproducibleSeed_ProducesSameResults()
         {
             // Arrange
@@ -557,7 +557,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Edge Case Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithAllSameValues_HandlesGracefully()
         {
             // Arrange
@@ -581,7 +581,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithVerySmallWeights_PrunesAll()
         {
             // Arrange

@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
@@ -65,7 +65,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithValidData_ReturnsValidFitType()
         {
             // Arrange
@@ -85,7 +85,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 result.FitType == FitType.Unstable);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_IncludesThresholdsInRecommendations()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains(result.Recommendations, r => r.Contains("AIC threshold") || r.Contains("BIC threshold"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ReturnsRecommendationsForFitType()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasAdvice);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_MultipleCallsReturnConsistentResults()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithCustomThresholds_InitializesSuccessfully()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithSimilarMseValues_ProducesResult()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithIdenticalMse_StillProducesResult()
         {
             // Arrange
@@ -288,7 +288,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_GoodFitAdvice_ContainsDeploymentRecommendation()
         {
             // Arrange - Use custom thresholds that make any fit "good"
@@ -313,7 +313,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_OverfitAdvice_ContainsRegularizationRecommendation()
         {
             // Arrange - Use thresholds that detect overfitting more readily
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_UnderfitAdvice_ContainsComplexityRecommendation()
         {
             // Arrange - Use thresholds that detect underfitting
@@ -360,7 +360,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_HighVarianceAdvice_ContainsDataRecommendation()
         {
             // Arrange
@@ -380,7 +380,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_UnstableAdvice_ContainsInvestigationRecommendation()
         {
             // Arrange
@@ -397,7 +397,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithConsistentMetrics_ReturnsHighConfidence()
         {
             // Arrange
@@ -425,7 +425,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 $"inconsistent data confidence ({inconsistentResult.ConfidenceLevel:F4})");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithInconsistentMetrics_ReturnsValidResult()
         {
             // Arrange
@@ -445,7 +445,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange

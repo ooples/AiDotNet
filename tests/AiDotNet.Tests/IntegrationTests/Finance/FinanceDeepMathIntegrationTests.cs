@@ -18,7 +18,7 @@ public class FinanceDeepMathIntegrationTests
     // FinancialDomain Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialDomain_HasTwoValues()
     {
         var values = (((FinancialDomain[])Enum.GetValues(typeof(FinancialDomain))));
@@ -37,7 +37,7 @@ public class FinanceDeepMathIntegrationTests
     // FinancialNLPTaskType Enum
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialNLPTaskType_HasSevenValues()
     {
         var values = (((FinancialNLPTaskType[])Enum.GetValues(typeof(FinancialNLPTaskType))));
@@ -61,21 +61,21 @@ public class FinanceDeepMathIntegrationTests
     // FinancialSearchSpace: Construction
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_Construction_Forecasting()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         Assert.NotNull(searchSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_Construction_Risk()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         Assert.NotNull(searchSpace);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_GetSearchSpace_PatchTST()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -84,7 +84,7 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_GetSearchSpace_NeuralVaR()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Risk);
@@ -93,7 +93,7 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_GetSearchSpace_Default()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -103,7 +103,7 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialSearchSpace_SearchSpace_ContainsLearningRate()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
@@ -251,7 +251,7 @@ public class FinanceDeepMathIntegrationTests
         Assert.Equal(expectedLogReturn, logReturn, 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialMath_LogReturns_Additive()
     {
         // Log returns are additive: ln(P2/P0) = ln(P1/P0) + ln(P2/P1)

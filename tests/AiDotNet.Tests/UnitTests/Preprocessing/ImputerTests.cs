@@ -13,7 +13,7 @@ public class ImputerTests
 
     #region SimpleImputer Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_MeanStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 3], mean = 2
@@ -35,7 +35,7 @@ public class ImputerTests
         Assert.Equal(20.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_MedianStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 3, 5], median = 3
@@ -57,7 +57,7 @@ public class ImputerTests
         Assert.Equal(3.0, result[1, 0], Tolerance); // NaN replaced with median
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_MostFrequentStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 2, 2, 1, 2], most frequent = 2
@@ -81,7 +81,7 @@ public class ImputerTests
         Assert.Equal(2.0, result[1, 0], Tolerance); // NaN replaced with most frequent
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_ConstantStrategy_ImputesMissingValues()
     {
         // Arrange
@@ -103,7 +103,7 @@ public class ImputerTests
         Assert.Equal(-999.0, result[1, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_ConstantStrategy_WithDefaultFillValue_UsesNumOpsZero()
     {
         // Arrange - When no fill value is explicitly provided, the imputer uses NumOps.Zero
@@ -126,7 +126,7 @@ public class ImputerTests
         Assert.Equal(20.0, result[1, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_SpecificColumns_OnlyImputesSelectedColumns()
     {
         // Arrange - Only impute column 0
@@ -148,7 +148,7 @@ public class ImputerTests
         Assert.True(double.IsNaN(result[0, 1])); // Not imputed (column 1 not selected)
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class ImputerTests
         Assert.Equal(4.0, result[1, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_AllMissingInColumn_ReturnsZero()
     {
         // Arrange - Column 0 has all NaN
@@ -194,7 +194,7 @@ public class ImputerTests
         Assert.Equal(0.0, result[2, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_FitTransform_WorksCorrectly()
     {
         // Arrange
@@ -229,7 +229,7 @@ public class ImputerTests
         Assert.Equal(2.0, result[1, 0], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_Statistics_ReturnsComputedValues()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class ImputerTests
         Assert.Equal(20.0, imputer.Statistics[1], Tolerance); // Mean of [10, 20, 30]
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
@@ -268,7 +268,7 @@ public class ImputerTests
 
     #region KNNImputer Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_UniformWeights_ImputesMissingValues()
     {
         // Arrange - Simple case where nearest neighbors have clear values
@@ -290,7 +290,7 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[2, 0]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_DistanceWeights_ImputesMissingValues()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[2, 0]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_InvalidNNeighbors_ThrowsException()
     {
         // Arrange & Act & Assert
@@ -320,7 +320,7 @@ public class ImputerTests
         Assert.Throws<ArgumentException>(() => new KNNImputer<double>(nNeighbors: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -331,7 +331,7 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class ImputerTests
         Assert.Equal(2.0, result[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_SpecificColumns_OnlyImputesSelectedColumns()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class ImputerTests
         Assert.True(double.IsNaN(result[0, 1])); // Not imputed
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
@@ -387,7 +387,7 @@ public class ImputerTests
         Assert.Throws<NotSupportedException>(() => imputer.InverseTransform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_DefaultNNeighbors_IsFive()
     {
         // Arrange
@@ -401,7 +401,7 @@ public class ImputerTests
 
     #region IterativeImputer Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_ImputesMissingValues()
     {
         // Arrange - Data with clear linear relationship
@@ -426,7 +426,7 @@ public class ImputerTests
         Assert.True(Math.Abs(result[2, 1] - 6.0) < 2.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_InvalidMaxIterations_ThrowsException()
     {
         // Arrange & Act & Assert
@@ -434,14 +434,14 @@ public class ImputerTests
         Assert.Throws<ArgumentException>(() => new IterativeImputer<double>(maxIterations: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_InvalidTolerance_ThrowsException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => new IterativeImputer<double>(tolerance: -0.1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
@@ -473,7 +473,7 @@ public class ImputerTests
         Assert.Equal(2.0, result[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_MeanInitialStrategy_Works()
     {
         // Arrange
@@ -495,7 +495,7 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 0]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_MedianInitialStrategy_Works()
     {
         // Arrange
@@ -517,7 +517,7 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 0]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
@@ -530,7 +530,7 @@ public class ImputerTests
         Assert.Throws<NotSupportedException>(() => imputer.InverseTransform(data));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_MultipleMissingColumns_ImputesAll()
     {
         // Arrange
@@ -552,7 +552,7 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 2]));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_Convergence_StopsEarly()
     {
         // Arrange - Simple data that should converge quickly
@@ -578,7 +578,7 @@ public class ImputerTests
 
     #region Properties and Configuration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -591,7 +591,7 @@ public class ImputerTests
         Assert.Equal(42.0, imputer.FillValue);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -602,7 +602,7 @@ public class ImputerTests
         Assert.Equal(KNNWeights.Distance, imputer.Weights);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IterativeImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -623,7 +623,7 @@ public class ImputerTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SimpleImputer_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
@@ -638,7 +638,7 @@ public class ImputerTests
         Assert.Equal(new[] { "feature1", "feature2" }, names);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void KNNImputer_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange

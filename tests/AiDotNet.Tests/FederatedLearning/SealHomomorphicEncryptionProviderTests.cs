@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class SealHomomorphicEncryptionProviderTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateEncryptedWeightedAverage_ValidatesInputs()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
@@ -21,7 +21,7 @@ public class SealHomomorphicEncryptionProviderTests
         Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateEncryptedWeightedAverage_ReturnsBaseline_WhenNoValidEncryptedIndices()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
@@ -41,7 +41,7 @@ public class SealHomomorphicEncryptionProviderTests
         Assert.Equal(3.0, result[2], precision: 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateEncryptedWeightedAverage_ThrowsWhenWeightsMissingOrInvalid()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
@@ -62,7 +62,7 @@ public class SealHomomorphicEncryptionProviderTests
             options: new HomomorphicEncryptionOptions { Scheme = (HomomorphicEncryptionScheme)999 }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AggregateEncryptedWeightedAverage_ThrowsForUnknownScheme()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
@@ -76,7 +76,7 @@ public class SealHomomorphicEncryptionProviderTests
             options: new HomomorphicEncryptionOptions { Scheme = (HomomorphicEncryptionScheme)999 }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetProviderName_IsStable()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();

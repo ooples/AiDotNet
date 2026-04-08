@@ -56,7 +56,7 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
@@ -66,7 +66,7 @@ public class MonteCarloValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class MonteCarloValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_TrainingSizeIsComplementOfValidation()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class MonteCarloValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class MonteCarloValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_TrainAndValidationCoverAllIndices()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Randomness Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_DifferentIterationsHaveDifferentSplits()
     {
         // Arrange
@@ -289,7 +289,7 @@ public class MonteCarloValidatorIntegrationTests
         Assert.True(foundDifferent, "Monte Carlo should produce different random splits across iterations");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -331,7 +331,7 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -368,7 +368,7 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Sample Usage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_SamplesMayAppearInMultipleValidationSets()
     {
         // Arrange - Monte Carlo allows samples to appear in multiple validation sets

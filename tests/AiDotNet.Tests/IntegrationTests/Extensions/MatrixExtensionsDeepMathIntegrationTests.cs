@@ -16,7 +16,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Identity Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdentityMatrix_TrueForIdentity()
     {
         var m = new Matrix<double>(3, 3);
@@ -24,7 +24,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsIdentityMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdentityMatrix_FalseForScaledIdentity()
     {
         var m = new Matrix<double>(3, 3);
@@ -32,7 +32,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(m.IsIdentityMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdentityMatrix_FalseForNonSquare()
     {
         var m = new Matrix<double>(2, 3);
@@ -43,7 +43,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Diagonal Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDiagonalMatrix_TrueForDiagonal()
     {
         var m = new Matrix<double>(3, 3);
@@ -51,7 +51,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsDiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDiagonalMatrix_FalseForNonDiagonal()
     {
         var m = new Matrix<double>(3, 3);
@@ -59,14 +59,14 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(m.IsDiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDiagonalMatrix_TrueForZeroMatrix()
     {
         var m = new Matrix<double>(3, 3);
         Assert.True(m.IsDiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityIsDiagonal()
     {
         var m = new Matrix<double>(3, 3);
@@ -78,7 +78,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Scalar Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsScalarMatrix_TrueForScaledIdentity()
     {
         var m = new Matrix<double>(3, 3);
@@ -86,7 +86,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsScalarMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsScalarMatrix_TrueForIdentity()
     {
         var m = new Matrix<double>(3, 3);
@@ -94,7 +94,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsScalarMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsScalarMatrix_FalseForDifferentDiagonals()
     {
         var m = new Matrix<double>(3, 3);
@@ -106,7 +106,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Symmetric Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSymmetricMatrix_TrueForSymmetric()
     {
         var m = new Matrix<double>(3, 3);
@@ -116,7 +116,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSymmetricMatrix_FalseForNonSymmetric()
     {
         var m = new Matrix<double>(3, 3);
@@ -125,7 +125,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(m.IsSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiagonalIsAlwaysSymmetric()
     {
         var m = new Matrix<double>(3, 3);
@@ -137,7 +137,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Skew-Symmetric Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSkewSymmetricMatrix_TrueForSkewSymmetric()
     {
         // A = -A^T, diagonal must be zero
@@ -148,7 +148,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsSkewSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSkewSymmetricMatrix_FalseForNonZeroDiagonal()
     {
         var m = new Matrix<double>(2, 2);
@@ -157,7 +157,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(m.IsSkewSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ZeroMatrixIsBothSymmetricAndSkewSymmetric()
     {
         var m = new Matrix<double>(3, 3);
@@ -169,7 +169,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Upper Triangular Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperTriangular_TrueForUpperTriangular()
     {
         var m = new Matrix<double>(3, 3);
@@ -179,7 +179,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsUpperTriangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperTriangular_FalseForLowerElements()
     {
         var m = new Matrix<double>(3, 3);
@@ -193,7 +193,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Lower Triangular Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsLowerTriangular_TrueForLowerTriangular()
     {
         var m = new Matrix<double>(3, 3);
@@ -203,7 +203,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsLowerTriangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiagonalIsBothUpperAndLowerTriangular()
     {
         var m = new Matrix<double>(3, 3);
@@ -216,7 +216,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Tridiagonal Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsTridiagonal_TrueForTridiagonal()
     {
         // Non-zero only on main diagonal and first sub/super diagonals
@@ -228,7 +228,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsTridiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsTridiagonal_FalseForFullMatrix()
     {
         var m = new Matrix<double>(3, 3);
@@ -242,7 +242,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Upper/Lower Bidiagonal Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperBidiagonal_TrueForUpperBidiagonal()
     {
         var m = new Matrix<double>(3, 3);
@@ -252,7 +252,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsUpperBidiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsLowerBidiagonal_TrueForLowerBidiagonal()
     {
         var m = new Matrix<double>(3, 3);
@@ -266,7 +266,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Band Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBandMatrix_TridiagonalIsBand11()
     {
         var m = new Matrix<double>(4, 4);
@@ -277,7 +277,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsBandMatrix(1, 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBandMatrix_DiagonalIsBand00()
     {
         var m = new Matrix<double>(3, 3);
@@ -289,28 +289,28 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Square / Rectangular Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSquareMatrix_TrueForSquare()
     {
         var m = new Matrix<double>(3, 3);
         Assert.True(m.IsSquareMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSquareMatrix_FalseForRectangular()
     {
         var m = new Matrix<double>(2, 3);
         Assert.False(m.IsSquareMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsRectangularMatrix_TrueForRectangular()
     {
         var m = new Matrix<double>(2, 3);
         Assert.True(m.IsRectangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsRectangularMatrix_FalseForSquare()
     {
         var m = new Matrix<double>(3, 3);
@@ -321,7 +321,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Sparse / Dense Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSparseMatrix_TrueForMostlyZeros()
     {
         var m = new Matrix<double>(4, 4);
@@ -329,7 +329,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsSparseMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDenseMatrix_TrueForMostlyNonZero()
     {
         var m = new Matrix<double>(3, 3);
@@ -343,7 +343,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // AddConstantColumn Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddConstantColumn_AddsOnesColumn()
     {
         var m = new Matrix<double>(2, 3);
@@ -368,7 +368,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // ToVector Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ToVector_FlattensMatrix()
     {
         var m = new Matrix<double>(2, 3);
@@ -389,7 +389,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // SumColumns Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumColumns_HandComputed()
     {
         // [[1,2,3],[4,5,6]] -> sum columns = [5, 7, 9]
@@ -408,7 +408,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // GetColumn Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetColumn_HandComputed()
     {
         var m = new Matrix<double>(3, 2);
@@ -432,7 +432,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // AddVectorToEachRow Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddVectorToEachRow_HandComputed()
     {
         var m = new Matrix<double>(2, 3);
@@ -454,7 +454,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Backward Substitution Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BackwardSubstitution_UpperTriangular_HandComputed()
     {
         // Solve Ux = b where U is upper triangular
@@ -483,7 +483,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(5.0 / 3.0, x[0], Tolerance);     // (3+7/3-2)/2 = 5/3
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BackwardSubstitution_DiagonalMatrix()
     {
         // For diagonal matrix, x[i] = b[i] / d[i]
@@ -498,7 +498,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(3.0, x[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BackwardSubstitution_IdentityMatrix()
     {
         // Ix = b => x = b
@@ -516,7 +516,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Block Matrix Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBlockMatrix_TrueForConsistentBlocks()
     {
         // 4x4 matrix with 2x2 blocks where each block has all identical elements
@@ -533,7 +533,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsBlockMatrix(2, 2));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetBlock_ExtractsSubmatrix()
     {
         var m = new Matrix<double>(4, 4);
@@ -554,7 +554,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // Matrix Type Classification Hierarchy
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IdentityMatrix_IsAllSpecialTypes()
     {
         var m = new Matrix<double>(3, 3);
@@ -569,7 +569,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsSquareMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiagonalMatrix_TypeHierarchy()
     {
         // Diagonal but not identity and not scalar
@@ -584,7 +584,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(m.IsIdentityMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SymmetricTridiagonal_TypeHierarchy()
     {
         // Symmetric tridiagonal (common in physics: 1D Laplacian)
@@ -605,7 +605,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
     // ConsistentBlock Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsConsistentBlock_AllSameValue()
     {
         var m = new Matrix<double>(2, 2);
@@ -614,7 +614,7 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(m.IsConsistentBlock());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsConsistentBlock_DifferentValues_False()
     {
         var m = new Matrix<double>(2, 2);

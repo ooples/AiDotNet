@@ -19,7 +19,7 @@ public class SourceGeneratorCoverageTests
     /// Verifies that every public Configure*() method on AiModelBuilder has a corresponding
     /// property on YamlModelConfig (either hand-written or auto-generated).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YamlModelConfig_HasPropertyForEveryConfigureMethod()
     {
         var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
@@ -67,7 +67,7 @@ public class SourceGeneratorCoverageTests
     /// Auto-generated: 48 from source generator
     /// Total: 66 properties
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void YamlModelConfig_HasExpectedPropertyCount()
     {
         var configType = typeof(YamlModelConfig);
@@ -87,7 +87,7 @@ public class SourceGeneratorCoverageTests
 
     #region Generated Section Deserialization
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithRegularizationSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -101,7 +101,7 @@ regularization:
         Assert.Equal("NoRegularization", config.Regularization.Type);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithFitDetectorSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -115,7 +115,7 @@ fitDetector:
         Assert.Equal("DefaultFitDetector", config.FitDetector.Type);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithFairnessEvaluatorSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -129,7 +129,7 @@ fairnessEvaluator:
         Assert.Equal("BasicFairnessEvaluator", config.FairnessEvaluator.Type);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithPreprocessingPipeline_DeserializesCorrectly()
     {
         var yaml = @"
@@ -150,7 +150,7 @@ preprocessing:
         Assert.True(config.Preprocessing.Steps[1].Params.ContainsKey("strategy"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithPostprocessingPipeline_DeserializesCorrectly()
     {
         var yaml = @"
@@ -166,7 +166,7 @@ postprocessing:
         Assert.Equal("SoftmaxTransformer", config.Postprocessing.Steps[0].Type);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithFederatedLearningSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -186,7 +186,7 @@ federatedLearning:
         Assert.Equal(100, config.FederatedLearning.MaxRounds);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithAugmentationSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -204,7 +204,7 @@ augmentation:
         Assert.Equal(42, config.Augmentation.Seed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithUncertaintyQuantificationSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -222,7 +222,7 @@ uncertaintyQuantification:
         Assert.Equal(0.1, config.UncertaintyQuantification.MonteCarloDropoutRate);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LoadFromString_WithProgramSynthesisSection_DeserializesCorrectly()
     {
         var yaml = @"
@@ -245,7 +245,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the type registry has entries for the sections that have parameterless-ctor implementations.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_HasRegisteredImplementations_ForKeyInterfaceSections()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
@@ -301,7 +301,7 @@ programSynthesis:
     /// The library has hundreds of IFullModel implementations and all with public constructors
     /// should be registered.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_ModelSection_HasMultipleImplementations()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
@@ -317,7 +317,7 @@ programSynthesis:
     /// Samples up to 3 types per section to avoid test host crashes from types
     /// that allocate large resources during construction.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_SampledTypes_CanBeInstantiated()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
@@ -372,7 +372,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the YamlRegisteredTypeNames (non-generic) matches the generic YamlTypeRegistry.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisteredTypeNames_MatchesTypeRegistry()
     {
         var genericRegistries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
@@ -398,7 +398,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the schema metadata covers all generated sections.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SchemaMetadata_CoversAllGeneratedSections()
     {
         var sections = YamlSchemaMetadata.Sections;
@@ -419,7 +419,7 @@ programSynthesis:
     /// <summary>
     /// Verifies POCO sections in the schema metadata have property definitions.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SchemaMetadata_PocoSections_HaveProperties()
     {
         var sections = YamlSchemaMetadata.Sections;
@@ -437,7 +437,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the hand-written sections are correctly marked in schema metadata.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SchemaMetadata_HandWrittenSections_AreMarked()
     {
         var sections = YamlSchemaMetadata.Sections;
@@ -467,7 +467,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the JSON Schema generator produces valid output.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JsonSchemaGenerate_ProducesValidJson()
     {
         var schema = YamlJsonSchema.Generate();
@@ -484,7 +484,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the JSON Schema covers both hand-written and generated sections.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JsonSchemaGenerate_CoversAllSections()
     {
         var schema = YamlJsonSchema.Generate();
@@ -513,7 +513,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the docs generator produces markdown output with key sections.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocsGenerate_ProducesMarkdown()
     {
         var docs = YamlDocsGenerator.Generate();
@@ -529,7 +529,7 @@ programSynthesis:
     /// <summary>
     /// Verifies the docs generator covers POCO, interface, and pipeline sections.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocsGenerate_CoversAllSectionTypes()
     {
         var docs = YamlDocsGenerator.Generate();
@@ -552,7 +552,7 @@ programSynthesis:
 
     #region Type Registry CreateInstance End-to-End
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_CreateInstance_NoRegularization_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
@@ -562,7 +562,7 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_CreateInstance_DefaultFitDetector_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
@@ -572,7 +572,7 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_CreateInstance_BasicFairnessEvaluator_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
@@ -582,7 +582,7 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_CreateInstance_InvalidSection_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
@@ -592,7 +592,7 @@ programSynthesis:
         Assert.Contains("NonExistentSection", ex.Message);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_CreateInstance_InvalidType_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
@@ -612,7 +612,7 @@ programSynthesis:
     /// These were previously excluded because the ImplementationFinder required parameterless
     /// constructors. With smart constructor resolution, they are now all registered.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TypeRegistry_PreviouslyGappedSections_NowHaveImplementations()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
@@ -654,7 +654,7 @@ programSynthesis:
     /// Counts the total number of Configure methods, generated properties, and registered types
     /// to provide a clear coverage summary.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CoverageSummary_ReportsCounts()
     {
         var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
@@ -698,7 +698,7 @@ programSynthesis:
 
     #region YAML Applier End-to-End for Generated Sections
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Apply_WithRegularizationSection_ConfiguresBuilder()
     {
         var yaml = @"
@@ -715,7 +715,7 @@ regularization:
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Apply_WithFitDetectorSection_ConfiguresBuilder()
     {
         var yaml = @"
@@ -731,7 +731,7 @@ fitDetector:
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Apply_WithFairnessEvaluatorSection_ConfiguresBuilder()
     {
         var yaml = @"
@@ -747,7 +747,7 @@ fairnessEvaluator:
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Apply_WithPromptTemplateSection_ConfiguresBuilder()
     {
         var yaml = @"
@@ -763,7 +763,7 @@ promptTemplate:
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Apply_WithComprehensiveConfig_AllSectionsApplyWithoutError()
     {
         var yaml = @"

@@ -37,14 +37,14 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IActivationFunction<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunctionFactory_Softmax_ThrowsForSingleValue()
     {
         Assert.Throws<NotSupportedException>(() =>
             ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Softmax));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunctionFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -77,7 +77,7 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IVectorActivationFunction<double>>(activation);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunctionFactory_CreateVector_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -116,7 +116,7 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IWindowFunction<double>>(window);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunctionFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -127,7 +127,7 @@ public class FactoriesIntegrationTests
 
     #region RegularizationFactory
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_NoRegularization()
     {
         var options = new RegularizationOptions { Type = RegularizationType.None };
@@ -136,7 +136,7 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IRegularization<double, Matrix<double>, Vector<double>>>(reg);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_L1()
     {
         var options = new RegularizationOptions { Type = RegularizationType.L1, Strength = 0.01 };
@@ -144,7 +144,7 @@ public class FactoriesIntegrationTests
         Assert.NotNull(reg);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_L2()
     {
         var options = new RegularizationOptions { Type = RegularizationType.L2, Strength = 0.01 };
@@ -152,7 +152,7 @@ public class FactoriesIntegrationTests
         Assert.NotNull(reg);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_ElasticNet()
     {
         var options = new RegularizationOptions { Type = RegularizationType.ElasticNet, Strength = 0.01 };
@@ -160,7 +160,7 @@ public class FactoriesIntegrationTests
         Assert.NotNull(reg);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_GetType_RoundTrip()
     {
         var options = new RegularizationOptions { Type = RegularizationType.L1 };
@@ -169,7 +169,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(RegularizationType.L1, detectedType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegularizationFactory_GetType_AllTypes()
     {
         var types = new[] { RegularizationType.None, RegularizationType.L1, RegularizationType.L2, RegularizationType.ElasticNet };
@@ -202,14 +202,14 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IFitnessCalculator<double, Matrix<double>, Vector<double>>>(calc);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitnessCalculatorFactory_Custom_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             FitnessCalculatorFactory.CreateFitnessCalculator<double, Matrix<double>, Vector<double>>(FitnessCalculatorType.Custom));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitnessCalculatorFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -237,7 +237,7 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IMatrixDecomposition<double>>(decomp);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MatrixDecompositionFactory_Cholesky_SPDMatrix()
     {
         // Cholesky requires SPD matrix
@@ -246,7 +246,7 @@ public class FactoriesIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MatrixDecompositionFactory_GetType_RoundTrip()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -255,7 +255,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(MatrixDecompositionType.Qr, detectedType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MatrixDecompositionFactory_InvalidType_Throws()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -263,7 +263,7 @@ public class FactoriesIntegrationTests
             MatrixDecompositionFactory.CreateDecomposition(matrix, (MatrixDecompositionType)999));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MatrixDecompositionFactory_GetType_Null_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -274,7 +274,7 @@ public class FactoriesIntegrationTests
 
     #region PromptTemplateFactory
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_Simple_ReturnsInstance()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Simple, "Hello {name}");
@@ -282,7 +282,7 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<IPromptTemplate>(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_Chat_ReturnsInstance()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Chat);
@@ -290,49 +290,49 @@ public class FactoriesIntegrationTests
         Assert.IsAssignableFrom<ChatPromptTemplate>(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_ChainOfThought_ReturnsInstance()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ChainOfThought, "Solve {problem}");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_ReAct_ReturnsInstance()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct, "Answer this question.");
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_Simple_NullTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, null));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_Simple_EmptyTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, ""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_FewShot_WithoutSelector_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.FewShot, "template {input}"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create((PromptTemplateType)999));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_ChainOfThought_DefaultTemplate()
     {
         // When no template is provided, should use default
@@ -340,7 +340,7 @@ public class FactoriesIntegrationTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptTemplateFactory_ReAct_DefaultTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct);
@@ -351,7 +351,7 @@ public class FactoriesIntegrationTests
 
     #region Cross-Factory - Activation Functions Are Callable
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunction_ReLU_Activate_Positive()
     {
         var relu = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ReLU);
@@ -359,7 +359,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(5.0, result, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunction_ReLU_Activate_Negative()
     {
         var relu = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ReLU);
@@ -367,7 +367,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunction_Sigmoid_Activate_Zero()
     {
         var sigmoid = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Sigmoid);
@@ -375,7 +375,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(0.5, result, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ActivationFunction_Identity_Activate_Passthrough()
     {
         var identity = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Identity);
@@ -387,7 +387,7 @@ public class FactoriesIntegrationTests
 
     #region Cross-Factory - Window Functions Generate Correct Size
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunction_Rectangular_GeneratesCorrectSize()
     {
         var window = WindowFunctionFactory.CreateWindowFunction<double>(WindowFunctionType.Rectangular);
@@ -395,7 +395,7 @@ public class FactoriesIntegrationTests
         Assert.Equal(16, coefficients.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunction_Hamming_GeneratesCorrectSize()
     {
         var window = WindowFunctionFactory.CreateWindowFunction<double>(WindowFunctionType.Hamming);

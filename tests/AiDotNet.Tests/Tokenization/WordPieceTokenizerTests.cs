@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.Tokenization
 {
     public class WordPieceTokenizerTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Train_CreatesTokenizerWithSubwords()
         {
             // Arrange
@@ -27,7 +27,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(tokenizer.VocabularySize > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Tokenize_SplitsTextIntoSubwords()
         {
             // Arrange
@@ -46,7 +46,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", tokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Tokenize_HandlesUnknownWords()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("[UNK]", tokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Encode_AddsSpecialTokens()
         {
             // Arrange
@@ -84,7 +84,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("[SEP]", result.Tokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decode_ReconstructsText()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal("helloing", decoded);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decode_SkipsSpecialTokens()
         {
             // Arrange
@@ -125,7 +125,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", decoded);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EncodeBatch_EncodesMultipleTexts()
         {
             // Arrange

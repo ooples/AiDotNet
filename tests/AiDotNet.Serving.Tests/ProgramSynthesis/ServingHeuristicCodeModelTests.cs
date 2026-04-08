@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingHeuristicCodeModelTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetModelMetadata_IncludesExpectedFields()
     {
         var model = CreateDefaultModel(ProgramLanguage.Generic);
@@ -19,7 +19,7 @@ public sealed class ServingHeuristicCodeModelTests
         Assert.Equal(ProgramLanguage.Generic.ToString(), metadata.AdditionalInfo["TargetLanguage"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Deserialize_MismatchedArchitecture_Throws()
     {
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())

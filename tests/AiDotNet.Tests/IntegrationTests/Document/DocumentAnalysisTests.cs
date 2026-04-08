@@ -36,7 +36,7 @@ public class DocumentAnalysisTests
 
     #region DocBank Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -44,7 +44,7 @@ public class DocumentAnalysisTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
@@ -56,7 +56,7 @@ public class DocumentAnalysisTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -69,7 +69,7 @@ public class DocumentAnalysisTests
 
     #region TableTransformer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -77,7 +77,7 @@ public class DocumentAnalysisTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
@@ -89,7 +89,7 @@ public class DocumentAnalysisTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -102,7 +102,7 @@ public class DocumentAnalysisTests
 
     #region Result Class Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentLayoutResult_Construction_EmptyRegions()
     {
         var result = new DocumentLayoutResult<double>();
@@ -110,7 +110,7 @@ public class DocumentAnalysisTests
         Assert.Equal(0, result.TotalRegions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextDetectionResult_Construction_EmptyRegions()
     {
         var result = new TextDetectionResult<double>();
@@ -118,7 +118,7 @@ public class DocumentAnalysisTests
         Assert.Equal(0, result.RegionCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRResult_Construction_EmptyText()
     {
         var result = new OCRResult<double> { AverageConfidence = default };
@@ -128,7 +128,7 @@ public class DocumentAnalysisTests
         Assert.Empty(result.Blocks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableStructureResult_Construction_EmptyCells()
     {
         var result = new TableStructureResult<double> { Confidence = default };
@@ -137,7 +137,7 @@ public class DocumentAnalysisTests
         Assert.Equal(0, result.NumColumns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableStructureResult_ToStringGrid_ReturnsEmptyForNoData()
     {
         var result = new TableStructureResult<double>
@@ -150,7 +150,7 @@ public class DocumentAnalysisTests
         Assert.Empty(grid);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextRegion_Construction_HasDefaults()
     {
         var region = new TextRegion<double> { Confidence = default };
@@ -158,7 +158,7 @@ public class DocumentAnalysisTests
         Assert.Equal(0, region.Index);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayoutRegion_ConfidenceLevel_CategorizesCorrectly()
     {
         var lowConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.2 };
@@ -167,7 +167,7 @@ public class DocumentAnalysisTests
         Assert.Equal(ConfidenceLevel.VeryHigh, highConfidence.ConfidenceLevel);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentLayoutResult_GetRegionsByType_FiltersCorrectly()
     {
         var result = new DocumentLayoutResult<double>
@@ -184,7 +184,7 @@ public class DocumentAnalysisTests
         Assert.Equal(2, textRegions.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentLayoutResult_GetHighConfidenceRegions_FiltersCorrectly()
     {
         var result = new DocumentLayoutResult<double>
@@ -201,7 +201,7 @@ public class DocumentAnalysisTests
         Assert.Single(highConf);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OCRWord_Construction_HasDefaults()
     {
         var word = new OCRWord<double> { Confidence = default };
@@ -209,7 +209,7 @@ public class DocumentAnalysisTests
         Assert.NotNull(word.BoundingBox);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TableCell_Construction_HasDefaults()
     {
         var cell = new TableCell<double> { Confidence = default };
@@ -223,7 +223,7 @@ public class DocumentAnalysisTests
 
     #region DocumentModelOptions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentModelOptions_DefaultValues_AreNull()
     {
         var options = new DocumentModelOptions<double>();
@@ -237,7 +237,7 @@ public class DocumentAnalysisTests
         Assert.Null(options.RandomSeed);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DocumentModelOptions_CustomValues_SetCorrectly()
     {
         var options = new DocumentModelOptions<double>

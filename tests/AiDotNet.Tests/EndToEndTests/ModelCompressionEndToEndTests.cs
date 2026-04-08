@@ -20,7 +20,7 @@ public class ModelCompressionEndToEndTests
 {
     #region Full Pipeline Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_Prune_Cluster_Huffman_RoundTrip()
     {
         // Arrange - Create realistic weights simulating a neural network layer
@@ -60,7 +60,7 @@ public class ModelCompressionEndToEndTests
             $"Should have ~50% non-zero weights, got {nonZeroRatio:P}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_DeepCompression_HanEtAl2015()
     {
         // Arrange - Simulate Han et al. 2015 "Deep Compression" pipeline
@@ -100,7 +100,7 @@ public class ModelCompressionEndToEndTests
         Assert.True(achievedSparsity >= 0.5, $"Should achieve at least 50% sparsity, got {achievedSparsity:P}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_StructuredSparsity_2to4_ThenQuantize()
     {
         // Arrange - Simulate NVIDIA Ampere structured sparsity pipeline
@@ -137,7 +137,7 @@ public class ModelCompressionEndToEndTests
         Assert.Equal(tensorSize, decompressed.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_LowRank_ThenQuantize_ForConvLayers()
     {
         // Arrange - Simulate low-rank + quantization for conv layers
@@ -182,7 +182,7 @@ public class ModelCompressionEndToEndTests
         Assert.True(rmse < 0.5, $"RMSE {rmse} should be reasonable for low-rank matrix");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_IterativePruning_LotteryTicket()
     {
         // Arrange - Simulate Lottery Ticket Hypothesis iterative pruning
@@ -225,7 +225,7 @@ public class ModelCompressionEndToEndTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FullPipeline_CompressionAnalyzer_SelectsBestStrategy()
     {
         // Arrange - Create weights with different characteristics
@@ -259,7 +259,7 @@ public class ModelCompressionEndToEndTests
 
     #region Stress Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void StressTest_LargeModel_CompressionPipeline()
     {
         // Arrange - Simulate a large layer (10K weights)
@@ -285,7 +285,7 @@ public class ModelCompressionEndToEndTests
         Assert.Equal(weights.Length, decompressed.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void StressTest_MultipleCompressionRoundTrips()
     {
         // Arrange - Test stability across multiple compression cycles

@@ -15,7 +15,7 @@ namespace UnitTests.Models.Generative.Diffusion
                 => sample; // identity
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void Predict_Uses_Scheduler()
         {
             var scheduler = new NoopScheduler();

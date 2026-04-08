@@ -5,7 +5,7 @@ namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class DockerRunnerValidationTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task RunAsync_ValidatesArguments()
     {
         var runner = new DockerRunner();

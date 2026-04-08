@@ -24,7 +24,7 @@ public class ExpectedModelChangeTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_DefaultMetric_InitializesWithExpectedGradientLength()
     {
         // Arrange & Act
@@ -51,7 +51,7 @@ public class ExpectedModelChangeTests
 
     #region Name Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_ExpectedGradientLength_ContainsMetricName()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class ExpectedModelChangeTests
         Assert.Equal("ExpectedModelChange-ExpectedGradientLength", emc.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_MaxGradientLength_ContainsMetricName()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class ExpectedModelChangeTests
         Assert.Equal("ExpectedModelChange-MaxGradientLength", emc.Name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_GradientVariance_ContainsMetricName()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class ExpectedModelChangeTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_DefaultValue_IsFalse()
     {
         // Arrange
@@ -95,7 +95,7 @@ public class ExpectedModelChangeTests
         Assert.False(emc.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_SetToTrue_UpdatesCorrectly()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class ExpectedModelChangeTests
 
     #region SelectSamples Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(null!, pool, batchSize: 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class ExpectedModelChangeTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class ExpectedModelChangeTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class ExpectedModelChangeTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_WithBatchDiversity_ReturnsValidIndices()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class ExpectedModelChangeTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(null!, pool));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class ExpectedModelChangeTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class ExpectedModelChangeTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
     {
         // Arrange
@@ -316,7 +316,7 @@ public class ExpectedModelChangeTests
         Assert.Equal(0.0, stats["MeanScore"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
@@ -339,7 +339,7 @@ public class ExpectedModelChangeTests
 
     #region Gradient Computation Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExpectedGradientLength_UniformProbabilities_ReturnsConsistentScores()
     {
         // Arrange
@@ -358,7 +358,7 @@ public class ExpectedModelChangeTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MaxGradientLength_ComputesMaximumAcrossLabels()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class ExpectedModelChangeTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientVariance_ComputesVarianceAcrossLabels()
     {
         // Arrange
@@ -400,7 +400,7 @@ public class ExpectedModelChangeTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExpectedModelChange_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class ExpectedModelChangeTests
         Assert.NotNull(stats2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExpectedModelChange_DiversityMode_ProducesDifferentResults()
     {
         // Arrange

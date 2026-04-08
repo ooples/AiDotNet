@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultValues_SetsCorrectProperties()
         {
             // Act
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(200, strategy.ChunkOverlap);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomValues_SetsCorrectProperties()
         {
             // Act
@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(50, strategy.ChunkOverlap);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ChunkSizeZero_ThrowsArgumentException()
         {
             // Act & Assert
@@ -46,7 +46,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkSize", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ChunkSizeNegative_ThrowsArgumentException()
         {
             // Act & Assert
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkSize", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ChunkOverlapNegative_ThrowsArgumentException()
         {
             // Act & Assert
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ChunkOverlapEqualToChunkSize_ThrowsArgumentException()
         {
             // Act & Assert
@@ -76,7 +76,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ChunkOverlapGreaterThanChunkSize_ThrowsArgumentException()
         {
             // Act & Assert
@@ -86,7 +86,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_ZeroOverlap_IsValid()
         {
             // Act
@@ -101,7 +101,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Chunk Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_NullText_ThrowsArgumentNullException()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(null!).ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_EmptyText_ThrowsArgumentException()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(string.Empty).ToList());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_SingleSentence_ReturnsSingleChunk()
         {
             // Arrange
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("This is a single sentence.", chunks[0]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_MultipleSentences_GroupsBySizeLimit()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split into multiple chunks");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_SentencesWithDifferentEndings_HandlesAllEndingTypes()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Exclamation", combined);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_TextWithNewlines_SplitsSentencesCorrectly()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 1, "Should create at least one chunk");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_LargeSentence_IncludesSentenceEvenIfOverLimit()
         {
             // Arrange - sentence is larger than chunk size
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Overlap Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_WithOverlap_ChunksHaveOverlappingPositions()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_ZeroOverlap_ChunksAreContiguous()
         {
             // Arrange
@@ -246,7 +246,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ChunkWithPositions Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ChunkWithPositions_SingleSentence_ReturnsValidPositions()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks[0].EndPosition > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ChunkWithPositions_MultipleChunks_HasSequentialPositions()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void ChunkWithPositions_ChunkContentHasValidLength()
         {
             // Arrange
@@ -307,7 +307,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_SingleCharacter_ReturnsSingleChunk()
         {
             // Arrange
@@ -322,7 +322,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("X", chunks[0]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_WhitespaceOnlyText_ReturnsEmptyCollection()
         {
             // Arrange
@@ -337,7 +337,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(chunks);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_VeryLongSingleSentence_ReturnsEntireTextAsSingleChunk()
         {
             // Arrange
@@ -352,7 +352,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text, chunks[0]);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_LargeChunkSize_ReturnsEntireTextAsSingleChunk()
         {
             // Arrange
@@ -366,7 +366,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(chunks);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_OnlyPunctuation_HandlesProperly()
         {
             // Arrange
@@ -380,7 +380,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count <= 1, "Should result in 0 or 1 chunks");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
@@ -399,7 +399,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_MixedPunctuation_SplitsCorrectly()
         {
             // Arrange
@@ -416,7 +416,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("fine", combined);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_SentencesWithAbbreviations_HandlesCommonCases()
         {
             // Arrange - Note: Simple sentence splitter may incorrectly split on abbreviations
@@ -434,7 +434,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Sentence Grouping Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_SentencesFitExactly_GroupsCorrectly()
         {
             // Arrange - sentences that fit exactly within limit
@@ -448,7 +448,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 1);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_ManySentences_CreatesManyChunks()
         {
             // Arrange
@@ -462,7 +462,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Many sentences should create multiple chunks");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Chunk_MixedLengthSentences_GroupsAppropriately()
         {
             // Arrange

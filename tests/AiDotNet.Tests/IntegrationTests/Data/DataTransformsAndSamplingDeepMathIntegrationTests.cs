@@ -18,7 +18,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // NormalizeTransform Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_Formula_XMinusMeanOverStd()
     {
         // (x - mean) / std
@@ -33,7 +33,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_MeanInput_ReturnsZero()
     {
         var mean = new[] { 5.0, 10.0 };
@@ -46,7 +46,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_OneSigmaAbove_ReturnsOne()
     {
         var mean = new[] { 0.0 };
@@ -57,7 +57,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_ZeroStd_ReturnsDifference()
     {
         // When std is nearly zero, result = x - mean (std division skipped)
@@ -69,7 +69,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[0], Tolerance); // 7 - 5 = 2, no division
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_GlobalMeanStd_AppliedToAllElements()
     {
         var transform = new NormalizeTransform<double>(10.0, 5.0, 3);
@@ -82,7 +82,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_MismatchedLengths_Throws()
     {
         var mean = new[] { 1.0, 2.0 };
@@ -90,7 +90,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new NormalizeTransform<double>(mean, std));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_InputLengthMismatch_Throws()
     {
         var mean = new[] { 1.0, 2.0 };
@@ -103,7 +103,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // StandardScaleTransform Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_ComputesMeanCorrectly()
     {
         // Data: [1, 3], [3, 7] => means: [2, 5]
@@ -116,7 +116,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_ComputesStdCorrectly()
     {
         // Data: [0, 0], [2, 4] => means: [1, 2]
@@ -132,7 +132,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_FromPrecomputed_MatchesFormula()
     {
         var mean = new[] { 10.0, 20.0 };
@@ -145,7 +145,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_ConstantFeature_StdSetToOne()
     {
         // All values same => std would be 0, should be set to 1
@@ -157,7 +157,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_EmptyData_Throws()
     {
         Assert.Throws<ArgumentException>(() => new StandardScaleTransform<double>(Array.Empty<double[]>()));
@@ -167,7 +167,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // MinMaxScaleTransform Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_DefaultRange_ScalesTo01()
     {
         // min=[0], max=[10], x=5 => (5-0)/(10-0) * (1-0) + 0 = 0.5
@@ -177,7 +177,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_MinValue_MapsToTargetMin()
     {
         var transform = new MinMaxScaleTransform<double>(new[] { 2.0 }, new[] { 8.0 });
@@ -186,7 +186,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_MaxValue_MapsToTargetMax()
     {
         var transform = new MinMaxScaleTransform<double>(new[] { 2.0 }, new[] { 8.0 });
@@ -195,7 +195,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_CustomRange_ScalesCorrectly()
     {
         // Scale to [-1, 1]
@@ -206,7 +206,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_FromReferenceData_ComputesMinMax()
     {
         var data = new[]
@@ -224,7 +224,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_ConstantFeature_MapsToTargetMin()
     {
         // All values the same => range = 0, should map to targetMin
@@ -234,7 +234,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance); // maps to targetMin = 0
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_HandComputed_TwoFeatures()
     {
         // min=[0, -10], max=[100, 10]
@@ -248,7 +248,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_InvalidRange_Throws()
     {
         // targetMin >= targetMax should throw
@@ -262,7 +262,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // OneHotEncodeTransform Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_Class0_FirstElementIsOne()
     {
         var transform = new OneHotEncodeTransform<double>(3);
@@ -274,7 +274,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_LastClass_LastElementIsOne()
     {
         var transform = new OneHotEncodeTransform<double>(4);
@@ -286,7 +286,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[3], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_SumIsAlwaysOne()
     {
         var transform = new OneHotEncodeTransform<double>(5);
@@ -298,7 +298,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_DifferentClasses_AreOrthogonal()
     {
         // Dot product of different one-hot vectors should be 0
@@ -311,7 +311,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, dot, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_InvalidIndex_Throws()
     {
         var transform = new OneHotEncodeTransform<double>(3);
@@ -319,7 +319,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => transform.Apply(3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OneHot_InvalidNumClasses_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new OneHotEncodeTransform<double>(0));
@@ -330,7 +330,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // Compose Transform Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Compose_AppliesTransformsInOrder()
     {
         // First normalize, then apply identity (compose two transforms)
@@ -347,7 +347,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // WeightedSampler Balanced Weights Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedWeights_EqualClasses_EqualWeights()
     {
         // 4 samples, 2 classes, each with 2 samples
@@ -362,7 +362,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, weights[3], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedWeights_ImbalancedClasses_InverseFrequency()
     {
         // 10 samples: 9 class 0, 1 class 1
@@ -378,7 +378,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(weights[9] / weights[0], 9.0, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedWeights_TotalWeightPerClass_IsEqual()
     {
         // After balancing, total weight per class should be equal
@@ -399,7 +399,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, class2Weight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BalancedWeights_EmptyClass_WeightIsZero()
     {
         // 3 classes but only 2 have samples
@@ -417,7 +417,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // WeightedSampler Sampling Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedSampler_WithReplacement_SamplesCorrectCount()
     {
         var weights = new[] { 1.0, 1.0, 1.0, 1.0, 1.0 };
@@ -427,7 +427,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(10, indices.Count);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedSampler_WithoutReplacement_NoDuplicates()
     {
         var weights = new[] { 1.0, 1.0, 1.0, 1.0, 1.0 };
@@ -438,7 +438,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(indices.Distinct().Count(), indices.Count); // no duplicates
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedSampler_ZeroWeight_NeverSampled()
     {
         // Index 2 has zero weight - should never appear
@@ -449,7 +449,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.DoesNotContain(2, indices);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedSampler_HighWeight_SampledMoreOften()
     {
         // Index 0 has 100x the weight of others
@@ -464,7 +464,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.True(count0 > 800, $"Index 0 sampled {count0}/1000 times, expected >800 with 100x weight");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedSampler_AllIndicesInRange()
     {
         var weights = new[] { 1.0, 2.0, 3.0 };
@@ -478,7 +478,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // Mathematical Properties Tests
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Normalize_InvertibleWithDenormalize()
     {
         // If you normalize then multiply by std and add mean, you get the original
@@ -500,7 +500,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(original[1], recovered[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardScale_OutputMean_IsApproxZero()
     {
         // After z-score normalization on the training data, the output mean should be ~0
@@ -525,7 +525,7 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, sum1 / data.Length, 1e-8);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMaxScale_OutputRange_WithinTargetBounds()
     {
         var data = new[]

@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
     {
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(summarizer);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullNumericOperations_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new DocumentSummarizer<double>(null, maxSummaryLength: 500));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroMaxSummaryLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new DocumentSummarizer<double>(NumOps, maxSummaryLength: 0));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeMaxSummaryLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 new DocumentSummarizer<double>(NumOps, maxSummaryLength: -100));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomMaxSummaryLength_CreatesInstance()
         {
             // Arrange & Act
@@ -61,7 +61,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Basic Functionality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithValidDocuments_ReturnsSummarizedDocuments()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(documents.Count, result.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullDocuments_ThrowsArgumentNullException()
         {
             // Arrange
@@ -89,7 +89,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 summarizer.Compress(null, query));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -101,7 +101,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 summarizer.Compress(documents, null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 summarizer.Compress(documents, string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocumentList_ReturnsEmptyList()
         {
             // Arrange
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Summarization Quality Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_LongDocument_RespectsSummaryLength()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 $"Summary length {result[0].Content.Length} should be <= {maxLength}");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_ShortDocument_ReturnsOriginal()
         {
             // Arrange
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(shortText, result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithQueryTerms_PrioritizesRelevantSentences()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 "Summary should prioritize sentences with query terms");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesMetadata()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertMetadataPreserved(documents, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesRelevanceScores()
         {
             // Arrange
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertRelevanceScoresPreserved(documents, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_PreservesDocumentIds()
         {
             // Arrange
@@ -253,7 +253,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Edge Cases Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithEmptyDocument_ReturnsEmptyDocument()
         {
             // Arrange
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithVeryLongSingleSentence_TruncatesCorrectly()
         {
             // Arrange
@@ -294,7 +294,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 $"Result length {result[0].Content.Length} should be <= {maxLength}");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithVeryLargeDocument_SummarizesSuccessfully()
         {
             // Arrange
@@ -312,7 +312,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithUnicodeContent_HandlesCorrectly()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithSpecialCharacters_HandlesCorrectly()
         {
             // Arrange
@@ -346,7 +346,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithMultipleDocuments_ProcessesAllDocuments()
         {
             // Arrange
@@ -373,7 +373,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region SummarizeText Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SummarizeText_WithValidInput_SummarizesText()
         {
             // Arrange
@@ -388,7 +388,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result.Length <= 100);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SummarizeText_WithEmptyText_ReturnsEmpty()
         {
             // Arrange
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SummarizeText_WithNullText_ReturnsNull()
         {
             // Arrange
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Null(result);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SummarizeText_WithQueryTerms_PrioritizesRelevantContent()
         {
             // Arrange
@@ -434,7 +434,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 lowerResult.Contains("neural"));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SummarizeText_TextShorterThanMaxLength_ReturnsOriginal()
         {
             // Arrange
@@ -452,7 +452,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Summarize Method Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Summarize_WithValidDocuments_ReturnsSummarizedDocuments()
         {
             // Arrange
@@ -467,7 +467,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(documents.Count, result.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Summarize_WithNullDocuments_ThrowsArgumentNullException()
         {
             // Arrange
@@ -478,7 +478,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 summarizer.Summarize(null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Summarize_PreservesMetadata()
         {
             // Arrange
@@ -496,7 +496,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Integration Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_WithDifferentMaxLengths_ProducesDifferentResults()
         {
             // Arrange
@@ -520,7 +520,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result2[0].Content.Length >= result1[0].Content.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Compress_MultipleInvocations_ProducesSameResults()
         {
             // Arrange

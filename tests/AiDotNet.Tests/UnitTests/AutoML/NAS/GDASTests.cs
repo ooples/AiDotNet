@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class GDASTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(gdas);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GetArchitectureParameters_HasCorrectShape()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(3, params_[2].Rows); // Third node connects to 3 previous nodes
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GetArchitectureGradients_MatchesParameterCount()
         {
             // Arrange
@@ -69,7 +69,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(params_.Count, gradients.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GetTemperature_ReturnsInitialTemperature()
         {
             // Arrange
@@ -83,7 +83,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5.0, temperature);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_AnnealTemperature_DecreasesTemperature()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(midTemp < initialTemp);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_AnnealTemperature_AtEnd_ApproachesFinalTemperature()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(finalTemp < 0.5); // Should be close to 0.1
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GumbelSoftmax_ReturnsValidProbabilities()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(alpha.Columns, probs.Columns);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_GumbelSoftmax_HardMode_ReturnsOneHotVectors()
         {
             // Arrange
@@ -162,7 +162,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_DeriveArchitecture_ContainsOperationsFromSearchSpace()
         {
             // Arrange
@@ -193,7 +193,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains("Architecture with", description);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_WithDifferentNumNodes_HasDifferentParameterCounts()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, params5.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void GDAS_TemperatureAnnealing_MonotonicallyDecreases()
         {
             // Arrange

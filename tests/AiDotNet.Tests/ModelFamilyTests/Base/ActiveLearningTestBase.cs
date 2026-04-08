@@ -42,7 +42,7 @@ public abstract class ActiveLearningTestBase
     // =========================================================================
 
     // INVARIANT 1: Selected count matches requested batch size
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_ReturnsRequestedCount()
     {
         var strategy = CreateStrategy();
@@ -51,7 +51,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 2: All selected indices are unique
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_IndicesAreUnique()
     {
         var strategy = CreateStrategy();
@@ -60,7 +60,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 3: All selected indices are within valid range
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_IndicesInRange()
     {
         var strategy = CreateStrategy();
@@ -80,7 +80,7 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 4: Selected samples have higher-than-average informativeness scores
     // The whole point of active learning: selected samples should be MORE informative.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_SelectedHaveHigherThanAverageScores()
     {
         var strategy = CreateStrategy();
@@ -109,7 +109,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 5: Scores are non-negative (informativeness is a non-negative measure)
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeScores_AreNonNegative()
     {
         var strategy = CreateStrategy();
@@ -124,7 +124,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 6: Scores are finite
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeScores_AreFinite()
     {
         var strategy = CreateStrategy();
@@ -139,7 +139,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 7: Score count matches pool size
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeScores_CountMatchesPoolSize()
     {
         var strategy = CreateStrategy();
@@ -153,7 +153,7 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 8: Selected samples are spread across the input space
     // Pairwise distances between selected samples should be non-trivial (not all identical).
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_AreSpreadAcrossInputSpace()
     {
         var strategy = CreateStrategy();
@@ -186,7 +186,7 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 9: Selecting k<n from pool is a SUBSET of selecting k+1<n
     // If you select 3 samples, the top-1 sample should also appear in the top-5.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_TopKContainsTopOne()
     {
         var strategy = CreateStrategy();
@@ -208,7 +208,7 @@ public abstract class ActiveLearningTestBase
     // =========================================================================
 
     // INVARIANT 10: Requesting more than pool size is handled gracefully
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_RequestMoreThanPool_HandlesGracefully()
     {
         var strategy = CreateStrategy();
@@ -227,7 +227,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 11: Batch size of 1 returns exactly 1
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_BatchSizeOne_ReturnsSingle()
     {
         var strategy = CreateStrategy();
@@ -237,7 +237,7 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 12: Does not mutate input pool
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_DoesNotMutatePool()
     {
         var strategy = CreateStrategy();

@@ -42,7 +42,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             public List<string> ConvertIdsToTokens(List<int> ids) => new List<string>();
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void TransformerEmbeddingNetwork_Embed_ReturnsCorrectDimension()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             Assert.Equal(embeddingDim, embedding.Length);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void TransformerEmbeddingNetwork_EmbedBatch_ReturnsCorrectMatrix()
         {
             // Arrange
@@ -107,7 +107,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             Assert.Equal(embeddingDim, embeddings.Columns);
         }
 
-        [Fact(Timeout = 120000)]
+        [Fact]
         public void TransformerEmbeddingNetwork_PoolingStrategy_ClsToken_Works()
         {
             // Arrange

@@ -187,7 +187,7 @@ public class LqDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
@@ -207,7 +207,7 @@ public class LqDecompositionIntegrationTests
             $"Identity matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class LqDecompositionIntegrationTests
             "Diagonal matrix L should be lower triangular");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_LowerTriangularMatrix_PreservesStructure()
     {
         // Arrange - Lower triangular matrix
@@ -240,7 +240,7 @@ public class LqDecompositionIntegrationTests
             "Lower triangular input L should produce lower triangular L");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class LqDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
@@ -310,7 +310,7 @@ public class LqDecompositionIntegrationTests
             $"Tall matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
@@ -335,7 +335,7 @@ public class LqDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LqDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange

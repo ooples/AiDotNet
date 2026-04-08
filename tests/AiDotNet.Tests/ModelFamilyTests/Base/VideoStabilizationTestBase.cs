@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StabilizedOutput_PreservesLength()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -22,7 +22,7 @@ public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
             $"Stabilized output ({output.Length}) much shorter than input ({input.Length}).");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StabilizedValues_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

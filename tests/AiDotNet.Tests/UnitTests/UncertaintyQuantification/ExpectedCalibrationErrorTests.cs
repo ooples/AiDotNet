@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class ExpectedCalibrationErrorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultBins_CreatesInstance()
     {
         // Arrange & Act
@@ -16,7 +16,7 @@ public class ExpectedCalibrationErrorTests
         Assert.NotNull(ece);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomBins_CreatesInstance()
     {
         // Arrange & Act
@@ -26,21 +26,21 @@ public class ExpectedCalibrationErrorTests
         Assert.NotNull(ece);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithZeroBins_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNegativeBins_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: -5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Compute_WithPerfectCalibration_ReturnsZero()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class ExpectedCalibrationErrorTests
         Assert.Equal(0.0, eceValue, precision: 2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Compute_WithIncorrectPredictions_ReturnsPositiveECE()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class ExpectedCalibrationErrorTests
         Assert.True(eceValue > 0.5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Compute_WithMismatchedLengths_ThrowsException()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class ExpectedCalibrationErrorTests
         Assert.Throws<ArgumentException>(() => { ece.Compute(probabilities, predictions, trueLabels); });
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetReliabilityDiagram_ReturnsNonEmptyData()
     {
         // Arrange

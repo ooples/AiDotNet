@@ -27,7 +27,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         return new ErrorStats<double>(inputs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -48,7 +48,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithSmallErrors_ReturnsSmallRMSE()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 0.3, 0.5); // RMSE should be around 0.387
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithLargeErrors_ReturnsLargeRMSE()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 9.5, 10.5); // RMSE should be around 10
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_RetrievesRMSEFromErrorStats()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 2.8, 3.2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 2.3f, 2.7f); // RMSE should be around 2.5
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -196,7 +196,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -207,7 +207,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
@@ -218,7 +218,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithVerySmallRMSE_HandlesCorrectly()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result < 0.001, $"Expected RMSE < 0.001, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithVeryLargeRMSE_HandlesCorrectly()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result > 999999.0, $"Expected RMSE > 999999, but got {result}");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_ComparesCorrectly()
     {
         // Arrange

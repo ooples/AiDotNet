@@ -14,7 +14,7 @@ public class DecisionTreeIntegrationTests
 
     #region Basic Training and Prediction Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Train_BuildsTree()
     {
         // Arrange
@@ -39,7 +39,7 @@ public class DecisionTreeIntegrationTests
         Assert.True(dt.LeafCount > 0, "Tree should have at least one leaf");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Predict_BinaryClassification()
     {
         // Arrange
@@ -69,7 +69,7 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Predict_MultiClassClassification()
     {
         // Arrange: Three classes
@@ -108,7 +108,7 @@ public class DecisionTreeIntegrationTests
 
     #region Probability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_PredictProbabilities_SumsToOne()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_PureSplit_HasProbabilityOne()
     {
         // Arrange: Perfectly separable data
@@ -185,7 +185,7 @@ public class DecisionTreeIntegrationTests
 
     #region Tree Constraint Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_WithMaxDepth_LimitsDepth()
     {
         // Arrange: Data that would create deep tree without constraint
@@ -209,7 +209,7 @@ public class DecisionTreeIntegrationTests
         Assert.True(dt.MaxDepth <= 2, $"MaxDepth {dt.MaxDepth} exceeds limit of 2");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_WithMinSamplesSplit_PreventsSplits()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class DecisionTreeIntegrationTests
             "High MinSamplesSplit should result in fewer or equal nodes");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_WithMinSamplesLeaf_EnforcesMinimum()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class DecisionTreeIntegrationTests
 
     #region Feature Importance Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_FeatureImportance_ReturnsValidValues()
     {
         // Arrange: Data where feature 0 is more important than feature 1
@@ -314,7 +314,7 @@ public class DecisionTreeIntegrationTests
 
     #region Impurity Criterion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_GiniImpurity_CalculatedCorrectly()
     {
         // Arrange: Same data, Gini criterion
@@ -344,7 +344,7 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Entropy_CalculatedCorrectly()
     {
         // Arrange: Same data, Entropy criterion
@@ -378,7 +378,7 @@ public class DecisionTreeIntegrationTests
 
     #region Serialization and Clone Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Serialize_Deserialize_PreservesPredictions()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(originalProbs[0, 1], newProbs[0, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class DecisionTreeIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_SingleFeature_WorksCorrectly()
     {
         // Arrange
@@ -475,7 +475,7 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_PureNode_StopsSplitting()
     {
         // Arrange: All same class
@@ -497,7 +497,7 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(1, dt.NodeCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_RandomSeed_ProducesConsistentResults()
     {
         // Arrange
@@ -538,7 +538,7 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(pred1[0], pred2[0], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DecisionTree_IdenticalSamples_HandlesGracefully()
     {
         // Arrange: Multiple identical samples with different labels

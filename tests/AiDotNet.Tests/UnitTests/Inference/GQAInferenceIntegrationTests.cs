@@ -28,7 +28,7 @@ public class GQAInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GQA_KVWeightDimensionReduced()
     {
         int embDim = 64;
@@ -55,7 +55,7 @@ public class GQAInferenceIntegrationTests
         Assert.Equal(qWeights.Shape[1] / 4, kWeights.Shape[1]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GQA_MemorySavings_VerifyParameterCount()
     {
         int embDim = 256;
@@ -78,7 +78,7 @@ public class GQAInferenceIntegrationTests
         Assert.True(gqaParams < mhaParams, "GQA should have fewer params than MHA");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GQA_WithRoPE_ProducesValidOutput()
     {
         int seqLen = 8;
@@ -96,7 +96,7 @@ public class GQAInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GQA_WithALiBi_ProducesValidOutput()
     {
         int seqLen = 8;

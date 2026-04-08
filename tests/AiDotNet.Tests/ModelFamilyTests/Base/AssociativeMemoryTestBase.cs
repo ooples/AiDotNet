@@ -133,7 +133,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Output Finite (No NaN/Infinity)
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ForwardPass_ShouldProduceFiniteOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -154,7 +154,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Finite Output After Training
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ForwardPass_ShouldBeFinite_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -179,7 +179,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Output Sensitivity to Input
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DifferentInputs_ShouldProduceDifferentOutputs()
     {
         var network = CreateNetwork();
@@ -205,7 +205,7 @@ public abstract class AssociativeMemoryTestBase
             "The network may have collapsed.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -220,7 +220,7 @@ public abstract class AssociativeMemoryTestBase
             Assert.Equal(out1[i], out2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parameters_ShouldBeNonEmpty()
     {
         var network = CreateNetwork();
@@ -228,7 +228,7 @@ public abstract class AssociativeMemoryTestBase
         Assert.True(parameters.Length > 0, "Network should have learnable parameters.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clone_ShouldProduceIdenticalOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -244,7 +244,7 @@ public abstract class AssociativeMemoryTestBase
             Assert.Equal(original[i], clonedOutput[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Metadata_ShouldExist()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -258,7 +258,7 @@ public abstract class AssociativeMemoryTestBase
             "Metadata.Complexity (parameter count) should be positive after training.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Architecture_ShouldHaveValidDimensions()
     {
         var network = CreateNetwork();
@@ -268,7 +268,7 @@ public abstract class AssociativeMemoryTestBase
             "Architecture should have positive input dimensions.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NamedLayerActivations_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -280,7 +280,7 @@ public abstract class AssociativeMemoryTestBase
         Assert.True(activations.Count > 0, "Named layer activations should not be empty.");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputDimension_ShouldMatchExpectedShape()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -296,7 +296,7 @@ public abstract class AssociativeMemoryTestBase
         Assert.Equal(expectedLength, output.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaledInput_ShouldChangeOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -332,7 +332,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Training Changes Network Behavior
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Training_ShouldChangeOutputBehavior()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -366,7 +366,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Training Should Change Parameters
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Training_ShouldChangeParameters()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -401,7 +401,7 @@ public abstract class AssociativeMemoryTestBase
     // MATHEMATICAL INVARIANT: Training Loss Should Be Finite
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrainingLoss_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -431,7 +431,7 @@ public abstract class AssociativeMemoryTestBase
     // toward the target after training.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PatternAutoAssociation_TrainedPatternShouldBeRecalled()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -488,7 +488,7 @@ public abstract class AssociativeMemoryTestBase
     // associative memory.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NoiseRobustness_ShouldCorrectNoisyInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -535,7 +535,7 @@ public abstract class AssociativeMemoryTestBase
     // the network has sufficient capacity.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Capacity_AllStoredPatternsShouldBeRecallable()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -607,7 +607,7 @@ public abstract class AssociativeMemoryTestBase
         return null; // Not all associative memory models have an energy function
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EnergyMonotonicity_TrainedPatternsShouldHaveLowerEnergy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -652,7 +652,7 @@ public abstract class AssociativeMemoryTestBase
     // patterns and verify each is recalled without interference.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OrthogonalPatterns_ShouldBeRecalledWithoutInterference()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -707,7 +707,7 @@ public abstract class AssociativeMemoryTestBase
     // that the deserialized network produces identical output.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SerializationRoundTrip_ShouldPreserveRecall()
     {
         if (!SupportsSerializationRoundTrip)
@@ -754,7 +754,7 @@ public abstract class AssociativeMemoryTestBase
     // (catastrophic forgetting check).
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiplePatternStability_OlderPatternsShouldNotBeCompletelyForgotten()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

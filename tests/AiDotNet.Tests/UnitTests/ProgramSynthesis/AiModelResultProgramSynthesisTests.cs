@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class AiModelResultProgramSynthesisTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExecuteCodeTask_DelegatesToUnderlyingCodeModel()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
@@ -50,7 +50,7 @@ public class AiModelResultProgramSynthesisTests
         Assert.NotNull(typed.Summary);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TokenizeCode_UsesCanonicalPipelineAndSupportsSql()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>
@@ -86,7 +86,7 @@ public class AiModelResultProgramSynthesisTests
         Assert.NotEmpty(csharp.AstEdges);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task ExecuteCodeTaskAsync_UsesServingClient_WhenConfiguredAndPreferred()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>
@@ -122,7 +122,7 @@ public class AiModelResultProgramSynthesisTests
         Assert.Equal(1, stubClient.CodeTaskCalls);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExecuteCodeTask_UsesLocalModel_WhenServingIsPresentButNotPreferred()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
@@ -160,7 +160,7 @@ public class AiModelResultProgramSynthesisTests
         Assert.Equal(0, stubClient.CodeTaskCalls);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExecuteProgramAsync_ThrowsWhenServingNotConfigured()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>

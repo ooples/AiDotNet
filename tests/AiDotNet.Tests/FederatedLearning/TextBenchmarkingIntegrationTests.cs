@@ -37,7 +37,7 @@ public class TextBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithSent140Benchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"sent140_train_{Guid.NewGuid():N}.json");
@@ -99,7 +99,7 @@ public class TextBenchmarkingIntegrationTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task BuildAsync_WithShakespeareBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"shakespeare_train_{Guid.NewGuid():N}.json");

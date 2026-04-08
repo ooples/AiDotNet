@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class RobustFullModelAggregationStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Median_Aggregate_IgnoresOutlier()
     {
         var aggregator = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
@@ -18,7 +18,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrimmedMean_Aggregate_IgnoresOutlier()
     {
         var aggregator = new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(trimFraction: 0.2);
@@ -29,7 +29,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Krum_Aggregate_SelectsCentralClient()
     {
         var aggregator = new KrumFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(byzantineClientCount: 1);
@@ -40,7 +40,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MultiKrum_Aggregate_AveragesSelectedCentralClients()
     {
         var aggregator = new MultiKrumFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(
@@ -55,7 +55,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Bulyan_Aggregate_IgnoresExtremeOutlier()
     {
         var aggregator = new BulyanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(byzantineClientCount: 1);
@@ -66,7 +66,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WinsorizedMean_Aggregate_ClipsOutlier()
     {
         var aggregator = new WinsorizedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(winsorizeFraction: 0.2);
@@ -77,7 +77,7 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] < 100.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Rfa_Aggregate_IsRobustToOutlier()
     {
         var aggregator = new RfaFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(maxIterations: 5);

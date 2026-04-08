@@ -14,21 +14,21 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_DefaultConstruction_DoesNotThrow()
     {
         var ece = new ExpectedCalibrationError<double>();
         Assert.NotNull(ece);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_CustomBins_DoesNotThrow()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 20);
         Assert.NotNull(ece);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_ZeroBins_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: 0));
@@ -38,7 +38,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Computation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_PerfectCalibration_ReturnsNonNegative()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -51,7 +51,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(result <= 1.0, "ECE should be at most 1.0");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_AllWrong_HighECE()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -63,7 +63,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(result > 0.5, $"ECE should be high when all predictions are wrong, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_MismatchedLengths_Throws()
     {
         var ece = new ExpectedCalibrationError<double>();
@@ -78,7 +78,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Reliability Diagram
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ECE_GetReliabilityDiagram_ReturnsNonEmpty()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 5);
@@ -100,27 +100,27 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_DefaultConstruction_TemperatureIsOne()
     {
         var ts = new TemperatureScaling<double>();
         Assert.Equal(1.0, ts.Temperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_CustomTemperature()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
         Assert.Equal(2.0, ts.Temperature, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_ZeroTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TemperatureScaling<double>(initialTemperature: 0.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_NegativeTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TemperatureScaling<double>(initialTemperature: -1.0));
@@ -130,7 +130,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - ScaleLogits
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_ScaleLogits_TemperatureOne_NoChange()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 1.0);
@@ -142,7 +142,7 @@ public class UncertaintyQuantificationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_ScaleLogits_HighTemperature_Softens()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
@@ -153,7 +153,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(0.0, scaled[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_ScaleLogits_LowTemperature_Sharpens()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 0.5);
@@ -168,7 +168,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - Calibration
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_Calibrate_TemperatureStaysPositive()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 1.0);
@@ -185,7 +185,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(ts.Temperature > 0, "Temperature should remain positive after calibration");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemperatureScaling_Calibrate_MismatchedLengths_Throws()
     {
         var ts = new TemperatureScaling<double>();
@@ -198,7 +198,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region MCDropoutLayer - Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_DefaultConstruction_DoesNotThrow()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
@@ -206,28 +206,28 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.False(layer.MonteCarloMode);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_WithMCMode_DoesNotThrow()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.3, mcMode: true);
         Assert.True(layer.MonteCarloMode);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_InvalidRate_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(dropoutRate: 1.0));
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(dropoutRate: -0.1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_SupportsTraining()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_MonteCarloMode_CanToggle()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
@@ -242,7 +242,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region MCDropoutLayer - Forward Pass
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_Forward_InTraining_ProducesOutput()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, randomSeed: 42);
@@ -252,7 +252,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_Forward_InInference_NoDropout()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, randomSeed: 42);
@@ -266,7 +266,7 @@ public class UncertaintyQuantificationIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCDropoutLayer_Forward_InMCMode_AppliesDropout()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, mcMode: true, randomSeed: 42);
@@ -290,7 +290,7 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region BayesianDenseLayer - Construction
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BayesianDenseLayer_DefaultConstruction_DoesNotThrow()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 2, randomSeed: 42);
@@ -298,7 +298,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BayesianDenseLayer_Forward_ProducesCorrectShape()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 3, randomSeed: 42);
@@ -308,7 +308,7 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(3, output.Shape[^1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BayesianDenseLayer_Forward_MultipleCallsProduceDifferentOutputs()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 2, randomSeed: 42);

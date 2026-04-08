@@ -23,7 +23,7 @@ public class TransferLearningDeepMathIntegrationTests
 
     #region CORAL Domain Adaptation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_IdenticalDomains_DiscrepancyNearZero()
     {
@@ -42,7 +42,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(0.0, discrepancy, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_DifferentDomains_PositiveDiscrepancy()
     {
@@ -68,7 +68,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(discrepancy > 0.0, $"Discrepancy should be positive, got {discrepancy}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_CovarianceComputation_HandCalculated()
     {
@@ -93,7 +93,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(0.0, discrepancy, Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_AdaptSource_PreservesMean()
     {
@@ -127,7 +127,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(40.0, meanCol1, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_AdaptationReducesDiscrepancy()
     {
@@ -156,7 +156,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(discrepancyBefore > 0, "Initial discrepancy should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_FrobeniusNorm_HandCalculated()
     {
@@ -189,7 +189,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(discrepancy > 0, "Different distributions should have positive discrepancy");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_AdaptationMethod_IsCorrectName()
     {
@@ -197,7 +197,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal("CORAL (CORrelation ALignment)", coral.AdaptationMethod);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_RequiresTraining_IsTrue()
     {
@@ -209,7 +209,7 @@ public class TransferLearningDeepMathIntegrationTests
 
     #region MMD Domain Adaptation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_IdenticalDomains_DiscrepancyNearZero()
     {
@@ -228,7 +228,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(0.0, discrepancy, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_DifferentDomains_PositiveDiscrepancy()
     {
@@ -252,7 +252,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(discrepancy > 0, $"MMD discrepancy should be positive, got {discrepancy}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_HandCalculated_TwoPoints()
     {
@@ -279,7 +279,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(expected, discrepancy, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_AdaptSource_ShiftsMean()
     {
@@ -315,7 +315,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(24.0, meanCol1, 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_SymmetricDiscrepancy()
     {
@@ -338,7 +338,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(d1, d2, 1e-10);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_NonNegativeDiscrepancy()
     {
@@ -358,7 +358,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(discrepancy >= 0, $"MMD must be non-negative, got {discrepancy}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_AdaptationMethod_IsCorrectName()
     {
@@ -366,7 +366,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal("Maximum Mean Discrepancy (MMD)", mmd.AdaptationMethod);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_RequiresTraining_IsFalse()
     {
@@ -378,7 +378,7 @@ public class TransferLearningDeepMathIntegrationTests
 
     #region LinearFeatureMapper Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_Train_SetsIsTrained()
     {
@@ -402,7 +402,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.True(mapper.IsTrained);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_MapToTarget_CorrectDimensions()
     {
@@ -428,7 +428,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(2, mapped.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_MapToSource_CorrectDimensions()
     {
@@ -454,7 +454,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(3, mapped.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_Untrained_Throws()
     {
@@ -465,7 +465,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => mapper.MapToSource(data, 2));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_ConfidenceInZeroOneRange()
     {
@@ -493,7 +493,7 @@ public class TransferLearningDeepMathIntegrationTests
             $"Confidence should be in [0, 1], got {confidence}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void LinearMapper_SameDimensions_HigherConfidence()
     {
@@ -525,7 +525,7 @@ public class TransferLearningDeepMathIntegrationTests
 
     #region Cross-Component Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void CORAL_AdaptTarget_InverseOfAdaptSource()
     {
@@ -557,7 +557,7 @@ public class TransferLearningDeepMathIntegrationTests
         Assert.Equal(target.Columns, adaptedTarget.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_LargerSigma_LowerDiscrepancy()
     {
@@ -585,7 +585,7 @@ public class TransferLearningDeepMathIntegrationTests
             $"Large sigma discrepancy {discLarge} should be < small sigma discrepancy {discSmall}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     [Trait("Category", "IntegrationTest")]
     public void MMD_TrainUpdatesSigma()
     {

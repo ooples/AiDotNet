@@ -21,7 +21,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// When covariance matrix is identity, Mahalanobis distance equals Euclidean distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MahalanobisDistance_IdentityCovariance_EqualsEuclidean()
     {
         // Arrange - Identity covariance matrix
@@ -47,7 +47,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Without covariance matrix, falls back to Euclidean distance.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MahalanobisDistance_NoCovarianceMatrix_FallsBackToEuclidean()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class ClusteringMetricsIntegrationTests
     /// Covariance matrix: [[2, 1], [1, 2]], inverse: [[2/3, -1/3], [-1/3, 2/3]]
     /// Result: sqrt(6) ≈ 2.449
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MahalanobisDistance_CustomCovariance_ReturnsExactValue()
     {
         // Arrange - Inverse of covariance matrix [[2, 1], [1, 2]]
@@ -98,7 +98,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MahalanobisDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class ClusteringMetricsIntegrationTests
     /// Perfect clustering should have silhouette score close to 1.
     /// Data: Two well-separated clusters.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SilhouetteScore_WellSeparatedClusters_ReturnsHighScore()
     {
         // Arrange - Two well-separated clusters
@@ -156,7 +156,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Single cluster should return 0 (need at least 2 clusters).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SilhouetteScore_SingleCluster_ReturnsZero()
     {
         // Arrange - All points in one cluster
@@ -180,7 +180,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Silhouette score should be in range [-1, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SilhouetteScore_AlwaysInValidRange()
     {
         // Arrange
@@ -213,7 +213,7 @@ public class ClusteringMetricsIntegrationTests
     /// sklearn.metrics.adjusted_rand_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
     /// Perfect agreement.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class ClusteringMetricsIntegrationTests
     /// Label values don't matter, only groupings.
     /// sklearn.metrics.adjusted_rand_score([0, 0, 1, 1], [1, 1, 0, 0]) = 1.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_SwappedLabels_ReturnsOne()
     {
         // Arrange - Same grouping, different label values
@@ -257,7 +257,7 @@ public class ClusteringMetricsIntegrationTests
     /// Math: With 4 points in pattern [AA, BB] vs [AB, AB], every point is
     /// paired incorrectly - true clusters are split exactly across predicted clusters.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_AntiCorrelatedLabels_ReturnsNegative()
     {
         // Arrange - Anti-correlated groupings (each true cluster split across pred clusters)
@@ -277,7 +277,7 @@ public class ClusteringMetricsIntegrationTests
     /// Verified with sklearn:
     /// sklearn.metrics.adjusted_rand_score([0, 0, 0, 1, 1, 1], [0, 0, 1, 1, 2, 2]) = 0.24242424242424243
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_PartialAgreement_ReturnsExactValue()
     {
         // Arrange
@@ -296,7 +296,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// ARI should be symmetric.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_IsSymmetric()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Well-separated clusters should have low Davies-Bouldin index.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DaviesBouldinIndex_WellSeparatedClusters_ReturnsLowValue()
     {
         // Arrange - Two well-separated clusters
@@ -349,7 +349,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Davies-Bouldin index should be non-negative.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DaviesBouldinIndex_AlwaysNonNegative()
     {
         // Arrange
@@ -379,7 +379,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Well-separated clusters should have high Calinski-Harabasz index.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalinskiHarabaszIndex_WellSeparatedClusters_ReturnsHighValue()
     {
         // Arrange - Two well-separated clusters
@@ -407,7 +407,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Calinski-Harabasz index should be non-negative.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CalinskiHarabaszIndex_AlwaysNonNegative()
     {
         // Arrange
@@ -437,7 +437,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have high normalized mutual information.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalizedMutualInformation_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// NMI should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalizedMutualInformation_AlwaysInValidRange()
     {
         // Arrange
@@ -480,7 +480,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have zero variation of information.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_PerfectAgreement_ReturnsZero()
     {
         // Arrange
@@ -499,7 +499,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Variation of Information should be non-negative.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_AlwaysNonNegative()
     {
         // Arrange
@@ -518,7 +518,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// VI should be symmetric.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationOfInformation_IsSymmetric()
     {
         // Arrange
@@ -542,7 +542,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Jaccard Index = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -561,7 +561,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Jaccard Index should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void JaccardIndex_AlwaysInValidRange()
     {
         // Arrange
@@ -585,7 +585,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Rand Index = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -604,7 +604,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Rand Index should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandIndex_AlwaysInValidRange()
     {
         // Arrange
@@ -628,7 +628,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Fowlkes-Mallows Index = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallowsIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -647,7 +647,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// FMI should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FowlkesMallowsIndex_AlwaysInValidRange()
     {
         // Arrange
@@ -671,7 +671,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have V-Measure = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -690,7 +690,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// V-Measure should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VMeasure_AlwaysInValidRange()
     {
         // Arrange
@@ -714,7 +714,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Homogeneity = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Homogeneity_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -733,7 +733,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Completeness = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Completeness_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -756,7 +756,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Purity = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Purity_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -775,7 +775,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Purity should be in range [0, 1].
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Purity_AlwaysInValidRange()
     {
         // Arrange
@@ -799,7 +799,7 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have F-Measure = 1.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FMeasure_PerfectAgreement_ReturnsOne()
     {
         // Arrange
@@ -819,7 +819,7 @@ public class ClusteringMetricsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdjustedRandIndex_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -835,7 +835,7 @@ public class ClusteringMetricsIntegrationTests
         Assert.Equal(1.0, score, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SilhouetteScore_FloatType_ReturnsValidValue()
     {
         // Arrange

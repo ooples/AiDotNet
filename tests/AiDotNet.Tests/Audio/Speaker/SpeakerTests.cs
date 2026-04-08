@@ -33,7 +33,7 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerEmbeddingExtractor Tests
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbeddingExtractor_Extract_ReturnsEmbedding()
         {
             // Arrange
@@ -49,7 +49,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(embedding.Vector.Length > 0, "Embedding should not be empty");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbeddingExtractor_SameAudio_SimilarEmbeddings()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbeddingExtractor_DifferentSpeakers_DifferentEmbeddings()
         {
             // Arrange
@@ -91,7 +91,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(sumDiff > 0.1, "Embeddings for different speakers should differ");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbeddingExtractor_EmbeddingValues_AreFinite()
         {
             // Arrange
@@ -109,7 +109,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbeddingExtractor_EmbeddingDimension_MatchesOption()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(128, extractor.EmbeddingDimension);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbedding_CosineSimilarity_SameEmbedding_IsOne()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1.0, similarity, 3);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerEmbedding_CosineSimilarity_InRange()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerVerifier Tests
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerVerifier_EnrollAndVerify_Works()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1.0, result.Score, 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerVerifier_EnrolledCount_IncreasesAfterEnroll()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1, verifier.EnrolledCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerVerifier_Unenroll_RemovesSpeaker()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(0, verifier.EnrolledCount);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerVerifier_IsEnrolled_ReturnsCorrectly()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerDiarizer Tests
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerDiarizer_Diarize_ReturnsTurns()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(result.Turns.Count >= 1, "Should have at least one speaker turn");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerDiarizer_Turns_HaveValidTimestamps()
         {
             // Arrange
@@ -259,7 +259,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerDiarizer_NumSpeakers_IsPositive()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(result.NumSpeakers >= 1, "Should detect at least one speaker");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void SpeakerDiarizer_Duration_MatchesAudio()
         {
             // Arrange

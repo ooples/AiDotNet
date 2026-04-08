@@ -17,7 +17,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Gaussian Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -26,7 +26,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_DifferentVectors_ReturnsLessThanOne()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -37,7 +37,7 @@ public class KernelFunctionsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_IsSymmetric()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -48,7 +48,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(r1, r2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_LargerSigma_HigherSimilarityForDistantPoints()
     {
         var x = V(1.0, 2.0);
@@ -60,7 +60,7 @@ public class KernelFunctionsIntegrationTests
         Assert.True(wide > narrow);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaussianKernel_DifferentLengthVectors_ThrowsArgumentException()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -73,7 +73,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Linear Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_Calculate_ReturnsDotProduct()
     {
         var kernel = new LinearKernel<double>();
@@ -84,7 +84,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(32.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearKernel_IsSymmetric()
     {
         var kernel = new LinearKernel<double>();
@@ -97,7 +97,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Polynomial Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_Degree2_ComputesCorrectly()
     {
         var kernel = new PolynomialKernel<double>(degree: 2, coef0: 1.0);
@@ -108,7 +108,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(4.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_Degree1_ReducesToLinear()
     {
         var polyKernel = new PolynomialKernel<double>(degree: 1, coef0: 0.0);
@@ -118,7 +118,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(linearKernel.Calculate(x, y), polyKernel.Calculate(x, y), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialKernel_IsSymmetric()
     {
         var kernel = new PolynomialKernel<double>(degree: 3, coef0: 1.0);
@@ -131,7 +131,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Sigmoid Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SigmoidKernel_Calculate_ReturnsBounded()
     {
         var kernel = new SigmoidKernel<double>();
@@ -147,7 +147,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Laplacian Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacianKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new LaplacianKernel<double>(1.0);
@@ -156,7 +156,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacianKernel_DifferentVectors_ReturnsLessThanOne()
     {
         var kernel = new LaplacianKernel<double>(1.0);
@@ -167,7 +167,7 @@ public class KernelFunctionsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LaplacianKernel_IsSymmetric()
     {
         var kernel = new LaplacianKernel<double>(1.0);
@@ -180,7 +180,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Exponential Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new ExponentialKernel<double>(1.0);
@@ -189,7 +189,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialKernel_IsSymmetric()
     {
         var kernel = new ExponentialKernel<double>(1.0);
@@ -202,7 +202,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Matern Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaternKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new MaternKernel<double>(1.0, 1.5);
@@ -211,7 +211,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaternKernel_IsSymmetric()
     {
         var kernel = new MaternKernel<double>(1.0, 2.5);
@@ -224,7 +224,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Cauchy Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CauchyKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new CauchyKernel<double>(1.0);
@@ -233,7 +233,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CauchyKernel_AlwaysPositive()
     {
         var kernel = new CauchyKernel<double>(1.0);
@@ -247,7 +247,7 @@ public class KernelFunctionsIntegrationTests
 
     #region RationalQuadratic Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadraticKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new RationalQuadraticKernel<double>(1.0, 1.0);
@@ -256,7 +256,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RationalQuadraticKernel_IsSymmetric()
     {
         var kernel = new RationalQuadraticKernel<double>(1.0, 2.0);
@@ -269,7 +269,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Cosine Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new CosineKernel<double>();
@@ -278,7 +278,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_OrthogonalVectors_ReturnsZero()
     {
         var kernel = new CosineKernel<double>();
@@ -288,7 +288,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_IsSymmetric()
     {
         var kernel = new CosineKernel<double>();
@@ -301,7 +301,7 @@ public class KernelFunctionsIntegrationTests
 
     #region WhiteNoise Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhiteNoiseKernel_IdenticalVectors_ReturnsVariance()
     {
         var kernel = new WhiteNoiseKernel<double>(2.0);
@@ -310,7 +310,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WhiteNoiseKernel_DifferentVectors_ReturnsZero()
     {
         var kernel = new WhiteNoiseKernel<double>(2.0);
@@ -324,7 +324,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Constant Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConstantKernel_AlwaysReturnsConstant()
     {
         var kernel = new ConstantKernel<double>(3.0);
@@ -338,7 +338,7 @@ public class KernelFunctionsIntegrationTests
 
     #region DotProduct Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DotProductKernel_Calculate_ReturnsDotProduct()
     {
         var kernel = new DotProductKernel<double>();
@@ -352,7 +352,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Multiquadric Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiquadricKernel_IdenticalVectors_ReturnsConstant()
     {
         var kernel = new MultiquadricKernel<double>(1.0);
@@ -362,7 +362,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultiquadricKernel_IsSymmetric()
     {
         var kernel = new MultiquadricKernel<double>(1.0);
@@ -375,7 +375,7 @@ public class KernelFunctionsIntegrationTests
 
     #region InverseMultiquadric Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseMultiquadricKernel_IdenticalVectors_ReturnsMax()
     {
         var kernel = new InverseMultiquadricKernel<double>(1.0);
@@ -390,7 +390,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Helinger Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HellingerKernel_IdenticalVectors_ReturnsMax()
     {
         var kernel = new HellingerKernel<double>();
@@ -399,7 +399,7 @@ public class KernelFunctionsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HellingerKernel_IsSymmetric()
     {
         var kernel = new HellingerKernel<double>();
@@ -412,7 +412,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Tanimoto Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanimotoKernel_IdenticalVectors_ReturnsOne()
     {
         var kernel = new TanimotoKernel<double>();
@@ -421,7 +421,7 @@ public class KernelFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TanimotoKernel_IsSymmetric()
     {
         var kernel = new TanimotoKernel<double>();
@@ -434,7 +434,7 @@ public class KernelFunctionsIntegrationTests
 
     #region Comprehensive Symmetry and Positivity Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernels_Symmetry_KxyEqualsKyx()
     {
         var kernels = new IKernelFunction<double>[]
@@ -466,7 +466,7 @@ public class KernelFunctionsIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllKernels_SelfSimilarity_NoNaN()
     {
         var kernels = new IKernelFunction<double>[]

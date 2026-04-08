@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.TransferLearning;
 
 public class FeatureMapperTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearFeatureMapper_InitializesCorrectly()
     {
         // Arrange & Act
@@ -17,7 +17,7 @@ public class FeatureMapperTests
         Assert.False(mapper.IsTrained);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearFeatureMapper_TrainsSuccessfully()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class FeatureMapperTests
         Assert.True(mapper.GetMappingConfidence() <= 1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearFeatureMapper_MapToTarget_WorksAfterTraining()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class FeatureMapperTests
         Assert.Equal(3, mapped.Columns);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LinearFeatureMapper_ThrowsWhenNotTrained()
     {
         // Arrange

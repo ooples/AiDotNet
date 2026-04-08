@@ -17,7 +17,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region BSpline Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BSplineWavelet_Calculate_NoNaN()
     {
         var bspline = new BSplineWavelet<double>(3);
@@ -29,7 +29,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BSplineWavelet_GetScalingCoefficients_NonEmpty()
     {
         var bspline = new BSplineWavelet<double>(3);
@@ -37,7 +37,7 @@ public class AdvancedWaveletFunctionsTests
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BSplineWavelet_Decompose_EvenInput()
     {
         var bspline = new BSplineWavelet<double>(2);
@@ -51,7 +51,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region BattleLemarie Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BattleLemarieWavelet_Calculate_NoNaN()
     {
         var bl = new BattleLemarieWavelet<double>(2);
@@ -63,7 +63,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BattleLemarieWavelet_GetScalingCoefficients_NonEmpty()
     {
         var bl = new BattleLemarieWavelet<double>(2);
@@ -78,7 +78,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region FejérKorovkin Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FejérKorovkinWavelet_Calculate_NoNaN()
     {
         var fk = new FejérKorovkinWavelet<double>(4);
@@ -90,7 +90,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FejérKorovkinWavelet_GetScalingCoefficients_NonEmpty()
     {
         var fk = new FejérKorovkinWavelet<double>(4);
@@ -102,7 +102,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region Gabor Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaborWavelet_Calculate_AtZero()
     {
         var gabor = new GaborWavelet<double>();
@@ -110,7 +110,7 @@ public class AdvancedWaveletFunctionsTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GaborWavelet_Calculate_DecaysFromCenter()
     {
         var gabor = new GaborWavelet<double>();
@@ -123,7 +123,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region ReverseBiorthogonal Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReverseBiorthogonalWavelet_Calculate_NoNaN()
     {
         var rbio = new ReverseBiorthogonalWavelet<double>();
@@ -135,7 +135,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReverseBiorthogonalWavelet_Decompose_EvenInput()
     {
         var rbio = new ReverseBiorthogonalWavelet<double>();
@@ -149,7 +149,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region ContinuousMexicanHat Wavelet Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinuousMexicanHatWavelet_Calculate_PeaksAtZero()
     {
         var cmh = new ContinuousMexicanHatWavelet<double>();
@@ -158,7 +158,7 @@ public class AdvancedWaveletFunctionsTests
         Assert.True(atZero > atOne);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContinuousMexicanHatWavelet_Calculate_IsEvenFunction()
     {
         var cmh = new ContinuousMexicanHatWavelet<double>();
@@ -171,7 +171,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region Haar Perfect Reconstruction Stress Test
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HaarWavelet_DecomposeReconstruct_LargerInput_PerfectReconstruction()
     {
         var haar = new HaarWavelet<double>();
@@ -184,7 +184,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HaarWavelet_Decompose_ConstantSignal_DetailIsZero()
     {
         var haar = new HaarWavelet<double>();
@@ -200,7 +200,7 @@ public class AdvancedWaveletFunctionsTests
 
     #region All Wavelets GetScalingCoefficients Test
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDiscreteWavelets_GetScalingCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]
@@ -224,7 +224,7 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllDiscreteWavelets_GetWaveletCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]

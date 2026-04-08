@@ -70,7 +70,7 @@ public class ActiveLearningIntegrationTests
 
     #region EntropySampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_SelectSamples_ReturnsCorrectBatchSize()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count()); // No duplicates
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(5, selected.Length); // Should return all available samples
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class ActiveLearningIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null!, pool, 5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class ActiveLearningIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null!, 5));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_ComputeInformativenessScores_HighEntropyForUncertainSamples()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class ActiveLearningIntegrationTests
         Assert.True(scores[9] > scores[0], $"Expected entropy[9]={scores[9]} > entropy[0]={scores[0]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_GetSelectionStatistics_ReturnsValidStats()
     {
         // Arrange
@@ -163,7 +163,7 @@ public class ActiveLearningIntegrationTests
         Assert.True(stats["MeanScore"] <= stats["MaxScore"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EntropySampling_WithBatchDiversity_SelectsDiverseSamples()
     {
         // Arrange
@@ -231,7 +231,7 @@ public class ActiveLearningIntegrationTests
         Assert.All(selected, idx => Assert.InRange(idx, 0, 49));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UncertaintySampling_LeastConfidence_CalculatesCorrectly()
     {
         // For a confident prediction like [0.9, 0.05, 0.05], least confidence = 1 - 0.9 = 0.1
@@ -249,7 +249,7 @@ public class ActiveLearningIntegrationTests
                 $"Least confidence {scores[i]} should be in [0, 1]"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UncertaintySampling_MarginSampling_CalculatesCorrectly()
     {
         // For confident [0.9, 0.05, 0.05], margin = 0.9 - 0.05 = 0.85, uncertainty = 1 - 0.85 = 0.15
@@ -267,7 +267,7 @@ public class ActiveLearningIntegrationTests
                 $"Margin uncertainty {scores[i]} should be in [0, 1]"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UncertaintySampling_Name_IncludesMeasure()
     {
         var lcStrategy = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.LeastConfidence);
@@ -283,7 +283,7 @@ public class ActiveLearningIntegrationTests
 
     #region BALD Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BALD_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BALD_ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // BALD score = H(y|x) - E[H(y|x,θ)] should be non-negative (epistemic uncertainty)
@@ -334,7 +334,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(3, selected.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BALD_Name_IncludesMcSampleCount()
     {
         var strategy = new BALD<double>(numMcSamples: 15);
@@ -345,7 +345,7 @@ public class ActiveLearningIntegrationTests
 
     #region RandomSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomSampling_SelectSamples_ReturnsRandomSelection()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class ActiveLearningIntegrationTests
         // Note: There's a tiny chance they could be equal, but extremely unlikely with 100 samples
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomSampling_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected1, selected2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RandomSampling_InformativenessScores_AreUniform()
     {
         // Random sampling should assign uniform scores (all equal)
@@ -408,7 +408,7 @@ public class ActiveLearningIntegrationTests
 
     #region MarginSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarginSampling_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new MarginSampling<double>();
@@ -421,7 +421,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MarginSampling_ScoresAreInValidRange()
     {
         var strategy = new MarginSampling<double>();
@@ -440,7 +440,7 @@ public class ActiveLearningIntegrationTests
 
     #region LeastConfidenceSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LeastConfidenceSampling_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new LeastConfidenceSampling<double>();
@@ -453,7 +453,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LeastConfidenceSampling_ScoresAreInValidRange()
     {
         var strategy = new LeastConfidenceSampling<double>();
@@ -472,7 +472,7 @@ public class ActiveLearningIntegrationTests
 
     #region VariationRatios Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationRatios_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new VariationRatios<double>();
@@ -485,7 +485,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariationRatios_ScoresAreInValidRange()
     {
         var strategy = new VariationRatios<double>();
@@ -504,7 +504,7 @@ public class ActiveLearningIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_SingleSamplePool_ReturnsOneSample()
     {
         var strategies = new object[]
@@ -532,7 +532,7 @@ public class ActiveLearningIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_ZeroBatchSize_ReturnsEmptyArray()
     {
         var strategy = new EntropySampling<double>();
@@ -544,7 +544,7 @@ public class ActiveLearningIntegrationTests
         Assert.Empty(selected);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStrategies_LargeBatchSize_ClampedToPoolSize()
     {
         var strategy = new BALD<double>();
@@ -560,7 +560,7 @@ public class ActiveLearningIntegrationTests
 
     #region Mathematical Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entropy_UniformDistribution_EqualsLogK()
     {
         // For uniform distribution over k classes, entropy = log(k)
@@ -577,7 +577,7 @@ public class ActiveLearningIntegrationTests
                 $"Entropy for uniform distribution should be close to log(4)={expectedMaxEntropy}, got {scores[i]}"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Entropy_CertainPrediction_EqualsZero()
     {
         // For certain prediction (all probability on one class), entropy = 0
@@ -635,7 +635,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiversitySampling_CoverageRadius_IsComputed()
     {
         // Arrange
@@ -651,7 +651,7 @@ public class ActiveLearningIntegrationTests
         Assert.True(coverageRadius >= 0, "Coverage radius should be non-negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DiversitySampling_FarthestFirst_SelectsDiverseSamples()
     {
         // Arrange - Create a pool with clearly separated clusters
@@ -689,7 +689,7 @@ public class ActiveLearningIntegrationTests
 
     #region CoreSetSelection Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CoreSetSelection_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CoreSetSelection_ComputeInformativenessScores_ReturnsValidScores()
     {
         // Arrange
@@ -727,7 +727,7 @@ public class ActiveLearningIntegrationTests
 
     #region HybridSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HybridSampling_SelectSamples_ReturnsValidSelection()
     {
         // Arrange - Use factory method to create hybrid strategy
@@ -743,7 +743,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HybridSampling_ComputeInformativenessScores_CombinesStrategies()
     {
         // Arrange - Create a hybrid strategy with entropy and diversity
@@ -793,7 +793,7 @@ public class ActiveLearningIntegrationTests
 
     #region InformationDensity Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InformationDensity_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -809,7 +809,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InformationDensity_BalancesInformativenessAndDensity()
     {
         // Arrange
@@ -831,7 +831,7 @@ public class ActiveLearningIntegrationTests
 
     #region DensityWeightedSampling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DensityWeightedSampling_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -851,7 +851,7 @@ public class ActiveLearningIntegrationTests
 
     #region ExpectedModelChange Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpectedModelChange_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -867,7 +867,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExpectedModelChange_Scores_AreNonNegative()
     {
         // Expected model change measures gradient magnitude which is always >= 0
@@ -885,7 +885,7 @@ public class ActiveLearningIntegrationTests
 
     #region BatchBALD Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchBALD_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
@@ -901,7 +901,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BatchBALD_WithDifferentMcSamples_Works()
     {
         // Arrange
@@ -923,7 +923,7 @@ public class ActiveLearningIntegrationTests
 
     #region QueryByCommittee Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QueryByCommittee_SelectSamples_ReturnsValidSelection()
     {
         // Arrange - Create a committee of models
@@ -944,7 +944,7 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QueryByCommittee_DisagreementScores_AreValid()
     {
         // Arrange

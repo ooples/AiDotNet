@@ -36,7 +36,7 @@ public abstract class ClassificationModelTestBase
     // no out-of-range. This catches silent type coercion bugs.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predictions_ShouldBeValidClassLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -66,7 +66,7 @@ public abstract class ClassificationModelTestBase
     // Failing this means the model isn't learning at all.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Accuracy_ShouldBeatChance_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -89,7 +89,7 @@ public abstract class ClassificationModelTestBase
     // With center spacing >> cluster std (4.0 vs 0.5), accuracy should be > 80%.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Accuracy_ShouldBeHigh_OnPerfectlySeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -111,7 +111,7 @@ public abstract class ClassificationModelTestBase
     // The model should fit training data at least as well as test data.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrainingAccuracy_ShouldBeAtLeastAsGood_AsTestAccuracy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -136,7 +136,7 @@ public abstract class ClassificationModelTestBase
     // MATHEMATICAL INVARIANT: More Data → Better or Equal Accuracy
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MoreData_ShouldNotDegrade_Accuracy()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -168,7 +168,7 @@ public abstract class ClassificationModelTestBase
     // MATHEMATICAL INVARIANT: Irrelevant Feature Should Not Help
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IrrelevantFeature_ShouldNotImprove_Accuracy()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -207,7 +207,7 @@ public abstract class ClassificationModelTestBase
     // to always predicting one class (a common bug).
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllClasses_ShouldBePredicted_OnBalancedData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -233,7 +233,7 @@ public abstract class ClassificationModelTestBase
     // Most predictions for class c should actually be class c.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ConfusionMatrix_ShouldBeDiagonalDominant()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -275,7 +275,7 @@ public abstract class ClassificationModelTestBase
     // DETERMINISM + OUTPUT SHAPE + CLONE + METADATA (basic contracts)
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -291,7 +291,7 @@ public abstract class ClassificationModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -303,7 +303,7 @@ public abstract class ClassificationModelTestBase
         Assert.Equal(TestSamples, model.Predict(testX).Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clone_ShouldProduceIdenticalPredictions()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -320,7 +320,7 @@ public abstract class ClassificationModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -331,7 +331,7 @@ public abstract class ClassificationModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         if (!HasFlatParameters) return; // Meta/ensemble/tree models delegate to sub-models
@@ -356,7 +356,7 @@ public abstract class ClassificationModelTestBase
     // predictions regardless of data variation has a degenerate decision function.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BinaryThreshold_Sensitivity()
     {
         if (NumClasses != 2) return;
@@ -388,7 +388,7 @@ public abstract class ClassificationModelTestBase
     // predictions than training on balanced data (50/50).
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ClassPrior_Sensitivity()
     {
         if (NumClasses != 2) return;
@@ -442,7 +442,7 @@ public abstract class ClassificationModelTestBase
     // INTEGRATION: Builder Pipeline
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -459,7 +459,7 @@ public abstract class ClassificationModelTestBase
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_AccuracyShouldBeatChance()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

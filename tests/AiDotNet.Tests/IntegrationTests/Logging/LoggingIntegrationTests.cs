@@ -40,7 +40,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_Constructor_WithLogDir_CreatesDirectory()
     {
         var logDir = Path.Combine(_testDir, "test_run");
@@ -51,7 +51,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.Equal(logDir, writer.LogDir);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_Constructor_WithNullLogDir_GeneratesAutoDirectory()
     {
         string? logDir = null;
@@ -76,7 +76,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_Constructor_WithComment_IncludesInDirectory()
     {
         string? logDir = null;
@@ -133,7 +133,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_DefaultStep_InitializesToZero()
     {
         var logDir = Path.Combine(_testDir, "test_run");
@@ -146,7 +146,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddScalar Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddScalar_Float_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "scalar_test");
@@ -158,7 +158,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddScalar_Double_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "scalar_test_double");
@@ -170,7 +170,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddScalar_WithoutStep_AutoIncrements()
     {
         var logDir = Path.Combine(_testDir, "scalar_auto_step");
@@ -211,7 +211,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddScalars Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddScalars_MultipleTags_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "scalars_test");
@@ -230,7 +230,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddScalars_EmptyDictionary_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "scalars_empty");
@@ -245,7 +245,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddHistogram Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_FloatArray_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "histogram_test");
@@ -258,7 +258,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_2DArray_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "histogram_2d_test");
@@ -276,7 +276,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_LargeArray_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "histogram_large");
@@ -289,7 +289,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_NegativeValues_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "histogram_negative");
@@ -301,7 +301,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHistogram_SingleValue_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "histogram_single");
@@ -317,7 +317,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddImage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddImage_CHW_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "image_chw_test");
@@ -342,7 +342,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddImage_HWC_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "image_hwc_test");
@@ -366,7 +366,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddImageRaw_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "image_raw_test");
@@ -384,7 +384,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddImages_Grid_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "images_grid_test");
@@ -411,7 +411,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddImages_Normalized_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "images_normalized");
@@ -442,7 +442,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddText Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddText_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "text_test");
@@ -454,7 +454,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddText_MultiLine_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "text_multiline");
@@ -466,7 +466,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddText_EmptyString_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "text_empty");
@@ -477,7 +477,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddText_UnicodeCharacters_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "text_unicode");
@@ -492,7 +492,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddHparams Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHparams_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "hparams_test");
@@ -516,7 +516,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddHparams_EmptyHparams_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "hparams_empty");
@@ -533,7 +533,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddEmbedding Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddEmbedding_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "embedding_test");
@@ -558,7 +558,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(File.Exists(Path.Combine(logDir, "embeddings_embeddings.tsv")));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddEmbedding_WithMetadata_WritesMetadataFile()
     {
         var logDir = Path.Combine(_testDir, "embedding_metadata");
@@ -586,7 +586,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter AddPrCurve Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddPrCurve_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "pr_curve_test");
@@ -600,7 +600,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddPrCurve_AllPositive_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "pr_curve_all_pos");
@@ -614,7 +614,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_AddPrCurve_AllNegative_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "pr_curve_all_neg");
@@ -632,7 +632,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter LogTrainingStep Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogTrainingStep_WritesLoss()
     {
         var logDir = Path.Combine(_testDir, "training_step");
@@ -644,7 +644,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogTrainingStep_WithAccuracy_WritesBoth()
     {
         var logDir = Path.Combine(_testDir, "training_step_acc");
@@ -655,7 +655,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogTrainingStep_WithLearningRate_WritesAll()
     {
         var logDir = Path.Combine(_testDir, "training_step_lr");
@@ -670,7 +670,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter LogValidationStep Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogValidationStep_WritesLoss()
     {
         var logDir = Path.Combine(_testDir, "validation_step");
@@ -681,7 +681,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogValidationStep_WithAccuracy_WritesBoth()
     {
         var logDir = Path.Combine(_testDir, "validation_step_acc");
@@ -696,7 +696,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter LogWeights Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogWeights_WritesHistogram()
     {
         var logDir = Path.Combine(_testDir, "log_weights");
@@ -708,7 +708,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_LogWeights_WithGradients_WritesBoth()
     {
         var logDir = Path.Combine(_testDir, "log_weights_grads");
@@ -725,7 +725,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region SummaryWriter Flush and Dispose Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_Flush_PersistsData()
     {
         var logDir = Path.Combine(_testDir, "flush_test");
@@ -740,7 +740,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_Close_IsAliasForDispose()
     {
         var logDir = Path.Combine(_testDir, "close_test");
@@ -754,7 +754,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Dispose();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_MultipleDispose_DoesNotThrow()
     {
         var logDir = Path.Combine(_testDir, "multi_dispose");
@@ -769,7 +769,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region TensorBoardWriter Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_Constructor_CreatesEventFile()
     {
         var logDir = Path.Combine(_testDir, "tb_writer_test");
@@ -781,13 +781,13 @@ public class LoggingIntegrationTests : IDisposable
         Assert.Equal(logDir, writer.LogDir);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_Constructor_WithNullLogDir_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new TensorBoardWriter(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_WriteScalar_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "tb_scalar");
@@ -797,7 +797,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_WriteScalars_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "tb_scalars");
@@ -811,7 +811,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_WriteHistogram_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "tb_histogram");
@@ -821,7 +821,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_WriteHistogram_EmptyArray_DoesNotWrite()
     {
         var logDir = Path.Combine(_testDir, "tb_histogram_empty");
@@ -832,7 +832,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_WriteText_WritesWithoutError()
     {
         var logDir = Path.Combine(_testDir, "tb_text");
@@ -842,7 +842,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardWriter_FilePath_ContainsCorrectFormat()
     {
         var logDir = Path.Combine(_testDir, "tb_filepath");
@@ -855,7 +855,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region TensorBoardExtensions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardExtensions_CreateTensorBoardWriter_CreatesWriter()
     {
         string? logDir = null;
@@ -877,7 +877,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardExtensions_CreateTensorBoardWriter_WithRunName_IncludesInPath()
     {
         string? logDir = null;
@@ -899,7 +899,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardExtensions_LogMetrics_WritesAllMetrics()
     {
         var logDir = Path.Combine(_testDir, "log_metrics");
@@ -917,7 +917,7 @@ public class LoggingIntegrationTests : IDisposable
         writer.Flush();
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardExtensions_LogMetrics_WithoutPrefix_WritesWithoutPrefix()
     {
         var logDir = Path.Combine(_testDir, "log_metrics_no_prefix");
@@ -937,7 +937,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region TensorBoardTrainingContext Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_Constructor_CreatesWriter()
     {
         string? logDir = null;
@@ -957,7 +957,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_LogTrainStep_IncrementsGlobalStep()
     {
         string? logDir = null;
@@ -982,7 +982,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_LogValStep_DoesNotIncrementGlobalStep()
     {
         string? logDir = null;
@@ -1005,7 +1005,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_GlobalStep_CanBeSet()
     {
         string? logDir = null;
@@ -1025,7 +1025,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_Elapsed_ReturnsPositiveTimeSpan()
     {
         string? logDir = null;
@@ -1047,7 +1047,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_LogModelWeights_WritesWeights()
     {
         string? logDir = null;
@@ -1072,7 +1072,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_LogModelWeights_WithGradients_WritesBoth()
     {
         string? logDir = null;
@@ -1101,7 +1101,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_LogElapsedTime_WritesScalar()
     {
         string? logDir = null;
@@ -1120,7 +1120,7 @@ public class LoggingIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_WithHparams_LogsHparams()
     {
         string? logDir = null;
@@ -1149,7 +1149,7 @@ public class LoggingIntegrationTests : IDisposable
 
     #region Integration Scenario Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SummaryWriter_FullTrainingLoop_WritesAllMetrics()
     {
         var logDir = Path.Combine(_testDir, "full_training_loop");
@@ -1179,7 +1179,7 @@ public class LoggingIntegrationTests : IDisposable
         Assert.True(Directory.GetFiles(logDir, "events.*").Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TensorBoardTrainingContext_FullTrainingLoop_TracksMetrics()
     {
         string? logDir = null;

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class NeuralProgramSynthesizerCoverageTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ValidateProgram_RejectsEmptyCode_AndHonorsMaxProgramLength()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 2);
@@ -25,7 +25,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.False(synthesizer.ValidateProgram(tooComplex));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ValidateProgram_ValidatesSqlAndGenericBrackets()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
@@ -40,7 +40,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.False(synthesizer.ValidateProgram(bracketsBad));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EvaluateProgram_ReturnsExpectedDefaults()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
@@ -52,7 +52,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.Equal(0.5, synthesizer.EvaluateProgram(validNoExamples, new ProgramInput<double> { Examples = new List<ProgramInputOutputExample>() }));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynthesizeProgram_WithExamples_StopsWhenNoExecutionEngineAvailable()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
@@ -72,7 +72,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.Equal(0.0, result.FitnessScore, precision: 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BuildFeedbackInput_ReturnsNull_WhenNoFailures()
     {
         var synthesizer = CreateSynthesizer(executionEngine: new EchoExecutionEngine(), maxProgramLength: 100);

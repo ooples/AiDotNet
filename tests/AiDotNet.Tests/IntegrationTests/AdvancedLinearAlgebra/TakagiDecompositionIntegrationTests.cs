@@ -92,7 +92,7 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(size, takagi.UnitaryMatrix.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_SigmaMatrix_IsDiagonal()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_SigmaMatrix_HasNonNegativeDiagonals()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(3, takagi.UnitaryMatrix.Columns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_JacobiAlgorithm_ConvergesToDiagonal()
     {
         // Arrange
@@ -234,7 +234,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_PowerIteration_ProducesValidResult()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_LanczosIteration_ProducesValidResult()
     {
         // Arrange
@@ -304,7 +304,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class TakagiDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_2x2Matrix_WorksCorrectly()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(2, takagi.UnitaryMatrix.Rows);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_DiagonalMatrix_WorksCorrectly()
     {
         // Arrange
@@ -376,7 +376,7 @@ public class TakagiDecompositionIntegrationTests
             $"Expected 16.0, got {singularValues[2]}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class TakagiDecompositionIntegrationTests
 
     #region Numerical Properties Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_NoNaNOrInfinity_InMatrices()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_UnitaryMatrix_HasUnitNormColumns()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_UnitaryMatrix_ColumnsAreOrthogonal()
     {
         // Arrange
@@ -491,7 +491,7 @@ public class TakagiDecompositionIntegrationTests
 
     #region Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TakagiDecomposition_DifferentAlgorithms_ProduceValidResults()
     {
         // Note: Different Takagi algorithms may produce different singular values

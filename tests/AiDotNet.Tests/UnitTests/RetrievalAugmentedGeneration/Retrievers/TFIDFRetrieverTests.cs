@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Constructor Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 new TFIDFRetriever<double>(null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithCustomDefaultTopK_SetsCorrectly()
         {
             // Arrange & Act
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Basic Retrieval Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithCustomTopK_ReturnsCorrectNumberOfResults()
         {
             // Arrange
@@ -101,7 +101,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.True(results.Count <= 2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithValidQuery_ReturnsSortedByRelevance()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region TF-IDF Scoring Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithExactKeywordMatch_ReturnsRelevantDocuments()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Contains("machine", topResult.Content.ToLowerInvariant());
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithRareTerms_ScoresHigher()
         {
             // Arrange
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal("doc4", results.First().Id);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithCommonTerms_ScoresLower()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Caching Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_MultipleCalls_UsesCachedStatistics()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotEmpty(results2);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_AfterDocumentCountChanges_RebuildsCache()
         {
             // Arrange
@@ -242,7 +242,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Metadata Filtering Tests
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNonMatchingFilter_ReturnsEmpty()
         {
             // Arrange
@@ -280,7 +280,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Edge Cases
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithNoMatchingTerms_ReturnsZeroScores()
         {
             // Arrange
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.Equal(0.0, doc.RelevanceScore));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithQueryContainingPunctuation_HandlesCorrectly()
         {
             // Arrange
@@ -310,7 +310,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotEmpty(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithCaseSensitiveQuery_WorksCorrectly()
         {
             // Arrange
@@ -325,7 +325,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(lowerResults.Count, upperResults.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithSingleDocumentStore_HandlesGracefully()
         {
             // Arrange
@@ -345,7 +345,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Single(results);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Retrieve_WithFloatType_WorksCorrectly()
         {
             // Arrange

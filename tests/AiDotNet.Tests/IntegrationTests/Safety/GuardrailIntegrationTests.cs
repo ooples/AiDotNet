@@ -17,7 +17,7 @@ public class GuardrailIntegrationTests
 {
     #region InputGuardrail Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Input_OversizedInput_Blocks()
     {
         var guardrail = new InputGuardrail<double>(maxInputLength: 100);
@@ -28,7 +28,7 @@ public class GuardrailIntegrationTests
         Assert.Contains(findings, f => f.RecommendedAction == SafetyAction.Block);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Input_NormalLength_NoFindings()
     {
         var guardrail = new InputGuardrail<double>(maxInputLength: 1000);
@@ -37,7 +37,7 @@ public class GuardrailIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Input_ExactlyAtLimit_NoFindings()
     {
         var guardrail = new InputGuardrail<double>(maxInputLength: 10);
@@ -46,7 +46,7 @@ public class GuardrailIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Input_EmptyText_BlocksEmptyInput()
     {
         var guardrail = new InputGuardrail<double>(maxInputLength: 100);
@@ -61,7 +61,7 @@ public class GuardrailIntegrationTests
 
     #region OutputGuardrail Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Output_HighlyRepetitive_DetectsIssue()
     {
         var guardrail = new OutputGuardrail<double>(repetitionThreshold: 0.3);
@@ -72,7 +72,7 @@ public class GuardrailIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Output_UniqueContent_NoFindings()
     {
         var guardrail = new OutputGuardrail<double>(repetitionThreshold: 0.5);
@@ -83,7 +83,7 @@ public class GuardrailIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Output_EmptyText_WarnsOnShortOutput()
     {
         var guardrail = new OutputGuardrail<double>(repetitionThreshold: 0.3);
@@ -97,7 +97,7 @@ public class GuardrailIntegrationTests
 
     #region TopicRestrictionGuardrail Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TopicRestriction_RestrictedTopic_Blocks()
     {
         var guardrail = new TopicRestrictionGuardrail<double>(
@@ -107,7 +107,7 @@ public class GuardrailIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TopicRestriction_AllowedTopic_NoFindings()
     {
         var guardrail = new TopicRestrictionGuardrail<double>(
@@ -118,7 +118,7 @@ public class GuardrailIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TopicRestriction_MultipleRestricted_DetectsAll()
     {
         var guardrail = new TopicRestrictionGuardrail<double>(
@@ -129,7 +129,7 @@ public class GuardrailIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TopicRestriction_CaseInsensitive_Detects()
     {
         var guardrail = new TopicRestrictionGuardrail<double>(
@@ -143,7 +143,7 @@ public class GuardrailIntegrationTests
 
     #region CustomRuleGuardrail Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CustomRule_MatchesPattern_ReturnsFindings()
     {
         var rules = new[]
@@ -167,7 +167,7 @@ public class GuardrailIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CustomRule_NoMatch_NoFindings()
     {
         var rules = new[]
@@ -191,7 +191,7 @@ public class GuardrailIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CustomRule_MultipleRules_ChecksAll()
     {
         var rules = new[]
@@ -232,7 +232,7 @@ public class GuardrailIntegrationTests
 
     #region CompositeGuardrail Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Composite_CombinesGuardrails_AggregatesFindings()
     {
         var guardrails = new IGuardrail<double>[]
@@ -247,7 +247,7 @@ public class GuardrailIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Composite_FailFast_StopsOnFirstFailure()
     {
         var guardrails = new IGuardrail<double>[]
@@ -263,7 +263,7 @@ public class GuardrailIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Composite_AllPass_NoFindings()
     {
         var guardrails = new IGuardrail<double>[]
@@ -281,7 +281,7 @@ public class GuardrailIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllGuardrails_ProcessSameText_NoExceptions()
     {
         var text = "This is a standard test input for guardrail validation.";

@@ -18,7 +18,7 @@ public class Phase4GateTests
 {
     #region Interface Completeness Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_IVectorizedOperations_HasAllActivationFunctions()
     {
         // Verify the interface has all required activation function methods
@@ -36,7 +36,7 @@ public class Phase4GateTests
 
     #region Float Operations Gate Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_FloatOperations_ImplementsAllActivationFunctions()
     {
         var ops = new FloatOperations();
@@ -54,7 +54,7 @@ public class Phase4GateTests
         Assert.True(true, "All float activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_FloatOperations_ReLU_IsCorrect()
     {
         var ops = new FloatOperations();
@@ -70,7 +70,7 @@ public class Phase4GateTests
         Assert.Equal(2.0f, output[4]); // 2 -> 2
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_FloatOperations_LeakyReLU_IsCorrect()
     {
         var ops = new FloatOperations();
@@ -91,7 +91,7 @@ public class Phase4GateTests
 
     #region Double Operations Gate Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_DoubleOperations_ImplementsAllActivationFunctions()
     {
         var ops = new DoubleOperations();
@@ -113,7 +113,7 @@ public class Phase4GateTests
 
     #region Integer Type Gate Tests (Fallback Implementations)
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_Int32Operations_ImplementsAllActivationFunctions()
     {
         var ops = new Int32Operations();
@@ -131,7 +131,7 @@ public class Phase4GateTests
         Assert.True(true, "All int32 activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_Int64Operations_ImplementsAllActivationFunctions()
     {
         var ops = new Int64Operations();
@@ -148,7 +148,7 @@ public class Phase4GateTests
         Assert.True(true, "All int64 activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_UIntOperations_ImplementsAllActivationFunctions()
     {
         var ops = new UIntOperations();
@@ -165,7 +165,7 @@ public class Phase4GateTests
         Assert.True(true, "Unsigned int activation functions implemented (ReLU, LeakyReLU only meaningful)");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_UInt32Operations_ImplementsAllActivationFunctions()
     {
         var ops = new UInt32Operations();
@@ -180,7 +180,7 @@ public class Phase4GateTests
         Assert.True(true, "Unsigned int32 activation functions implemented (ReLU, LeakyReLU only meaningful)");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_UInt64Operations_ImplementsAllActivationFunctions()
     {
         var ops = new UInt64Operations();
@@ -195,7 +195,7 @@ public class Phase4GateTests
         Assert.True(true, "Unsigned int64 activation functions implemented (ReLU, LeakyReLU only meaningful)");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_DecimalOperations_ImplementsAllActivationFunctions()
     {
         var ops = new DecimalOperations();
@@ -212,7 +212,7 @@ public class Phase4GateTests
         Assert.True(true, "All decimal activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_ByteOperations_ImplementsAllActivationFunctions()
     {
         var ops = new ByteOperations();
@@ -227,7 +227,7 @@ public class Phase4GateTests
         Assert.True(true, "Byte activation functions implemented (ReLU, LeakyReLU only meaningful)");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_SByteOperations_ImplementsAllActivationFunctions()
     {
         var ops = new SByteOperations();
@@ -244,7 +244,7 @@ public class Phase4GateTests
         Assert.True(true, "All sbyte activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_ShortOperations_ImplementsAllActivationFunctions()
     {
         var ops = new ShortOperations();
@@ -261,7 +261,7 @@ public class Phase4GateTests
         Assert.True(true, "All short activation functions implemented");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_UInt16Operations_ImplementsAllActivationFunctions()
     {
         var ops = new UInt16Operations();
@@ -276,7 +276,7 @@ public class Phase4GateTests
         Assert.True(true, "Unsigned int16 activation functions implemented (ReLU, LeakyReLU only meaningful)");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_HalfOperations_ImplementsAllActivationFunctions()
     {
         var ops = new HalfOperations();
@@ -297,7 +297,7 @@ public class Phase4GateTests
 
     #region SIMD Performance Gate Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_SimdKernels_FloatReLU_ProcessesLargeArrays()
     {
         var ops = new FloatOperations();
@@ -327,7 +327,7 @@ public class Phase4GateTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_SimdKernels_DoubleReLU_ProcessesLargeArrays()
     {
         var ops = new DoubleOperations();
@@ -360,7 +360,7 @@ public class Phase4GateTests
 
     #region Phase 4 Completion Summary
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Gate_Phase4_AllRequirementsComplete()
     {
         // This test summarizes all Phase 4 requirements

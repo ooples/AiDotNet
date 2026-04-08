@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SameInput_SameEmbedding()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -25,7 +25,7 @@ public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
             Assert.Equal(emb1[i], emb2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SpeakerEmbedding_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

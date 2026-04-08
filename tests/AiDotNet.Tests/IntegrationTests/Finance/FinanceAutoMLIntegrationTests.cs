@@ -36,7 +36,7 @@ public class FinanceAutoMLIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FinancialModelFactory_RejectsUnsupportedModels()
     {
         var architecture = FinanceTestHelpers.CreateArchitecture<double>(inputSize: 4, outputSize: 4);

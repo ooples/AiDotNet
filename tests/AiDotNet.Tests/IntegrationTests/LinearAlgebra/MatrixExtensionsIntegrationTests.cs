@@ -13,7 +13,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddConstantColumn Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddConstantColumn_AddsColumnAtFront()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -36,7 +36,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region ToVector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ToVector_FlattensMatrixRowMajor()
     {
         var matrix = new Matrix<double>(2, 3);
@@ -58,7 +58,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddVectorToEachRow Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddVectorToEachRow_AddsVectorToAllRows()
     {
         var matrix = new Matrix<double>(2, 3);
@@ -80,7 +80,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region SumColumns Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SumColumns_ReturnsColumnSums()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -99,7 +99,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumn Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetColumn_ExtractsCorrectColumn()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -119,7 +119,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region BackwardSubstitution Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BackwardSubstitution_SolvesUpperTriangularSystem()
     {
         // Upper triangular matrix A
@@ -142,7 +142,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region ForwardSubstitution Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForwardSubstitution_SolvesLowerTriangularSystem()
     {
         // Lower triangular matrix A
@@ -164,7 +164,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetBlock Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetBlock_ExtractsSubmatrix()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -186,28 +186,28 @@ public class MatrixExtensionsIntegrationTests
 
     #region Matrix Type Detection Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSquareMatrix_SquareMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         Assert.True(matrix.IsSquareMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSquareMatrix_RectangularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(2, 3);
         Assert.False(matrix.IsSquareMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsRectangularMatrix_NonSquareMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(2, 3);
         Assert.True(matrix.IsRectangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSymmetricMatrix_SymmetricMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -218,7 +218,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSymmetricMatrix_NonSymmetricMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -228,7 +228,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.False(matrix.IsSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDiagonalMatrix_DiagonalMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -237,7 +237,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdentityMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -245,7 +245,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsIdentityMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperTriangularMatrix_UpperTriangular_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -256,7 +256,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsUpperTriangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsLowerTriangularMatrix_LowerTriangular_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -267,14 +267,14 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsLowerTriangularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsZeroMatrix_ZeroMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         Assert.True(matrix.IsZeroMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSparseMatrix_MostlyZeros_ReturnsTrue()
     {
         var matrix = new Matrix<double>(10, 10);
@@ -284,7 +284,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSparseMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDenseMatrix_MostlyNonZeros_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -295,7 +295,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDenseMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsScalarMatrix_ScalarMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -304,7 +304,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsScalarMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsTridiagonalMatrix_Tridiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -316,7 +316,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsTridiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsUpperBidiagonalMatrix_UpperBidiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -327,7 +327,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsUpperBidiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsLowerBidiagonalMatrix_LowerBidiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -338,7 +338,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsLowerBidiagonalMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSkewSymmetricMatrix_SkewSymmetric_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -349,7 +349,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSkewSymmetricMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsPermutationMatrix_PermutationMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -360,7 +360,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsPermutationMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsStochasticMatrix_StochasticMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -371,7 +371,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsStochasticMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsDoublyStochasticMatrix_DoublyStochastic_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -382,7 +382,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDoublyStochasticMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsToeplitzMatrix_ToeplitzMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -393,7 +393,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsToeplitzMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsHankelMatrix_HankelMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -404,7 +404,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsHankelMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsCirculantMatrix_CirculantMatrix_ReturnsTrue()
     {
         // Implementation uses left circular shift convention
@@ -421,7 +421,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Matrix Operations Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Transpose_ReturnsTransposedMatrix()
     {
         var matrix = new Matrix<double>(2, 3);
@@ -440,7 +440,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(6, result[2, 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Negate_NegatesAllElements()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -455,7 +455,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(4, result[1, 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FrobeniusNorm_ReturnsCorrectNorm()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -468,7 +468,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(Math.Sqrt(30), norm, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Determinant_2x2Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -481,7 +481,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(-2, det, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Determinant_3x3Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -499,7 +499,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Inverse Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Inverse_2x2Matrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -516,7 +516,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, product[1, 1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InvertDiagonalMatrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -529,7 +529,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0.2, inverse[2, 2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InvertUpperTriangularMatrix_ReturnsCorrectInverse()
     {
         // Upper triangular matrix
@@ -556,7 +556,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region PointwiseMultiply Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointwiseMultiply_TwoMatrices_ReturnsHadamardProduct()
     {
         var a = new Matrix<double>(2, 2);
@@ -575,7 +575,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(32, result[1, 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PointwiseMultiply_MatrixAndVector_ScalesRowsByVectorElements()
     {
         // Vector length must match rows - scales each row by corresponding vector element
@@ -599,7 +599,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Submatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Submatrix_ExtractsCorrectRegion()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -617,7 +617,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(10, sub[1, 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Submatrix_ByIndices_ExtractsRows()
     {
         var matrix = new Matrix<double>(4, 3);
@@ -638,7 +638,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddColumn Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AddColumn_AppendsColumn()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -658,7 +658,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumns Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetColumns_ExtractsSelectedColumns()
     {
         var matrix = new Matrix<double>(3, 4);
@@ -681,7 +681,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRow Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetRow_ReturnsCorrectRow()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -701,7 +701,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRowRange Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetRowRange_ExtractsRowSubset()
     {
         var matrix = new Matrix<double>(4, 3);
@@ -721,7 +721,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region SwapRows Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SwapRows_SwapsRowsInPlace()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -741,7 +741,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region KroneckerProduct Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void KroneckerProduct_ReturnsCorrectResult()
     {
         var a = new Matrix<double>(2, 2);
@@ -767,7 +767,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Flatten Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Flatten_FlattensToVector()
     {
         var matrix = new Matrix<double>(2, 3);
@@ -785,7 +785,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Reshape Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Reshape_ChangesMatrixShape()
     {
         var matrix = new Matrix<double>(2, 3);
@@ -806,7 +806,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Extract Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Extract_ExtractsTopLeftCorner()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -827,7 +827,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region RowWiseArgmax Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RowWiseArgmax_ReturnsIndicesOfMaxInEachRow()
     {
         var matrix = new Matrix<double>(3, 4);
@@ -847,7 +847,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region SetSubmatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetSubmatrix_SetsValuesInPlace()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -867,7 +867,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetSubColumn Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSubColumn_ExtractsColumnPortion()
     {
         var matrix = new Matrix<double>(5, 3);
@@ -885,7 +885,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRank Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetRank_IdentityMatrix_ReturnsFullRank()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -896,7 +896,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(3, rank);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetRank_RankDeficientMatrix_ReturnsCorrectRank()
     {
         // All rows are multiples of the first row: rank should be 1
@@ -910,7 +910,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, rank);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetRank_ZeroMatrix_ReturnsZero()
     {
         var matrix = new Matrix<double>(3, 3);
@@ -924,7 +924,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Complex Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ToComplexMatrix_ConvertsRealToComplex()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -939,7 +939,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, complex[0, 0].Imaginary);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ToRealMatrix_ExtractsRealPart()
     {
         var complex = new Matrix<Complex<double>>(2, 2);
@@ -956,7 +956,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(7, real[1, 1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConjugateTranspose_ReturnsHermitianTranspose()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
@@ -977,7 +977,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsBandMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBandMatrix_TridiagonalMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(4, 4);
@@ -989,7 +989,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsBandMatrix(1, 1));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBandMatrix_DiagonalMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateDiagonal(new Vector<double>([1, 2, 3]));
@@ -1001,7 +1001,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsHermitianMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsHermitianMatrix_HermitianMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
@@ -1013,7 +1013,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsHermitianMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsHermitianMatrix_NonHermitianMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
@@ -1029,7 +1029,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsSkewHermitianMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSkewHermitianMatrix_SkewHermitianMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
@@ -1045,7 +1045,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsSingularMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSingularMatrix_ZeroDeterminant_ReturnsTrue()
     {
         // Matrix with linearly dependent rows
@@ -1059,7 +1059,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSingularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsSingularMatrix_IdentityMatrix_ReturnsFalse()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1071,7 +1071,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsNonSingularMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsNonSingularMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1079,7 +1079,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsNonSingularMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsNonSingularMatrix_SingularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1095,7 +1095,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsPositiveDefiniteMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsPositiveDefiniteMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1103,7 +1103,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsPositiveDefiniteMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsPositiveDefiniteMatrix_SymmetricPD_ReturnsTrue()
     {
         // A positive definite matrix: A^T * A for full-rank A
@@ -1120,7 +1120,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsPositiveSemiDefiniteMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsPositiveSemiDefiniteMatrix_ZeroMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateZeros(3, 3);
@@ -1128,7 +1128,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsPositiveSemiDefiniteMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsPositiveSemiDefiniteMatrix_PositiveDefinite_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1140,7 +1140,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsIdempotentMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdempotentMatrix_IdentityMatrix_ReturnsTrue()
     {
         // I * I = I
@@ -1149,7 +1149,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsIdempotentMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdempotentMatrix_ZeroMatrix_ReturnsTrue()
     {
         // 0 * 0 = 0
@@ -1158,7 +1158,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsIdempotentMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIdempotentMatrix_ProjectionMatrix_ReturnsTrue()
     {
         // A simple 2D projection matrix onto x-axis
@@ -1175,7 +1175,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsInvolutoryMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvolutoryMatrix_IdentityMatrix_ReturnsTrue()
     {
         // I * I = I
@@ -1184,7 +1184,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsInvolutoryMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvolutoryMatrix_ReflectionMatrix_ReturnsTrue()
     {
         // Reflection matrix: A^2 = I
@@ -1201,7 +1201,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsOrthogonalProjectionMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsOrthogonalProjectionMatrix_SimpleProjection_ReturnsTrue()
     {
         // Projection onto x-axis (symmetric and idempotent)
@@ -1218,7 +1218,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsInvertible Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1226,7 +1226,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsInvertible());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInvertible_SingularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1242,7 +1242,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsVandermondeMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsVandermondeMatrix_VandermondeMatrix_ReturnsTrue()
     {
         // Vandermonde matrix for nodes [1, 2, 3]
@@ -1260,7 +1260,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsHilbertMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsHilbertMatrix_HilbertMatrix_ReturnsTrue()
     {
         // H[i,j] = 1 / (i + j + 1) for 0-indexed
@@ -1278,7 +1278,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsCauchyMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsCauchyMatrix_CauchyMatrix_ReturnsTrue()
     {
         // C[i,j] = 1 / (x[i] - y[j])
@@ -1297,7 +1297,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsCompanionMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsCompanionMatrix_CompanionMatrix_ReturnsTrue()
     {
         // Companion matrix for polynomial coefficients
@@ -1315,7 +1315,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsAdjacencyMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsAdjacencyMatrix_SymmetricBinaryMatrix_ReturnsTrue()
     {
         // Adjacency matrix: symmetric, binary (0 or 1), zero diagonal
@@ -1329,7 +1329,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsAdjacencyMatrix());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsAdjacencyMatrix_NonSymmetric_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1346,7 +1346,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsLaplacianMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsLaplacianMatrix_SimpleLaplacian_ReturnsTrue()
     {
         // Laplacian: L = D - A, where D is degree matrix, A is adjacency
@@ -1365,7 +1365,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsIncidenceMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsIncidenceMatrix_IncidenceMatrix_ReturnsTrue()
     {
         // Incidence matrix: each column has exactly one +1 and one -1
@@ -1383,7 +1383,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region InvertLowerTriangularMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InvertLowerTriangularMatrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1407,7 +1407,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Inverse Variants Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseGaussianJordanElimination_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1424,7 +1424,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, product[1, 1], 1e-6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseNewton_ReturnsCorrectInverse()
     {
         // Use a well-conditioned diagonally dominant matrix for Newton-Schulz
@@ -1446,7 +1446,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, product[1, 0], 1e-4);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InverseStrassen_ReturnsCorrectInverse()
     {
         // Strassen requires power of 2 dimension
@@ -1468,7 +1468,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetNullity Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetNullity_FullRankMatrix_ReturnsZero()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1476,7 +1476,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, matrix.GetNullity());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetNullity_RankDeficientMatrix_ReturnsCorrectNullity()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1494,7 +1494,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region LogDeterminant Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogDeterminant_IdentityMatrix_ReturnsZero()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1504,7 +1504,7 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, logDet, 1e-6); // log(1) = 0
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogDeterminant_PositiveDefiniteMatrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1523,7 +1523,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumnVectors Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetColumnVectors_ReturnsCorrectColumns()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1545,7 +1545,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region Max with Selector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Max_WithSelector_ReturnsMaxOfTransformedValues()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -1563,7 +1563,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region ToComplexVector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ToComplexVector_ConvertsRealToComplex()
     {
         var vector = new Vector<double>([1, 2, 3]);
@@ -1579,7 +1579,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region CreateComplexMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateComplexMatrix_CreatesCorrectDimensions()
     {
         var template = new Matrix<Complex<double>>(2, 3);
@@ -1594,7 +1594,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsBlockMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsBlockMatrix_UniformBlocks_ReturnsTrue()
     {
         // 4x4 matrix with 2x2 blocks
@@ -1613,7 +1613,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region InvertUnitaryMatrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InvertUnitaryMatrix_ReturnsConjugateTranspose()
     {
         // A simple unitary matrix: diagonal with unit complex numbers
@@ -1636,7 +1636,7 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetDeterminant Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetDeterminant_SameAsDeterminant()
     {
         var matrix = new Matrix<double>(new double[,]

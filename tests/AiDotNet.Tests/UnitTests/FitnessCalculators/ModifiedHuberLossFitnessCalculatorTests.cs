@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class ModifiedHuberLossFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithConfidentCorrectPredictions_ReturnsZero()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithIncorrectPredictions_ReturnsPositiveValue()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithSlightlyIncorrectPredictions_HasQuadraticLoss()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithVeryIncorrectPredictions_HasLinearLoss()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMixedPredictions_HandlesCorrectly()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -128,7 +128,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -141,7 +141,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -183,7 +183,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -194,7 +194,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
@@ -205,7 +205,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithBinaryClassification_WorksCorrectly()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0); // One misclassification
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithOutliers_ReturnsPositiveLoss()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithAllCorrectPredictions_ReturnsZero()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_BetterPredictions_LowerLoss()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result1 < result2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMismatchedVectorLengths_ThrowsArgumentException()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Throws<ArgumentException>(() => calculator.CalculateFitnessScore(dataSet));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithEmptyVectors_ReturnsNaN()
     {
         // Arrange

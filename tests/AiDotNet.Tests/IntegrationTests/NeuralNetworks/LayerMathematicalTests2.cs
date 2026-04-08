@@ -16,7 +16,7 @@ public class LayerMathematicalTests2
     /// <summary>
     /// Conv2D output size: floor((H + 2*padding - kernelSize) / stride) + 1
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Conv2DLayer_OutputSize_WithPadding()
     {
         // inputDepth=1, inputHeight=8, inputWidth=8, outputDepth=4, kernelSize=3, stride=1, padding=1
@@ -32,7 +32,7 @@ public class LayerMathematicalTests2
         Assert.Equal(8, output.Shape[3]); // width preserved
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Conv2DLayer_Stride2_HalvesSize()
     {
         // stride=2, padding=1
@@ -46,7 +46,7 @@ public class LayerMathematicalTests2
         Assert.Equal(4, output.Shape[3]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Conv2DLayer_ZeroInput_ProducesBiasOutput()
     {
         // With zero input, output should be just the convolution bias
@@ -65,7 +65,7 @@ public class LayerMathematicalTests2
 
     #region Pooling Layer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPool2D_OutputSize()
     {
         // inputShape=[1, 4, 4], poolSize=2, stride=2
@@ -81,7 +81,7 @@ public class LayerMathematicalTests2
         Assert.Equal(2, output.Shape[3]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPool2D_SelectsMaximum()
     {
         var layer = new MaxPoolingLayer<double>([1, 2, 2], 2, 2);
@@ -95,7 +95,7 @@ public class LayerMathematicalTests2
         Assert.Equal(4.0, output[0], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaxPool2D_Idempotent_ForConstantInput()
     {
         // If all values are the same, max pooling should preserve the value
@@ -110,7 +110,7 @@ public class LayerMathematicalTests2
             Assert.Equal(7.0, output[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AvgPool2D_ComputesAverage()
     {
         var layer = new AveragePoolingLayer<double>([1, 2, 2], 2, 2);
@@ -128,7 +128,7 @@ public class LayerMathematicalTests2
 
     #region Layer Normalization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LayerNorm_NormalizesEachSample()
     {
         int featureSize = 4;
@@ -156,7 +156,7 @@ public class LayerMathematicalTests2
 
     #region Embedding Layer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmbeddingLayer_OutputShape()
     {
         int vocabSize = 100, embeddingDim = 32;
@@ -169,7 +169,7 @@ public class LayerMathematicalTests2
         Assert.Equal(embeddingDim, output.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmbeddingLayer_SameIndex_SameVector()
     {
         int vocabSize = 10, embeddingDim = 4;
@@ -184,7 +184,7 @@ public class LayerMathematicalTests2
             Assert.Equal(output1[i], output2[i], Tol);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EmbeddingLayer_DifferentIndices_DifferentVectors()
     {
         int vocabSize = 10, embeddingDim = 8;

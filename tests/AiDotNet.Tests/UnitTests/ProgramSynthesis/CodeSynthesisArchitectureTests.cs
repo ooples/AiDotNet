@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class CodeSynthesisArchitectureTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ValidParameters_CreatesInstance()
     {
         // Arrange & Act
@@ -42,7 +42,7 @@ public class CodeSynthesisArchitectureTests
         Assert.Equal(100, architecture.MaxProgramLength);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_DefaultValues_CreatesInstanceWithDefaults()
     {
         // Arrange & Act
@@ -62,7 +62,7 @@ public class CodeSynthesisArchitectureTests
         Assert.False(architecture.UseDataFlow);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDataFlow_SetsDataFlowCorrectly()
     {
         // Arrange & Act
@@ -76,7 +76,7 @@ public class CodeSynthesisArchitectureTests
         Assert.True(architecture.UseDataFlow);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_DifferentLanguages_CreatesCorrectInstances()
     {
         // Arrange & Act

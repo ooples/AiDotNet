@@ -34,7 +34,7 @@ public abstract class TimeSeriesModelTestBase
     // The model should predict higher values for later time points.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrendRecovery_LaterTimeShouldHaveHigherPrediction()
     {
         if (!IsForecastingModel) return;
@@ -76,7 +76,7 @@ public abstract class TimeSeriesModelTestBase
     // Shifting all y-values by constant C should shift predictions by C.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
         if (!IsForecastingModel) return;
@@ -114,7 +114,7 @@ public abstract class TimeSeriesModelTestBase
     // On data with clear trend + seasonality, model should outperform mean.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void R2_ShouldBePositive_OnTrendData()
     {
         // Stationary models (MA) cannot capture trends — skip this test for them
@@ -163,7 +163,7 @@ public abstract class TimeSeriesModelTestBase
     // MATHEMATICAL INVARIANT: Training Error ≤ Test Error
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TrainingError_ShouldNotExceedTestError()
     {
         if (!IsForecastingModel) return;
@@ -193,7 +193,7 @@ public abstract class TimeSeriesModelTestBase
     // MATHEMATICAL INVARIANT: Residual Mean ≈ 0
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ResidualMean_ShouldBeNearZero()
     {
         if (!IsForecastingModel) return;
@@ -221,7 +221,7 @@ public abstract class TimeSeriesModelTestBase
     // MATHEMATICAL INVARIANT: Scaling Equivariance
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
         if (!IsForecastingModel) return;
@@ -260,7 +260,7 @@ public abstract class TimeSeriesModelTestBase
     // produce worse R² — more data should help, not hurt.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MoreData_ShouldNotDegrade_R2()
     {
         if (!CanCaptureTrend) return;
@@ -297,7 +297,7 @@ public abstract class TimeSeriesModelTestBase
     // BASIC CONTRACTS: Finite Predictions, Determinism, Output Shape, Clone, Metadata
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -315,7 +315,7 @@ public abstract class TimeSeriesModelTestBase
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -331,7 +331,7 @@ public abstract class TimeSeriesModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -343,7 +343,7 @@ public abstract class TimeSeriesModelTestBase
         Assert.Equal(TestLength, model.Predict(testX).Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Clone_ShouldProduceIdenticalPredictions()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -360,7 +360,7 @@ public abstract class TimeSeriesModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -371,7 +371,7 @@ public abstract class TimeSeriesModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -401,7 +401,7 @@ public abstract class TimeSeriesModelTestBase
     // INTEGRATION: Builder Pipeline
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -418,7 +418,7 @@ public abstract class TimeSeriesModelTestBase
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_R2ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

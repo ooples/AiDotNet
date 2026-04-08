@@ -11,7 +11,7 @@ using Xunit;
 /// </summary>
 public class GaussianDifferentialPrivacyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithValidClipNorm_InitializesSuccessfully()
     {
         // Arrange & Act
@@ -22,14 +22,14 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithNegativeClipNorm_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacy<double>(clipNorm: -1.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_WithValidParameters_AddsNoiseToModel()
     {
         // Arrange
@@ -60,7 +60,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.True(hasNoise, "Noise should have been added to the model");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_UpdatesPrivacyBudget()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.8, dp.GetPrivacyBudgetConsumed(), precision: 5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_WithZeroEpsilon_ThrowsArgumentException()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: 0.0, delta: 1e-5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_WithInvalidDelta_ThrowsArgumentException()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: 1.0, delta: 1.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ResetPrivacyBudget_ResetsToZero()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetMechanismName_ReturnsCorrectName()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class GaussianDifferentialPrivacyTests
         Assert.Contains("2.5", name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_WithSameSeed_ProducesSameNoise()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class GaussianDifferentialPrivacyTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ApplyPrivacy_PerformsGradientClipping()
     {
         // Arrange

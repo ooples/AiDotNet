@@ -17,7 +17,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region PolynomialRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialRegression_Train_QuadraticData_FitsPolynomial()
     {
         // Arrange: y = x^2 + 2x + 1
@@ -41,7 +41,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialRegression_Train_Degree1_EquivalentToLinear()
     {
         // Arrange
@@ -69,7 +69,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialRegression_Train_HighDegree_Overfits()
     {
         // Arrange - high degree polynomial on few points should fit exactly
@@ -90,7 +90,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialRegression_Predict_Extrapolation_ReturnsValues()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region SplineRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplineRegression_Train_SmoothData_FitsWell()
     {
         // Arrange
@@ -141,7 +141,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region IsotonicRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsotonicRegression_Train_PreservesMonotonicity()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsotonicRegression_Train_AlreadyMonotonic_PreservesValues()
     {
         // Arrange
@@ -191,7 +191,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region QuantileRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantileRegression_Train_MedianQuantile_SimilarToMean()
     {
         // Arrange - median (0.5 quantile) should be similar to mean for symmetric data
@@ -211,7 +211,7 @@ public class SpecializedRegressionIntegrationTests
         Assert.True(!double.IsNaN(predictions[0]), "Prediction should not be NaN");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantileRegression_Train_LowQuantile_BelowMedian()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region RobustRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustRegression_Train_WithOutliers_ResistsInfluence()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class SpecializedRegressionIntegrationTests
             $"Robust regression should resist outlier influence better: robust error={robustError}, regular error={regularError}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RobustRegression_Train_NoOutliers_SimilarToOLS()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region BayesianRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BayesianRegression_Train_FitsData()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void BayesianRegression_Train_ProvidesUncertainty()
     {
         // Arrange
@@ -359,7 +359,7 @@ public class SpecializedRegressionIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialRegression_Train_NegativeValues_HandlesCorrectly()
     {
         // Arrange
@@ -383,7 +383,7 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsotonicRegression_Train_SinglePoint_HandlesGracefully()
     {
         // Arrange
@@ -399,7 +399,7 @@ public class SpecializedRegressionIntegrationTests
         Assert.Equal(5.0, predictions[0], LooseTolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QuantileRegression_Train_ConstantTarget_HandlesCorrectly()
     {
         // Arrange

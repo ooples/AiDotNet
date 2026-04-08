@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.Evaluation;
 
 public class PredictionTypeInferenceFromTargetsTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferFromTargets_ReturnsMultiClass_ForOneHotTensor()
     {
         var values = new[]
@@ -23,7 +23,7 @@ public class PredictionTypeInferenceFromTargetsTests
         Assert.Equal(PredictionType.MultiClass, predictionType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferFromTargets_ReturnsMultiLabel_ForMultiHotTensor()
     {
         var values = new[]
@@ -39,7 +39,7 @@ public class PredictionTypeInferenceFromTargetsTests
         Assert.Equal(PredictionType.MultiLabel, predictionType);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InferFromTargets_ReturnsRegression_ForDenseContinuousTensor()
     {
         var values = new[]

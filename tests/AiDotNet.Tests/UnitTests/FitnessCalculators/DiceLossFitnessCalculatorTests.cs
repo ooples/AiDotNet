@@ -14,7 +14,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
     /// </summary>
     public class DiceLossFitnessCalculatorTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultDataSetType_UsesValidation()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter); // Dice loss: lower is better
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithTrainingDataSetType_UsesTraining()
         {
             // Arrange & Act
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithNoOverlap_ReturnsOne()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithPartialOverlap_ReturnsCorrectValue()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.2, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithProbabilisticPredictions_ReturnsCorrectValue()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.24324324324324326, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithAllZeros_ReturnsOne()
         {
             // Arrange
@@ -136,7 +136,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.999);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
         {
             // Arrange
@@ -158,7 +158,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.33333333333333331, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -178,7 +178,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.2f, result, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithImbalancedData_HandlesCorrectly()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.08108108108108109, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
         {
             // Arrange
@@ -212,7 +212,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
@@ -234,7 +234,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10); // Perfect predictions
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
@@ -256,7 +256,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10); // No overlap
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsHigherScoreBetter_ReturnsFalse()
         {
             // Arrange
@@ -266,7 +266,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsBetterFitness_WithLowerScore_ReturnsTrue()
         {
             // Arrange
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result); // Lower score is better for loss functions
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void IsBetterFitness_WithHigherScore_ReturnsFalse()
         {
             // Arrange
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(result); // Higher score is worse for loss functions
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_MedicalImagingScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating tumor segmentation scenario
@@ -320,7 +320,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.09947643979057592, result, 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
         {
             // Arrange

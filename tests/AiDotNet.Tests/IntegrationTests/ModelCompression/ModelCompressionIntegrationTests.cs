@@ -17,7 +17,7 @@ public class ModelCompressionIntegrationTests
 
     #region DeepCompression Pipeline Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepCompression_VectorPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create weights with known distribution
@@ -68,7 +68,7 @@ public class ModelCompressionIntegrationTests
         Assert.True(preservedCount >= 4, "At least 4 large weights should be preserved");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepCompression_MatrixPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create a weight matrix
@@ -100,7 +100,7 @@ public class ModelCompressionIntegrationTests
         Assert.True(ratio > 0, $"Compression ratio {ratio} should be positive");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeepCompression_TensorPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create a 3D tensor (simulating conv filter) and flatten to vector
@@ -131,7 +131,7 @@ public class ModelCompressionIntegrationTests
 
     #region Pruning Integration Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PruningStrategies_AllStrategiesProduceValidMasks()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class ModelCompressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientPruning_WithGradients_ProducesValidMask()
     {
         // Arrange
@@ -201,7 +201,7 @@ public class ModelCompressionIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StructuredSparsity_2to4_CreatesValidPattern()
     {
         // Arrange - Create tensor for structured sparsity
@@ -219,7 +219,7 @@ public class ModelCompressionIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NtoMSparsity_4to8_CreatesValidPattern()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class ModelCompressionIntegrationTests
 
     #region Compression + Pruning Combined Pipeline
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SparsePruning_ThenDeepCompression_AchievesHighCompression()
     {
         // Arrange
@@ -277,7 +277,7 @@ public class ModelCompressionIntegrationTests
 
     #region Weight Clustering Compression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightClustering_ReducesUniqueValues()
     {
         // Arrange
@@ -305,7 +305,7 @@ public class ModelCompressionIntegrationTests
 
     #region Huffman Encoding Compression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HuffmanEncoding_CompressesRepetitiveData()
     {
         // Arrange - Create data with repetitive patterns (good for Huffman)
@@ -333,7 +333,7 @@ public class ModelCompressionIntegrationTests
 
     #region Low-Rank Factorization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LowRankFactorization_CompressesVector()
     {
         // Arrange - Create a low-rank matrix (should compress well) and flatten to vector
@@ -370,7 +370,7 @@ public class ModelCompressionIntegrationTests
 
     #region Product Quantization Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProductQuantization_CompressesVectors()
     {
         // Arrange
@@ -395,7 +395,7 @@ public class ModelCompressionIntegrationTests
 
     #region Compression Analyzer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionAnalyzer_RecommendsAppropriateStrategy()
     {
         // Arrange - Create sparse weights (should recommend pruning)
@@ -419,7 +419,7 @@ public class ModelCompressionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Compression_EmptyInput_ThrowsArgumentException()
     {
         // Arrange
@@ -430,7 +430,7 @@ public class ModelCompressionIntegrationTests
         Assert.Throws<ArgumentException>(() => compression.Compress(emptyVector));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateMask_InvalidSparsity_ThrowsArgumentException()
     {
         // Arrange

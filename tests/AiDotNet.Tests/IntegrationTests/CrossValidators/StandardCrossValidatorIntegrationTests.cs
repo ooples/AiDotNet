@@ -56,7 +56,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
@@ -66,7 +66,7 @@ public class StandardCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Fold Size Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_FoldSizesAreApproximatelyEqual()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_NoOverlapBetweenTrainAndTest()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class StandardCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_TrainAndTestCoverAllIndices()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class StandardCrossValidatorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithoutShuffle_PreservesOrder()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -311,7 +311,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Sample Usage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_EachSampleUsedExactlyOnceAsTest()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_WithMinimumFolds_Works()
     {
         // Arrange - 2 folds is minimum

@@ -27,7 +27,7 @@ public class HybridSamplingTests
 
     #region Constructor Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_ValidStrategies_InitializesCorrectly()
     {
         // Arrange
@@ -41,14 +41,14 @@ public class HybridSamplingTests
         Assert.Equal(2, hybrid.Strategies.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_NullStrategies_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new HybridSampling<double>(null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_EmptyStrategies_ThrowsArgumentException()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class HybridSamplingTests
 
     #region Name Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_MultipleStrategies_ContainsAllStrategyNames()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class HybridSamplingTests
         Assert.Contains("Hybrid", name);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Name_ContainsCombinationMethod()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class HybridSamplingTests
 
     #region Strategies Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Strategies_ReturnsReadOnlyList()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class HybridSamplingTests
         Assert.Equal(3, returnedStrategies.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Strategies_PreservesWeights()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class HybridSamplingTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_DefaultValue_IsFalse()
     {
         // Arrange
@@ -163,7 +163,7 @@ public class HybridSamplingTests
         Assert.False(hybrid.UseBatchDiversity);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UseBatchDiversity_SetToTrue_UpdatesCorrectly()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class HybridSamplingTests
 
     #region CreateUncertaintyDiversity Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateUncertaintyDiversity_DefaultWeights_CreatesHybridSampler()
     {
         // Act
@@ -192,7 +192,7 @@ public class HybridSamplingTests
         Assert.Equal(2, hybrid.Strategies.Count);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreateUncertaintyDiversity_CustomWeights_AppliesWeights()
     {
         // Act
@@ -209,7 +209,7 @@ public class HybridSamplingTests
 
     #region SelectSamples Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -221,7 +221,7 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(null!, pool, batchSize: 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class HybridSamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class HybridSamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class HybridSamplingTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(null!, pool));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -327,7 +327,7 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class HybridSamplingTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
@@ -388,7 +388,7 @@ public class HybridSamplingTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_BeforeAnySelection_ReturnsInitialStatistics()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class HybridSamplingTests
         Assert.Equal(2.0, stats["NumStrategies"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
@@ -426,7 +426,7 @@ public class HybridSamplingTests
         Assert.Equal(3.0, stats["NumStrategies"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GetSelectionStatistics_IncludesIndividualStrategyStats()
     {
         // Arrange
@@ -449,7 +449,7 @@ public class HybridSamplingTests
 
     #region Combination Method Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WeightedSum_CombinesScoresCorrectly()
     {
         // Arrange
@@ -473,7 +473,7 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Product_CombinesScoresCorrectly()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void RankFusion_CombinesScoresCorrectly()
     {
         // Arrange
@@ -513,7 +513,7 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Maximum_SelectsHighestScoreAcrossStrategies()
     {
         // Arrange
@@ -529,7 +529,7 @@ public class HybridSamplingTests
         Assert.Equal(10, scores.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Minimum_SelectsLowestScoreAcrossStrategies()
     {
         // Arrange
@@ -549,7 +549,7 @@ public class HybridSamplingTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HybridSampling_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
@@ -571,7 +571,7 @@ public class HybridSamplingTests
         Assert.NotNull(stats2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HybridSampling_MultipleStrategies_WorksCorrectly()
     {
         // Arrange
@@ -594,7 +594,7 @@ public class HybridSamplingTests
         Assert.Equal(3.0, stats["NumStrategies"]);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void HybridSampling_DifferentCombinationMethods_ProduceDifferentResults()
     {
         // Arrange

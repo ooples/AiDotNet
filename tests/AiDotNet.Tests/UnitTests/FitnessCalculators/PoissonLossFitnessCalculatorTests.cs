@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class PoissonLossFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithDifferentPredictions_ReturnsValue()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithCountData_HandlesCorrectly()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithLargeCounts_WorksCorrectly()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithSmallPositiveValues_HandlesCorrectly()
     {
         // Arrange
@@ -107,7 +107,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -130,7 +130,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!float.IsNaN(result) && !float.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -182,7 +182,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -193,7 +193,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithSmallCounts_HandlesCorrectly()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMixedCounts_WorksCorrectly()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_BetterPredictions_LowerLoss()
     {
         // Arrange

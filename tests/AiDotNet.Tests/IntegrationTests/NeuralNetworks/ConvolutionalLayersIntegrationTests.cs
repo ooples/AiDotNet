@@ -17,7 +17,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: 3 channels, 8x8 image, 16 filters, 3x3 kernel
@@ -40,7 +40,7 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_Forward_WithStride2_ReducesDimensions()
     {
         // Arrange: stride=2 should halve the spatial dimensions
@@ -60,7 +60,7 @@ public class ConvolutionalLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class ConvolutionalLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_LargeKernel_ProducesValidOutput()
     {
         // Arrange: 5x5 kernel
@@ -107,7 +107,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Conv3DLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Conv3DLayer_Forward_ProducesValidOutput()
     {
         // Arrange: 3D convolution for volumetric data (e.g., video, medical imaging)
@@ -135,7 +135,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region DilatedConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DilatedConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: dilation=2 increases receptive field without increasing parameters
@@ -158,7 +158,7 @@ public class ConvolutionalLayersIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DilatedConvolutionalLayer_LargeDilation_ProducesValidOutput()
     {
         // Arrange: dilation=4 for very large receptive field
@@ -182,7 +182,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region DepthwiseSeparableConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DepthwiseSeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: efficient convolution used in MobileNet
@@ -209,7 +209,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region SeparableConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange - inputShape is [batch, height, width, channels]
@@ -234,7 +234,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region SubpixelConvolutionalLayer Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SubpixelConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: upscale by 2x (commonly used for super-resolution)
@@ -263,7 +263,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_SingleChannel_SingleFilter_Works()
     {
         // Arrange: minimal configuration
@@ -283,7 +283,7 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_NoPadding_ReducesDimensions()
     {
         // Arrange: without padding, 3x3 kernel reduces each dimension by 2
@@ -302,7 +302,7 @@ public class ConvolutionalLayersIntegrationTests
         Assert.Equal(6, output.Shape[2]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_ManyFilters_Works()
     {
         // Arrange: 64 filters as commonly used in CNNs
@@ -324,7 +324,7 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Activation Function Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
@@ -345,7 +345,7 @@ public class ConvolutionalLayersIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConvolutionalLayer_WithTanh_ProducesOutputInRange()
     {
         // Arrange

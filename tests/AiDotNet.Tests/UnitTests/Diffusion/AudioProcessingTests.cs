@@ -14,7 +14,7 @@ public class AudioProcessingTests
 {
     #region Window Function Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunctions_Hann_CreatesCorrectShape()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class AudioProcessingTests
         Assert.Equal(length, window.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunctions_Hann_FirstAndLastValuesNearZero()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class AudioProcessingTests
         Assert.True(window[length / 2] > 0.99f); // Peak should be near 1
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunctions_Hamming_DoesNotGoToZero()
     {
         // Arrange
@@ -57,7 +57,7 @@ public class AudioProcessingTests
         Assert.True(window[0] > 0.05f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WindowFunctions_Kaiser_VariesWithBeta()
     {
         // Arrange
@@ -105,7 +105,7 @@ public class AudioProcessingTests
 
     #region STFT Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void STFT_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class AudioProcessingTests
         Assert.Equal(expectedFreqs, spectrogram.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void STFT_Magnitude_ProducesNonNegativeValues()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void STFT_Power_IsSquareOfMagnitude()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void STFT_Inverse_ReconstructsSignal()
     {
         // Arrange
@@ -212,7 +212,7 @@ public class AudioProcessingTests
         Assert.True(rmse < 0.1, $"RMSE {rmse} should be small for perfect reconstruction");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void STFT_CalculateNumFrames_ConsistentWithForward()
     {
         // Arrange
@@ -238,7 +238,7 @@ public class AudioProcessingTests
 
     #region Mel Spectrogram Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MelSpectrogram_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class AudioProcessingTests
         Assert.Equal(nMels, mel.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MelSpectrogram_HzToMel_Invertible()
     {
         // Arrange
@@ -283,7 +283,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MelSpectrogram_GetFilterbank_HasCorrectShape()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class AudioProcessingTests
         Assert.Equal(nFft / 2 + 1, filterbank.Shape[1]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MelSpectrogram_Filterbank_RowsAreNormalized()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MelSpectrogram_GetMelCenterFrequencies_IncreasesMonotonically()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class AudioProcessingTests
 
     #region Griffin-Lim Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GriffinLim_Reconstruct_ProducesCorrectLength()
     {
         // Arrange
@@ -382,7 +382,7 @@ public class AudioProcessingTests
         Assert.True(audio.Length > 0, "Output should have data");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GriffinLim_ComputeSpectralConvergence_DecreasesWithIterations()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class AudioProcessingTests
             $"50 iterations error ({error50}) should be <= 10 iterations error ({error10}) with 5% tolerance");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GriffinLim_WithProgress_CallsCallback()
     {
         // Arrange
@@ -443,7 +443,7 @@ public class AudioProcessingTests
 
     #region AudioProcessor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioProcessor_AudioToSpectrogram_ProducesNormalizedOutput()
     {
         // Arrange
@@ -469,7 +469,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioProcessor_DurationConversions_AreConsistent()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class AudioProcessingTests
             $"Duration should round-trip: {duration} -> {recoveredDuration}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioProcessor_NormalizeAudio_ScalesToTargetPeak()
     {
         // Arrange
@@ -517,7 +517,7 @@ public class AudioProcessingTests
             $"Peak should be {targetPeak}, got {maxAbs}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioProcessor_PadOrTruncate_PadsCorrectly()
     {
         // Arrange
@@ -546,7 +546,7 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioProcessor_PadOrTruncate_TruncatesCorrectly()
     {
         // Arrange

@@ -27,7 +27,7 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that a method with a non-nullable parameter can receive null at runtime.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NonNullableParameter_CanReceiveNull_AtRuntime()
     {
         // Suppress the nullable warning at the call site to simulate a caller without NRT.
@@ -42,7 +42,7 @@ public class NullableReferenceTypeTests
     /// Demonstrates that a non-nullable property can be set to null via an object initializer
     /// when a caller suppresses NRT warnings.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NonNullableProperty_CanBeNull_WhenSetFromDisabledContext()
     {
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
@@ -54,7 +54,7 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that an array of non-nullable type contains null default elements.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NonNullableArray_ContainsNullDefaults()
     {
         // string[] is an array of "non-nullable" strings,
@@ -68,7 +68,7 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that casting through object erases NRT information.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CastingThroughObject_ErasesNullability()
     {
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.

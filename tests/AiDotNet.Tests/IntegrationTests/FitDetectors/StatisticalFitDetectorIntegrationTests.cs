@@ -99,7 +99,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region ResidualAnalysisFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -109,7 +109,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_DetectFit_WithPoorFitData_DetectsIssue()
     {
         // Arrange
@@ -157,7 +157,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotEqual(FitType.GoodFit, result.FitType);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region AutocorrelationFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AutocorrelationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -186,7 +186,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AutocorrelationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AutocorrelationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AutocorrelationFitDetector_DetectFit_ReturnsAutocorrelationRelatedFitType()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region HeteroscedasticityFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HeteroscedasticityFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -257,7 +257,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HeteroscedasticityFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HeteroscedasticityFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void HeteroscedasticityFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -310,7 +310,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region VIFFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VIFFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -320,7 +320,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VIFFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -337,7 +337,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VIFFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VIFFitDetector_DetectFit_ReturnsMulticollinearityRelatedFitType()
     {
         // Arrange
@@ -379,7 +379,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region CookDistanceFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CookDistanceFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -389,7 +389,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CookDistanceFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -405,7 +405,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CookDistanceFitDetector_DetectFit_WithoutModel_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region InformationCriteriaFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InformationCriteriaFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -433,7 +433,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InformationCriteriaFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -450,7 +450,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InformationCriteriaFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -470,7 +470,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region ROCCurveFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ROCCurveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -480,7 +480,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ROCCurveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -498,7 +498,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ROCCurveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -513,7 +513,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ROCCurveFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -536,7 +536,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region PrecisionRecallCurveFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrecisionRecallCurveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -546,7 +546,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrecisionRecallCurveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -563,7 +563,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrecisionRecallCurveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -583,7 +583,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region ConfusionMatrixFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrixFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -596,7 +596,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrixFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConfusionMatrixFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -633,7 +633,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region PermutationTestFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationTestFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -643,7 +643,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationTestFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -660,7 +660,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PermutationTestFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -680,7 +680,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region ResidualBootstrapFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualBootstrapFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -690,7 +690,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualBootstrapFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -707,7 +707,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualBootstrapFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -726,7 +726,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region ShapleyValueFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShapleyValueFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShapleyValueFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -755,7 +755,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShapleyValueFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -776,7 +776,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region PartialDependencePlotFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependencePlotFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -786,7 +786,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependencePlotFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -802,7 +802,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialDependencePlotFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -821,7 +821,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region LearningCurveFitDetector Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningCurveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -831,7 +831,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningCurveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -848,7 +848,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningCurveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -864,7 +864,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LearningCurveFitDetector_DetectFit_ReturnsNonEmptyRecommendations()
     {
         // Arrange
@@ -882,7 +882,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStatisticalDetectors_WithSameData_ProduceValidResults()
     {
         // Arrange
@@ -910,7 +910,7 @@ public class StatisticalFitDetectorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStatisticalDetectors_ReturnValidConfidenceLevels()
     {
         // Arrange
@@ -935,7 +935,7 @@ public class StatisticalFitDetectorIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllStatisticalDetectors_WithPoorFitData_DetectProblems()
     {
         // Arrange
@@ -963,7 +963,7 @@ public class StatisticalFitDetectorIntegrationTests
 
     #region AdditionalInfo Dictionary Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResidualAnalysisFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange
@@ -977,7 +977,7 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.NotNull(result.AdditionalInfo);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VIFFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange

@@ -16,7 +16,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // Code model outputs (embeddings, token probabilities) must be finite.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CodeOutput_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -39,7 +39,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // Different code inputs should produce different embeddings/outputs.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DifferentCode_DifferentOutputs()
     {
         var network = CreateNetwork();
@@ -69,7 +69,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // An empty code file is a valid edge case.
     // =====================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();

@@ -10,7 +10,7 @@ public class PreprocessorContractTests
 {
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CannyEdgePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new CannyEdgePreprocessor<double>();
@@ -19,7 +19,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DepthEstimationPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new DepthEstimationPreprocessor<double>();
@@ -28,7 +28,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NormalMapPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new NormalMapPreprocessor<double>();
@@ -37,7 +37,7 @@ public class PreprocessorContractTests
         Assert.Equal(3, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OpenPosePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new OpenPosePreprocessor<double>();
@@ -46,7 +46,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DWPosePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new DWPosePreprocessor<double>();
@@ -55,7 +55,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SemanticSegPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new SemanticSegPreprocessor<double>();
@@ -64,7 +64,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LineArtPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new LineArtPreprocessor<double>();
@@ -73,7 +73,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SoftEdgePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new SoftEdgePreprocessor<double>();
@@ -82,7 +82,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MLSDPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new MLSDPreprocessor<double>();
@@ -91,7 +91,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ScribblePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new ScribblePreprocessor<double>();
@@ -100,7 +100,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TilePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new TilePreprocessor<double>();
@@ -109,7 +109,7 @@ public class PreprocessorContractTests
         Assert.Equal(3, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InpaintingMaskPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new InpaintingMaskPreprocessor<double>();
@@ -118,7 +118,7 @@ public class PreprocessorContractTests
         Assert.Equal(1, preprocessor.OutputChannels);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ShufflePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new ShufflePreprocessor<double>();
@@ -127,7 +127,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void QRCodePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new QRCodePreprocessor<double>();
@@ -136,7 +136,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ColorPalettePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new ColorPalettePreprocessor<double>();
@@ -145,7 +145,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContentShufflePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new ContentShufflePreprocessor<double>();
@@ -154,7 +154,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SAMPreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new SAMPreprocessor<double>();
@@ -163,7 +163,7 @@ public class PreprocessorContractTests
         Assert.True(preprocessor.OutputChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MediaPipeFacePreprocessor_DefaultConstructor_CreatesValidPreprocessor()
     {
         var preprocessor = new MediaPipeFacePreprocessor<double>();

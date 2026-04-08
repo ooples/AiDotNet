@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.Reasoning.Benchmarks;
 
 public sealed class HumanEvalBenchmarkDatasetLoadingTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task LoadProblemsAsync_WhenDatasetEnvVarSet_LoadsFromFile()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_HUMANEVAL_DATASET");

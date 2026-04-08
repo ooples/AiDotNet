@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class BatchingStrategyTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TimeoutBatchingStrategy_ShouldProcessBatch_WhenTimeoutReached()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class BatchingStrategyTests
         Assert.True(shouldProcess2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SizeBatchingStrategy_ShouldProcessBatch_WhenSizeReached()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class BatchingStrategyTests
         Assert.True(shouldProcess2);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SizeBatchingStrategy_ShouldProcessBatch_WhenMaxWaitReached()
     {
         // Arrange
@@ -75,7 +75,7 @@ public class BatchingStrategyTests
         Assert.True(shouldProcess);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_ShouldAdaptBatchSize_BasedOnLatency()
     {
         // Arrange
@@ -95,7 +95,7 @@ public class BatchingStrategyTests
         Assert.True(increasedBatchSize >= initialBatchSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_ShouldDecreaseBatchSize_WhenLatencyTooHigh()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class BatchingStrategyTests
         Assert.True(decreasedBatchSize < batchSizeBeforeHighLatency);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_ShouldProcessBatch_WhenBackpressureDetected()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class BatchingStrategyTests
         Assert.True(shouldProcess);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketBatchingStrategy_ShouldReturnCorrectBucketIndex()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class BatchingStrategyTests
         Assert.Equal(5, strategy.GetBucketIndex(1000)); // Overflow bucket
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketBatchingStrategy_ShouldReturnCorrectBucketSize()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class BatchingStrategyTests
 
     #region PR #758 Bug Fix Tests - Parameter Validation
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ContinuousBatchingStrategy_Constructor_ThrowsOnInvalidMaxConcurrency()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -189,14 +189,14 @@ public class BatchingStrategyTests
             new ContinuousBatchingStrategy(maxConcurrency: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ContinuousBatchingStrategy_Constructor_ThrowsOnNegativeMinWait()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ContinuousBatchingStrategy(minWaitMs: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ContinuousBatchingStrategy_Constructor_ThrowsOnInvalidTargetLatency()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -205,14 +205,14 @@ public class BatchingStrategyTests
             new ContinuousBatchingStrategy(targetLatencyMs: -10));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TimeoutBatchingStrategy_Constructor_ThrowsOnNegativeTimeout()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TimeoutBatchingStrategy(timeoutMs: -1, maxBatchSize: 10));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TimeoutBatchingStrategy_Constructor_ThrowsOnInvalidMaxBatchSize()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -221,42 +221,42 @@ public class BatchingStrategyTests
             new TimeoutBatchingStrategy(timeoutMs: 10, maxBatchSize: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_Constructor_ThrowsOnInvalidMinBatchSize()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AdaptiveBatchingStrategy(minBatchSize: 0, maxBatchSize: 10, maxWaitMs: 50, targetLatencyMs: 20));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_Constructor_ThrowsOnMaxBatchSizeLessThanMin()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AdaptiveBatchingStrategy(minBatchSize: 10, maxBatchSize: 5, maxWaitMs: 50, targetLatencyMs: 20));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_Constructor_ThrowsOnNegativeMaxWait()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AdaptiveBatchingStrategy(minBatchSize: 1, maxBatchSize: 10, maxWaitMs: -1, targetLatencyMs: 20));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_Constructor_ThrowsOnInvalidTargetLatency()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AdaptiveBatchingStrategy(minBatchSize: 1, maxBatchSize: 10, maxWaitMs: 50, targetLatencyMs: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AdaptiveBatchingStrategy_Constructor_ThrowsOnInvalidLatencyToleranceFactor()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AdaptiveBatchingStrategy(minBatchSize: 1, maxBatchSize: 10, maxWaitMs: 50, targetLatencyMs: 20, latencyToleranceFactor: 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SizeBatchingStrategy_Constructor_ThrowsOnInvalidBatchSize()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -265,28 +265,28 @@ public class BatchingStrategyTests
             new SizeBatchingStrategy(batchSize: -1, maxWaitMs: 100));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SizeBatchingStrategy_Constructor_ThrowsOnNegativeMaxWait()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SizeBatchingStrategy(batchSize: 10, maxWaitMs: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketBatchingStrategy_Constructor_ThrowsOnInvalidMaxBatchSize()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BucketBatchingStrategy(new[] { 32, 64 }, maxBatchSize: 0, maxWaitMs: 50));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketBatchingStrategy_Constructor_ThrowsOnNegativeMaxWait()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BucketBatchingStrategy(new[] { 32, 64 }, maxBatchSize: 10, maxWaitMs: -1));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BucketBatchingStrategy_Constructor_ThrowsOnNonPositiveBucketBoundary()
     {
         Assert.Throws<ArgumentException>(() =>

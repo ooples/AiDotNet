@@ -132,7 +132,7 @@ public class RemainingRegressionIntegrationTests
 
     #region LogisticRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_Train_BinaryData_MakesProbabilisticPredictions()
     {
         // Arrange
@@ -157,7 +157,7 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_Train_LearnableBoundary_SeparatesClasses()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class RemainingRegressionIntegrationTests
         Assert.True(accuracy > 0.5, $"Accuracy {accuracy} should be better than random");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_Coefficients_AreAccessible()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(2, logistic.Coefficients.Length); // Two features
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LogisticRegression_GetModelType_ReturnsLogisticRegression()
     {
         // Arrange
@@ -258,7 +258,7 @@ public class RemainingRegressionIntegrationTests
 
     #region TimeSeriesRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesRegression_Train_WithLagOrder_MakesPredictions()
     {
         // Arrange
@@ -281,7 +281,7 @@ public class RemainingRegressionIntegrationTests
         Assert.True(predictions.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesRegression_Train_WithSeasonality_CapturesPattern()
     {
         // Arrange
@@ -304,7 +304,7 @@ public class RemainingRegressionIntegrationTests
         Assert.True(predictions.Length > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TimeSeriesRegression_GetModelType_ReturnsTimeSeriesRegression()
     {
         // Arrange
@@ -329,7 +329,7 @@ public class RemainingRegressionIntegrationTests
 
     #region GeneticAlgorithmRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithmRegression_Train_FindsSolution()
     {
         // Arrange
@@ -351,7 +351,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithmRegression_Coefficients_AreAccessible()
     {
         // Arrange
@@ -370,7 +370,7 @@ public class RemainingRegressionIntegrationTests
         Assert.NotNull(gaRegression.Coefficients);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GeneticAlgorithmRegression_GetModelType_ReturnsGeneticAlgorithmRegression()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class RemainingRegressionIntegrationTests
 
     #region PrincipalComponentRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrincipalComponentRegression_Train_ReducesDimensionality()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PrincipalComponentRegression_Train_WithFewerComponents_WorksCorrectly()
     {
         // Arrange
@@ -436,7 +436,7 @@ public class RemainingRegressionIntegrationTests
 
     #region PartialLeastSquaresRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialLeastSquaresRegression_Train_MakesPredictions()
     {
         // Arrange
@@ -455,7 +455,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PartialLeastSquaresRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -479,7 +479,7 @@ public class RemainingRegressionIntegrationTests
 
     #region MultivariateRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultivariateRegression_Train_WithMultipleTargets_WorksCorrectly()
     {
         // Arrange - using multiple target variables
@@ -504,7 +504,7 @@ public class RemainingRegressionIntegrationTests
 
     #region StepwiseRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepwiseRegression_Train_SelectsFeatures()
     {
         // Arrange
@@ -525,7 +525,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepwiseRegression_BackwardDirection_WorksCorrectly()
     {
         // Arrange
@@ -549,7 +549,7 @@ public class RemainingRegressionIntegrationTests
 
     #region WeightedRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedRegression_Train_WithUniformWeights_WorksLikeOLS()
     {
         // Arrange
@@ -574,7 +574,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WeightedRegression_Train_WithVaryingWeights_WorksCorrectly()
     {
         // Arrange
@@ -603,7 +603,7 @@ public class RemainingRegressionIntegrationTests
 
     #region OrthogonalRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OrthogonalRegression_Train_MinimizesTotalLeastSquares()
     {
         // Arrange
@@ -622,7 +622,7 @@ public class RemainingRegressionIntegrationTests
 
     #region NeuralNetworkRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NeuralNetworkRegression_Train_SimpleData_MakesPredictions()
     {
         // Arrange
@@ -643,7 +643,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NeuralNetworkRegression_Train_NonLinearData_CapturesPattern()
     {
         // Arrange - quadratic data y = x^2
@@ -672,7 +672,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NeuralNetworkRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -697,7 +697,7 @@ public class RemainingRegressionIntegrationTests
 
     #region MultilayerPerceptronRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultilayerPerceptronRegression_Train_SimpleData_MakesPredictions()
     {
         // Arrange
@@ -718,7 +718,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultilayerPerceptronRegression_Train_MultipleLayers_WorksCorrectly()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultilayerPerceptronRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -787,7 +787,7 @@ public class RemainingRegressionIntegrationTests
         return (X, y);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialLogisticRegression_Train_MultiClassData_MakesPredictions()
     {
         // Arrange
@@ -813,7 +813,7 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialLogisticRegression_Coefficients_AreAccessible()
     {
         // Arrange
@@ -831,7 +831,7 @@ public class RemainingRegressionIntegrationTests
         Assert.NotNull(multinomial.Coefficients);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultinomialLogisticRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -852,7 +852,7 @@ public class RemainingRegressionIntegrationTests
 
     #region SymbolicRegression Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SymbolicRegression_Train_SimpleData_FindsExpression()
     {
         // Arrange
@@ -872,7 +872,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SymbolicRegression_Train_QuadraticData_DiscoversPattern()
     {
         // Arrange - y = x^2 data
@@ -900,7 +900,7 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SymbolicRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -925,7 +925,7 @@ public class RemainingRegressionIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AllRemainingModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange

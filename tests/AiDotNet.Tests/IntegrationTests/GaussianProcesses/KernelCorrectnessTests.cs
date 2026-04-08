@@ -16,7 +16,7 @@ public class KernelCorrectnessTests
 
     #region Cosine Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_SameVector_ReturnsOne()
     {
         var kernel = new CosineKernel<double>();
@@ -28,7 +28,7 @@ public class KernelCorrectnessTests
             $"Cosine kernel of same vector should be 1.0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_OrthogonalVectors_ReturnsZero()
     {
         var kernel = new CosineKernel<double>();
@@ -41,7 +41,7 @@ public class KernelCorrectnessTests
             $"Cosine kernel of orthogonal vectors should be 0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_OppositeVectors_ReturnsNegativeOne()
     {
         var kernel = new CosineKernel<double>();
@@ -54,7 +54,7 @@ public class KernelCorrectnessTests
             $"Cosine kernel of opposite vectors should be -1.0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_IsSymmetric()
     {
         var kernel = new CosineKernel<double>();
@@ -68,7 +68,7 @@ public class KernelCorrectnessTests
             $"Kernel should be symmetric: k(x1,x2)={k12}, k(x2,x1)={k21}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineKernel_WithOutputScale_ScalesCorrectly()
     {
         var scale = 2.5;
@@ -86,7 +86,7 @@ public class KernelCorrectnessTests
 
     #region Arc Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ArcKernel_Order0_SameVector_ReturnsOne()
     {
         var kernel = new ArcKernel<double>(order: 0);
@@ -98,7 +98,7 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of same vector should be 1.0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ArcKernel_Order0_OrthogonalVectors_ReturnsHalf()
     {
         var kernel = new ArcKernel<double>(order: 0);
@@ -112,7 +112,7 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of orthogonal vectors should be 0.5, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ArcKernel_Order0_OppositeVectors_ReturnsZero()
     {
         var kernel = new ArcKernel<double>(order: 0);
@@ -126,7 +126,7 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of opposite vectors should be 0, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ArcKernel_IsSymmetric()
     {
         var kernel = new ArcKernel<double>(order: 1);
@@ -160,7 +160,7 @@ public class KernelCorrectnessTests
 
     #region Cylindrical Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CylindricalKernel_SamePoint_ReturnsNonZero()
     {
         var rbf = new GaussianKernel<double>(1.0);
@@ -177,7 +177,7 @@ public class KernelCorrectnessTests
             $"Cylindrical kernel of same point should be close to 1, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CylindricalKernel_AngularDim_WrapsAround()
     {
         var rbf = new GaussianKernel<double>(1.0);
@@ -205,7 +205,7 @@ public class KernelCorrectnessTests
             $"Angular wrapping not working: k(23,1)={k12}, k(23,21)={k13}, ratio={ratio}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CylindricalKernel_WithRBF_FactoryWorks()
     {
         var kernel = CylindricalKernel<double>.WithRBF(
@@ -227,7 +227,7 @@ public class KernelCorrectnessTests
 
     #region Spectral Delta Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralDeltaKernel_SamePoint_ReturnsVariance()
     {
         var variance = 2.5;
@@ -244,7 +244,7 @@ public class KernelCorrectnessTests
             $"Spectral delta kernel at same point should return variance {variance}, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralDeltaKernel_HasCorrectPeriod()
     {
         var period = 7.0; // weekly
@@ -254,7 +254,7 @@ public class KernelCorrectnessTests
             $"Kernel period should be {period}, got {kernel.Period}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralDeltaKernel_OscillatesWithFrequency()
     {
         var frequency = 1.0;
@@ -276,7 +276,7 @@ public class KernelCorrectnessTests
         Assert.True(k03 > 0, $"k(0,1) should be positive, got {k03}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralDeltaKernel_PSD_IsCenteredAtFrequency()
     {
         var frequency = 5.0;
@@ -298,7 +298,7 @@ public class KernelCorrectnessTests
 
     #region Grid Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridKernel_SamePoint_ReturnsPositive()
     {
         var gridX = Enumerable.Range(0, 5).Select(i => (double)i).ToArray();
@@ -315,7 +315,7 @@ public class KernelCorrectnessTests
             $"Grid kernel of same point should be positive, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridKernel_Precompute_ComputesEigenvalues()
     {
         var gridX = Enumerable.Range(0, 4).Select(i => (double)i).ToArray();
@@ -334,7 +334,7 @@ public class KernelCorrectnessTests
             "All eigenvalues should be non-negative for PSD kernel");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridKernel_LogDeterminant_IsFinite()
     {
         var gridX = Enumerable.Range(0, 4).Select(i => (double)i).ToArray();
@@ -352,7 +352,7 @@ public class KernelCorrectnessTests
         Assert.False(double.IsInfinity(logDet), "Log-determinant should be finite");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridKernel_KroneckerMultiply_GivesCorrectResult()
     {
         // Small grid for exact verification
@@ -377,7 +377,7 @@ public class KernelCorrectnessTests
 
     #region Grid Interpolation Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridInterpolationKernel_SamePoint_ReturnsPositive()
     {
         var bounds = new[] { (0.0, 10.0), (0.0, 10.0) };
@@ -393,7 +393,7 @@ public class KernelCorrectnessTests
             $"Grid interpolation kernel of same point should be positive, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridInterpolationKernel_ClosePoints_HighSimilarity()
     {
         var bounds = new[] { (0.0, 10.0), (0.0, 10.0) };
@@ -413,7 +413,7 @@ public class KernelCorrectnessTests
             $"Close points should have higher similarity: k(close)={kClose}, k(far)={kFar}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GridInterpolationKernel_InterpolationWeights_SumToOne()
     {
         var bounds = new[] { (0.0, 10.0) };
@@ -437,7 +437,7 @@ public class KernelCorrectnessTests
 
     #region Product Structure Kernel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProductStructureKernel_SamePoint_ReturnsPositive()
     {
         var kernel = ProductStructureKernel<double>.WithRBF(
@@ -451,7 +451,7 @@ public class KernelCorrectnessTests
             $"Product kernel of same point should be positive, got {result}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProductStructureKernel_IsProductOfGroupKernels()
     {
         // Create individual RBF kernels with same lengthscale
@@ -482,7 +482,7 @@ public class KernelCorrectnessTests
             $"Product kernel should be product of group kernels: expected {expected}, got {actual}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProductStructureKernel_FullyFactorized_Works()
     {
         var kernel = ProductStructureKernel<double>.FullyFactorized(3, baseLengthscale: 1.0);

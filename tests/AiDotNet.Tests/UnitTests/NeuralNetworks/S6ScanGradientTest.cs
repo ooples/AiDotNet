@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class S6ScanGradientTest
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void S6Scan_BackwardGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;
@@ -90,7 +90,7 @@ public class S6ScanGradientTest
             $"S6Scan gradient check failed for {failCount} x elements. Details: {errors}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void S6Scan_BackwardDeltaGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;

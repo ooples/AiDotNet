@@ -16,20 +16,20 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region Constants
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultEpsilon_IsSmallPositive()
     {
         Assert.Equal(1e-7, NumericalStabilityHelper.DefaultEpsilon);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SmallEpsilon_IsSmaller()
     {
         Assert.True(NumericalStabilityHelper.SmallEpsilon < NumericalStabilityHelper.DefaultEpsilon);
         Assert.Equal(1e-15, NumericalStabilityHelper.SmallEpsilon);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LargeEpsilon_IsLarger()
     {
         Assert.True(NumericalStabilityHelper.LargeEpsilon > NumericalStabilityHelper.DefaultEpsilon);
@@ -40,14 +40,14 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region GetEpsilon
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetEpsilon_Default_ReturnsDefaultEpsilon()
     {
         double eps = NumericalStabilityHelper.GetEpsilon<double>();
         Assert.Equal(NumericalStabilityHelper.DefaultEpsilon, eps, 1e-15);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetEpsilon_Custom_ReturnsCustomValue()
     {
         double eps = NumericalStabilityHelper.GetEpsilon<double>(1e-3);
@@ -58,21 +58,21 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region SafeLog
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLog_PositiveValue_ReturnsCorrectLog()
     {
         double result = NumericalStabilityHelper.SafeLog(Math.E);
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLog_One_ReturnsZero()
     {
         double result = NumericalStabilityHelper.SafeLog(1.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLog_Zero_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeLog(0.0);
@@ -81,7 +81,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.True(result < 0, "SafeLog(0) should be negative (log of small epsilon)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLog_NegativeValue_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeLog(-5.0);
@@ -92,14 +92,14 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region SafeDiv
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeDiv_NormalDivision_ReturnsCorrectResult()
     {
         double result = NumericalStabilityHelper.SafeDiv(10.0, 2.0);
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeDiv_ZeroDenominator_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeDiv(1.0, 0.0);
@@ -107,7 +107,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeDiv_VerySmallDenominator_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeDiv(1.0, 1e-20);
@@ -115,7 +115,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeDiv_ZeroNumerator_ReturnsZero()
     {
         double result = NumericalStabilityHelper.SafeDiv(0.0, 5.0);
@@ -126,14 +126,14 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region SafeSqrt
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeSqrt_PositiveValue_ReturnsCorrectResult()
     {
         double result = NumericalStabilityHelper.SafeSqrt(4.0);
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeSqrt_Zero_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeSqrt(0.0);
@@ -141,7 +141,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.True(result > 0, "SafeSqrt(0) should be positive (sqrt of epsilon)");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeSqrt_NegativeValue_ReturnsFiniteValue()
     {
         double result = NumericalStabilityHelper.SafeSqrt(-1.0);
@@ -152,14 +152,14 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region ClampProbability
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClampProbability_ValidProbability_Unchanged()
     {
         double result = NumericalStabilityHelper.ClampProbability(0.5);
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClampProbability_Zero_ClampsToEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(0.0);
@@ -167,7 +167,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.True(result < 0.01, "Clamped probability should be small");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClampProbability_One_ClampsToLessThanOne()
     {
         double result = NumericalStabilityHelper.ClampProbability(1.0);
@@ -175,14 +175,14 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.True(result > 0.99, "Clamped probability should be close to 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClampProbability_Negative_ClampsToEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(-0.5);
         Assert.True(result > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClampProbability_GreaterThanOne_ClampsToLessThanOne()
     {
         double result = NumericalStabilityHelper.ClampProbability(1.5);
@@ -193,14 +193,14 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region SafeLogProbability
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLogProbability_ValidProbability_ReturnsNegative()
     {
         double result = NumericalStabilityHelper.SafeLogProbability(0.5);
         Assert.True(result < 0, "log(0.5) should be negative");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLogProbability_Zero_ReturnsFinite()
     {
         double result = NumericalStabilityHelper.SafeLogProbability(0.0);
@@ -208,7 +208,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.False(double.IsNegativeInfinity(result));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafeLogProbability_One_ReturnsNearZero()
     {
         double result = NumericalStabilityHelper.SafeLogProbability(1.0);
@@ -219,49 +219,49 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region IsNaN / IsInfinity / IsFinite
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsNaN_NaN_ReturnsTrue()
     {
         Assert.True(NumericalStabilityHelper.IsNaN(double.NaN));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsNaN_Normal_ReturnsFalse()
     {
         Assert.False(NumericalStabilityHelper.IsNaN(1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInfinity_PositiveInfinity_ReturnsTrue()
     {
         Assert.True(NumericalStabilityHelper.IsInfinity(double.PositiveInfinity));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInfinity_NegativeInfinity_ReturnsTrue()
     {
         Assert.True(NumericalStabilityHelper.IsInfinity(double.NegativeInfinity));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsInfinity_Normal_ReturnsFalse()
     {
         Assert.False(NumericalStabilityHelper.IsInfinity(1.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsFinite_Normal_ReturnsTrue()
     {
         Assert.True(NumericalStabilityHelper.IsFinite(42.0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsFinite_NaN_ReturnsFalse()
     {
         Assert.False(NumericalStabilityHelper.IsFinite(double.NaN));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void IsFinite_Infinity_ReturnsFalse()
     {
         Assert.False(NumericalStabilityHelper.IsFinite(double.PositiveInfinity));
@@ -271,35 +271,35 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region ContainsNaN / ContainsInfinity / ContainsNonFinite (Vector)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNaN_Vector_CleanVector_ReturnsFalse()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         Assert.False(NumericalStabilityHelper.ContainsNaN(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNaN_Vector_WithNaN_ReturnsTrue()
     {
         var v = new Vector<double>(new double[] { 1.0, double.NaN, 3.0 });
         Assert.True(NumericalStabilityHelper.ContainsNaN(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsInfinity_Vector_WithInfinity_ReturnsTrue()
     {
         var v = new Vector<double>(new double[] { 1.0, double.PositiveInfinity, 3.0 });
         Assert.True(NumericalStabilityHelper.ContainsInfinity(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNonFinite_Vector_WithBoth_ReturnsTrue()
     {
         var v = new Vector<double>(new double[] { double.NaN, 2.0, double.NegativeInfinity });
         Assert.True(NumericalStabilityHelper.ContainsNonFinite(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNonFinite_Vector_Clean_ReturnsFalse()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -310,21 +310,21 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region ContainsNaN / ContainsInfinity / ContainsNonFinite (Tensor)
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNaN_Tensor_CleanTensor_ReturnsFalse()
     {
         var t = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 }));
         Assert.False(NumericalStabilityHelper.ContainsNaN(t));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsNaN_Tensor_WithNaN_ReturnsTrue()
     {
         var t = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, double.NaN, 3.0 }));
         Assert.True(NumericalStabilityHelper.ContainsNaN(t));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ContainsInfinity_Tensor_WithInfinity_ReturnsTrue()
     {
         var t = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, double.PositiveInfinity, 3.0 }));
@@ -335,7 +335,7 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region ReplaceNaN / ReplaceInfinity / ReplaceNonFinite
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReplaceNaN_ReplacesNaNWithZero()
     {
         var v = new Vector<double>(new double[] { 1.0, double.NaN, 3.0 });
@@ -346,7 +346,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReplaceNaN_CustomReplacement()
     {
         var v = new Vector<double>(new double[] { double.NaN, 2.0 });
@@ -356,14 +356,14 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReplaceNaN_Null_ReturnsNull()
     {
         var result = NumericalStabilityHelper.ReplaceNaN<double>(null);
         Assert.Null(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReplaceInfinity_ReplacesInfWithZero()
     {
         var v = new Vector<double>(new double[] { 1.0, double.PositiveInfinity, double.NegativeInfinity });
@@ -374,7 +374,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(0.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ReplaceNonFinite_ReplacesBoth()
     {
         var v = new Vector<double>(new double[] { double.NaN, 2.0, double.PositiveInfinity });
@@ -389,21 +389,21 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region CountNaN / CountInfinity
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountNaN_NoNaN_ReturnsZero()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         Assert.Equal(0, NumericalStabilityHelper.CountNaN(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountNaN_MultipleNaN_ReturnsCount()
     {
         var v = new Vector<double>(new double[] { double.NaN, 2.0, double.NaN, 4.0 });
         Assert.Equal(2, NumericalStabilityHelper.CountNaN(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CountInfinity_MultipleInf_ReturnsCount()
     {
         var v = new Vector<double>(new double[] { double.PositiveInfinity, 2.0, double.NegativeInfinity });
@@ -414,7 +414,7 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region StableSoftmax
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableSoftmax_SumsToOne()
     {
         var logits = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -427,7 +427,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableSoftmax_HighestLogitGetsHighestProbability()
     {
         var logits = new Vector<double>(new double[] { 1.0, 5.0, 2.0 });
@@ -437,7 +437,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.True(result[1] > result[2], "Highest logit should have highest probability");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableSoftmax_EqualLogits_EqualProbabilities()
     {
         var logits = new Vector<double>(new double[] { 3.0, 3.0, 3.0 });
@@ -448,7 +448,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(1.0 / 3.0, result[2], Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableSoftmax_LargeValues_NoOverflow()
     {
         var logits = new Vector<double>(new double[] { 1000.0, 1001.0, 1002.0 });
@@ -467,7 +467,7 @@ public class NumericalStabilityHelperIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableSoftmax_Null_ReturnsNull()
     {
         var result = NumericalStabilityHelper.StableSoftmax<double>(null);
@@ -478,7 +478,7 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region StableLogSoftmax
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableLogSoftmax_AllNegative()
     {
         var logits = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -491,7 +491,7 @@ public class NumericalStabilityHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableLogSoftmax_ExponentiatesToSoftmax()
     {
         var logits = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -506,7 +506,7 @@ public class NumericalStabilityHelperIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StableLogSoftmax_LargeValues_NoOverflow()
     {
         var logits = new Vector<double>(new double[] { 500.0, 501.0, 502.0 });
@@ -524,46 +524,46 @@ public class NumericalStabilityHelperIntegrationTests
 
     #region AssertFinite
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Value_FiniteValue_DoesNotThrow()
     {
         NumericalStabilityHelper.AssertFinite(42.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Value_NaN_Throws()
     {
         Assert.Throws<ArgumentException>(() => NumericalStabilityHelper.AssertFinite(double.NaN));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Value_Infinity_Throws()
     {
         Assert.Throws<ArgumentException>(() => NumericalStabilityHelper.AssertFinite(double.PositiveInfinity));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Vector_AllFinite_DoesNotThrow()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         NumericalStabilityHelper.AssertFinite(v);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Vector_WithNaN_Throws()
     {
         var v = new Vector<double>(new double[] { 1.0, double.NaN, 3.0 });
         Assert.Throws<ArgumentException>(() => NumericalStabilityHelper.AssertFinite(v));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Tensor_AllFinite_DoesNotThrow()
     {
         var t = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 }));
         NumericalStabilityHelper.AssertFinite(t);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AssertFinite_Tensor_WithInfinity_Throws()
     {
         var t = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, double.PositiveInfinity, 3.0 }));

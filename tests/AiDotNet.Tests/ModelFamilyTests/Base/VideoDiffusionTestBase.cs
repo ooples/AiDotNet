@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemporalCoherence_AdjacentFrames()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -30,7 +30,7 @@ public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FrameCount_ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

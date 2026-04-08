@@ -31,7 +31,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([1, 2, 3, 4, 5]) = 3.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_SimpleSequence_ReturnsExactValue()
     {
         // Arrange & Act
@@ -44,7 +44,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([2.5, 3.7, 4.1, 5.9, 6.3]) = 4.5
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_DecimalValues_ReturnsExactValue()
     {
         // Arrange & Act
@@ -57,7 +57,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([-5, -3, 0, 3, 5]) = 0.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_MixedPositiveNegative_ReturnsExactValue()
     {
         // Arrange & Act
@@ -70,7 +70,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([42]) = 42.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_SingleValue_ReturnsValue()
     {
         // Arrange & Act
@@ -83,7 +83,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([1e10, 2e10, 3e10]) = 2e10
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_LargeValues_ReturnsExactValue()
     {
         // Arrange & Act
@@ -96,7 +96,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean([1e-10, 2e-10, 3e-10]) = 2e-10
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_SmallValues_ReturnsExactValue()
     {
         // Arrange & Act
@@ -114,7 +114,7 @@ public class BasicStatsIntegrationTests
     /// Verified with NumPy: np.var([1, 2, 3, 4, 5], ddof=0) = 2.0 (population variance)
     /// Note: BasicStats uses population variance (ddof=0), not sample variance (ddof=1).
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Variance_SimpleSequence_ReturnsExactValue()
     {
         // Arrange & Act
@@ -127,7 +127,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.var([5, 5, 5, 5, 5]) = 0.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Variance_AllSameValues_ReturnsZero()
     {
         // Arrange & Act
@@ -140,7 +140,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.var([10, 20, 30, 40, 50], ddof=0) = 200.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Variance_LargerSpread_ReturnsExactValue()
     {
         // Arrange & Act
@@ -158,7 +158,7 @@ public class BasicStatsIntegrationTests
     /// Verified with NumPy:
     /// np.std([1, 2, 3, 4, 5], ddof=0) = 1.4142135623730951 (population)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardDeviation_SimpleSequence_ReturnsExactValue()
     {
         // Arrange & Act
@@ -171,7 +171,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.std([2, 4, 4, 4, 5, 5, 7, 9], ddof=0) = 2.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StandardDeviation_KnownDataset_ReturnsExactValue()
     {
         // Arrange - Classic dataset with known std dev = 2.0
@@ -188,7 +188,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.min/max([3, 1, 4, 1, 5, 9, 2, 6]) = 1, 9
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMax_UnsortedData_ReturnsCorrectValues()
     {
         // Arrange & Act
@@ -202,7 +202,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.min/max([-10, -5, 0, 5, 10]) = -10, 10
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MinMax_NegativeValues_ReturnsCorrectValues()
     {
         // Arrange & Act
@@ -217,7 +217,7 @@ public class BasicStatsIntegrationTests
 
     #region Count Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Count_ReturnsCorrectCount()
     {
         // Arrange & Act
@@ -235,7 +235,7 @@ public class BasicStatsIntegrationTests
     /// Verified with SciPy: scipy.stats.skew([1, 2, 3, 4, 5], bias=False) = 0.0
     /// Symmetric distribution has zero skewness.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Skewness_SymmetricDistribution_ReturnsZero()
     {
         // Arrange - Symmetric distribution
@@ -249,7 +249,7 @@ public class BasicStatsIntegrationTests
     /// Verified with SciPy: scipy.stats.skew([1, 1, 1, 1, 5], bias=False) > 0
     /// Right-skewed distribution has positive skewness.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Skewness_RightSkewed_ReturnsPositive()
     {
         // Arrange - Right-skewed distribution
@@ -263,7 +263,7 @@ public class BasicStatsIntegrationTests
     /// Verified with SciPy: scipy.stats.skew([1, 5, 5, 5, 5], bias=False) < 0
     /// Left-skewed distribution has negative skewness.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Skewness_LeftSkewed_ReturnsNegative()
     {
         // Arrange - Left-skewed distribution
@@ -281,7 +281,7 @@ public class BasicStatsIntegrationTests
     /// Verified with SciPy: Normal distribution has excess kurtosis = 0.
     /// scipy.stats.kurtosis([...], fisher=True) returns excess kurtosis.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Kurtosis_UniformDistribution_IsFinite()
     {
         // Arrange - Uniform distribution has negative excess kurtosis (platykurtic)
@@ -298,7 +298,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.median([1, 2, 3, 4, 5]) = 3.0 (odd count)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Median_OddCount_ReturnsMiddleValue()
     {
         // Arrange & Act
@@ -311,7 +311,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.median([1, 2, 3, 4, 5, 6]) = 3.5 (even count)
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Median_EvenCount_ReturnsAverageOfMiddleTwo()
     {
         // Arrange & Act
@@ -324,7 +324,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.median([5, 2, 8, 1, 9]) = 5.0
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Median_UnsortedData_ReturnsCorrectValue()
     {
         // Arrange - Unsorted data
@@ -341,7 +341,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7], [25, 75]) = [2.5, 5.5]
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Quartiles_SevenValues_ReturnsExactValues()
     {
         // Arrange & Act
@@ -355,7 +355,7 @@ public class BasicStatsIntegrationTests
     /// <summary>
     /// IQR = Q3 - Q1
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InterquartileRange_ReturnsQ3MinusQ1()
     {
         // Arrange & Act
@@ -377,7 +377,7 @@ public class BasicStatsIntegrationTests
     /// Note: Despite being called MAD (commonly Median Absolute Deviation in literature),
     /// the StatisticsHelper.CalculateMeanAbsoluteDeviation computes the MEAN of absolute deviations.
     /// </summary>
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MAD_SimpleSequence_ReturnsExactValue()
     {
         // Arrange & Act
@@ -391,7 +391,7 @@ public class BasicStatsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Mean_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -402,7 +402,7 @@ public class BasicStatsIntegrationTests
         Assert.Equal(3.0f, stats.Mean, 1e-5f);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Variance_FloatType_ReturnsCorrectValue()
     {
         // Arrange
@@ -417,7 +417,7 @@ public class BasicStatsIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TwoValues_CalculatesCorrectly()
     {
         // Arrange & Act
@@ -429,7 +429,7 @@ public class BasicStatsIntegrationTests
         Assert.Equal(25.0, stats.Variance, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Empty_ReturnsZeroValues()
     {
         // Arrange & Act

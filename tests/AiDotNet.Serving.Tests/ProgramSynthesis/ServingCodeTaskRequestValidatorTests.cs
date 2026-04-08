@@ -30,7 +30,7 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Subject = "sub"
     };
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TryValidate_Completion_EnforcesCursorOffsetAndCandidates()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
@@ -66,7 +66,7 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("MaxCandidates exceeds tier limit (2).", error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TryValidate_Generation_RequiresDescriptionOrExamples_AndAppliesExampleLimits()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
@@ -107,7 +107,7 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("Examples exceeds tier limit (2).", error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TryValidate_Search_AndCorpus_Validation_EnforcesLimits()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
@@ -156,7 +156,7 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("Filters exceeds tier limit (2).", error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TryValidate_CloneDetection_ValidatesMinSimilarity()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
@@ -192,7 +192,7 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("MinSimilarity must be between 0 and 1.", error);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TryValidate_MaxWallClockMilliseconds_IsClampedByTier()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions

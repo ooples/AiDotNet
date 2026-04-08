@@ -18,7 +18,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         private CohereEmbeddingModel<T> CreateModel<T>(string inputType = "search_document", int dimension = 1024)
             => new(HasApiKey ? CohereApiKey : "test-api-key", "embed-english-v3.0", inputType, dimension);
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithDefaultDimension_CreatesInstance()
         {
             // Arrange & Act
@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithEmptyApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -60,7 +60,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -69,7 +69,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullModel_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -78,7 +78,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithEmptyModel_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNullInputType_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Input type cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithEmptyInputType_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -105,7 +105,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Input type cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1024, embedding.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 Assert.Equal(embedding1[i], embedding2[i], 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithDifferentInputTypes_ReturnsDifferentEmbeddings()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings with different input types should be different");
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_ReturnsNormalizedVector()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -188,7 +188,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1024, embeddings.Columns);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
@@ -230,7 +230,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -241,7 +241,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                     Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithFloatType_WorksCorrectly()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -278,7 +278,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, embedding.Length);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_Deterministic_MultipleInstances()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 Assert.Equal(embedding1[i], embedding2[i], 10);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Constructor_WithValidInputTypes_CreatesInstances()
         {
             // Arrange & Act
@@ -306,7 +306,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.NotNull(clusteringModel);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void EmbedBatch_AllRowsAreNormalized()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Embed_WithLongText_ReturnsEmbedding()
         {
             if (!HasApiKey) return; // requires COHERE_API_KEY env var

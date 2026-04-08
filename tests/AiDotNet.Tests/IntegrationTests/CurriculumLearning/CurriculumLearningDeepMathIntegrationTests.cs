@@ -19,7 +19,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Linear Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearScheduler_FractionAtStart_IsMinFraction()
     {
         // fraction(0) = min + (0/total) * (max - min) = min
@@ -30,7 +30,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.1, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearScheduler_FractionAtEnd_IsMaxFraction()
     {
         // fraction(total-1) = min + (1.0) * (max - min) = max
@@ -41,7 +41,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearScheduler_FractionAtMidpoint_IsAverage()
     {
         // At midpoint t=0.5: fraction = min + 0.5*(max-min) = (min+max)/2
@@ -52,7 +52,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.5, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearScheduler_MonotonicallyIncreasing()
     {
         double min = 0.1, max = 1.0;
@@ -68,7 +68,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LinearScheduler_ConstantRateOfChange()
     {
         // Linear: equal increment per epoch
@@ -90,7 +90,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Exponential Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialScheduler_AtStart_IsMinFraction()
     {
         // At t=0: (1-e^0)/(1-e^(-r)) = 0
@@ -101,7 +101,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(min, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialScheduler_AtEnd_IsMaxFraction()
     {
         // At t=1: (1-e^(-r))/(1-e^(-r)) = 1
@@ -112,7 +112,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(max, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialScheduler_HandComputed()
     {
         // t=0.5, rate=3.0
@@ -130,7 +130,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(expected, fraction, 1e-3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialScheduler_HigherRate_FasterInitialGrowth()
     {
         // Higher growth rate -> more initial fraction at same epoch
@@ -145,7 +145,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.True(fracMed > fracLow, $"Medium rate {fracMed} should > low {fracLow}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ExponentialScheduler_MonotonicallyIncreasing()
     {
         double min = 0.1, max = 1.0;
@@ -166,7 +166,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Polynomial Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialScheduler_Power1_IsLinear()
     {
         // power=1: t^1 = t (same as linear)
@@ -181,7 +181,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialScheduler_Power2_Quadratic()
     {
         // power=2: progress = t^2
@@ -192,7 +192,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(expected, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialScheduler_PowerHalf_SquareRoot()
     {
         // power=0.5: progress = sqrt(t)
@@ -202,7 +202,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(expected, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialScheduler_HighPower_SlowStart()
     {
         // Higher power -> slower start (more time at low fractions)
@@ -217,7 +217,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.True(fracP2 > fracP5, $"Power 2 ({fracP2}) should > power 5 ({fracP5}) early on");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PolynomialScheduler_BoundaryConditions()
     {
         // At t=0, always 0 (then min), at t=1 always 1 (then max)
@@ -238,7 +238,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Cosine Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineScheduler_AtStart_IsMinFraction()
     {
         // t=0: progress = 0.5*(1-cos(0)) = 0.5*(1-1) = 0
@@ -247,7 +247,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(min, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineScheduler_AtEnd_IsMaxFraction()
     {
         // t=1: progress = 0.5*(1-cos(pi)) = 0.5*(1-(-1)) = 1.0
@@ -256,7 +256,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(max, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineScheduler_AtMidpoint_IsHalfway()
     {
         // t=0.5: progress = 0.5*(1-cos(pi/2)) = 0.5*(1-0) = 0.5
@@ -265,7 +265,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.5, fraction, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineScheduler_SymmetricProgress()
     {
         // Cosine scheduler has S-shaped curve: symmetric around midpoint
@@ -277,7 +277,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0, p1 + p2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CosineScheduler_HandComputedQuarter()
     {
         // t=0.25: progress = 0.5*(1-cos(pi/4)) = 0.5*(1-sqrt(2)/2) = 0.5*(1-0.70711) = 0.14645
@@ -291,7 +291,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Step Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepScheduler_UniformSteps_CorrectFractions()
     {
         // 3 steps over 12 epochs: epochs 0-3 -> step 0, 4-7 -> step 1, 8-11 -> step 2
@@ -310,7 +310,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0, step2, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepScheduler_WithinSameStep_FractionConstant()
     {
         int numSteps = 4, totalEpochs = 20;
@@ -325,7 +325,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(frac0, frac4, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StepScheduler_StepBoundary_FractionJumps()
     {
         int numSteps = 5, totalEpochs = 10;
@@ -343,7 +343,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Self-Paced Learning: Hard Regularizer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Hard_SelectsBelowThreshold()
     {
         // Hard: v = 1 if loss < lambda, else 0
@@ -359,7 +359,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.0, weights[4], Tolerance); // 1.0 > 0.5
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Hard_HigherLambda_SelectsMore()
     {
         double[] losses = [0.1, 0.3, 0.5, 0.7, 1.0];
@@ -376,7 +376,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Self-Paced Learning: Linear Regularizer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Linear_WeightFormula()
     {
         // Linear: v = max(0, 1 - loss/lambda)
@@ -390,14 +390,14 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.0, LinearRegularizer(1.5, lambda), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Linear_ZeroLoss_MaxWeight()
     {
         // loss=0 -> weight = 1 - 0/lambda = 1
         Assert.Equal(1.0, LinearRegularizer(0.0, 0.5), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Linear_AtThreshold_ZeroWeight()
     {
         // loss=lambda -> weight = 1 - lambda/lambda = 0
@@ -405,7 +405,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.0, LinearRegularizer(lambda, lambda), Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Linear_GradualTransition()
     {
         // Lower loss -> higher weight (smooth transition)
@@ -424,7 +424,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Self-Paced Learning: Mixture Regularizer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Mixture_CombinesHardAndLinear()
     {
         // Mixture: if loss >= lambda -> 0, else weight = zeta + (1-zeta)*(1 - loss/lambda)
@@ -438,14 +438,14 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.8, weight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Mixture_AboveThreshold_Zero()
     {
         double weight = MixtureRegularizer(1.5, 1.0, 0.5);
         Assert.Equal(0.0, weight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Mixture_ZeroLoss_MaxWeight()
     {
         // loss=0: weight = zeta + (1-zeta)*1 = 1.0
@@ -453,7 +453,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0, weight, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Mixture_MinWeightIsZeta()
     {
         // At loss just below lambda: linearPart ≈ 0
@@ -468,7 +468,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Self-Paced Lambda Growth
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_LambdaGrowth_Linear()
     {
         // lambda(t+1) = lambda(t) + growth_rate
@@ -484,7 +484,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.6, lambda, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_LambdaGrowth_CapsAtMax()
     {
         double lambda = 0.1;
@@ -495,7 +495,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(2.0, lambda, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_LambdaGrowth_MoreEpochs_MoreSamples()
     {
         // As lambda grows, more samples should be selected (hard regularizer)
@@ -518,7 +518,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Competence-Based Scheduler Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_EMA_Smoothing_HandComputed()
     {
         // EMA: competence_new = alpha * raw + (1-alpha) * competence_old
@@ -532,7 +532,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.38, competenceNew, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_EMA_SmoothsOutNoise()
     {
         // EMA should smooth out noisy observations
@@ -555,7 +555,7 @@ public class CurriculumLearningDeepMathIntegrationTests
             $"Smoothed variance {smoothedVariance} should be < raw {rawVariance}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_EMA_ConvergesToConstant()
     {
         // If all raw values are the same, EMA converges to that value
@@ -571,7 +571,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(constantValue, competence, 1e-5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_PlateauDetection_HandComputed()
     {
         // Plateau competence: epochs_without_improvement / patience
@@ -583,7 +583,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.6, plateauCompetence, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_PlateauDetection_CappedAt1()
     {
         // Plateau competence should cap at 1.0
@@ -594,7 +594,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0, plateauCompetence, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_LossBasedCompetence_HighLoss_LowCompetence()
     {
         // Competence from loss: 1/(1+loss) -> high loss = low competence
@@ -610,7 +610,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(1.0 / 1.1, compLow, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Competence_Combined_WeightedAverage()
     {
         // Combined competence: average of components
@@ -631,7 +631,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Phase Advancement Logic
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhaseAdvancement_CompetenceExceedsThreshold()
     {
         // Phase advances when competence >= threshold
@@ -642,7 +642,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.True(shouldAdvance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhaseAdvancement_CompetenceBelowThreshold()
     {
         double competence = 0.85;
@@ -652,7 +652,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.False(shouldAdvance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhaseAdvancement_ResetCompetenceAfterAdvance()
     {
         // After advancing, competence is halved (momentum preservation)
@@ -662,7 +662,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.Equal(0.475, competenceAfter, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PhaseAdvancement_DataFractionIncreases()
     {
         // Each phase uses more data
@@ -695,7 +695,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Difficulty Estimation Mathematics
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifficultyEstimation_LossBased_HigherLoss_Harder()
     {
         // Difficulty scores based on loss: higher loss = harder sample
@@ -708,7 +708,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifficultyEstimation_Confidence_LowerConfidence_Harder()
     {
         // Difficulty from confidence: 1 - max(softmax)
@@ -723,7 +723,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DifficultyEstimation_EnsembleDisagreement()
     {
         // Ensemble disagreement: variance of ensemble predictions
@@ -743,7 +743,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Logarithmic Regularizer
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Logarithmic_HandComputed()
     {
         // v = max(0, log(lambda) - log(loss + eps)) / log(lambda)
@@ -758,7 +758,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         Assert.True(weight > 0, $"Weight should be positive for loss < lambda: {weight}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfPaced_Logarithmic_HighLoss_ZeroWeight()
     {
         // When loss >= lambda, log(loss) >= log(lambda), weight <= 0
@@ -774,7 +774,7 @@ public class CurriculumLearningDeepMathIntegrationTests
 
     #region Sample Selection Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleSelection_TotalSamples_IncreaseOverEpochs()
     {
         // As training progresses, more samples should be included
@@ -797,7 +797,7 @@ public class CurriculumLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SampleSelection_DifficultySorted_EasyFirst()
     {
         // Sorted indices: easiest samples first

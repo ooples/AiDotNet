@@ -27,7 +27,7 @@ public class SafetyPipelineIntegrationTests
 {
     // =============== Pipeline Factory Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_DefaultConfig_CreatesPipelineWithDefaultModules()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -36,7 +36,7 @@ public class SafetyPipelineIntegrationTests
         Assert.True(pipeline.Modules.Count > 0, "Default pipeline should have modules registered");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_DisabledConfig_CreatesEmptyPipeline()
     {
         var config = new SafetyConfig { Enabled = false };
@@ -45,7 +45,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Empty(pipeline.Modules);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Factory_AllFeaturesEnabled_RegistersAllModuleTypes()
     {
         var config = new SafetyConfig
@@ -68,7 +68,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Text Safety Integration Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextPipeline_ToxicContent_DetectsViolation()
     {
         var config = new SafetyConfig
@@ -84,7 +84,7 @@ public class SafetyPipelineIntegrationTests
         Assert.True(report.Findings.Count > 0, "Toxic content should produce findings");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextPipeline_PIIContent_DetectsExposure()
     {
         var config = new SafetyConfig { Text = { PIIDetection = true } };
@@ -97,7 +97,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(report.Findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextPipeline_JailbreakAttempt_DetectsAttack()
     {
         var config = new SafetyConfig
@@ -115,7 +115,7 @@ public class SafetyPipelineIntegrationTests
         Assert.True(report.Findings.Count > 0, "Jailbreak attempt should produce findings");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextPipeline_SafeContent_NoFindings()
     {
         var config = new SafetyConfig
@@ -137,7 +137,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Individual Module Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnsembleToxicityDetector_DetectsToxicContent()
     {
         var detector = new EnsembleToxicityDetector<double>(0.3);
@@ -147,7 +147,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompositePIIDetector_DetectsMultiplePIITypes()
     {
         var detector = new CompositePIIDetector<double>();
@@ -157,7 +157,7 @@ public class SafetyPipelineIntegrationTests
         Assert.True(findings.Count >= 2, $"Should detect multiple PII types, found {findings.Count}");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnsembleJailbreakDetector_DetectsKnownPatterns()
     {
         var detector = new EnsembleJailbreakDetector<double>(0.3);
@@ -168,7 +168,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SelfConsistencyHallucinationDetector_DetectsContradictions()
     {
         var detector = new SelfConsistencyHallucinationDetector<double>();
@@ -180,7 +180,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PerplexityMemorizationDetector_DetectsRepetitiveText()
     {
         var detector = new PerplexityMemorizationDetector<double>();
@@ -190,7 +190,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void NgramCopyrightDetector_SafeTextNoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
@@ -199,7 +199,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GradientJailbreakDetector_DetectsAdversarialTokens()
     {
         var detector = new GradientJailbreakDetector<double>();
@@ -212,7 +212,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Image Safety Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CLIPImageSafetyClassifier_ProcessesTensor()
     {
         var classifier = new CLIPImageSafetyClassifier<double>();
@@ -227,7 +227,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EnsembleImageSafetyClassifier_ProcessesTensor()
     {
         var classifier = new EnsembleImageSafetyClassifier<double>();
@@ -241,7 +241,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FrequencyDeepfakeDetector_ProcessesTensor()
     {
         var detector = new FrequencyDeepfakeDetector<double>();
@@ -255,7 +255,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConsistencyDeepfakeDetector_ProcessesTensor()
     {
         var detector = new ConsistencyDeepfakeDetector<double>();
@@ -269,7 +269,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ProvenanceDeepfakeDetector_ProcessesTensor()
     {
         var detector = new ProvenanceDeepfakeDetector<double>();
@@ -285,7 +285,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Audio Safety Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SpectralDeepfakeDetector_ProcessesAudio()
     {
         var detector = new SpectralDeepfakeDetector<double>();
@@ -296,7 +296,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VoiceprintDeepfakeDetector_ProcessesAudio()
     {
         var detector = new VoiceprintDeepfakeDetector<double>();
@@ -306,7 +306,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AcousticToxicityDetector_ProcessesAudio()
     {
         var detector = new AcousticToxicityDetector<double>();
@@ -316,7 +316,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WatermarkVoiceProtector_EmbedAndDetect()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
@@ -327,7 +327,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Equal(audio.Length, watermarked.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PerturbationVoiceProtector_ProtectsAudio()
     {
         var protector = new PerturbationVoiceProtector<double>();
@@ -338,7 +338,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Equal(audio.Length, protected_.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MaskingVoiceProtector_ProtectsAudio()
     {
         var protector = new MaskingVoiceProtector<double>();
@@ -351,7 +351,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Video Safety Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TemporalConsistencyDetector_ProcessesFrames()
     {
         var detector = new TemporalConsistencyDetector<double>();
@@ -361,7 +361,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MultimodalVideoModerator_ProcessesFrames()
     {
         var moderator = new MultimodalVideoModerator<double>();
@@ -371,7 +371,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FrameSamplingVideoModerator_SamplesAndClassifies()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
@@ -383,7 +383,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Watermarking Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextWatermarker_DetectsWatermark()
     {
         var watermarker = new TextWatermarker<double>();
@@ -393,7 +393,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ImageWatermarker_ProcessesTensor()
     {
         var watermarker = new ImageWatermarker<double>();
@@ -407,7 +407,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AudioWatermarker_ProcessesAudio()
     {
         var watermarker = new AudioWatermarker<double>();
@@ -419,7 +419,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Fairness Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DemographicParityChecker_DetectsGenderBias()
     {
         var checker = new DemographicParityChecker<double>(disparityThreshold: 0.1);
@@ -431,7 +431,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Bias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StereotypeDetector_DetectsStereotypes()
     {
         var detector = new StereotypeDetector<double>(threshold: 0.3);
@@ -442,7 +442,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Bias);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EqualizedOddsChecker_NeutralText_NoFindings()
     {
         var checker = new EqualizedOddsChecker<double>();
@@ -453,7 +453,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Adversarial Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdversarialRobustnessEvaluator_DetectsHomoglyphs()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -464,7 +464,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdversarialRobustnessEvaluator_DetectsInvisibleChars()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
@@ -474,7 +474,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AdversarialImageEvaluator_ProcessesTensor()
     {
         var evaluator = new AdversarialImageEvaluator<double>();
@@ -490,7 +490,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Multimodal Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossModalConsistencyChecker_DetectsOverridePatterns()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -500,7 +500,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CrossModalConsistencyChecker_DetectsMismatch()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -525,7 +525,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Manipulated);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TextImageAlignmentChecker_DetectsMisleadingLabels()
     {
         var checker = new TextImageAlignmentChecker<double>();
@@ -537,7 +537,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Compliance Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EUAIActComplianceChecker_DetectsMissingWatermarking()
     {
         var config = new SafetyConfig
@@ -552,7 +552,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Description.Contains("Article 50"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GDPRComplianceChecker_DetectsMissingPIIDetection()
     {
         var config = new SafetyConfig
@@ -566,7 +566,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SOC2ComplianceChecker_DetectsMissingControls()
     {
         var config = new SafetyConfig
@@ -582,7 +582,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Guardrail Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void InputGuardrail_BlocksOversizedInput()
     {
         var guardrail = new InputGuardrail<double>(maxInputLength: 100);
@@ -593,7 +593,7 @@ public class SafetyPipelineIntegrationTests
         Assert.Contains(findings, f => f.RecommendedAction == SafetyAction.Block);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OutputGuardrail_DetectsRepetition()
     {
         var guardrail = new OutputGuardrail<double>(repetitionThreshold: 0.3);
@@ -604,7 +604,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TopicRestrictionGuardrail_BlocksRestrictedTopics()
     {
         var guardrail = new TopicRestrictionGuardrail<double>(
@@ -614,7 +614,7 @@ public class SafetyPipelineIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CustomRuleGuardrail_ExecutesCustomRules()
     {
         var rules = new[]
@@ -640,7 +640,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Benchmark Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafetyBenchmarkRunner_RunsStandardBenchmarks()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -653,7 +653,7 @@ public class SafetyPipelineIntegrationTests
         Assert.True(result.Recall >= 0 && result.Recall <= 1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafetyBenchmarkRunner_JailbreakBenchmark_HasResults()
     {
         var config = new SafetyConfig { Text = { JailbreakDetection = true } };
@@ -667,7 +667,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== Pipeline Policy Enforcement Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_EnforcePolicy_ThrowsOnUnsafeInput()
     {
         var config = new SafetyConfig { ThrowOnUnsafeInput = true };
@@ -682,7 +682,7 @@ public class SafetyPipelineIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Pipeline_EnforcePolicy_DoesNotThrowForSafeContent()
     {
         var config = new SafetyConfig
@@ -700,7 +700,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== SafetyConfig Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafetyConfig_DefaultValues_AreCorrect()
     {
         var config = new SafetyConfig();
@@ -716,7 +716,7 @@ public class SafetyPipelineIntegrationTests
         Assert.False(config.Text.EffectiveCopyrightDetection);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafetyConfig_OverriddenValues_TakePrecedence()
     {
         var config = new SafetyConfig
@@ -732,7 +732,7 @@ public class SafetyPipelineIntegrationTests
 
     // =============== SafetyReport Tests ===============
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SafetyReport_Safe_HasNoActionableFindings()
     {
         var report = SafetyReport.Safe(new[] { "TestModule" });

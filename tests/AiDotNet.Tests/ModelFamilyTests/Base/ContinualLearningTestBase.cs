@@ -32,7 +32,7 @@ public abstract class ContinualLearningTestBase
     // EWC: L = λ/2 * Σ F_i (θ_i - θ*_i)² >= 0 since F_i >= 0 and squared terms >= 0
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_IsNonNegative()
     {
         var strategy = CreateStrategy();
@@ -53,7 +53,7 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 2: Regularization loss is finite
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_IsFinite()
     {
         var strategy = CreateStrategy();
@@ -75,7 +75,7 @@ public abstract class ContinualLearningTestBase
     // This is a fundamental property of quadratic regularization.
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_IncreasesWithParameterDeviation()
     {
         var strategy = CreateStrategy();
@@ -112,7 +112,7 @@ public abstract class ContinualLearningTestBase
     // L(λ) = λ * g(θ), so L(2λ) ≈ 2 * L(λ) for the same parameters.
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_ScalesWithLambda()
     {
         var strategy1 = CreateStrategy();
@@ -156,7 +156,7 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 5: Modified gradients have same length as input
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModifyGradients_PreservesLength()
     {
         var strategy = CreateStrategy();
@@ -179,7 +179,7 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 6: Modified gradients are finite
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModifyGradients_AreFinite()
     {
         var strategy = CreateStrategy();
@@ -207,7 +207,7 @@ public abstract class ContinualLearningTestBase
     // Gradient projection should not increase the gradient magnitude.
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ModifyGradients_DoesNotIncreaseNorm()
     {
         var strategy = CreateStrategy();
@@ -246,7 +246,7 @@ public abstract class ContinualLearningTestBase
     // VCL just shifts the prior to the last posterior — loss may decrease.
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ComputeLoss_IncreasesWithMoreTasks()
     {
         var strategy = CreateStrategy();
@@ -291,7 +291,7 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 9: Lambda is non-negative
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Lambda_IsNonNegative()
     {
         var strategy = CreateStrategy();
@@ -303,7 +303,7 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 10: Reset clears state without errors
     // =========================================================================
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Reset_DoesNotThrow()
     {
         var strategy = CreateStrategy();

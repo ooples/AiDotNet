@@ -15,7 +15,7 @@ public class ContinualLearningStrategyTests
 {
     #region ElasticWeightConsolidation Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_Constructor_DefaultParameters()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -23,7 +23,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(400.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_Constructor_CustomLambda()
     {
         var strategy = new ElasticWeightConsolidation<double>(lambda: 1000.0);
@@ -31,7 +31,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1000.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_Lambda_CanBeModified()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -40,7 +40,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(500.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -48,7 +48,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_AfterTask_ThrowsOnNullNetwork()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -57,7 +57,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(null, taskData, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -67,7 +67,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_AfterTask_ThrowsOnNullTargets()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -77,7 +77,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (inputs, null), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -88,7 +88,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_ModifyGradients_ThrowsOnNullNetwork()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -97,7 +97,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(null, gradients));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_ModifyGradients_ThrowsOnNullGradients()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -106,7 +106,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_ModifyGradients_ReturnsSameVectorWhenNoTasks()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -118,7 +118,7 @@ public class ContinualLearningStrategyTests
         Assert.Same(gradients, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ElasticWeightConsolidation_Reset_ClearsState()
     {
         var strategy = new ElasticWeightConsolidation<double>();
@@ -137,7 +137,7 @@ public class ContinualLearningStrategyTests
 
     #region OnlineEWC Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_Constructor_DefaultParameters()
     {
         var strategy = new OnlineEWC<double>();
@@ -147,7 +147,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_Constructor_CustomParameters()
     {
         var strategy = new OnlineEWC<double>(lambda: 800.0, gamma: 0.9);
@@ -156,7 +156,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.9, strategy.Gamma);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_TaskCount_IncreasesAfterTask()
     {
         var strategy = new OnlineEWC<double>();
@@ -169,7 +169,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new OnlineEWC<double>();
@@ -177,7 +177,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new OnlineEWC<double>();
@@ -187,7 +187,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new OnlineEWC<double>();
@@ -198,7 +198,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void OnlineEWC_Reset_ClearsStateAndTaskCount()
     {
         var strategy = new OnlineEWC<double>();
@@ -216,7 +216,7 @@ public class ContinualLearningStrategyTests
 
     #region SynapticIntelligence Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_Constructor_DefaultParameters()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -224,7 +224,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_Constructor_CustomParameters()
     {
         var strategy = new SynapticIntelligence<double>(lambda: 2.0, damping: 0.2);
@@ -232,7 +232,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(2.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -240,7 +240,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_AfterTask_ThrowsOnNullNetwork()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -249,7 +249,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(null, taskData, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -260,7 +260,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_ModifyGradients_ThrowsOnNullNetwork()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -269,7 +269,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(null, gradients));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_ModifyGradients_ThrowsOnNullGradients()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -278,7 +278,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SynapticIntelligence_Reset_ClearsState()
     {
         var strategy = new SynapticIntelligence<double>();
@@ -297,7 +297,7 @@ public class ContinualLearningStrategyTests
 
     #region MemoryAwareSynapses Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_Constructor_DefaultParameters()
     {
         var strategy = new MemoryAwareSynapses<double>();
@@ -306,7 +306,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_Constructor_CustomLambda()
     {
         var strategy = new MemoryAwareSynapses<double>(lambda: 5.0);
@@ -314,7 +314,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(5.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_TaskCount_IncreasesAfterTask()
     {
         var strategy = new MemoryAwareSynapses<double>();
@@ -327,7 +327,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new MemoryAwareSynapses<double>();
@@ -335,7 +335,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new MemoryAwareSynapses<double>();
@@ -346,7 +346,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MemoryAwareSynapses_Reset_ClearsStateAndTaskCount()
     {
         var strategy = new MemoryAwareSynapses<double>();
@@ -364,7 +364,7 @@ public class ContinualLearningStrategyTests
 
     #region LearningWithoutForgetting Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_Constructor_DefaultParameters()
     {
         var strategy = new LearningWithoutForgetting<double>();
@@ -374,7 +374,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_Constructor_CustomParameters()
     {
         var strategy = new LearningWithoutForgetting<double>(lambda: 2.0, temperature: 4.0);
@@ -383,7 +383,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(4.0, strategy.Temperature);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_TaskCount_IncreasesAfterPrepareDistillation()
     {
         var strategy = new LearningWithoutForgetting<double>();
@@ -396,7 +396,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new LearningWithoutForgetting<double>();
@@ -404,7 +404,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new LearningWithoutForgetting<double>();
@@ -415,7 +415,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void LearningWithoutForgetting_Reset_ClearsStateAndTaskCount()
     {
         var strategy = new LearningWithoutForgetting<double>();
@@ -435,7 +435,7 @@ public class ContinualLearningStrategyTests
 
     #region GradientEpisodicMemory Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_Constructor_DefaultParameters()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -445,7 +445,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_Constructor_CustomParameters()
     {
         var strategy = new GradientEpisodicMemory<double>(memorySize: 512, margin: 0.3, lambda: 2.0);
@@ -454,7 +454,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.3, strategy.Margin);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_TaskCount_IncreasesAfterTask()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -467,7 +467,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -475,7 +475,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -485,7 +485,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_ComputeLoss_ReturnsZeroAlways()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -496,7 +496,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_ModifyGradients_ReturnsSameVectorWhenNoTasks()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -508,7 +508,7 @@ public class ContinualLearningStrategyTests
         Assert.Same(gradients, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientEpisodicMemory_Reset_ClearsMemoryAndTaskCount()
     {
         var strategy = new GradientEpisodicMemory<double>();
@@ -526,7 +526,7 @@ public class ContinualLearningStrategyTests
 
     #region AveragedGEM Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_Constructor_DefaultParameters()
     {
         var strategy = new AveragedGEM<double>();
@@ -536,7 +536,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TotalMemorySize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_Constructor_CustomParameters()
     {
         var strategy = new AveragedGEM<double>(memorySize: 512, sampleSize: 128, lambda: 2.0);
@@ -544,7 +544,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(2.0, strategy.Lambda);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_TaskCount_IncreasesAfterTask()
     {
         var strategy = new AveragedGEM<double>();
@@ -558,7 +558,7 @@ public class ContinualLearningStrategyTests
         Assert.True(strategy.TotalMemorySize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new AveragedGEM<double>();
@@ -566,7 +566,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new AveragedGEM<double>();
@@ -576,7 +576,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_ComputeLoss_ReturnsZeroAlways()
     {
         var strategy = new AveragedGEM<double>();
@@ -587,7 +587,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_ModifyGradients_ReturnsSameVectorWhenNoTasks()
     {
         var strategy = new AveragedGEM<double>();
@@ -599,7 +599,7 @@ public class ContinualLearningStrategyTests
         Assert.Same(gradients, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AveragedGEM_Reset_ClearsMemory()
     {
         var strategy = new AveragedGEM<double>();
@@ -618,7 +618,7 @@ public class ContinualLearningStrategyTests
 
     #region ExperienceReplay Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_Constructor_DefaultParameters()
     {
         var strategy = new ExperienceReplay<double>();
@@ -629,7 +629,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.BufferSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_Constructor_CustomParameters()
     {
         var strategy = new ExperienceReplay<double>(
@@ -643,7 +643,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(ExperienceReplay<double>.BufferStrategy.Ring, strategy.Strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_BufferStrategy_ClassBalanced()
     {
         var strategy = new ExperienceReplay<double>(strategy: ExperienceReplay<double>.BufferStrategy.ClassBalanced);
@@ -651,7 +651,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(ExperienceReplay<double>.BufferStrategy.ClassBalanced, strategy.Strategy);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_BufferSize_IncreasesAfterTask()
     {
         var strategy = new ExperienceReplay<double>();
@@ -664,7 +664,7 @@ public class ContinualLearningStrategyTests
         Assert.True(strategy.BufferSize > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new ExperienceReplay<double>();
@@ -672,7 +672,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new ExperienceReplay<double>();
@@ -682,7 +682,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_ComputeLoss_ReturnsZeroWhenBufferEmpty()
     {
         var strategy = new ExperienceReplay<double>();
@@ -693,7 +693,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_Reset_ClearsBuffer()
     {
         var strategy = new ExperienceReplay<double>();
@@ -707,7 +707,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.BufferSize);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_SampleReplayBatch_ThrowsWhenBufferEmpty()
     {
         var strategy = new ExperienceReplay<double>();
@@ -715,7 +715,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<InvalidOperationException>(() => strategy.SampleReplayBatch());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExperienceReplay_SampleReplayBatch_ReturnsDataWhenBufferPopulated()
     {
         var strategy = new ExperienceReplay<double>();
@@ -736,7 +736,7 @@ public class ContinualLearningStrategyTests
 
     #region GenerativeReplay Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_Constructor_DefaultParameters()
     {
         var strategy = new GenerativeReplay<double>();
@@ -747,7 +747,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_Constructor_CustomParameters()
     {
         var strategy = new GenerativeReplay<double>(
@@ -760,7 +760,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.3, strategy.ReplayRatio);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_TaskCount_IncreasesAfterTask()
     {
         var strategy = new GenerativeReplay<double>();
@@ -773,7 +773,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new GenerativeReplay<double>();
@@ -781,7 +781,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_AfterTask_ThrowsOnNullInputs()
     {
         var strategy = new GenerativeReplay<double>();
@@ -791,7 +791,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.AfterTask(network, (null, targets), 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_SetGenerator_ThrowsOnNull()
     {
         var strategy = new GenerativeReplay<double>();
@@ -799,7 +799,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.SetGenerator(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_ComputeLoss_ReturnsZeroWithoutGenerator()
     {
         var strategy = new GenerativeReplay<double>();
@@ -810,7 +810,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_GenerateReplaySamples_ReturnsNullWithoutGenerator()
     {
         var strategy = new GenerativeReplay<double>();
@@ -821,7 +821,7 @@ public class ContinualLearningStrategyTests
         Assert.Null(targets);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_Reset_ClearsTaskCount()
     {
         var strategy = new GenerativeReplay<double>();
@@ -835,7 +835,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_CreateMixedBatch_ThrowsOnNullInputs()
     {
         var strategy = new GenerativeReplay<double>();
@@ -844,7 +844,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.CreateMixedBatch(null, targets, 32));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_CreateMixedBatch_ThrowsOnNullTargets()
     {
         var strategy = new GenerativeReplay<double>();
@@ -853,7 +853,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.CreateMixedBatch(inputs, null, 32));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GenerativeReplay_CreateMixedBatch_ReturnsOriginalWhenNoGenerator()
     {
         var strategy = new GenerativeReplay<double>();
@@ -869,7 +869,7 @@ public class ContinualLearningStrategyTests
 
     #region PackNet Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_DefaultParameters()
     {
         var strategy = new PackNet<double>();
@@ -879,7 +879,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_CustomParameters()
     {
         var strategy = new PackNet<double>(pruningRatio: 0.7, lambda: 500.0);
@@ -888,31 +888,31 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.7, strategy.PruningRatio);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_ThrowsOnInvalidPruningRatio_Zero()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PackNet<double>(pruningRatio: 0.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_ThrowsOnInvalidPruningRatio_One()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PackNet<double>(pruningRatio: 1.0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_ThrowsOnInvalidPruningRatio_Negative()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PackNet<double>(pruningRatio: -0.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Constructor_ThrowsOnInvalidPruningRatio_GreaterThanOne()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PackNet<double>(pruningRatio: 1.5));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_TaskCount_IncreasesAfterTask()
     {
         var strategy = new PackNet<double>();
@@ -925,7 +925,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new PackNet<double>();
@@ -933,7 +933,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_ComputeLoss_ReturnsZeroAlways()
     {
         var strategy = new PackNet<double>();
@@ -944,7 +944,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_ModifyGradients_ReturnsSameVectorWhenNoTasks()
     {
         var strategy = new PackNet<double>();
@@ -956,7 +956,7 @@ public class ContinualLearningStrategyTests
         Assert.Same(gradients, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_Reset_ClearsStateAndTaskCount()
     {
         var strategy = new PackNet<double>();
@@ -970,7 +970,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_GetTaskMask_ReturnsEmptyForInvalidTaskId()
     {
         var strategy = new PackNet<double>();
@@ -982,7 +982,7 @@ public class ContinualLearningStrategyTests
         Assert.Empty(mask);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PackNet_GetWeightAllocationStats_ReturnsStats()
     {
         var strategy = new PackNet<double>();
@@ -1002,7 +1002,7 @@ public class ContinualLearningStrategyTests
 
     #region ProgressiveNeuralNetworks Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_Constructor_DefaultParameters()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1012,7 +1012,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.ColumnCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_Constructor_CustomParameters()
     {
         var strategy = new ProgressiveNeuralNetworks<double>(useLateralConnections: false, lambda: 2.0);
@@ -1021,7 +1021,7 @@ public class ContinualLearningStrategyTests
         Assert.False(strategy.UseLateralConnections);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_ColumnCount_IncreasesAfterTask()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1038,7 +1038,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(2, strategy.ColumnCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1046,7 +1046,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_ComputeLoss_ReturnsZeroAlways()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1057,7 +1057,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_ModifyGradients_ThrowsOnNullNetwork()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1066,7 +1066,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(null, gradients));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_ModifyGradients_ThrowsOnNullGradients()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1075,7 +1075,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_Reset_ClearsColumnsAndState()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1089,7 +1089,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.ColumnCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_GetColumnParameters_ReturnsNullForInvalidTaskId()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1099,7 +1099,7 @@ public class ContinualLearningStrategyTests
         Assert.Null(parameters);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_GetNetworkStats_ReturnsStats()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1111,7 +1111,7 @@ public class ContinualLearningStrategyTests
         Assert.True(stats.ContainsKey("UseLateralConnections"));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_EstimateMemoryUsage_ReturnsZeroWhenEmpty()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1121,7 +1121,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, memory);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ProgressiveNeuralNetworks_ComputeLateralInput_ReturnsEmptyWhenNoActivations()
     {
         var strategy = new ProgressiveNeuralNetworks<double>();
@@ -1138,7 +1138,7 @@ public class ContinualLearningStrategyTests
 
     #region VariationalContinualLearning Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_Constructor_DefaultParameters()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1148,7 +1148,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_Constructor_CustomParameters()
     {
         var strategy = new VariationalContinualLearning<double>(lambda: 2.0, initialLogVar: -2.0);
@@ -1157,7 +1157,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(-2.0, strategy.InitialLogVar);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_TaskCount_IncreasesAfterTask()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1170,7 +1170,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(1, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_BeforeTask_ThrowsOnNullNetwork()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1178,7 +1178,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_ComputeLoss_ReturnsZeroBeforeAnyTasks()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1189,7 +1189,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_ModifyGradients_ThrowsOnNullNetwork()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1198,7 +1198,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(null, gradients));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_ModifyGradients_ThrowsOnNullGradients()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1207,7 +1207,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_ModifyGradients_ReturnsSameVectorWhenNoTasks()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1219,7 +1219,7 @@ public class ContinualLearningStrategyTests
         Assert.Same(gradients, result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_Reset_ClearsStateAndTaskCount()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1233,7 +1233,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, strategy.TaskCount);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_SampleWeights_ThrowsOnNullNetwork()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1241,7 +1241,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.SampleWeights(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_SampleWeights_ReturnsNetworkParamsWhenNoPrior()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1253,7 +1253,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(network.ParameterCount, samples.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_UpdateVariance_ThrowsOnNullGradients()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1261,7 +1261,7 @@ public class ContinualLearningStrategyTests
         Assert.Throws<ArgumentNullException>(() => strategy.UpdateVariance(null, 0.01));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_GetPrior_ReturnsEmptyVectorsInitially()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1272,7 +1272,7 @@ public class ContinualLearningStrategyTests
         Assert.Equal(0, logVar.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VariationalContinualLearning_GetPosterior_ReturnsEmptyVectorsInitially()
     {
         var strategy = new VariationalContinualLearning<double>();
@@ -1287,7 +1287,7 @@ public class ContinualLearningStrategyTests
 
     #region Integration Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllStrategies_ImplementIContinualLearningStrategy()
     {
         var strategies = new List<IContinualLearningStrategy<double>>
@@ -1310,7 +1310,7 @@ public class ContinualLearningStrategyTests
         Assert.All(strategies, s => Assert.NotNull(s));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllStrategies_HaveLambdaProperty()
     {
         var strategies = new List<IContinualLearningStrategy<double>>
@@ -1338,7 +1338,7 @@ public class ContinualLearningStrategyTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void AllStrategies_CanProcessMultipleTasks()
     {
         var strategies = new List<IContinualLearningStrategy<double>>

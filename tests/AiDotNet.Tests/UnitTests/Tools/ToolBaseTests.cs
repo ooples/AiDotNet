@@ -15,7 +15,7 @@ public class ToolBaseTests
 
     #region PR #756 Bug Fix Tests - Type Conversion Robustness
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_InvalidIntType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - n_samples should be int but we pass a string
@@ -29,7 +29,7 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_InvalidDoubleType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - Use RegularizationTool which uses TryGetDouble for training_score
@@ -44,7 +44,7 @@ public class ToolBaseTests
         Assert.Contains("REGULARIZATION RECOMMENDATIONS", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_InvalidBoolType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - is_linear should be bool but we pass a string
@@ -58,7 +58,7 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_MissingProperties_UsesDefaults()
     {
         // Arrange - Only provide minimal JSON
@@ -72,7 +72,7 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_EmptyInput_ReturnsError()
     {
         // Act
@@ -83,7 +83,7 @@ public class ToolBaseTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_InvalidJson_ReturnsJsonError()
     {
         // Act
@@ -94,7 +94,7 @@ public class ToolBaseTests
         Assert.Contains("JSON", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Execute_NullPropertyValues_UsesDefaults()
     {
         // Arrange - Explicit null values

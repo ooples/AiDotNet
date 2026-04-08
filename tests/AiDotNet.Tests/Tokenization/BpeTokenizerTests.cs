@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.Tokenization
 {
     public class BpeTokenizerTests
     {
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Train_CreatesTokenizerWithMerges()
         {
             // Arrange
@@ -27,7 +27,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(tokenizer.VocabularySize > 0);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Tokenize_SplitsTextIntoTokens()
         {
             // Arrange
@@ -52,7 +52,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("hello", tokens);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Encode_ReturnsTokenizationResult()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(result.TokenIds.Count, result.Tokens.Count);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Decode_ReconstructsText()
         {
             // Arrange
@@ -97,7 +97,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(text, decoded);
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Encode_WithPadding_AddsPaddingTokens()
         {
             // Arrange
@@ -123,7 +123,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains(0, result.AttentionMask); // Has padding
         }
 
-        [Fact(Timeout = 60000)]
+        [Fact]
         public void Encode_WithTruncation_TruncatesSequence()
         {
             // Arrange

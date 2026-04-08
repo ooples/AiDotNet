@@ -41,7 +41,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region Constructor Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithValidDirectory_CreatesRegistry()
     {
         var registryDir = Path.Combine(_testDirectory, "registry1");
@@ -50,7 +50,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.True(Directory.Exists(registryDir));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_WithNullDirectory_UsesDefault()
     {
         // This would create in current directory, so we skip to avoid pollution
@@ -79,7 +79,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_CreatesDirectoryIfNotExists()
     {
         var registryDir = Path.Combine(_testDirectory, "new_registry");
@@ -94,7 +94,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region RegisterModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_WithValidModel_ReturnsModelId()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_register");
@@ -108,7 +108,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.NotEmpty(modelId);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_WithTags_StoresTags()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_tags");
@@ -128,7 +128,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("AiDotNet", retrieved.Tags["framework"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_NullName_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_null_name");
@@ -139,7 +139,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => registry.RegisterModel(null!, model, metadata));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_EmptyName_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_empty_name");
@@ -150,7 +150,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => registry.RegisterModel("", model, metadata));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_NullModel_ThrowsArgumentNullException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_null_model");
@@ -160,7 +160,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => registry.RegisterModel<object>("test", null!, metadata));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RegisterModel_SameNameTwice_CreatesVersions()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_versions");
@@ -179,7 +179,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region CreateModelVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateModelVersion_ExistingModel_ReturnsNewVersion()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_create_version");
@@ -193,7 +193,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(2, newVersion);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateModelVersion_NonExistentModel_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_create_nonexistent");
@@ -205,7 +205,7 @@ public class ModelRegistryIntegrationTests : IDisposable
             registry.CreateModelVersion("nonexistent", model, metadata));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateModelVersion_WithDescription_StoresDescription()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_version_desc");
@@ -226,7 +226,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region GetModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModel_ExistingModel_ReturnsModel()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_get");
@@ -242,7 +242,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(1, retrieved.Version);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModel_SpecificVersion_ReturnsCorrectVersion()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_get_version");
@@ -259,7 +259,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(2, v2.Version);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModel_NonExistentModel_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_get_nonexistent");
@@ -268,7 +268,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => registry.GetModel("nonexistent"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModel_NonExistentVersion_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_get_bad_version");
@@ -285,7 +285,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region GetLatestModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetLatestModel_MultipleVersions_ReturnsLatest()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_latest");
@@ -306,7 +306,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region GetModelByStage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelByStage_ExistingStage_ReturnsModel()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_stage");
@@ -323,7 +323,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(ModelStage.Production, production.Stage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelByStage_NoModelInStage_ReturnsNull()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_no_stage");
@@ -338,7 +338,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Null(production);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelByStage_NonExistentModel_ReturnsNull()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_nonexistent_stage");
@@ -353,7 +353,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region TransitionModelStage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionModelStage_ToProduction_UpdatesStage()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_transition");
@@ -368,7 +368,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(ModelStage.Production, retrieved.Stage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionModelStage_ArchivesPreviousInStage()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_archive_prev");
@@ -389,7 +389,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(ModelStage.Production, v2.Stage);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionModelStage_ArchivePreviousFalse_DoesNotArchive()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_no_archive");
@@ -415,7 +415,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region ListModels Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListModels_NoFilter_ReturnsAllModels()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_list");
@@ -435,7 +435,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Contains("model_c", models);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListModels_WithFilter_ReturnsMatchingModels()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_list_filter");
@@ -453,7 +453,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.All(classifiers, m => Assert.Contains("classifier", m));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListModels_WithTags_ReturnsMatchingModels()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_list_tags");
@@ -474,7 +474,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region ListModelVersions Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListModelVersions_ReturnsAllVersions()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_list_versions");
@@ -494,7 +494,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Contains(versions, v => v.Version == 3);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ListModelVersions_NonExistentModel_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_list_nonexistent");
@@ -507,7 +507,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region SearchModels Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchModels_ByNamePattern_ReturnsMatching()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_search_name");
@@ -525,7 +525,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("search_classifier", results[0].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchModels_ByStage_ReturnsMatching()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_search_stage");
@@ -544,7 +544,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("stage_search_a", results[0].Name);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchModels_ByVersionRange_ReturnsMatching()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_search_version");
@@ -564,7 +564,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.All(results, r => Assert.InRange(r.Version, 2, 3));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SearchModels_NullCriteria_ThrowsArgumentNullException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_search_null");
@@ -577,7 +577,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region UpdateModelMetadata Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpdateModelMetadata_UpdatesMetadata()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_update_metadata");
@@ -600,7 +600,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(8, retrieved.Metadata?.Complexity);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpdateModelMetadata_NullMetadata_ThrowsArgumentNullException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_update_null");
@@ -618,7 +618,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region UpdateModelTags Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpdateModelTags_AddsTags()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_update_tags");
@@ -641,7 +641,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("release", retrieved.Tags["version_type"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void UpdateModelTags_NullTags_ThrowsArgumentNullException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_tags_null");
@@ -659,7 +659,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region DeleteModelVersion Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteModelVersion_RemovesSpecificVersion()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_delete_version");
@@ -677,7 +677,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal(2, versions[0].Version);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteModelVersion_LastVersion_RemovesModel()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_delete_last");
@@ -692,7 +692,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.DoesNotContain("delete_last", models);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteModelVersion_NonExistent_DoesNotThrow()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_delete_nonexistent");
@@ -706,7 +706,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region DeleteModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteModel_RemovesAllVersions()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_delete_all");
@@ -724,7 +724,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.DoesNotContain("delete_all", models);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DeleteModel_NonExistent_DoesNotThrow()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_delete_model_none");
@@ -738,7 +738,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region CompareModels Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompareModels_DifferentMetadata_ReportsChanges()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_compare");
@@ -768,7 +768,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.True(comparison.MetadataDifferences.Count > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompareModels_SameMetadata_NoChanges()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_compare_same");
@@ -788,7 +788,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region GetModelLineage Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelLineage_ReturnsLineageInfo()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_lineage");
@@ -808,7 +808,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region ArchiveModel Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ArchiveModel_SetsArchivedStage()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_archive");
@@ -827,7 +827,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region GetModelStoragePath Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelStoragePath_ReturnsValidPath()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_path");
@@ -848,7 +848,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region ModelCard Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttachModelCard_StoresModelCard()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_modelcard");
@@ -872,7 +872,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("Test Developer", retrieved.Developers);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void AttachModelCard_NullModelCard_ThrowsArgumentNullException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_null_card");
@@ -886,7 +886,7 @@ public class ModelRegistryIntegrationTests : IDisposable
             registry.AttachModelCard("null_card", 1, null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelCard_NoCard_ReturnsNull()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_no_card");
@@ -900,7 +900,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Null(card);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GenerateModelCard_CreatesCard()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_generate_card");
@@ -917,7 +917,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Equal("Auto-Generated", card.Developers);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SaveModelCard_CreatesFile()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_save_card");
@@ -933,7 +933,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.True(File.Exists(cardPath));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SaveModelCard_EmptyPath_ThrowsArgumentException()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_empty_path");
@@ -951,7 +951,7 @@ public class ModelRegistryIntegrationTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Registry_PersistsAcrossInstances()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_persist");
@@ -969,7 +969,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         Assert.Contains("persisted_model", models);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Registry_LoadsExistingVersions()
     {
         var registryDir = Path.Combine(_testDirectory, "registry_load_versions");

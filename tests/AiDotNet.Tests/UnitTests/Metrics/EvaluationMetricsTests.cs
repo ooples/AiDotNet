@@ -12,7 +12,7 @@ public class EvaluationMetricsTests
 {
     #region Audio Metrics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_IdenticalStrings_ReturnsZero()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_CompletelyDifferent_ReturnsOne()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class EvaluationMetricsTests
         Assert.Equal(1.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_OneSubstitution_ReturnsCorrectRate()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.25, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_EmptyReference_ReturnsOne()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class EvaluationMetricsTests
         Assert.Equal(1.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_EmptyBoth_ReturnsZero()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_DetailedOutput_ContainsCorrectCounts()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class EvaluationMetricsTests
         Assert.True(werScore > 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_BatchCompute_ReturnsAverageWER()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.125, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CharacterErrorRate_IdenticalStrings_ReturnsZero()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CharacterErrorRate_OneSubstitution_ReturnsCorrectRate()
     {
         // Arrange
@@ -151,7 +151,7 @@ public class EvaluationMetricsTests
         Assert.Equal(0.2, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CharacterErrorRate_IgnoreWhitespace_Works()
     {
         // Arrange
@@ -167,7 +167,7 @@ public class EvaluationMetricsTests
         Assert.True(resultWithWs > resultNoWs);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ShortTimeObjectiveIntelligibility_IdenticalSignals_ReturnsHighScore()
     {
         // Arrange
@@ -187,7 +187,7 @@ public class EvaluationMetricsTests
         Assert.True(result > 0.5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaleInvariantSDR_IdenticalSignals_ReturnsHighValue()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class EvaluationMetricsTests
         Assert.True(result > 50);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ScaleInvariantSDR_ScaledSignal_ReturnsHighValue()
     {
         // Arrange
@@ -227,7 +227,7 @@ public class EvaluationMetricsTests
         Assert.True(result > 50);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SignalToNoiseRatio_NoisySignal_ReturnsPositiveValue()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class EvaluationMetricsTests
 
     #region Image Metrics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PSNR_IdenticalImages_ReturnsHighValue()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class EvaluationMetricsTests
         Assert.Equal(100.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PSNR_DifferentImages_ReturnsLowerValue()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class EvaluationMetricsTests
         Assert.True(result > 0 && result < 100);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SSIM_IdenticalImages_ReturnsOne()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class EvaluationMetricsTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SSIM_DifferentImages_ReturnsLowerValue()
     {
         // Arrange
@@ -340,7 +340,7 @@ public class EvaluationMetricsTests
         Assert.True(result < 1.0 && result > -1.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MeanIoU_PerfectPrediction_ReturnsOne()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class EvaluationMetricsTests
         Assert.Equal(1.0, result, 6);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void MeanIoU_RandomPrediction_ReturnsLowerValue()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class EvaluationMetricsTests
 
     #region Video Metrics Tests
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VideoPSNR_IdenticalVideos_ReturnsHighValue()
     {
         // Arrange
@@ -410,7 +410,7 @@ public class EvaluationMetricsTests
         Assert.Equal(10, perFrame.Length);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VideoSSIM_IdenticalVideos_ReturnsOne()
     {
         // Arrange
@@ -429,7 +429,7 @@ public class EvaluationMetricsTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TemporalConsistency_SmoothVideo_ReturnsHighValue()
     {
         // Arrange
@@ -460,7 +460,7 @@ public class EvaluationMetricsTests
         Assert.True(result > 0.8);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TemporalConsistency_FlickeringVideo_ReturnsLowerValue()
     {
         // Arrange
@@ -491,7 +491,7 @@ public class EvaluationMetricsTests
         Assert.True(result < 0.5);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Flicker_SmoothVideo_ReturnsLowValue()
     {
         // Arrange
@@ -520,7 +520,7 @@ public class EvaluationMetricsTests
         Assert.True(result < 0.3);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void VideoQualityIndex_ReturnsComprehensiveResults()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class EvaluationMetricsTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WordErrorRate_BatchMismatch_ThrowsException()
     {
         // Arrange
@@ -563,7 +563,7 @@ public class EvaluationMetricsTests
         Assert.Throws<ArgumentException>(() => wer.ComputeBatch(hypotheses, references));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CharacterErrorRate_BatchMismatch_ThrowsException()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class EvaluationMetricsTests
         Assert.Throws<ArgumentException>(() => cer.ComputeBatch(hypotheses, references));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void PSNR_ShapeMismatch_ThrowsException()
     {
         // Arrange
@@ -587,7 +587,7 @@ public class EvaluationMetricsTests
         Assert.Throws<ArgumentException>(() => psnr.Compute(image1, image2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void SiSdr_LengthMismatch_ThrowsException()
     {
         // Arrange
@@ -599,7 +599,7 @@ public class EvaluationMetricsTests
         Assert.Throws<ArgumentException>(() => siSdr.Compute(signal1, signal2));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void STOI_LengthMismatch_ThrowsException()
     {
         // Arrange

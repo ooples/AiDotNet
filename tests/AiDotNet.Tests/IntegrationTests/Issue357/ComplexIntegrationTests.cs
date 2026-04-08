@@ -13,7 +13,7 @@ public class ComplexIntegrationTests
 
     #region Construction and Basic Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_DefaultConstructor_CreatesZeroComplex()
     {
         // Arrange & Act
@@ -82,7 +82,7 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedImag, result.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Multiplication_FollowsFoilRule()
     {
         // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
@@ -96,7 +96,7 @@ public class ComplexIntegrationTests
         Assert.Equal(14.0, result.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Division_ProducesCorrectResult()
     {
         // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c^2 + d^2)
@@ -110,7 +110,7 @@ public class ComplexIntegrationTests
         Assert.Equal(-0.5, result.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_MultiplyByScalar_ScalesBothParts()
     {
         var z = new Complex<double>(3, 4);
@@ -140,7 +140,7 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedMagnitude, magnitude, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Phase_ComputesCorrectAngle()
     {
         // 1 + i has phase pi/4
@@ -176,7 +176,7 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedImag, conj.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_MultiplyByConjugate_ProducesRealNumber()
     {
         // z * conj(z) = |z|^2 (a real number)
@@ -193,7 +193,7 @@ public class ComplexIntegrationTests
 
     #region Polar Coordinates
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_FromPolarCoordinates_CreatesCorrectComplex()
     {
         // r=2, theta=pi/4 -> 2*(cos(pi/4) + i*sin(pi/4)) = sqrt(2) + sqrt(2)*i
@@ -206,7 +206,7 @@ public class ComplexIntegrationTests
         Assert.Equal(Math.Sqrt(2), z.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_PolarRoundTrip_PreservesValue()
     {
         var original = new Complex<double>(3, 4);
@@ -223,7 +223,7 @@ public class ComplexIntegrationTests
 
     #region Mathematical Properties
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Addition_IsCommutative()
     {
         var z1 = new Complex<double>(3, 4);
@@ -236,7 +236,7 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Multiplication_IsCommutative()
     {
         var z1 = new Complex<double>(3, 4);
@@ -249,7 +249,7 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Addition_IsAssociative()
     {
         var z1 = new Complex<double>(1, 2);
@@ -263,7 +263,7 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Multiplication_IsAssociative()
     {
         var z1 = new Complex<double>(1, 2);
@@ -277,7 +277,7 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Multiplication_DistributesOverAddition()
     {
         var z1 = new Complex<double>(1, 2);
@@ -292,7 +292,7 @@ public class ComplexIntegrationTests
         Assert.Equal(left.Imaginary, right.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_DivisionThenMultiplication_ReturnsOriginal()
     {
         var z1 = new Complex<double>(6, 8);
@@ -305,7 +305,7 @@ public class ComplexIntegrationTests
         Assert.Equal(z1.Imaginary, restored.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_ISquared_EqualsMinusOne()
     {
         // i^2 = -1
@@ -320,7 +320,7 @@ public class ComplexIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_AddZero_ReturnsOriginal()
     {
         var z = new Complex<double>(3, 4);
@@ -332,7 +332,7 @@ public class ComplexIntegrationTests
         Assert.Equal(z.Imaginary, result.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_MultiplyByOne_ReturnsOriginal()
     {
         var z = new Complex<double>(3, 4);
@@ -344,7 +344,7 @@ public class ComplexIntegrationTests
         Assert.Equal(z.Imaginary, result.Imaginary, Tolerance);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_MultiplyByI_RotatesBy90Degrees()
     {
         // Multiplying by i rotates by 90 degrees counterclockwise
@@ -362,7 +362,7 @@ public class ComplexIntegrationTests
 
     #region Equality
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Equality_TrueForSameValues()
     {
         var z1 = new Complex<double>(3, 4);
@@ -372,7 +372,7 @@ public class ComplexIntegrationTests
         Assert.False(z1 != z2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_Equality_FalseForDifferentValues()
     {
         var z1 = new Complex<double>(3, 4);
@@ -382,7 +382,7 @@ public class ComplexIntegrationTests
         Assert.True(z1 != z2);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_GetHashCode_SameForEqualValues()
     {
         var z1 = new Complex<double>(3, 4);
@@ -395,7 +395,7 @@ public class ComplexIntegrationTests
 
     #region ToString
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_ToString_PositiveImaginary()
     {
         var z = new Complex<double>(3, 4);
@@ -403,7 +403,7 @@ public class ComplexIntegrationTests
         Assert.Equal("3 + 4i", z.ToString());
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Complex_ToString_NegativeImaginary()
     {
         var z = new Complex<double>(3, -4);

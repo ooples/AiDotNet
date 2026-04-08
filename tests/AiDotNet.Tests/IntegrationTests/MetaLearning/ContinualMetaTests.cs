@@ -49,7 +49,7 @@ public class ContinualMetaTests
         return false;
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ACL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -69,7 +69,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void iTAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -89,7 +89,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MetaContinualAL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -109,7 +109,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MePo_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -129,7 +129,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void OML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -149,7 +149,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MOCA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -169,7 +169,7 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ACL_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);

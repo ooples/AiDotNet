@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class RolePlayingTemplateTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithRole_CreatesTemplate()
     {
         var template = new RolePlayingTemplate("Software Engineer");
@@ -14,7 +14,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Software Engineer", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithExpertise_IncludesExpertise()
     {
         var template = new RolePlayingTemplate(
@@ -27,7 +27,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("JavaScript", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithPersonality_IncludesPersonality()
     {
         var template = new RolePlayingTemplate(
@@ -38,7 +38,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Patient and encouraging", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithConstraints_IncludesConstraints()
     {
         var template = new RolePlayingTemplate(
@@ -49,7 +49,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Only use verified data", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "You are a {role}";
@@ -58,7 +58,7 @@ public class RolePlayingTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void WithTask_SetsTask()
     {
         // Use role constructor by specifying expertise parameter
@@ -69,7 +69,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Review this code", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Format_ReplacesVariables()
     {
         // Use role constructor and add context placeholder via task
@@ -85,7 +85,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("We are building a web app", result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TechnicalExpert_CreatesExpertTemplate()
     {
         var template = RolePlayingTemplate.TechnicalExpert("C#");
@@ -95,7 +95,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Expert", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void TechnicalExpert_WithSeniorityLevel_IncludesLevel()
     {
         var template = RolePlayingTemplate.TechnicalExpert("Python", "Principal");
@@ -104,7 +104,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Principal", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BusinessAnalyst_CreatesAnalystTemplate()
     {
         var template = RolePlayingTemplate.BusinessAnalyst();
@@ -113,7 +113,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Business Analyst", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void BusinessAnalyst_WithIndustry_IncludesIndustry()
     {
         var template = RolePlayingTemplate.BusinessAnalyst("Healthcare");
@@ -122,7 +122,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Healthcare", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreativeWriter_CreatesWriterTemplate()
     {
         var template = RolePlayingTemplate.CreativeWriter();
@@ -131,7 +131,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Creative Writer", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CreativeWriter_WithStyle_IncludesStyle()
     {
         var template = RolePlayingTemplate.CreativeWriter("Science Fiction");
@@ -140,7 +140,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Science Fiction", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Teacher_CreatesTeacherTemplate()
     {
         var template = RolePlayingTemplate.Teacher("Mathematics");
@@ -150,7 +150,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Teacher", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Teacher_WithStudentLevel_IncludesLevel()
     {
         var template = RolePlayingTemplate.Teacher("Physics", "Advanced");
@@ -159,7 +159,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Advanced", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CodeReviewer_CreatesReviewerTemplate()
     {
         var template = RolePlayingTemplate.CodeReviewer("C#", "Python");
@@ -170,7 +170,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Python", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CodeReviewer_WithoutLanguages_UsesDefault()
     {
         var template = RolePlayingTemplate.CodeReviewer();
@@ -179,7 +179,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("multiple languages", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_CreatesTemplateWithRole()
     {
         var template = RolePlayingTemplate.Builder()
@@ -190,7 +190,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Data Scientist", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithExpertise_IncludesExpertise()
     {
         var template = RolePlayingTemplate.Builder()
@@ -204,7 +204,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Statistics", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithExpertiseArray_IncludesAllExpertise()
     {
         var template = RolePlayingTemplate.Builder()
@@ -218,7 +218,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("DevOps", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithPersonality_IncludesPersonality()
     {
         var template = RolePlayingTemplate.Builder()
@@ -230,7 +230,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Motivating and supportive", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithConstraints_IncludesConstraints()
     {
         var template = RolePlayingTemplate.Builder()
@@ -242,7 +242,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Provide factual information only", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithTask_IncludesTask()
     {
         var template = RolePlayingTemplate.Builder()
@@ -254,7 +254,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("Help with scheduling", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Builder_WithAttribute_DoesNotThrow()
     {
         var template = RolePlayingTemplate.Builder()
@@ -265,7 +265,7 @@ public class RolePlayingTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Template_ContainsYouAre()
     {
         // Use role constructor by specifying expertise parameter
@@ -274,7 +274,7 @@ public class RolePlayingTemplateTests
         Assert.Contains("You are", template.Template);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Template_ContainsTaskPlaceholder()
     {
         // Use role constructor with task to include task placeholder

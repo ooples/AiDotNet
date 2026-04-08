@@ -21,7 +21,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: Token Estimation
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultTokenEstimator_4CharsPerToken()
     {
         var manager = new ContextWindowManager(4096);
@@ -30,7 +30,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(2, manager.EstimateTokens("Hello"));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultTokenEstimator_LongerText_CeilDivision()
     {
         var manager = new ContextWindowManager(4096);
@@ -40,7 +40,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(25, manager.EstimateTokens(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DefaultTokenEstimator_OddLength_RoundsUp()
     {
         var manager = new ContextWindowManager(4096);
@@ -50,21 +50,21 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(4, manager.EstimateTokens(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTokens_EmptyString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
         Assert.Equal(0, manager.EstimateTokens(""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EstimateTokens_NullString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
         Assert.Equal(0, manager.EstimateTokens(null!));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CustomTokenEstimator_UsedInstead()
     {
         // Custom estimator: 1 token per word
@@ -78,7 +78,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: FitsInWindow
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitsInWindow_WithinLimit_ReturnsTrue()
     {
         var manager = new ContextWindowManager(100);
@@ -88,7 +88,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(manager.FitsInWindow(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitsInWindow_ExceedsLimit_ReturnsFalse()
     {
         var manager = new ContextWindowManager(5);
@@ -98,7 +98,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(manager.FitsInWindow(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitsInWindow_WithReserved_AccountsForReserved()
     {
         var manager = new ContextWindowManager(100);
@@ -108,7 +108,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(manager.FitsInWindow(text, reservedTokens: 20));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void FitsInWindow_ExactlyAtLimit_ReturnsTrue()
     {
         var manager = new ContextWindowManager(10);
@@ -122,7 +122,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: RemainingTokens
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RemainingTokens_HalfUsed_ReturnsHalf()
     {
         var manager = new ContextWindowManager(100);
@@ -132,7 +132,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(50, manager.RemainingTokens(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RemainingTokens_Exceeded_ReturnsZero()
     {
         var manager = new ContextWindowManager(10);
@@ -142,7 +142,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0, manager.RemainingTokens(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void RemainingTokens_WithReserved_AccountsForBoth()
     {
         var manager = new ContextWindowManager(100);
@@ -156,7 +156,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: TruncateToFit (Binary Search)
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TruncateToFit_FitsAlready_ReturnsOriginal()
     {
         var manager = new ContextWindowManager(100);
@@ -165,7 +165,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(text, manager.TruncateToFit(text));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TruncateToFit_TooLong_Truncates()
     {
         var manager = new ContextWindowManager(5);
@@ -176,7 +176,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(manager.FitsInWindow(truncated));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TruncateToFit_WithReserved_TruncatesMore()
     {
         var manager = new ContextWindowManager(10);
@@ -188,14 +188,14 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(withReserve.Length <= noReserve.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TruncateToFit_EmptyString_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(100);
         Assert.Equal("", manager.TruncateToFit(""));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TruncateToFit_ZeroAvailable_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(5);
@@ -209,7 +209,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: SplitIntoChunks
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoChunks_FitsInOne_SingleChunk()
     {
         var manager = new ContextWindowManager(100);
@@ -220,7 +220,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(text, chunks[0]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoChunks_LongText_MultipleChunks()
     {
         var manager = new ContextWindowManager(10);
@@ -236,7 +236,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SplitIntoChunks_EmptyText_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(100);
@@ -248,7 +248,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ComplexityAnalyzer: Flesch Reading Ease
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexityAnalyzer_SimplePrompt_LowComplexity()
     {
         var analyzer = new ComplexityAnalyzer();
@@ -258,7 +258,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.InRange(metrics.ComplexityScore, 0.0, 0.5);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexityAnalyzer_ComplexPrompt_HigherComplexity()
     {
         var analyzer = new ComplexityAnalyzer();
@@ -277,7 +277,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(metrics.ComplexityScore > 0.1);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ComplexityAnalyzer_AnalyzeReturnsValidMetrics()
     {
         var analyzer = new ComplexityAnalyzer();
@@ -312,21 +312,21 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal((decimal)expectedPrice, price);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelPrice_UnknownModel_DefaultsToGpt4()
     {
         var price = TokenCountAnalyzer.GetModelPrice("unknown-model");
         Assert.Equal(0.03m, price);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetModelPrice_CaseInsensitive()
     {
         var price = TokenCountAnalyzer.GetModelPrice("GPT-4");
         Assert.Equal(0.03m, price);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSupportedModels_Returns11Models()
     {
         var models = TokenCountAnalyzer.GetSupportedModels();
@@ -337,7 +337,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // TokenCountAnalyzer: Cost Estimation
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CostEstimation_1000Tokens_EqualsPricePerK()
     {
         // For GPT-4: cost = (tokens / 1000) * $0.03
@@ -349,7 +349,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(metrics.EstimatedCost > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CostEstimation_EmptyPrompt_ThrowsOnNull()
     {
         var analyzer = TokenCountAnalyzer.ForGpt4();
@@ -360,7 +360,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // TokenCountAnalyzer: Factory Methods
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForGpt4_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGpt4();
@@ -370,7 +370,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-4", metrics.ModelName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForGpt35Turbo_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGpt35Turbo();
@@ -380,7 +380,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-3.5-turbo", metrics.ModelName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForClaude_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForClaude();
@@ -390,7 +390,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("claude-3-sonnet", metrics.ModelName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ForGemini_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGemini();
@@ -404,7 +404,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Pattern Detection
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_QuestionMark_DetectsQuestion()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -413,7 +413,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("question", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_GenerationKeywords_DetectsGeneration()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -422,7 +422,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("generation", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_SummarizeKeyword_DetectsSummarization()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -431,7 +431,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("summarization", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_TranslateKeyword_DetectsTranslation()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -440,7 +440,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("translation", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_AnalyzeKeyword_DetectsAnalysis()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -449,7 +449,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("analysis", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_ChainOfThoughtKeywords_DetectsCoT()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -458,7 +458,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("chain-of-thought", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_RoleKeywords_DetectsRolePlaying()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -467,7 +467,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("role-playing", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_TemplateVariables_DetectsTemplate()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -476,7 +476,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("template", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void DetectPatterns_SimpleText_DetectsGeneral()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -489,7 +489,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Variable Counting
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariableCount_MultipleVariables_Counted()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -498,7 +498,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(3, metrics.VariableCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void VariableCount_NoVariables_Zero()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -511,7 +511,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Word and Character Count
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WordCount_SplitsOnWhitespace()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -520,7 +520,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(5, metrics.WordCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CharacterCount_MatchesStringLength()
     {
         var analyzer = new TokenCountAnalyzer();
@@ -534,7 +534,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: Syntax Validation
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_MismatchedBraces_ReportsError()
     {
         var validator = new PromptValidator();
@@ -543,7 +543,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE010" && i.Severity == IssueSeverity.Error);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_MismatchedParentheses_ReportsWarning()
     {
         var validator = new PromptValidator();
@@ -552,7 +552,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE011" && i.Severity == IssueSeverity.Warning);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_UnclosedCodeBlock_ReportsWarning()
     {
         var validator = new PromptValidator();
@@ -561,7 +561,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE013");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_NullPrompt_ReportsError()
     {
         var validator = new PromptValidator();
@@ -570,7 +570,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE001" && i.Severity == IssueSeverity.Error);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_EmptyPrompt_ReportsError()
     {
         var validator = new PromptValidator();
@@ -597,7 +597,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE030" && i.Severity == IssueSeverity.Warning);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Validate_SafePrompt_NoInjectionWarnings()
     {
         var validator = new PromptValidator();
@@ -610,7 +610,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: ValidationSummary
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSummary_ValidPrompt_IsValid()
     {
         var validator = new PromptValidator();
@@ -620,7 +620,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0, summary.ErrorCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSummary_InvalidPrompt_NotValid()
     {
         var validator = new PromptValidator();
@@ -630,7 +630,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(summary.ErrorCount > 0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetSummary_TotalCount_SumsAllSeverities()
     {
         var summary = new ValidationSummary
@@ -647,7 +647,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: ValidationOptions Presets
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ValidationOptions_Strict_LowMaxTokens()
     {
         var strict = ValidationOptions.Strict;
@@ -658,7 +658,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(IssueSeverity.Info, strict.MinSeverityToReport);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ValidationOptions_Lenient_HighMaxTokens()
     {
         var lenient = ValidationOptions.Lenient;
@@ -673,7 +673,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // StopWordRemovalCompressor: Compression
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StopWordRemoval_Light_RemovesArticles()
     {
         var compressor = new StopWordRemovalCompressor(
@@ -687,7 +687,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(compressed.Length < original.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StopWordRemoval_Medium_RemovesMoreWords()
     {
         var compressor = new StopWordRemovalCompressor(
@@ -700,7 +700,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(compressed.Length < original.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void StopWordRemoval_Aggressive_RemovesPrepositions()
     {
         var compressor = new StopWordRemovalCompressor(
@@ -716,7 +716,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressionResult: Computed Properties
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionResult_TokensSaved_Computed()
     {
         var result = new CompressionResult
@@ -728,7 +728,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(30, result.TokensSaved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionResult_CompressionRatio_Computed()
     {
         var result = new CompressionResult
@@ -741,7 +741,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0.3, result.CompressionRatio, 0.001);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionResult_CompressionRatio_ZeroOriginal_ReturnsZero()
     {
         var result = new CompressionResult
@@ -753,7 +753,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0.0, result.CompressionRatio);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionResult_IsSuccessful_WhenReduced()
     {
         var successResult = new CompressionResult
@@ -771,7 +771,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(noChangeResult.IsSuccessful);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionResult_50PercentReduction_Ratio05()
     {
         var result = new CompressionResult
@@ -788,7 +788,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressionOptions: Presets
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionOptions_Default_ModerateSettings()
     {
         var opts = CompressionOptions.Default;
@@ -800,7 +800,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-4", opts.ModelName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionOptions_Aggressive_HigherReduction()
     {
         var opts = CompressionOptions.Aggressive;
@@ -809,7 +809,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(20, opts.MinTokenCount);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressionOptions_Conservative_LowerReduction()
     {
         var opts = CompressionOptions.Conservative;
@@ -823,7 +823,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressWithMetrics: Full Pipeline
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressWithMetrics_ReturnsDetailedResult()
     {
         var compressor = new StopWordRemovalCompressor();
@@ -838,7 +838,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(result.CompressionRatio <= 1.0);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CompressWithMetrics_CostSavings_Positive()
     {
         var compressor = new StopWordRemovalCompressor();
@@ -856,7 +856,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptMetrics: Defaults
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptMetrics_DefaultValues()
     {
         var metrics = new PromptMetrics();
@@ -876,7 +876,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptIssue: Properties
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void PromptIssue_DefaultValues()
     {
         var issue = new PromptIssue();
@@ -892,7 +892,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     // End-to-End: Analysis Pipeline
     // ============================
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EndToEnd_AnalyzeThenValidate_ConsistentResults()
     {
         var analyzer = new ComplexityAnalyzer();
@@ -914,7 +914,7 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("template", metrics.DetectedPatterns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void EndToEnd_AnalyzeCompressAnalyze_CompressionReducesTokens()
     {
         var analyzer = new TokenCountAnalyzer();

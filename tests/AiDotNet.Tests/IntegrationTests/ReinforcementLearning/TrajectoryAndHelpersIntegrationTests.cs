@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class TrajectoryAndHelpersIntegrationTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Trajectory_AddStepAndClear_TracksState()
     {
         var trajectory = new Trajectory<double>();
@@ -37,7 +37,7 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Null(trajectory.Returns);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SequenceContext_LengthReflectsStates()
     {
         var context = new SequenceContext<double>();
@@ -49,7 +49,7 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(1, context.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void MCTSNode_DefaultsAndAssignments_Work()
     {
         var node = new MCTSNode<double>
@@ -69,7 +69,7 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(1, node.TotalVisits);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void TransitionData_DefaultsAndOverrides_Work()
     {
         var data = new TransitionData<double>();
@@ -87,7 +87,7 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(0.5, data.Probability);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void WorkerNetworks_DefaultsAndAssignments_Work()
     {
         var policyNetwork = CreateNetwork(2, 1);

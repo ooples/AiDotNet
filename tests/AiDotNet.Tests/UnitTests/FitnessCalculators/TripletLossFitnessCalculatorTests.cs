@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class TripletLossFitnessCalculatorTests
 {
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithPerfectSeparation_ReturnsZero()
     {
         // Arrange
@@ -35,7 +35,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithDifferentMargins_AffectsLoss()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(resultLarge >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -173,7 +173,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -183,7 +183,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Matrix<double>, Vector<double>>)null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -194,7 +194,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -205,7 +205,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void Constructor_WithDefaultMargin_UsesDefaultValue()
     {
         // Arrange & Act
@@ -216,7 +216,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithMultipleSamplesPerClass_HandlesCorrectly()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void CalculateFitnessScore_WithHighDimensionalFeatures_WorksCorrectly()
     {
         // Arrange

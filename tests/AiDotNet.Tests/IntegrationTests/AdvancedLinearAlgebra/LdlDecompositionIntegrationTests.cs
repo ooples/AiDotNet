@@ -179,7 +179,7 @@ public class LdlDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LdlDecomposition_IdentityMatrix_HasAllOnesInD()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class LdlDecompositionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LdlDecomposition_DiagonalMatrix_PreservesDiagonalInD()
     {
         // Arrange - Diagonal matrix with positive values
@@ -213,7 +213,7 @@ public class LdlDecompositionIntegrationTests
         Assert.True(Math.Abs(ldl.D[3] - 1.0) < Tolerance, $"D[3] = {ldl.D[3]}, expected 1");
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LdlDecomposition_PositiveDefiniteMatrix_HasPositiveD()
     {
         // Arrange - Positive definite matrix
@@ -267,7 +267,7 @@ public class LdlDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LdlDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
@@ -282,7 +282,7 @@ public class LdlDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void LdlDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange

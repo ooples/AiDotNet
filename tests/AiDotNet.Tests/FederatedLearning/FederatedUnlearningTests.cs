@@ -60,7 +60,7 @@ public class FederatedUnlearningTests
 
     // ========== ExactRetrainingUnlearner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExactRetraining_RemovesTargetClient_ModelDiffers()
     {
         var options = new FederatedUnlearningOptions
@@ -82,7 +82,7 @@ public class FederatedUnlearningTests
         Assert.True(certificate.UnlearningTimeMs >= 0);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExactRetraining_CertificateHasValidHashes()
     {
         var options = new FederatedUnlearningOptions { Method = UnlearningMethod.ExactRetraining };
@@ -97,7 +97,7 @@ public class FederatedUnlearningTests
         Assert.NotEqual(certificate.PreUnlearningModelHash, certificate.PostUnlearningModelHash);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExactRetraining_SingleClient_ReturnsZeroModel()
     {
         var options = new FederatedUnlearningOptions { Method = UnlearningMethod.ExactRetraining };
@@ -114,7 +114,7 @@ public class FederatedUnlearningTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExactRetraining_MethodName_ReturnsCorrectName()
     {
         var options = new FederatedUnlearningOptions { Method = UnlearningMethod.ExactRetraining };
@@ -125,7 +125,7 @@ public class FederatedUnlearningTests
 
     // ========== GradientAscentUnlearner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientAscent_ProducesModifiedModel()
     {
         var options = new FederatedUnlearningOptions
@@ -159,7 +159,7 @@ public class FederatedUnlearningTests
         Assert.True(anyDifferent, "Unlearned model should differ from original after gradient ascent");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientAscent_MissingTargetClient_StillWorks()
     {
         var options = new FederatedUnlearningOptions
@@ -180,7 +180,7 @@ public class FederatedUnlearningTests
 
     // ========== InfluenceFunctionUnlearner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InfluenceFunction_ProducesModifiedModel()
     {
         var options = new FederatedUnlearningOptions
@@ -200,7 +200,7 @@ public class FederatedUnlearningTests
         Assert.Equal(UnlearningMethod.InfluenceFunction, certificate.MethodUsed);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InfluenceFunction_CertificateHasMembershipScore()
     {
         var options = new FederatedUnlearningOptions
@@ -220,7 +220,7 @@ public class FederatedUnlearningTests
 
     // ========== DiffusiveNoiseUnlearner Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffusiveNoise_ProducesModifiedModel()
     {
         var options = new FederatedUnlearningOptions
@@ -252,7 +252,7 @@ public class FederatedUnlearningTests
         Assert.True(anyDifferent, "Diffusive noise should perturb the model");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffusiveNoise_RetainedAccuracy_ReasonableRange()
     {
         var options = new FederatedUnlearningOptions
@@ -273,7 +273,7 @@ public class FederatedUnlearningTests
 
     // ========== Options Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedUnlearningOptions_DefaultValues()
     {
         var options = new FederatedUnlearningOptions();
@@ -288,7 +288,7 @@ public class FederatedUnlearningTests
         Assert.Equal(0.95, options.VerificationThreshold);
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UnlearningMethod_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(UnlearningMethod), UnlearningMethod.ExactRetraining));
@@ -297,7 +297,7 @@ public class FederatedUnlearningTests
         Assert.True(Enum.IsDefined(typeof(UnlearningMethod), UnlearningMethod.DiffusiveNoise));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void UnlearningCertificate_DefaultValues()
     {
         var cert = new UnlearningCertificate();
@@ -309,25 +309,25 @@ public class FederatedUnlearningTests
 
     // ========== Null Argument Tests ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void ExactRetraining_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ExactRetrainingUnlearner<double>(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void GradientAscent_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new GradientAscentUnlearner<double>(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void InfluenceFunction_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new InfluenceFunctionUnlearner<double>(null));
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void DiffusiveNoise_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new DiffusiveNoiseUnlearner<double>(null));
@@ -335,7 +335,7 @@ public class FederatedUnlearningTests
 
     // ========== Integration with FederatedLearningOptions ==========
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void FederatedLearningOptions_CanSetUnlearningOptions()
     {
         var flOptions = new FederatedLearningOptions

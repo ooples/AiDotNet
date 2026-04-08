@@ -19,7 +19,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Basic CRUD Operations
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetCachedStepData_NonExistentKey_ReturnsNull()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_ThenGet_ReturnsSameData()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_OverwriteExistingKey_ReturnsNewData()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.NotSame(stepData1, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClearCache_RemovesAllEntries()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Null Key Validation
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetCachedStepData_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_NullStepData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -128,7 +128,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Multiple Keys Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Cache_MultipleKeys_EachRetrievableIndependently()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Thread Safety Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConcurrentCacheOperations_DoesNotThrow()
     {
         // Arrange
@@ -204,7 +204,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConcurrentReadWrite_SameKey_ThreadSafe()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ConcurrentClearAndAccess_ThreadSafe()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Edge Cases
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_EmptyKey_StoresSuccessfully()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_VeryLongKey_StoresSuccessfully()
     {
         // Arrange
@@ -316,7 +316,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CacheStepData_SpecialCharactersInKey_StoresSuccessfully()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClearCache_OnEmptyCache_DoesNotThrow()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class DefaultModelCacheIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ClearCache_CalledMultipleTimes_DoesNotThrow()
     {
         // Arrange
@@ -364,7 +364,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Type Tests
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ModelCache_FloatType_WorksCorrectly()
     {
         // Arrange
@@ -387,7 +387,7 @@ public class DefaultModelCacheIntegrationTests
 
     #region Return Null vs New Verification
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetCachedStepData_MultipleNonExistentKeys_AllReturnNull()
     {
         // Arrange
@@ -401,7 +401,7 @@ public class DefaultModelCacheIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetCachedStepData_AfterClear_ReturnsNull()
     {
         // Arrange

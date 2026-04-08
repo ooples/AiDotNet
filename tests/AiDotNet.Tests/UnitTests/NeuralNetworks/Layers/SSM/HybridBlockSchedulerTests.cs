@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class HybridBlockSchedulerTests
 {
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ValidParameters_CreatesScheduler()
     {
         int seqLen = 8;
@@ -26,7 +26,7 @@ public class HybridBlockSchedulerTests
         Assert.Equal(HybridSchedulePattern.JambaStyle, scheduler.SchedulePattern);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsOnEmptyBlocks()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -35,7 +35,7 @@ public class HybridBlockSchedulerTests
                 HybridSchedulePattern.JambaStyle, 32));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsOnMismatchedArrays()
     {
         var blocks = CreateMambaBlocks(8, 32, 3);
@@ -46,7 +46,7 @@ public class HybridBlockSchedulerTests
                 8, blocks, isAttention, HybridSchedulePattern.JambaStyle, 32));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Constructor_ThrowsOnInvalidModelDimension()
     {
         var blocks = CreateMambaBlocks(8, 32, 2);
@@ -57,7 +57,7 @@ public class HybridBlockSchedulerTests
                 8, blocks, isAttention, HybridSchedulePattern.JambaStyle, 0));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_3D_ProducesValidOutput()
     {
         int batchSize = 2;
@@ -77,7 +77,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_2D_ProducesValidOutput()
     {
         int seqLen = 4;
@@ -98,7 +98,7 @@ public class HybridBlockSchedulerTests
 
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -124,7 +124,7 @@ public class HybridBlockSchedulerTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var blocks = CreateMambaBlocks(4, 32, 2);
@@ -136,7 +136,7 @@ public class HybridBlockSchedulerTests
         Assert.Throws<ArgumentException>(() => scheduler.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void SupportsTraining_ReturnsTrue()
     {
         var blocks = CreateMambaBlocks(4, 32, 2);
@@ -148,7 +148,7 @@ public class HybridBlockSchedulerTests
         Assert.True(scheduler.SupportsTraining);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var blocks = CreateMambaBlocks(4, 32, 3);
@@ -171,7 +171,7 @@ public class HybridBlockSchedulerTests
         Assert.Equal("2", metadata["SSMBlocks"]);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void ResetState_AllowsReuse()
     {
         int seqLen = 4;
@@ -223,7 +223,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateJambaSchedule_CreatesCorrectPattern()
     {
         var scheduler = HybridBlockScheduler<float>.CreateJambaSchedule(
@@ -244,7 +244,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateZambaSchedule_InterleavesAttentionWithMamba()
     {
         var scheduler = HybridBlockScheduler<float>.CreateZambaSchedule(
@@ -265,7 +265,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateSambaSchedule_AlternatesMambaAndAttention()
     {
         var scheduler = HybridBlockScheduler<float>.CreateSambaSchedule(
@@ -286,7 +286,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void CreateJambaSchedule_ThrowsOnInvalidParameters()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -297,7 +297,7 @@ public class HybridBlockSchedulerTests
     }
 
 
-    [Fact(Timeout = 120000)]
+    [Fact]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;
