@@ -524,8 +524,12 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 children[cluster] = new List<int>();
             }
 
+            // Pass 1: Compute birth lambda and parent-child relationships.
+            // Per Campello et al. 2013, birth lambda of a cluster = the lambda at which
+            // it first appears in the condensed tree (minimum lambda across all its entries).
             foreach (var node in condensedTree)
             {
+                // Birth lambda of a cluster = minimum lambda at which it appears as a child
                 if (birthLambda.ContainsKey(node.Child))
                 {
                     T current = birthLambda[node.Child];
@@ -536,12 +540,21 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 {
                     children[node.Parent].Add(node.Child);
                 }
+            }
 
-                // Add stability contribution
+            // Pass 2: Compute stability. Per the paper, stability of cluster C =
+            // sum over all points p that fall out of C: (lambda_p - lambda_birth(C)).
+            // Each condensed tree edge where Child < n represents a point falling out.
+            // Each edge where Child >= n represents a sub-cluster splitting off.
+            foreach (var node in condensedTree)
+            {
                 if (stability.ContainsKey(node.Parent))
                 {
                     T deathLambda = node.Lambda;
                     T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
+                    // Clamp birth to avoid using MaxValue for clusters that only appear as parents
+                    if (NumOps.GreaterThan(birth, deathLambda))
+                        birth = NumOps.Zero;
                     T sizeT = NumOps.FromDouble(node.Size);
                     stability[node.Parent] = NumOps.Add(stability[node.Parent],
                         NumOps.Multiply(NumOps.Subtract(deathLambda, birth), sizeT));
