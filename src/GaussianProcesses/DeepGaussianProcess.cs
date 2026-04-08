@@ -669,6 +669,9 @@ internal class DGPLayer<T>
             Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
         }
 
+        // Pre-compute Cholesky factorization of Kuu once — reused across all output dimensions
+        var kuuDecomp = MatrixDecompositionFactory.CreateDecomposition(Kuu, MatrixDecompositionType.Cholesky);
+
         // Solve Kuu * alpha_d = m_d for each output dimension
         for (int d = 0; d < _outputDim; d++)
         {
@@ -676,7 +679,7 @@ internal class DGPLayer<T>
             for (int j = 0; j < m_points; j++)
                 m_d[j] = _variationalMean[j, d];
 
-            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(Kuu, m_d, MatrixDecompositionType.Cholesky);
+            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(m_d, kuuDecomp);
 
             // Predict: mean_d = Kxu * alpha_d
             for (int i = 0; i < n; i++)

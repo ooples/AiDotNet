@@ -56,6 +56,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
 
             Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
         [Fact(Timeout = 60000)]

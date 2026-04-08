@@ -399,18 +399,31 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        // Set network + layer eval mode for deterministic inference.
-        // Don't zero _metaState — Forward no longer mutates it in eval mode,
-        // and zeroing would destroy learned self-modification state.
-        SetTrainingMode(false);
-        _contextFlow.Reset();
-        foreach (var layer in Layers)
-        {
-            layer.ResetState();
-            layer.SetTrainingMode(false);
-        }
+        // Save prior network mode so Predict() can be called during training without side effects.
+        bool previousMode = IsTrainingMode;
 
-        return Forward(input);
+        try
+        {
+            // Set network + layer eval mode for deterministic inference.
+            // Don't zero _metaState — Forward no longer mutates it in eval mode,
+            // and zeroing would destroy learned self-modification state.
+            SetTrainingMode(false);
+            _contextFlow.Reset();
+            foreach (var layer in Layers)
+            {
+                layer.ResetState();
+                layer.SetTrainingMode(false);
+            }
+
+            return Forward(input);
+        }
+        finally
+        {
+            // Restore prior training/eval mode for network and all layers
+            SetTrainingMode(previousMode);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(previousMode);
+        }
     }
 
     /// <summary>

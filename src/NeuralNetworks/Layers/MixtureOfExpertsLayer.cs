@@ -1334,8 +1334,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _ = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
 
         // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant).
-        // Straight-through estimator per Shazeer et al. §3.2: forward uses discrete selection,
-        // backward passes gradients through the softmax weights.
+        // Hard top-K masking: forward multiplies softmax weights by 0/1 mask and renormalizes.
+        // Gradients flow through the mask×weight product to the softmax weights for selected experts;
+        // non-selected experts receive zero gradient. This is not a straight-through estimator
+        // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
         // NOTE: The O(batchSize×k) scalar loop is intentional — TensorScatter is non-differentiable
         // in the Tensors OpRegistry, so we must use this approach for gradient flow.
         var mask = new Tensor<T>(weights.Shape.ToArray());

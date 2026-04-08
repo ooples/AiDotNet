@@ -51,7 +51,8 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     private Tensor<T>? _weightsTCache;
 
     /// <summary>
-    /// Scalar bias per output feature — shifts the Poincaré distance.
+    /// Scalar bias per output feature — added to the Poincaré ball coordinates
+    /// after Möbius matrix-vector multiplication.
     /// Shape: [OutputFeatures].
     /// </summary>
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
@@ -167,7 +168,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 // Initialize weights in tangent space (small values)
                 _weights[o, i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale * 0.1);
             }
-            // Scalar bias per output — shifts the Poincaré distance
+            // Scalar bias per output — added to ball coordinates after Möbius matmul
             _biases[o] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * 0.01);
         }
     }
