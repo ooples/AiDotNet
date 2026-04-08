@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Bayesian;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Bayesian;
 /// sparse solutions where only a few features matter.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class HorseshoeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

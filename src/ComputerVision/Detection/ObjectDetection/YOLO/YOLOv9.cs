@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information",
+[ResearchPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information",
     "https://arxiv.org/abs/2402.13616",
     Year = 2024,
     Authors = "Chien-Yao Wang, I-Hau Yeh, Hong-Yuan Mark Liao")]

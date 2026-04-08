@@ -79,7 +79,7 @@ namespace AiDotNet.Agents;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(string))]
-[ModelPaper("Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning by Large Language Models", "https://arxiv.org/abs/2305.04091", Year = 2023, Authors = "Lei Wang, Wanyu Xu, Yihuai Lan, Zhiqiang Hu, Yunshi Lan, Roy Ka-Wei Lee, Ee-Peng Lim")]
+[ResearchPaper("Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning by Large Language Models", "https://arxiv.org/abs/2305.04091", Year = 2023, Authors = "Lei Wang, Wanyu Xu, Yihuai Lan, Zhiqiang Hu, Yunshi Lan, Roy Ka-Wei Lee, Ee-Peng Lim")]
 public class PlanAndExecuteAgent<T> : AgentBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

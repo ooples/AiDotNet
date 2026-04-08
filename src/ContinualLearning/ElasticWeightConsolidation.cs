@@ -37,7 +37,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://doi.org/10.1073/pnas.1611835114", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
+[ResearchPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://doi.org/10.1073/pnas.1611835114", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

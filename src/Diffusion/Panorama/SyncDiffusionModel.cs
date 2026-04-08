@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SyncDiffusion: Coherent Montage via Synchronized Joint Diffusions", "https://arxiv.org/abs/2306.05178", Year = 2023, Authors = "Lee et al.")]
+[ResearchPaper("SyncDiffusion: Coherent Montage via Synchronized Joint Diffusions", "https://arxiv.org/abs/2306.05178", Year = 2023, Authors = "Lee et al.")]
 public class SyncDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

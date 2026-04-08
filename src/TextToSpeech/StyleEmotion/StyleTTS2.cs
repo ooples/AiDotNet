@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Li et al.")]
 public class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTS2Options _options; public override ModelOptions GetOptions() => _options;

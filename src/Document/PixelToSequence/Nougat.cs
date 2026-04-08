@@ -55,7 +55,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://doi.org/10.48550/arXiv.2308.13418", Year = 2023, Authors = "Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic")]
+[ResearchPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://doi.org/10.48550/arXiv.2308.13418", Year = 2023, Authors = "Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic")]
 public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly NougatOptions _options;

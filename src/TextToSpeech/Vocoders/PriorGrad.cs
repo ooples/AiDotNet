@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive Prior", "https://arxiv.org/abs/2106.06406", Year = 2022, Authors = "Lee et al.")]
+[ResearchPaper("PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive Prior", "https://arxiv.org/abs/2106.06406", Year = 2022, Authors = "Lee et al.")]
 public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly PriorGradOptions _options; public override ModelOptions GetOptions() => _options;

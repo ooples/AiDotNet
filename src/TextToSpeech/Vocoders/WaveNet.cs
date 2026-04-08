@@ -37,7 +37,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "van den Oord et al.")]
+[ResearchPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "van den Oord et al.")]
 public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveNetOptions _options; public override ModelOptions GetOptions() => _options;

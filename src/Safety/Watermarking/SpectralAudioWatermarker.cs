@@ -27,7 +27,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("WavMark: Watermarking for Audio via Wavelet-Based Modification",
+[ResearchPaper("WavMark: Watermarking for Audio via Wavelet-Based Modification",
     "https://arxiv.org/abs/2308.12770",
     Year = 2024,
     Authors = "Various")]

@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TS2Vec: Towards Universal Representation of Time Series", "https://arxiv.org/abs/2106.10466", Year = 2022, Authors = "Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu")]
+[ResearchPaper("TS2Vec: Towards Universal Representation of Time Series", "https://arxiv.org/abs/2106.10466", Year = 2022, Authors = "Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu")]
 public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.GameTheory;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.GameTheory;
 /// fair and complete picture of each feature's true importance.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

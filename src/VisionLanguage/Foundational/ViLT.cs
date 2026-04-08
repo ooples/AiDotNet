@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision", "https://arxiv.org/abs/2102.03334", Year = 2021, Authors = "Kim et al.")]
+[ResearchPaper("ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision", "https://arxiv.org/abs/2102.03334", Year = 2021, Authors = "Kim et al.")]
 public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLTOptions _options; public override ModelOptions GetOptions() => _options;

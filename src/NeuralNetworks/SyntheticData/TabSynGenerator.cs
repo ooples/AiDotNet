@@ -82,7 +82,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mixed-Type Tabular Data Synthesis with Score-based Diffusion in Latent Space",
+[ResearchPaper("Mixed-Type Tabular Data Synthesis with Score-based Diffusion in Latent Space",
     "https://arxiv.org/abs/2310.09656",
     Year = 2023,
     Authors = "Hengrui Zhang, Jiani Zhang, Balasubramaniam Srinivasan, Zhengyuan Shen, Xiao Qin, Christos Faloutsos, Huzefa Rangwala, George Karypis")]

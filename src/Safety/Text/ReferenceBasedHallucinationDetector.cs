@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HHEM 2.1: A Better Hallucination Evaluation Model",
+[ResearchPaper("HHEM 2.1: A Better Hallucination Evaluation Model",
     "https://vectara.com/blog/hhem-2-1-a-better-hallucination-evaluation-model/",
     Year = 2024,
     Authors = "Vectara")]

@@ -1,6 +1,8 @@
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -37,6 +39,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// <b>Reference:</b> Esser et al., "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", ICML 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TripleTextConditioner<T> : IConditioningModule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

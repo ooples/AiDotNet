@@ -47,7 +47,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning Joint Spatial-Temporal Transformations for Video Inpainting",
+[ResearchPaper("Learning Joint Spatial-Temporal Transformations for Video Inpainting",
     "https://arxiv.org/abs/2007.10247",
     Year = 2020,
     Authors = "Yanhong Zeng, Jianlong Fu, Hongyang Chao")]

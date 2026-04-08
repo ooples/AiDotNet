@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -40,6 +41,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Zhao et al., "UniPC: A Unified Predictor-Corrector Framework for Fast Sampling of Diffusion Models", NeurIPS 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

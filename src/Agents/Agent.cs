@@ -53,7 +53,7 @@ namespace AiDotNet.Agents;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(string))]
-[ModelPaper("ReAct: Synergizing Reasoning and Acting in Language Models", "https://arxiv.org/abs/2210.03629", Year = 2023, Authors = "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao")]
+[ResearchPaper("ReAct: Synergizing Reasoning and Acting in Language Models", "https://arxiv.org/abs/2210.03629", Year = 2023, Authors = "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao")]
 public class Agent<T> : AgentBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

@@ -60,7 +60,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Large Language Models Are Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2310.07820", Year = 2023, Authors = "Nate Gruver, Marc Finzi, Shikai Qiu, Andrew Gordon Wilson")]
+[ResearchPaper("Large Language Models Are Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2310.07820", Year = 2023, Authors = "Nate Gruver, Marc Finzi, Shikai Qiu, Andrew Gordon Wilson")]
 public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

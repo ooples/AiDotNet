@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MinMo: A Multimodal Large Language Model for Seamless Voice Interaction", "https://arxiv.org/abs/2501.06282", Year = 2025, Authors = "Chen et al.")]
+[ResearchPaper("MinMo: A Multimodal Large Language Model for Seamless Voice Interaction", "https://arxiv.org/abs/2501.06282", Year = 2025, Authors = "Chen et al.")]
 public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MinMoOptions _options; public override ModelOptions GetOptions() => _options;

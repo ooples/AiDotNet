@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543", Year = 2023, Authors = "Zhang et al.")]
 public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

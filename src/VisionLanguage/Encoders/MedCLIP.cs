@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MedCLIP: Contrastive Learning from Unpaired Medical Images and Text", "https://arxiv.org/abs/2210.10163", Year = 2022, Authors = "Wang et al.")]
+[ResearchPaper("MedCLIP: Contrastive Learning from Unpaired Medical Images and Text", "https://arxiv.org/abs/2210.10163", Year = 2022, Authors = "Wang et al.")]
 public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly MedCLIPOptions _options; public override ModelOptions GetOptions() => _options;

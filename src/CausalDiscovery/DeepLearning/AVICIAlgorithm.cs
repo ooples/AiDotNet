@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Amortized Inference for Causal Structure Learning", "https://arxiv.org/abs/2205.12934", Year = 2023, Authors = "Lars Lorch, Scott Sussex, Jonas Rothfuss, Andreas Krause, Bernhard Scholkopf")]
+[ResearchPaper("Amortized Inference for Causal Structure Learning", "https://arxiv.org/abs/2205.12934", Year = 2023, Authors = "Lars Lorch, Scott Sussex, Jonas Rothfuss, Andreas Krause, Bernhard Scholkopf")]
 public class AVICIAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

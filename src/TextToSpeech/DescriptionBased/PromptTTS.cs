@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PromptTTS: Controllable Text-to-Speech with Text Descriptions", "https://arxiv.org/abs/2211.12171", Year = 2023, Authors = "Guo et al.")]
+[ResearchPaper("PromptTTS: Controllable Text-to-Speech with Text Descriptions", "https://arxiv.org/abs/2211.12171", Year = 2023, Authors = "Guo et al.")]
 public class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PromptTTSOptions _options; public override ModelOptions GetOptions() => _options;

@@ -34,7 +34,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Step-Audio: Unified Understanding and Generation in Intelligent Speech Interaction", "https://arxiv.org/abs/2502.11946", Year = 2025, Authors = "StepFun")]
+[ResearchPaper("Step-Audio: Unified Understanding and Generation in Intelligent Speech Interaction", "https://arxiv.org/abs/2502.11946", Year = 2025, Authors = "StepFun")]
 public class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly StepAudioOptions _options; public override ModelOptions GetOptions() => _options;

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MAGI: Multi-Annotated Explanation-Guided Inference for Video Generation", "https://arxiv.org/abs/2501.16925", Year = 2025, Authors = "Sand AI")]
+[ResearchPaper("MAGI: Multi-Annotated Explanation-Guided Inference for Video Generation", "https://arxiv.org/abs/2501.16925", Year = 2025, Authors = "Sand AI")]
 public class MAGI1Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

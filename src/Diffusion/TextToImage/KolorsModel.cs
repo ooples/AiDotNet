@@ -72,7 +72,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Kolors: Effective Training of Diffusion Model for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2407.15233", Year = 2024, Authors = "Kwai")]
+[ResearchPaper("Kolors: Effective Training of Diffusion Model for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2407.15233", Year = 2024, Authors = "Kwai")]
 public class KolorsModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -31,7 +31,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SynthID-Text: Watermarking for Large Language Models",
+[ResearchPaper("SynthID-Text: Watermarking for Large Language Models",
     "https://www.nature.com/articles/s41586-024-08025-4",
     Year = 2024,
     Authors = "Google DeepMind")]

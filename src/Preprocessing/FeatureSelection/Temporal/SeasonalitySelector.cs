@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Temporal;
 
@@ -16,6 +18,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Temporal;
 /// periodic behavior using spectral analysis.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

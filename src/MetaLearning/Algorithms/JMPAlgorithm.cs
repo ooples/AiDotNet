@@ -42,10 +42,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks",
+[ResearchPaper("Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks",
     "https://arxiv.org/abs/1703.03400",
     Year = 2017,
     Authors = "Chelsea Finn, Pieter Abbeel, Sergey Levine")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

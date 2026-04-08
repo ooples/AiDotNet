@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Hyper-SD: Trajectory Segmented Consistency Model for Efficient Image Synthesis", "https://arxiv.org/abs/2404.13686", Year = 2024, Authors = "Ren et al.")]
+[ResearchPaper("Hyper-SD: Trajectory Segmented Consistency Model for Efficient Image Synthesis", "https://arxiv.org/abs/2404.13686", Year = 2024, Authors = "Ren et al.")]
 public class HyperSDModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

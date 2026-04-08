@@ -49,7 +49,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TLBVFI: Token-Level Bidirectional Video Frame Interpolation",
+[ResearchPaper("TLBVFI: Token-Level Bidirectional Video Frame Interpolation",
     "https://arxiv.org/abs/2404.07547",
     Year = 2024,
     Authors = "Xiang Zhang, Zekun Xu, Fuhai Chen")]

@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MemFlow: Optical Flow Estimation and Prediction with Memory",
+[ResearchPaper("MemFlow: Optical Flow Estimation and Prediction with Memory",
     "https://arxiv.org/abs/2404.04808",
     Year = 2024,
     Authors = "Qiaole Dong, Yanwei Fu")]

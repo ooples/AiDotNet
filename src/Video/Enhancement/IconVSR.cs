@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BasicVSR: The Search for Essential Components in Video Super-Resolution and Beyond",
+[ResearchPaper("BasicVSR: The Search for Essential Components in Video Super-Resolution and Beyond",
     "https://arxiv.org/abs/2012.02181",
     Year = 2021,
     Authors = "Kelvin C.K. Chan, Xintao Wang, Ke Yu, Chao Dong, Chen Change Loy")]

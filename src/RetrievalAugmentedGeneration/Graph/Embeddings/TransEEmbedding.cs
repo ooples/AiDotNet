@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// you can predict that "Berlin" + "capital_of" ≈ "Germany".
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class TransEEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

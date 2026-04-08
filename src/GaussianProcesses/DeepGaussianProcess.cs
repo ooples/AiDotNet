@@ -54,7 +54,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Deep Gaussian Processes", "https://doi.org/10.48550/arXiv.1211.0358", Year = 2013, Authors = "Andreas Damianou, Neil D. Lawrence")]
+[ResearchPaper("Deep Gaussian Processes", "https://doi.org/10.48550/arXiv.1211.0358", Year = 2013, Authors = "Andreas Damianou, Neil D. Lawrence")]
 public class DeepGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>

@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MVBench: A Comprehensive Multi-modal Video Understanding Benchmark", "https://arxiv.org/abs/2311.17005", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper("MVBench: A Comprehensive Multi-modal Video Understanding Benchmark", "https://arxiv.org/abs/2311.17005", Year = 2023, Authors = "Li et al.")]
 public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoChat2Options _options; public override ModelOptions GetOptions() => _options;

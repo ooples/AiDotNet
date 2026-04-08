@@ -66,7 +66,7 @@ namespace AiDotNet.Audio.StableAudio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion", "https://arxiv.org/abs/2402.04825", Year = 2024, Authors = "Zach Evans, CJ Carr, Josiah Taylor, Scott H. Hawley, Jordi Pons")]
+[ResearchPaper("Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion", "https://arxiv.org/abs/2402.04825", Year = 2024, Authors = "Zach Evans, CJ Carr, Josiah Taylor, Scott H. Hawley, Jordi Pons")]
 public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

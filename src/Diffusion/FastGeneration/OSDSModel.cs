@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("One Step Diffusion via Shortcut Models", "https://arxiv.org/abs/2410.12557", Year = 2024, Authors = "Frans et al.")]
+[ResearchPaper("One Step Diffusion via Shortcut Models", "https://arxiv.org/abs/2410.12557", Year = 2024, Authors = "Frans et al.")]
 public class OSDSModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

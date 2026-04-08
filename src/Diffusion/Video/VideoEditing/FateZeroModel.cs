@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FateZero: Fusing Attentions for Zero-shot Text-based Video Editing", "https://arxiv.org/abs/2303.09535", Year = 2023, Authors = "Qi et al.")]
+[ResearchPaper("FateZero: Fusing Attentions for Zero-shot Text-based Video Editing", "https://arxiv.org/abs/2303.09535", Year = 2023, Authors = "Qi et al.")]
 public class FateZeroModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

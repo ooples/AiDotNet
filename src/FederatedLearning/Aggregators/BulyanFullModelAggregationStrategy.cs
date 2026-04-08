@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -13,6 +15,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 ///
 /// This can better tolerate malicious clients, at the cost of more computation.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

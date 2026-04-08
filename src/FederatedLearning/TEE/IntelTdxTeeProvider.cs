@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// supports large model aggregation without the memory constraints of SGX.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class IntelTdxTeeProvider<T> : TeeProviderBase<T>
 {
     /// <summary>

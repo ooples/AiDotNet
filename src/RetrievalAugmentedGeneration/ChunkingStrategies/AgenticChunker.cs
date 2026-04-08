@@ -52,6 +52,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// - Maintains semantic coherence
 /// </para>
 /// </remarks>
+[Attributes.ComponentType(Enums.ComponentType.Chunker)]
+[Attributes.PipelineStage(Enums.PipelineStage.DataIngestion)]
 public class AgenticChunker : ChunkingStrategyBase
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

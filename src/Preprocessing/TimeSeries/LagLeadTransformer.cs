@@ -1,4 +1,6 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.TimeSeries;
 
@@ -32,6 +34,8 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class LagLeadTransformer<T> : TimeSeriesTransformerBase<T>
 {
     #region Fields

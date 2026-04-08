@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Dream to Control: Learning Behaviors by Latent Imagination",
+[ResearchPaper("Dream to Control: Learning Behaviors by Latent Imagination",
     "https://arxiv.org/abs/1912.01603",
     Year = 2020,
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]

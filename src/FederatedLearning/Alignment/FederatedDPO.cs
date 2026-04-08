@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Alignment;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.FederatedLearning.Alignment;
 /// https://arxiv.org/abs/2404.18567</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly FederatedDPOOptions _options;

@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Translation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
+[ResearchPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
 public class TransfusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

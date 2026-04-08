@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("xGen-MM (BLIP-3): A Family of Open Large Multimodal Models", "https://arxiv.org/abs/2408.08872", Year = 2024, Authors = "Xue et al.")]
+[ResearchPaper("xGen-MM (BLIP-3): A Family of Open Large Multimodal Models", "https://arxiv.org/abs/2408.08872", Year = 2024, Authors = "Xue et al.")]
 public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly BLIP3Options _options; public override ModelOptions GetOptions() => _options;

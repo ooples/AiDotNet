@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression.MixedEffects;
 
 /// <summary>
@@ -20,6 +23,8 @@ namespace AiDotNet.Regression.MixedEffects;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FeatureGenerator)]
+[PipelineStage(PipelineStage.Training)]
 public class RandomEffect<T>
 {
     /// <summary>

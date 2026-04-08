@@ -50,7 +50,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Continual Learning with Deep Generative Replay", "https://arxiv.org/abs/1705.08690", Year = 2017, Authors = "Hanul Shin, Jung Kwon Lee, Jaehong Kim, Jiwon Kim")]
+[ResearchPaper("Continual Learning with Deep Generative Replay", "https://arxiv.org/abs/1705.08690", Year = 2017, Authors = "Hanul Shin, Jung Kwon Lee, Jaehong Kim, Jiwon Kim")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

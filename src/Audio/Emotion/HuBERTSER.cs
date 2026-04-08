@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
+[ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
 public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields

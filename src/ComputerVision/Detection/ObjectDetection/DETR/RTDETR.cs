@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DETRs Beat YOLOs on Real-time Object Detection",
+[ResearchPaper("DETRs Beat YOLOs on Real-time Object Detection",
     "https://arxiv.org/abs/2304.08069",
     Year = 2024,
     Authors = "Yian Zhao, Wenyu Lv, Shangliang Xu, Jinman Wei, Guanzhong Wang, Qingqing Dang, Yi Liu, Jie Chen")]

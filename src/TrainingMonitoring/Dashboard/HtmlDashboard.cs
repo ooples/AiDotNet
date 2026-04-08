@@ -4,6 +4,8 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TrainingMonitoring.Dashboard;
@@ -41,6 +43,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 /// // Result is available in the returned value
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class HtmlDashboard : ITrainingDashboard
 {
     private readonly ConcurrentDictionary<string, List<ScalarDataPoint>> _scalars = new();

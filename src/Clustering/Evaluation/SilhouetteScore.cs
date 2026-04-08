@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -37,6 +39,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Higher is better!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class SilhouetteScore<T> : IClusterMetric<T>
 {
     private readonly IDistanceMetric<T>? _distanceMetric;

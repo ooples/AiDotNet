@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -36,6 +38,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.DocumentStore)]
+    [PipelineStage(PipelineStage.Indexing)]
     public class MilvusDocumentStore<T> : DocumentStoreBase<T>
     {
         private readonly Dictionary<string, VectorDocument<T>> _documents;

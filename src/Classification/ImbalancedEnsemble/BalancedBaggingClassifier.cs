@@ -72,7 +72,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelTask(ModelTask.BinaryClassification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Roughly Balanced Bagging for Imbalanced Data",
+[ResearchPaper("Roughly Balanced Bagging for Imbalanced Data",
     "https://doi.org/10.1007/s10115-008-0180-z",
     Year = 2009,
     Authors = "Shohei Hido, Hisashi Kashima")]

@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabDPT: Scaling Tabular Foundation Models",
+[ResearchPaper("TabDPT: Scaling Tabular Foundation Models",
     "https://arxiv.org/abs/2501.02487",
     Year = 2025,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]

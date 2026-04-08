@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.Image;
 
@@ -31,6 +33,8 @@ namespace AiDotNet.Preprocessing.Image;
 /// - After preprocessing: 224x224 tensor with normalized values around [-2, 2]
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ClipImagePreprocessor<T>
 {
     /// <summary>

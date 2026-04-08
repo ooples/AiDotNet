@@ -62,7 +62,7 @@ namespace AiDotNet.CausalInference;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Metalearners for estimating heterogeneous treatment effects using machine learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
+[ResearchPaper("Metalearners for estimating heterogeneous treatment effects using machine learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
 public class XLearner<T> : CausalModelBase<T>
 {
     /// <summary>

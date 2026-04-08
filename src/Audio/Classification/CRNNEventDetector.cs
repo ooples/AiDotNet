@@ -59,7 +59,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Convolutional Recurrent Neural Network for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
+[ResearchPaper("Convolutional Recurrent Neural Network for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
 public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

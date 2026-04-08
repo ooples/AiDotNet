@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MedNeXt: Transformer-driven Scaling of ConvNets for Medical Image Segmentation", "https://arxiv.org/abs/2303.09975", Year = 2023, Authors = "Roy et al.")]
+[ResearchPaper("MedNeXt: Transformer-driven Scaling of ConvNets for Medical Image Segmentation", "https://arxiv.org/abs/2303.09975", Year = 2023, Authors = "Roy et al.")]
 public class MedNeXt<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedNeXtOptions _options;

@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Memory;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.Diffusion.Memory;
 /// ```
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ModelShard<T>
 {
     /// <summary>

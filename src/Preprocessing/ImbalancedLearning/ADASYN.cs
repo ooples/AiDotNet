@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -39,6 +41,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - He et al. (2008). "ADASYN: Adaptive Synthetic Sampling Approach for Imbalanced Learning"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ADASYN<T> : OversamplingBase<T>
 {
     /// <summary>

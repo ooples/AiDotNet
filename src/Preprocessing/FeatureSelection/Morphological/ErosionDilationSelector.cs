@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Morphological;
 
@@ -16,6 +18,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Morphological;
 /// change significantly under these operations may capture important local patterns.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
@@ -24,6 +26,8 @@ using Newtonsoft.Json;
 /// helps the algorithm find better solutions in complex landscapes with many local optima.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

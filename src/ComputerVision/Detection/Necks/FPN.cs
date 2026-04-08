@@ -30,7 +30,7 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Feature Pyramid Networks for Object Detection",
+[ResearchPaper("Feature Pyramid Networks for Object Detection",
     "https://arxiv.org/abs/1612.03144",
     Year = 2017,
     Authors = "Tsung-Yi Lin, Piotr Dollar, Ross Girshick, Kaiming He, Bharath Hariharan, Serge Belongie")]

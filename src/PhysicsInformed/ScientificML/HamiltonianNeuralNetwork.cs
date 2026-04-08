@@ -83,7 +83,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Hamiltonian Neural Networks", "https://doi.org/10.48550/arXiv.1906.01563", Year = 2019, Authors = "Sam Greydanus, Misko Dzamba, Jason Yosinski")]
+    [ResearchPaper("Hamiltonian Neural Networks", "https://doi.org/10.48550/arXiv.1906.01563", Year = 2019, Authors = "Sam Greydanus, Misko Dzamba, Jason Yosinski")]
     public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly HamiltonianNeuralNetworkOptions _options;

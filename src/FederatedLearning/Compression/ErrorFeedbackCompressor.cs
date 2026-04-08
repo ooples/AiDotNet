@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -26,6 +28,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// uncompressed SGD, up to a constant factor.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;

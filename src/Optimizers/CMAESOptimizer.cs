@@ -3,6 +3,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -20,6 +23,8 @@ namespace AiDotNet.Optimizers;
 /// between inputs and outputs isn't straightforward.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

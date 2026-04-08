@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 
@@ -17,6 +19,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// means regular, predictable patterns like trends.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

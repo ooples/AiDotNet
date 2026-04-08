@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Safety;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Diffusion.Safety;
 /// Reference: Pham et al., "Robust Concept Erasure via Adversarial Training (RACE)", 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class RACEEraser<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// Heterogeneous Datasets via Bucketing." ICML 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly ParameterDictionaryAggregationStrategyBase<T> _innerStrategy;

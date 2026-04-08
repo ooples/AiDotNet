@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 
 /// <summary>
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 /// - delta_total = sum(delta_round)
 /// This is simple but can be pessimistic compared to tighter accountants.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class BasicCompositionPrivacyAccountant : PrivacyAccountantBase
 {
     private double _epsilonTotal;

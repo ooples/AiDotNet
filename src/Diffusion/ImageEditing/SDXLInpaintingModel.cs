@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2024, Authors = "Podell et al.")]
+[ResearchPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2024, Authors = "Podell et al.")]
 public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

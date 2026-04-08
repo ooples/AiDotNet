@@ -41,7 +41,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("On the Identifiability of the Post-Nonlinear Causal Model", "https://auai.org/uai2009/papers/UAI2009_0172_7af15a82e72625cee10a906ac00f34b0.pdf", Year = 2009, Authors = "Kun Zhang, Aapo Hyvarinen")]
+[ResearchPaper("On the Identifiability of the Post-Nonlinear Causal Model", "https://auai.org/uai2009/papers/UAI2009_0172_7af15a82e72625cee10a906ac00f34b0.pdf", Year = 2009, Authors = "Kun Zhang, Aapo Hyvarinen")]
 public class PNLAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;

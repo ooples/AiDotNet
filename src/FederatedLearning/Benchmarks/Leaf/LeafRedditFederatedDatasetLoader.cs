@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 using Newtonsoft.Json.Linq;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 /// you can run CI-friendly benchmark checks.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class LeafRedditFederatedDatasetLoader
 {
     private const string PadToken = "<PAD>";

@@ -63,7 +63,7 @@ namespace AiDotNet.CausalInference;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("The Central Role of the Propensity Score in Observational Studies for Causal Effects", "https://doi.org/10.1093/biomet/70.1.41")]
+    [ResearchPaper("The Central Role of the Propensity Score in Observational Studies for Causal Effects", "https://doi.org/10.1093/biomet/70.1.41")]
 public class PropensityScoreMatching<T> : CausalModelBase<T>
 {
     /// <summary>

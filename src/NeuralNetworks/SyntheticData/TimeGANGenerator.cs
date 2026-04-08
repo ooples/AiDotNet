@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Time-series Generative Adversarial Networks",
+[ResearchPaper("Time-series Generative Adversarial Networks",
     "https://papers.nips.cc/paper/2019/hash/c9efe5f26cd17ba6216bbe2a7d26d490-Abstract.html",
     Year = 2019,
     Authors = "Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar")]

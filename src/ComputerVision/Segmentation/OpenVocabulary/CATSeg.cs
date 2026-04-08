@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2303.11797", Year = 2024, Authors = "Cho et al.")]
+[ResearchPaper("CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2303.11797", Year = 2024, Authors = "Cho et al.")]
 public class CATSeg<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly CATSegOptions _options;

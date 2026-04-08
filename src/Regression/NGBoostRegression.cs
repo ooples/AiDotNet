@@ -61,7 +61,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("NGBoost: Natural Gradient Boosting for Probabilistic Prediction", "https://arxiv.org/abs/1910.03225", Year = 2019, Authors = "Tony Duan, Anand Avati, Daisy Yi Ding, Khanh K. Thai, Sanjay Basu, Andrew Y. Ng, Alejandro Schuler")]
+[ResearchPaper("NGBoost: Natural Gradient Boosting for Probabilistic Prediction", "https://arxiv.org/abs/1910.03225", Year = 2019, Authors = "Tony Duan, Anand Avati, Daisy Yi Ding, Khanh K. Thai, Sanjay Basu, Andrew Y. Ng, Alejandro Schuler")]
 public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     private const double MinVariance = 1e-6;

@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("The Llama 3 Herd of Models", "https://arxiv.org/abs/2407.21783", Year = 2024, Authors = "Grattafiori et al.")]
+[ResearchPaper("The Llama 3 Herd of Models", "https://arxiv.org/abs/2407.21783", Year = 2024, Authors = "Grattafiori et al.")]
 public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Llama32VisionOptions _options; public override ModelOptions GetOptions() => _options;

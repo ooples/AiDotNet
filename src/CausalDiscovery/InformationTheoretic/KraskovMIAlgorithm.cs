@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Estimating Mutual Information", "https://doi.org/10.1103/PhysRevE.69.066138", Year = 2004, Authors = "Alexander Kraskov, Harald Stoegbauer, Peter Grassberger")]
+[ResearchPaper("Estimating Mutual Information", "https://doi.org/10.1103/PhysRevE.69.066138", Year = 2004, Authors = "Alexander Kraskov, Harald Stoegbauer, Peter Grassberger")]
 public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 {
     private const double CoincidenceTolerance = 1e-15;

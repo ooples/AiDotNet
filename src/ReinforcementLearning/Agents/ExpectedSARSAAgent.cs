@@ -48,7 +48,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Theoretical and Empirical Analysis of Expected Sarsa",
+[ResearchPaper("A Theoretical and Empirical Analysis of Expected Sarsa",
     "https://doi.org/10.1109/ADPRL.2009.4927542",
     Year = 2009,
     Authors = "van Seijen, H., van Hasselt, H., Whiteson, S., & Wiering, M.")]

@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Anmol Gulati, James Qin, Chung-Cheng Chiu, Niki Parmar, Yu Zhang, Jiahui Yu, Wei Han, Shibo Wang, Zhengdong Zhang, Yonghui Wu, Ruoming Pang")]
+[ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Anmol Gulati, James Qin, Chung-Cheng Chiu, Niki Parmar, Yu Zhang, Jiahui Yu, Wei Han, Shibo Wang, Zhengdong Zhang, Yonghui Wu, Ruoming Pang")]
 public class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

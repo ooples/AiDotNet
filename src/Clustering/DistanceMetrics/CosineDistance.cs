@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -28,6 +30,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// - Sparse high-dimensional data
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class CosineDistance<T> : DistanceMetricBase<T>
 {
     /// <inheritdoc />

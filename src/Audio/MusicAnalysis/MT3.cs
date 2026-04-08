@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Multi-Track Music Transcription with a New General-Purpose Pretrained Model", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
+[ResearchPaper("Multi-Track Music Transcription with a New General-Purpose Pretrained Model", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
 public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     #region Fields

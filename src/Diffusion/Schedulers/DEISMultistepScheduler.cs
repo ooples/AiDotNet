@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -34,6 +35,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Zhang and Chen, "Fast Sampling of Diffusion Models with Exponential Integrator", ICLR 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class DEISMultistepScheduler<T> : NoiseSchedulerBase<T>
 {
     private Vector<T>? _sigmas;

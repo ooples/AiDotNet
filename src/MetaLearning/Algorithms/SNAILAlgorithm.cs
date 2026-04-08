@@ -96,10 +96,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Simple Neural Attentive Meta-Learner",
+[ResearchPaper("A Simple Neural Attentive Meta-Learner",
     "https://arxiv.org/abs/1707.03141",
     Year = 2018,
     Authors = "Nikhil Mishra, Mostafa Rohaninejad, Xi Chen, Pieter Abbeel")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

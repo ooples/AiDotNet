@@ -47,10 +47,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("How to Train Your MAML to Excel in Few-Shot Classification",
+[ResearchPaper("How to Train Your MAML to Excel in Few-Shot Classification",
     "https://arxiv.org/abs/2106.16245",
     Year = 2022,
     Authors = "Han-Jia Ye, Lu Ming, De-Chuan Zhan, Wei-Lun Chao")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

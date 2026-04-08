@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
+[ResearchPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
 public class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MoonshineOptions _options; public override ModelOptions GetOptions() => _options;

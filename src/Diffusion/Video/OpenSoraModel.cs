@@ -111,7 +111,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Sora: Democratizing Efficient Video Production for All", "https://arxiv.org/abs/2412.00131", Year = 2024, Authors = "Zheng et al.")]
+[ResearchPaper("Open-Sora: Democratizing Efficient Video Production for All", "https://arxiv.org/abs/2412.00131", Year = 2024, Authors = "Zheng et al.")]
 public class OpenSoraModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

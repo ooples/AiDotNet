@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using AiDotNet.Tokenization.HuggingFace;
@@ -14,6 +16,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// Production-ready sentence transformer for generating semantic embeddings using ONNX Runtime.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelPath;

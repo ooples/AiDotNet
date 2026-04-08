@@ -31,7 +31,7 @@ namespace AiDotNet.ComputerVision.Tracking;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Simple Online and Realtime Tracking",
+[ResearchPaper("Simple Online and Realtime Tracking",
     "https://arxiv.org/abs/1602.00763",
     Year = 2016,
     Authors = "Alex Bewley, Zongyuan Ge, Lionel Ott, Fabio Ramos, Ben Upcroft")]

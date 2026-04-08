@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Phi-4-mini Technical Report: Compact yet Powerful Multimodal Language Models via Mixture-of-LoRAs", "https://arxiv.org/abs/2503.01743", Year = 2025, Authors = "Abdin et al.")]
+[ResearchPaper("Phi-4-mini Technical Report: Compact yet Powerful Multimodal Language Models via Mixture-of-LoRAs", "https://arxiv.org/abs/2503.01743", Year = 2025, Authors = "Abdin et al.")]
 public class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Phi4AudioOptions _options; public override ModelOptions GetOptions() => _options;

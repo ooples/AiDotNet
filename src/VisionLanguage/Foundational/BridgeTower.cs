@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning", "https://arxiv.org/abs/2206.08657", Year = 2023, Authors = "Xu et al.")]
+[ResearchPaper("BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning", "https://arxiv.org/abs/2206.08657", Year = 2023, Authors = "Xu et al.")]
 public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly BridgeTowerOptions _options; public override ModelOptions GetOptions() => _options;

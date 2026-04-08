@@ -110,7 +110,9 @@ public class EWCOptions<T>
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://arxiv.org/abs/1612.00796", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
+[ResearchPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://arxiv.org/abs/1612.00796", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInput, TOutput>
 {
     private readonly T _lambda;

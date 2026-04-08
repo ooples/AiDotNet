@@ -47,7 +47,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Extending Deep Reinforcement Learning Frameworks in Cryptocurrency Market Making", "https://arxiv.org/abs/2004.06985")]
+[ResearchPaper("Extending Deep Reinforcement Learning Frameworks in Cryptocurrency Market Making", "https://arxiv.org/abs/2004.06985")]
 public class MarketMakingAgent<T> : TradingAgentBase<T>
 {
     #region Fields

@@ -66,7 +66,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("PyTorch Distributed: Accelerating Data Parallel Training", "https://arxiv.org/abs/2006.15704")]
+[ResearchPaper("PyTorch Distributed: Accelerating Data Parallel Training", "https://arxiv.org/abs/2006.15704")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {

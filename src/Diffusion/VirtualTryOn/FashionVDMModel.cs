@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FashionVDM: Video Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2411.00225", Year = 2024, Authors = "Gu et al.")]
+[ResearchPaper("FashionVDM: Video Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2411.00225", Year = 2024, Authors = "Gu et al.")]
 public class FashionVDMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

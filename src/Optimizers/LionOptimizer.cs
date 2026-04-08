@@ -3,6 +3,9 @@ using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -27,6 +30,8 @@ namespace AiDotNet.Optimizers;
 /// shows direction - it's simpler, uses less memory, and often gets you to your destination faster.
 /// Lion is particularly good for training large neural networks.</para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

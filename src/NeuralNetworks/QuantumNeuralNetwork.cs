@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Parameterized Quantum Circuits as Machine Learning Models", "https://arxiv.org/abs/1906.07682")]
+    [ResearchPaper("Parameterized Quantum Circuits as Machine Learning Models", "https://arxiv.org/abs/1906.07682")]
 public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly QuantumNeuralNetworkOptions _options;

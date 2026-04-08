@@ -3,6 +3,9 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -25,6 +28,8 @@ namespace AiDotNet.Optimizers;
 /// This method is efficient for large datasets and can often find good solutions quickly.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;

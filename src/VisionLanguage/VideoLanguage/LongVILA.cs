@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LongVILA: Scaling Long-Context Visual Language Models for Long Videos", "https://arxiv.org/abs/2408.10188", Year = 2024, Authors = "Xue et al.")]
+[ResearchPaper("LongVILA: Scaling Long-Context Visual Language Models for Long Videos", "https://arxiv.org/abs/2408.10188", Year = 2024, Authors = "Xue et al.")]
 public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LongVILAOptions _options; public override ModelOptions GetOptions() => _options;

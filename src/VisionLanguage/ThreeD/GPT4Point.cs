@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GPT4Point: A Unified Framework for Point-Language Understanding and Generation", "https://arxiv.org/abs/2312.02980", Year = 2024, Authors = "Qi et al.")]
+[ResearchPaper("GPT4Point: A Unified Framework for Point-Language Understanding and Generation", "https://arxiv.org/abs/2312.02980", Year = 2024, Authors = "Qi et al.")]
 public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly GPT4PointOptions _options; public override ModelOptions GetOptions() => _options;

@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Zipformer: A faster and better encoder for automatic speech recognition", "https://arxiv.org/abs/2310.11230", Year = 2023, Authors = "Yao et al.")]
+[ResearchPaper("Zipformer: A faster and better encoder for automatic speech recognition", "https://arxiv.org/abs/2310.11230", Year = 2023, Authors = "Yao et al.")]
 public class StreamingZipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly StreamingZipformerOptions _options; public override ModelOptions GetOptions() => _options;

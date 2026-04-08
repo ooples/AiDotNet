@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Language-Image Pre-training via Masking", "https://arxiv.org/abs/2212.00794", Year = 2022, Authors = "Li et al.")]
+[ResearchPaper("Scaling Language-Image Pre-training via Masking", "https://arxiv.org/abs/2212.00794", Year = 2022, Authors = "Li et al.")]
 public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly FLIPOptions _options;

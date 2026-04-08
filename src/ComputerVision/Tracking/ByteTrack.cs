@@ -32,7 +32,7 @@ namespace AiDotNet.ComputerVision.Tracking;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ByteTrack: Multi-Object Tracking by Associating Every Detection Box",
+[ResearchPaper("ByteTrack: Multi-Object Tracking by Associating Every Detection Box",
     "https://arxiv.org/abs/2110.06864",
     Year = 2022,
     Authors = "Yifu Zhang, Peize Sun, Yi Jiang, Dongdong Yu, Fucheng Weng, Zehuan Yuan, Ping Luo, Wenyu Liu, Xinggang Wang")]

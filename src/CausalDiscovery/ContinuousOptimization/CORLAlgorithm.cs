@@ -48,7 +48,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Ordering-Based Causal Discovery with Reinforcement Learning", "https://doi.org/10.24963/ijcai.2021/491", Year = 2021, Authors = "Xiaoqiang Wang, Yali Du, Shengyu Zhu, Liangjun Ke, Zhitang Chen, Jianye Hao, Jun Wang")]
+[ResearchPaper("Ordering-Based Causal Discovery with Reinforcement Learning", "https://doi.org/10.24963/ijcai.2021/491", Year = 2021, Authors = "Xiaoqiang Wang, Yali Du, Shengyu Zhu, Liangjun Ke, Zhitang Chen, Jianye Hao, Jun Wang")]
 public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRate;

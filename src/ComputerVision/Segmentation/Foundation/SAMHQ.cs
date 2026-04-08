@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Segment Anything in High Quality", "https://arxiv.org/abs/2306.01567", Year = 2023, Authors = "Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu")]
+[ResearchPaper("Segment Anything in High Quality", "https://arxiv.org/abs/2306.01567", Year = 2023, Authors = "Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu")]
 public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SAMHQOptions _options;

@@ -188,7 +188,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
+[ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
 public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
     private readonly GaussianSplattingOptions _options;

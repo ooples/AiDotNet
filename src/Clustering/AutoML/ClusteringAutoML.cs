@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.AutoML;
 using AiDotNet.Clustering.AutoK;
 using AiDotNet.Clustering.Density;
@@ -6,6 +7,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Probabilistic;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
@@ -45,6 +47,8 @@ namespace AiDotNet.Clustering.AutoML;
 /// var bestModel = result.BestResult;
 /// </code>
 /// </example>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ClusteringAutoML<T> : UnsupervisedAutoMLBase<T>
 {
     private readonly ClusteringAutoMLOptions _options;

@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FuSta: Hybrid Approach for Video Stabilization",
+[ResearchPaper("FuSta: Hybrid Approach for Video Stabilization",
     "https://arxiv.org/abs/2202.06897",
     Year = 2022,
     Authors = "Zhiming Wang, Feng Xu, Jiangyu Liu")]

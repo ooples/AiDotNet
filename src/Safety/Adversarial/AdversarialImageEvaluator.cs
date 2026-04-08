@@ -39,7 +39,7 @@ namespace AiDotNet.Safety.Adversarial;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Feature Squeezing: Detecting Adversarial Examples in Deep Neural Networks",
+[ResearchPaper("Feature Squeezing: Detecting Adversarial Examples in Deep Neural Networks",
     "https://arxiv.org/abs/1704.01155",
     Year = 2018,
     Authors = "Weilin Xu, David Evans, Yanjun Qi")]

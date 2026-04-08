@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, Ross Girshick")]
+[ResearchPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, Ross Girshick")]
 public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SAMOptions _options;

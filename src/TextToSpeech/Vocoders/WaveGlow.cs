@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("WaveGlow: A Flow-based Generative Network for Speech Synthesis", "https://arxiv.org/abs/1811.00002", Year = 2019, Authors = "Prenger et al.")]
+[ResearchPaper("WaveGlow: A Flow-based Generative Network for Speech Synthesis", "https://arxiv.org/abs/1811.00002", Year = 2019, Authors = "Prenger et al.")]
 public class WaveGlow<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGlowOptions _options; public override ModelOptions GetOptions() => _options;

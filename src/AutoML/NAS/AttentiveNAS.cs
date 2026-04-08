@@ -38,7 +38,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling", "https://arxiv.org/abs/2011.09011")]
+    [ResearchPaper("AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling", "https://arxiv.org/abs/2011.09011")]
     public class AttentiveNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

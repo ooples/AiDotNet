@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-OneVision 1.5: Improved and Fully Open", "https://arxiv.org/abs/2502.13886", Year = 2025, Authors = "Li et al.")]
+[ResearchPaper("LLaVA-OneVision 1.5: Improved and Fully Open", "https://arxiv.org/abs/2502.13886", Year = 2025, Authors = "Li et al.")]
 public class LLaVAOneVision15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVAOneVision15Options _options; public override ModelOptions GetOptions() => _options;

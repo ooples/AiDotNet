@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FLAVR: Flow-Agnostic Video Representations for Fast Frame Interpolation",
+[ResearchPaper("FLAVR: Flow-Agnostic Video Representations for Fast Frame Interpolation",
     "https://arxiv.org/abs/2012.08512",
     Year = 2021,
     Authors = "Tarun Kalluri, Deepak Pathak, Manmohan Chandraker, Du Tran")]

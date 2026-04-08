@@ -88,10 +88,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transductive Information Maximization for Few-Shot Learning",
+[ResearchPaper("Transductive Information Maximization for Few-Shot Learning",
     "https://arxiv.org/abs/2008.11297",
     Year = 2020,
     Authors = "Malik Boudiaf, Ziko Imtiaz Masud, Jerome Rony, Jose Dolz, Pablo Piantanida, Ismail Ben Ayed")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

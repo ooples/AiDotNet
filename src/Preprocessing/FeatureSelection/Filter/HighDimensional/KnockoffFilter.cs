@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly double _fdr;

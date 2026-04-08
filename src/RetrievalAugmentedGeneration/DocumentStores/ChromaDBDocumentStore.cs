@@ -4,6 +4,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -19,6 +21,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// ChromaDB is an open-source vector database that emphasizes ease of use while maintaining
 /// high performance for similarity search operations.
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly HttpClient _httpClient;

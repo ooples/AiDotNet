@@ -71,7 +71,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
+    [ResearchPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
 public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     private readonly SileroVadOptions _options;

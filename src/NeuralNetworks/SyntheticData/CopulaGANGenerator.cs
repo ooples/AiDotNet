@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Modeling Tabular Data using Conditional GAN",
+[ResearchPaper("Modeling Tabular Data using Conditional GAN",
     "https://arxiv.org/abs/1907.00503",
     Year = 2019,
     Authors = "Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, Kalyan Veeramachaneni")]

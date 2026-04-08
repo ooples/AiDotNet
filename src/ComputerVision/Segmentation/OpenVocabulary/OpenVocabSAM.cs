@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
+[ResearchPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
 public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly OpenVocabSAMOptions _options;

@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conservative Q-Learning for Offline Reinforcement Learning",
+[ResearchPaper("Conservative Q-Learning for Offline Reinforcement Learning",
     "https://arxiv.org/abs/2006.04779",
     Year = 2020,
     Authors = "Kumar, A., Zhou, A., Tucker, G., & Levine, S.")]

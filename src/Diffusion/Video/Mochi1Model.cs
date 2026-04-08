@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Mochi 1: A New SOTA in Open-Source Video Generation", "https://github.com/genmoai/mochi")]
+    [ResearchPaper("Mochi 1: A New SOTA in Open-Source Video Generation", "https://github.com/genmoai/mochi")]
 public class Mochi1Model<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

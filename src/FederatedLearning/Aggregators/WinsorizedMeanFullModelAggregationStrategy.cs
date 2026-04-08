@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -11,6 +13,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// it *clips* them to the nearest remaining value before averaging. This reduces the impact of outliers
 /// while keeping the same number of values in the average.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

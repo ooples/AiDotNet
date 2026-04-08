@@ -51,7 +51,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("IQ-VFI: Image Quality-Aware Video Frame Interpolation",
+[ResearchPaper("IQ-VFI: Image Quality-Aware Video Frame Interpolation",
     "https://arxiv.org/abs/2408.11108",
     Year = 2024,
     Authors = "Xinyi Zhang, Fanghua Yu, Jie Huang, Feng Zhao")]

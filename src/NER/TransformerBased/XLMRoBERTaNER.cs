@@ -56,7 +56,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unsupervised Cross-lingual Representation Learning at Scale",
+[ResearchPaper("Unsupervised Cross-lingual Representation Learning at Scale",
     "https://arxiv.org/abs/1911.02116",
     Year = 2020,
     Authors = "Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzman, Edouard Grave, Myle Ott, Luke Zettlemoyer, Veselin Stoyanov")]

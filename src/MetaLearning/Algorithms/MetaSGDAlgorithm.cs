@@ -93,10 +93,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning",
+[ResearchPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning",
     "https://arxiv.org/abs/1707.09835",
     Year = 2017,
     Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

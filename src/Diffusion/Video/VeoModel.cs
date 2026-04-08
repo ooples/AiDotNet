@@ -114,7 +114,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Veo: High-Fidelity Video Generation", "https://deepmind.google/technologies/veo/")]
+    [ResearchPaper("Veo: High-Fidelity Video Generation", "https://deepmind.google/technologies/veo/")]
 public class VeoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

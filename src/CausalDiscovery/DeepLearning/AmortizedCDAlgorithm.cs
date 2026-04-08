@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Amortized Causal Discovery: Learning to Infer Causal Graphs from Time-Series Data", "https://proceedings.mlr.press/v177/lowe22a.html", Year = 2022, Authors = "Sindy Lowe, David Madras, Richard Zemel, Max Welling")]
+[ResearchPaper("Amortized Causal Discovery: Learning to Infer Causal Graphs from Time-Series Data", "https://proceedings.mlr.press/v177/lowe22a.html", Year = 2022, Authors = "Sindy Lowe, David Madras, Richard Zemel, Max Welling")]
 public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

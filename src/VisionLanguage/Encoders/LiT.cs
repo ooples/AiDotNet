@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LiT: Zero-Shot Transfer with Locked-image text Tuning", "https://arxiv.org/abs/2111.07991", Year = 2022, Authors = "Zhai et al.")]
+[ResearchPaper("LiT: Zero-Shot Transfer with Locked-image text Tuning", "https://arxiv.org/abs/2111.07991", Year = 2022, Authors = "Zhai et al.")]
 public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly LiTOptions _options;

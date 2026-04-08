@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("CubeDiff: Repurposing Diffusion-Based Image Models for Panorama Generation", "https://arxiv.org/abs/2501.17162")]
+    [ResearchPaper("CubeDiff: Repurposing Diffusion-Based Image Models for Panorama Generation", "https://arxiv.org/abs/2501.17162")]
 public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

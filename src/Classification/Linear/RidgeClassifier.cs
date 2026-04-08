@@ -62,7 +62,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Ridge Regression: Biased Estimation for Nonorthogonal Problems", "https://doi.org/10.1080/00401706.1970.10488634")]
+    [ResearchPaper("Ridge Regression: Biased Estimation for Nonorthogonal Problems", "https://doi.org/10.1080/00401706.1970.10488634")]
 public class RidgeClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

@@ -40,10 +40,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning",
+[ResearchPaper("Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning",
     "https://arxiv.org/abs/2003.04390",
     Year = 2021,
     Authors = "Yinbo Chen, Zhuang Liu, Huijuan Xu, Trevor Darrell, Xiaolong Wang")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -11,6 +13,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Handles various table formats (Markdown, CSV, HTML tables) and ensures table integrity
 /// by keeping related rows together and preserving column headers.
 /// </remarks>
+[ComponentType(ComponentType.Chunker)]
+[PipelineStage(PipelineStage.DataIngestion)]
 public class TableAwareTextSplitter : ChunkingStrategyBase
 {
     private readonly int _maxRowsPerChunk;

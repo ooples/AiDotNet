@@ -32,7 +32,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Gaussian Processes for Machine Learning", "https://doi.org/10.7551/mitpress/3206.001.0001", Year = 2006, Authors = "Carl Edward Rasmussen, Christopher K. I. Williams")]
+[ResearchPaper("Gaussian Processes for Machine Learning", "https://doi.org/10.7551/mitpress/3206.001.0001", Year = 2006, Authors = "Carl Edward Rasmussen, Christopher K. I. Williams")]
 public class StandardGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>

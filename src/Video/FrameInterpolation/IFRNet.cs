@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("IFRNet: Intermediate Feature Refine Network for Efficient Frame Interpolation",
+[ResearchPaper("IFRNet: Intermediate Feature Refine Network for Efficient Frame Interpolation",
     "https://arxiv.org/abs/2205.14620",
     Year = 2022,
     Authors = "Lingtong Kong, Boyuan Jiang, Donghao Luo, Wenqing Chu, Xiaoming Huang, Ying Tai, Chengjie Wang, Jie Yang")]

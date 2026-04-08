@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Heterogeneity;
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// normalizing their updates before aggregation.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FedNovaHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     public override Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs)

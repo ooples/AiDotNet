@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2022, Authors = "Gao et al.")]
+[ResearchPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2022, Authors = "Gao et al.")]
 public class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParaformerOptions _options; public override ModelOptions GetOptions() => _options;

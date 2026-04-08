@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Spirit-LM: Interleaved Spoken and Written Language Model", "https://arxiv.org/abs/2402.05755", Year = 2024, Authors = "Nguyen et al.")]
+[ResearchPaper("Spirit-LM: Interleaved Spoken and Written Language Model", "https://arxiv.org/abs/2402.05755", Year = 2024, Authors = "Nguyen et al.")]
 public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpiritLMOptions _options; public override ModelOptions GetOptions() => _options;

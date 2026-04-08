@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SAM 2: Segment Anything in Images and Videos", "https://arxiv.org/abs/2408.00714", Year = 2024, Authors = "Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer")]
+[ResearchPaper("SAM 2: Segment Anything in Images and Videos", "https://arxiv.org/abs/2408.00714", Year = 2024, Authors = "Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer")]
 public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SAM21Options _options;

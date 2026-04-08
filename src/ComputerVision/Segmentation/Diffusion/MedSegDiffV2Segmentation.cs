@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2023, Authors = "Junde Wu, Wei Ji, Huazhu Fu, Min Xu, Yueming Jin, Yanwu Xu")]
+[ResearchPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2023, Authors = "Junde Wu, Wei Ji, Huazhu Fu, Min Xu, Yueming Jin, Yanwu Xu")]
 public class MedSegDiffV2Segmentation<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSegDiffV2SegmentationOptions _options;

@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabNet: Attentive Interpretable Tabular Learning",
+[ResearchPaper("TabNet: Attentive Interpretable Tabular Learning",
     "https://arxiv.org/abs/1908.07442",
     Year = 2021,
     Authors = "Arik, S. O. & Pfister, T.")]

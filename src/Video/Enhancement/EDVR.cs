@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EDVR: Video Restoration with Enhanced Deformable Convolutional Networks",
+[ResearchPaper("EDVR: Video Restoration with Enhanced Deformable Convolutional Networks",
     "https://arxiv.org/abs/1905.02716",
     Year = 2019,
     Authors = "Xintao Wang, Kelvin C.K. Chan, Ke Yu, Chao Dong, Chen Change Loy")]

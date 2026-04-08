@@ -57,7 +57,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
+    [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
 public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

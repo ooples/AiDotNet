@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// edges and correct color blending between layers.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class AlphaCompositor<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

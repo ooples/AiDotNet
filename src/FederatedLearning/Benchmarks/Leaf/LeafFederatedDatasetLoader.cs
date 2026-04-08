@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using Newtonsoft.Json.Linq;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 /// "client datasets" — one dataset per user — so federated learning trainers can run simulations.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBase<T>
 {
     /// <summary>

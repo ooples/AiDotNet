@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Alignment;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.Diffusion.Alignment;
 /// Reference: Black et al., "Training Diffusion Models with Reinforcement Learning", 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class DiffusionRLHF<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

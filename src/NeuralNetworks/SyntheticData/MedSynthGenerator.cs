@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generation and Evaluation of Synthetic Patient Data",
+[ResearchPaper("Generation and Evaluation of Synthetic Patient Data",
     "https://arxiv.org/abs/1909.02662",
     Year = 2020,
     Authors = "Andrew Yale, Saloni Dash, Ritik Dutta, Isabelle Guyon, Adrien Pavao, Kristin P. Bennett")]

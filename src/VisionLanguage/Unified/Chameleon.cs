@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Chameleon: Mixed-Modal Early-Fusion Foundation Models", "https://arxiv.org/abs/2405.09818", Year = 2024, Authors = "Meta")]
+[ResearchPaper("Chameleon: Mixed-Modal Early-Fusion Foundation Models", "https://arxiv.org/abs/2405.09818", Year = 2024, Authors = "Meta")]
 public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ChameleonOptions _options; public override ModelOptions GetOptions() => _options;

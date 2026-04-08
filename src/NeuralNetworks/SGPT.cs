@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Ranking)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("SGPT: GPT Sentence Embeddings for Semantic Search", "https://arxiv.org/abs/2202.08904", Year = 2022, Authors = "Niklas Muennighoff")]
+    [ResearchPaper("SGPT: GPT Sentence Embeddings for Semantic Search", "https://arxiv.org/abs/2202.08904", Year = 2022, Authors = "Niklas Muennighoff")]
     public class SGPT<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SGPTOptions _options;

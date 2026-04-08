@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Compression;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Knowledge Distillation." NeurIPS 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _temperature;

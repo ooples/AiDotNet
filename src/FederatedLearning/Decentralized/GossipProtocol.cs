@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -20,6 +22,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// Reference: Boyd et al. (2006), "Randomized Gossip Algorithms".
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class GossipProtocol : IDecentralizedTopology
 {
     private readonly int _fanout;

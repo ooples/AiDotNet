@@ -29,7 +29,9 @@ namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Statistical Interpretation of Term Specificity and Its Application in Retrieval", "https://doi.org/10.1108/eb026526", Year = 1972, Authors = "Karen Spärck Jones")]
+[ResearchPaper("A Statistical Interpretation of Term Specificity and Its Application in Retrieval", "https://doi.org/10.1108/eb026526", Year = 1972, Authors = "Karen Spärck Jones")]
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

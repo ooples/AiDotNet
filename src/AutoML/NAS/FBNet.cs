@@ -40,7 +40,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS", "https://arxiv.org/abs/1812.03443")]
+    [ResearchPaper("FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS", "https://arxiv.org/abs/1812.03443")]
     public class FBNet<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

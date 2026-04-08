@@ -46,7 +46,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("DeepAnT: A Deep Learning Approach for Unsupervised Anomaly Detection in Time Series", "https://doi.org/10.1109/ACCESS.2018.2886457", Year = 2019, Authors = "Mohsin Munir, Shoaib Ahmed Siddiqui, Andreas Dengel, Sheraz Ahmed")]
+[ResearchPaper("DeepAnT: A Deep Learning Approach for Unsupervised Anomaly Detection in Time Series", "https://doi.org/10.1109/ACCESS.2018.2886457", Year = 2019, Authors = "Mohsin Munir, Shoaib Ahmed Siddiqui, Andreas Dengel, Sheraz Ahmed")]
 public class DeepANT<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepANTOptions<T> _options;

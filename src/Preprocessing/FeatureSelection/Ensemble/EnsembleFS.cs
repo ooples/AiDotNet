@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

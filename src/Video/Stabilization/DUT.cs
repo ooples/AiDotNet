@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DUT: Learning Video Stabilization by Simply Watching Unstable Videos",
+[ResearchPaper("DUT: Learning Video Stabilization by Simply Watching Unstable Videos",
     "https://arxiv.org/abs/2011.14574",
     Year = 2022,
     Authors = "Yufei Xu, Jing Zhang, Stephen J. Maybank, Dacheng Tao")]

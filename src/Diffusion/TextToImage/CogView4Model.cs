@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CogView3: Finer and Faster Text-to-Image Generation via Relay Diffusion", "https://arxiv.org/abs/2403.05121", Year = 2024, Authors = "Zheng et al.")]
+[ResearchPaper("CogView3: Finer and Faster Text-to-Image Generation via Relay Diffusion", "https://arxiv.org/abs/2403.05121", Year = 2024, Authors = "Zheng et al.")]
 public class CogView4Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

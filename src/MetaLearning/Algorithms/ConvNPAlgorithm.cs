@@ -19,10 +19,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning Stationary Stochastic Process Prediction with Convolutional Neural Processes",
+[ResearchPaper("Meta-Learning Stationary Stochastic Process Prediction with Convolutional Neural Processes",
     "https://arxiv.org/abs/2007.01332",
     Year = 2020,
     Authors = "Andrew Y.K. Foong, Wessel P. Bruinsma, Jonathan Gordon, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ConvNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ConvNPOptions<T, TInput, TOutput> _algoOptions;

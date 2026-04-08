@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Ovis: Structural Embedding Alignment for Multimodal Large Language Model", "https://arxiv.org/abs/2405.20797", Year = 2024, Authors = "Lu et al.")]
+[ResearchPaper("Ovis: Structural Embedding Alignment for Multimodal Large Language Model", "https://arxiv.org/abs/2405.20797", Year = 2024, Authors = "Lu et al.")]
 public class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly OvisOptions _options; public override ModelOptions GetOptions() => _options;

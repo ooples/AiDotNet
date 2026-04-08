@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
@@ -7,6 +9,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
     /// Manhattan distance metric for vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class ManhattanDistanceMetric<T> : ISimilarityMetric<T>
     {
         /// <inheritdoc/>

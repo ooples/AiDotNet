@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Vocos: Closing the gap between time-domain and Fourier-based neural vocoders for high-quality audio synthesis", "https://arxiv.org/abs/2306.00814", Year = 2023, Authors = "Hubert Siuzdak")]
+[ResearchPaper("Vocos: Closing the gap between time-domain and Fourier-based neural vocoders for high-quality audio synthesis", "https://arxiv.org/abs/2306.00814", Year = 2023, Authors = "Hubert Siuzdak")]
 public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

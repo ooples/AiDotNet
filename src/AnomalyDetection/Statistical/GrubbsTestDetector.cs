@@ -41,7 +41,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Sample Criteria for Testing Outlying Observations", "https://doi.org/10.1214/aoms/1177729885", Year = 1950, Authors = "Frank E. Grubbs")]
+[ResearchPaper("Sample Criteria for Testing Outlying Observations", "https://doi.org/10.1214/aoms/1177729885", Year = 1950, Authors = "Frank E. Grubbs")]
 public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

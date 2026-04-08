@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -29,6 +31,8 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// <item><description>Half-Gates: Zahur, Rosulek &amp; Evans (EUROCRYPT 2015)</description></item>
 /// </list>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class GarbledCircuitGenerator : IGarbledCircuit
 {
     private readonly bool _enableFreeXor;

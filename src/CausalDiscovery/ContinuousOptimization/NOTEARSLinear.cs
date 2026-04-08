@@ -59,7 +59,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DAGs with NO TEARS: Continuous Optimization for Structure Learning", "https://proceedings.neurips.cc/paper/2018/hash/e347c51419ffb23ca3fd5050202f9c3d-Abstract.html", Year = 2018, Authors = "Xun Zheng, Bryon Aragam, Pradeep Ravikumar, Eric Xing")]
+[ResearchPaper("DAGs with NO TEARS: Continuous Optimization for Structure Learning", "https://proceedings.neurips.cc/paper/2018/hash/e347c51419ffb23ca3fd5050202f9c3d-Abstract.html", Year = 2018, Authors = "Xun Zheng, Bryon Aragam, Pradeep Ravikumar, Eric Xing")]
 public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 {
     #region Constants

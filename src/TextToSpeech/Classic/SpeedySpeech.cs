@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpeedySpeech: Efficient Neural Speech Synthesis", "https://arxiv.org/abs/2008.03802", Year = 2020, Authors = "Vainer and Durnov")]
+[ResearchPaper("SpeedySpeech: Efficient Neural Speech Synthesis", "https://arxiv.org/abs/2008.03802", Year = 2020, Authors = "Vainer and Durnov")]
 public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly SpeedySpeechOptions _options; public override ModelOptions GetOptions() => _options;

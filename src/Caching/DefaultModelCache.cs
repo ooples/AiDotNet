@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 namespace AiDotNet.Caching;
 
@@ -22,6 +24,7 @@ namespace AiDotNet.Caching;
 /// if you need to take a break.
 /// </para>
 /// </remarks>
+[InfraType(InfraType.Cache)]
 public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOutput>
 {
     /// <summary>

@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
+[ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
 public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ConformerTransducerOptions _options; public override ModelOptions GetOptions() => _options;

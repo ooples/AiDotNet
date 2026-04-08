@@ -4,6 +4,9 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -32,6 +35,8 @@ namespace AiDotNet.Optimizers;
 /// - Adjusting automatically to different parts of the solution space
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

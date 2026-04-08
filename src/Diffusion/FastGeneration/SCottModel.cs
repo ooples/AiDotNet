@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SCott: Accelerating Diffusion Models with Stochastic Consistency Distillation", "https://arxiv.org/abs/2403.01505", Year = 2024, Authors = "Luo et al.")]
+[ResearchPaper("SCott: Accelerating Diffusion Models with Stochastic Consistency Distillation", "https://arxiv.org/abs/2403.01505", Year = 2024, Authors = "Luo et al.")]
 public class SCottModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

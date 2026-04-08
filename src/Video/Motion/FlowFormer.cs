@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlowFormer: A Transformer Architecture for Optical Flow",
+[ResearchPaper("FlowFormer: A Transformer Architecture for Optical Flow",
     "https://arxiv.org/abs/2203.16194",
     Year = 2022,
     Authors = "Zhaoyang Huang, Xiaoyu Shi, Chao Zhang, Qiang Wang, Ka Chun Cheung, Hongwei Qin, Jifeng Dai, Hongsheng Li")]

@@ -31,7 +31,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Swin Transformer: Hierarchical Vision Transformer using Shifted Windows",
+[ResearchPaper("Swin Transformer: Hierarchical Vision Transformer using Shifted Windows",
     "https://arxiv.org/abs/2103.14030",
     Year = 2021,
     Authors = "Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo")]

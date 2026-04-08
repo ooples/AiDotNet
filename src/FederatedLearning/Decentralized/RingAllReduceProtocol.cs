@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// central person.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class RingAllReduceProtocol : IDecentralizedTopology
 {
     /// <inheritdoc/>

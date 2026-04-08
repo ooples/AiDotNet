@@ -35,7 +35,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SafeSpeech: Robust and Universal Voice Protection Against Malicious Speech Synthesis",
+[ResearchPaper("SafeSpeech: Robust and Universal Voice Protection Against Malicious Speech Synthesis",
     "https://arxiv.org/abs/2504.09839",
     Year = 2025,
     Authors = "Various")]

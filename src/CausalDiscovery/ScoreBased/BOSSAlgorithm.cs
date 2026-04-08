@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Fast Scalable and Accurate Discovery of DAGs Using the Best Order Score Search and Grow-Shrink Trees", "https://arxiv.org/abs/2206.13275", Year = 2022, Authors = "Bryan Andrews, Joseph Ramsey, Ruben Sanchez-Romero, Jazmin Camchong, Erich Kummerfeld")]
+[ResearchPaper("Fast Scalable and Accurate Discovery of DAGs Using the Best Order Score Search and Grow-Shrink Trees", "https://arxiv.org/abs/2206.13275", Year = 2022, Authors = "Bryan Andrews, Joseph Ramsey, Ruben Sanchez-Romero, Jazmin Camchong, Erich Kummerfeld")]
 public class BOSSAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

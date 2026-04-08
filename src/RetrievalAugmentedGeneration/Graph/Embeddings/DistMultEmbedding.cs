@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// - Works best for symmetric relations where direction doesn't matter
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class DistMultEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

@@ -44,7 +44,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Progress & Compress: A Scalable Framework for Continual Learning", "https://arxiv.org/abs/1805.06370", Year = 2018, Authors = "Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Agnieszka Grabska-Barwinska, Yee Whye Teh, Razvan Pascanu, Raia Hadsell")]
+[ResearchPaper("Progress & Compress: A Scalable Framework for Continual Learning", "https://arxiv.org/abs/1805.06370", Year = 2018, Authors = "Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Agnieszka Grabska-Barwinska, Yee Whye Teh, Razvan Pascanu, Raia Hadsell")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class OnlineEWC<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

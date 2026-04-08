@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Restoration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VRT: A Video Restoration Transformer",
+[ResearchPaper("VRT: A Video Restoration Transformer",
     "https://arxiv.org/abs/2201.12288",
     Year = 2022,
     Authors = "Jingyun Liang, Jiezhang Cao, Yuchen Fan, Kai Zhang, Rakesh Ranjan, Yawei Li, Radu Timofte, Luc Van Gool")]

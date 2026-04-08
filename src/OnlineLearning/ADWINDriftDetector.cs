@@ -64,7 +64,7 @@ namespace AiDotNet.OnlineLearning;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-[ModelPaper("Learning from Time-Changing Data with Adaptive Windowing", "https://doi.org/10.1137/1.9781611972771.42", Year = 2007, Authors = "Albert Bifet, Ricard Gavaldà")]
+[ResearchPaper("Learning from Time-Changing Data with Adaptive Windowing", "https://doi.org/10.1137/1.9781611972771.42", Year = 2007, Authors = "Albert Bifet, Ricard Gavaldà")]
 public class ADWINDriftDetector<T> : IDriftDetector<T>
 {
     /// <summary>

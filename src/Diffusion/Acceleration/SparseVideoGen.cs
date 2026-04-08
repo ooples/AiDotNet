@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -19,6 +22,8 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// This achieves 2-4x speedup with minimal visual quality degradation.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class SparseVideoGen<T>
 {
     private readonly int _totalFrames;

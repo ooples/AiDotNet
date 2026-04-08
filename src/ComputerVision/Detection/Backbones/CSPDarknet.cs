@@ -27,7 +27,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("YOLOv4: Optimal Speed and Accuracy of Object Detection",
+[ResearchPaper("YOLOv4: Optimal Speed and Accuracy of Object Detection",
     "https://arxiv.org/abs/2004.10934",
     Year = 2020,
     Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]

@@ -36,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Prioritized Sweeping: Reinforcement Learning with Less Data and Less Time",
+[ResearchPaper("Prioritized Sweeping: Reinforcement Learning with Less Data and Less Time",
     "https://doi.org/10.1023/A:1022635613229",
     Year = 1993,
     Authors = "Moore, A. W. & Atkeson, C. G.")]

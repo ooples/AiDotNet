@@ -47,7 +47,7 @@ namespace AiDotNet.Audio.Features;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Efficient Algorithm for the Calculation of a Constant Q Transform", "https://doi.org/10.1121/1.404385", Year = 1992, Authors = "Judith C. Brown, Miller S. Puckette")]
+[ResearchPaper("An Efficient Algorithm for the Calculation of a Constant Q Transform", "https://doi.org/10.1121/1.404385", Year = 1992, Authors = "Judith C. Brown, Miller S. Puckette")]
 public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps inherited from ModelBase

@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generative Pretraining in Multimodality", "https://arxiv.org/abs/2307.05222", Year = 2023, Authors = "Sun et al.")]
+[ResearchPaper("Generative Pretraining in Multimodality", "https://arxiv.org/abs/2307.05222", Year = 2023, Authors = "Sun et al.")]
 public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly EmuOptions _options; public override ModelOptions GetOptions() => _options;

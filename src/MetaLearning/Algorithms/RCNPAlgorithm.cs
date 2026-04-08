@@ -19,10 +19,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Recurrent Neural Processes",
+[ResearchPaper("Recurrent Neural Processes",
     "https://arxiv.org/abs/2110.09493",
     Year = 2022,
     Authors = "Timon Willi, Jonathan Masci, Juergen Schmidhuber, Christian Osendorfer")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class RCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly RCNPOptions<T, TInput, TOutput> _algoOptions;

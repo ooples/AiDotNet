@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Digital Audio Signal Processing", "https://doi.org/10.1002/9780470680018", Year = 2008, Authors = "Udo Zölzer")]
+[ResearchPaper("Digital Audio Signal Processing", "https://doi.org/10.1002/9780470680018", Year = 2008, Authors = "Udo Zölzer")]
 public class ParametricEqualizer<T> : AudioEffectBase<T>
 {
     #region Configuration

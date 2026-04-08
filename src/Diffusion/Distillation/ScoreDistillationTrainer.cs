@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Distillation;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.Diffusion.Distillation;
 /// Wang et al., "ProlificDreamer: High-Fidelity and Diverse Text-to-3D Generation with Variational Score Distillation", NeurIPS 2023 (VSD)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class ScoreDistillationTrainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

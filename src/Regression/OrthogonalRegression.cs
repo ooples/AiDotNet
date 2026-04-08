@@ -49,7 +49,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Total Least Squares and Errors-in-Variables Modeling", "https://doi.org/10.1007/978-94-017-3552-0")]
+    [ResearchPaper("Total Least Squares and Errors-in-Variables Modeling", "https://doi.org/10.1007/978-94-017-3552-0")]
 public class OrthogonalRegression<T> : RegressionBase<T>
 {
     /// <summary>

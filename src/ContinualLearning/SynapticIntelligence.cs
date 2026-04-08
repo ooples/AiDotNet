@@ -43,7 +43,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Continual Learning Through Synaptic Intelligence", "https://arxiv.org/abs/1703.04200", Year = 2017, Authors = "Friedemann Zenke, Ben Poole, Surya Ganguli")]
+[ResearchPaper("Continual Learning Through Synaptic Intelligence", "https://arxiv.org/abs/1703.04200", Year = 2017, Authors = "Friedemann Zenke, Ben Poole, Surya Ganguli")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

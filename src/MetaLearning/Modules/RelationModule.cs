@@ -32,10 +32,12 @@ namespace AiDotNet.MetaLearning.Modules;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning to Compare: Relation Network for Few-Shot Learning",
+[ResearchPaper("Learning to Compare: Relation Network for Few-Shot Learning",
     "https://arxiv.org/abs/1711.06025",
     Year = 2018,
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps inherited from ModelBase

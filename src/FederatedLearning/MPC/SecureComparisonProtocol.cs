@@ -1,4 +1,6 @@
-﻿using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -29,6 +31,8 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
 {
     private readonly ISecureComputationProtocol<T> _protocol;

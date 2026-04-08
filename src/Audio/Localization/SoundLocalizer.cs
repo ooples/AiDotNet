@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.Localization;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("The Generalized Correlation Method for Estimation of Time Delay", "https://doi.org/10.1109/TASSP.1976.1162830", Year = 1976, Authors = "Charles Knapp, G. Clifford Carter")]
+[ResearchPaper("The Generalized Correlation Method for Estimation of Time Delay", "https://doi.org/10.1109/TASSP.1976.1162830", Year = 1976, Authors = "Charles Knapp, G. Clifford Carter")]
 public class SoundLocalizer<T> : IDisposable
 {
     private readonly INumericOperations<T> _numOps;

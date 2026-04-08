@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Boltzmann Machines", "https://proceedings.mlr.press/v5/salakhutdinov09a.html", Year = 2009, Authors = "Ruslan Salakhutdinov, Geoffrey Hinton")]
+[ResearchPaper("Deep Boltzmann Machines", "https://proceedings.mlr.press/v5/salakhutdinov09a.html", Year = 2009, Authors = "Ruslan Salakhutdinov, Geoffrey Hinton")]
 public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBoltzmannMachineOptions _options;

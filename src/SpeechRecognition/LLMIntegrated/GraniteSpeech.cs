@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Granite Speech: Integrating Speech Capabilities into Enterprise LLMs", "https://arxiv.org/abs/2502.01700", Year = 2025, Authors = "IBM Research")]
+[ResearchPaper("Granite Speech: Integrating Speech Capabilities into Enterprise LLMs", "https://arxiv.org/abs/2502.01700", Year = 2025, Authors = "IBM Research")]
 public class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GraniteSpeechOptions _options; public override ModelOptions GetOptions() => _options;

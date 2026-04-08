@@ -42,7 +42,7 @@ namespace AiDotNet.Safety.Compliance;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EU AI Act (Regulation 2024/1689)",
+[ResearchPaper("EU AI Act (Regulation 2024/1689)",
     "https://eur-lex.europa.eu/eli/reg/2024/1689",
     Year = 2024,
     Authors = "European Parliament and Council")]

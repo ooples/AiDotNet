@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GOGGLE: Generative Modelling for Tabular Data by Learning Relational Structure",
+[ResearchPaper("GOGGLE: Generative Modelling for Tabular Data by Learning Relational Structure",
     "https://arxiv.org/abs/2210.12007",
     Year = 2023,
     Authors = "Tennison Liu, Zhaozhi Qian, Jeroen Berrevoets, Mihaela van der Schaar")]

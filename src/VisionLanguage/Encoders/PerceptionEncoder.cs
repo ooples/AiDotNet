@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Perception Encoder: The best satisfies all", "https://arxiv.org/abs/2504.13181", Year = 2025, Authors = "Meta")]
+[ResearchPaper("Perception Encoder: The best satisfies all", "https://arxiv.org/abs/2504.13181", Year = 2025, Authors = "Meta")]
 public class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly PerceptionEncoderOptions _options; public override ModelOptions GetOptions() => _options;

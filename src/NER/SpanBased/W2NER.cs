@@ -79,7 +79,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unified Named Entity Recognition as Word-Word Relation Classification",
+[ResearchPaper("Unified Named Entity Recognition as Word-Word Relation Classification",
     "https://arxiv.org/abs/2112.10070",
     Year = 2022,
     Authors = "Jingye Li, Hao Fei, Jiang Liu, Shengqiong Wu, Meishan Zhang, Chong Teng, Donghong Ji, Fei Li")]

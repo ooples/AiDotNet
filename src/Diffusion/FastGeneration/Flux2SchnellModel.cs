@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FLUX.2 Schnell", "https://blackforestlabs.ai/flux-2/", Year = 2025, Authors = "Black Forest Labs")]
+[ResearchPaper("FLUX.2 Schnell", "https://blackforestlabs.ai/flux-2/", Year = 2025, Authors = "Black Forest Labs")]
 public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

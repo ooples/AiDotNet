@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second",
+[ResearchPaper("TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second",
     "https://arxiv.org/abs/2207.01848",
     Year = 2023,
     Authors = "Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter")]

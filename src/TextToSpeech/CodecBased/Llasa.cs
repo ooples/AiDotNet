@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Llasa: Scaling Train-Time and Inference-Time Compute for Llama-based Speech Synthesis", "https://arxiv.org/abs/2502.04128", Year = 2025, Authors = "Ye et al.")]
+[ResearchPaper("Llasa: Scaling Train-Time and Inference-Time Compute for Llama-based Speech Synthesis", "https://arxiv.org/abs/2502.04128", Year = 2025, Authors = "Ye et al.")]
 public class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly LlasaOptions _options; public override ModelOptions GetOptions() => _options;

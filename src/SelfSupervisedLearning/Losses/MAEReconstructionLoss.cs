@@ -34,7 +34,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelTask(ModelTask.Restoration)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
+[ResearchPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
 public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PSRT: Progressive Spatio-temporal Alignment for Video Super-Resolution",
+[ResearchPaper("PSRT: Progressive Spatio-temporal Alignment for Video Super-Resolution",
     "https://arxiv.org/abs/2208.09906",
     Year = 2022,
     Authors = "Dacheng Shi, Dan Zhong, Zhiwei Xiong")]

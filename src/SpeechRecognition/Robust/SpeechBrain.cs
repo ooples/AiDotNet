@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
+[ResearchPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
 public class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechBrainOptions _options; public override ModelOptions GetOptions() => _options;

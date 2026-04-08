@@ -71,7 +71,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
+[ResearchPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
 public class ETSformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

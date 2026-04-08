@@ -69,7 +69,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Distilling Free-Form Natural Laws from Experimental Data", "https://doi.org/10.1126/science.1165893", Year = 2009, Authors = "Michael Schmidt, Hod Lipson")]
+    [ResearchPaper("Distilling Free-Form Natural Laws from Experimental Data", "https://doi.org/10.1126/science.1165893", Year = 2009, Authors = "Michael Schmidt, Hod Lipson")]
     public class SymbolicPhysicsLearner<T> : ModelBase<T, Matrix<T>, Vector<T>>
     {
         private readonly List<SymbolicUnaryOperator<T>> _unaryOperators;

@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", "https://arxiv.org/abs/2401.04722", Year = 2024, Authors = "Ma et al.")]
+[ResearchPaper("U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", "https://arxiv.org/abs/2401.04722", Year = 2024, Authors = "Ma et al.")]
 public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly UMambaOptions _options;

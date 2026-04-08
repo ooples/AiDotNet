@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -25,6 +27,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// all differences more equally.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class MinkowskiDistance<T> : DistanceMetricBase<T>
 {
     private readonly double _p;

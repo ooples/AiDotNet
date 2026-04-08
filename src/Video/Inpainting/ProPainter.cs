@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ProPainter: Improving Propagation and Transformer for Video Inpainting",
+[ResearchPaper("ProPainter: Improving Propagation and Transformer for Video Inpainting",
     "https://arxiv.org/abs/2309.03897",
     Year = 2023,
     Authors = "Shangchen Zhou, Chongyi Li, Kelvin C.K. Chan, Chen Change Loy")]

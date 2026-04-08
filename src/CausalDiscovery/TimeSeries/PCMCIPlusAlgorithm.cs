@@ -34,7 +34,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Discovering Contemporaneous and Lagged Causal Relations in Autocorrelated Nonlinear Time Series Datasets", "https://proceedings.mlr.press/v124/runge20a.html", Year = 2020, Authors = "Jakob Runge")]
+[ResearchPaper("Discovering Contemporaneous and Lagged Causal Relations in Autocorrelated Nonlinear Time Series Datasets", "https://proceedings.mlr.press/v124/runge20a.html", Year = 2020, Authors = "Jakob Runge")]
 public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private double _alpha = 0.05;

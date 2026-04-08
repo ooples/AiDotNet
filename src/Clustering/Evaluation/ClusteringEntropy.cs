@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -30,6 +32,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// We want LOW entropy (pure clusters).
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ClusteringEntropy<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

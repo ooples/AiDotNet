@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
@@ -7,6 +9,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
     /// Cosine similarity metric for vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class CosineSimilarityMetric<T> : ISimilarityMetric<T>
     {
         /// <inheritdoc/>

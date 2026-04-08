@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PortaSpeech: Portable and High-Quality Generative Text-to-Speech", "https://arxiv.org/abs/2109.15166", Year = 2021, Authors = "Ren et al.")]
+[ResearchPaper("PortaSpeech: Portable and High-Quality Generative Text-to-Speech", "https://arxiv.org/abs/2109.15166", Year = 2021, Authors = "Ren et al.")]
 public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly PortaSpeechOptions _options; public override ModelOptions GetOptions() => _options;

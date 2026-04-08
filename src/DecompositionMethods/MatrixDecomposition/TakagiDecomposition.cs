@@ -19,7 +19,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-    [ModelPaper("Matrix Computations", "https://doi.org/10.56021/9781421407944")]
+    [ResearchPaper("Matrix Computations", "https://doi.org/10.56021/9781421407944")]
 public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

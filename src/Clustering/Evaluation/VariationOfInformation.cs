@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -33,6 +35,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Think of it as: "How much would I need to change one grouping to get the other?"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class VariationOfInformation<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

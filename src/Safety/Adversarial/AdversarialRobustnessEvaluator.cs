@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Adversarial;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Universal Adversarial Triggers for Attacking and Analyzing NLP",
+[ResearchPaper("Universal Adversarial Triggers for Attacking and Analyzing NLP",
     "https://arxiv.org/abs/1908.07125",
     Year = 2019,
     Authors = "Eric Wallace, Shi Feng, Nikhil Kandpal, et al.")]

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Lee et al.")]
+[ResearchPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Lee et al.")]
 public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly BigVGANOptions _options; public override ModelOptions GetOptions() => _options;

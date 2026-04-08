@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, Neil Zeghidour")]
+[ResearchPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, Neil Zeghidour")]
 public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

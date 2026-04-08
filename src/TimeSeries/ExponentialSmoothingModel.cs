@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Forecasting Methods and Applications", "https://doi.org/10.1002/9781118619193", Year = 1998, Authors = "Spyros Makridakis, Steven C. Wheelwright, Rob J. Hyndman")]
+[ResearchPaper("Forecasting Methods and Applications", "https://doi.org/10.1002/9781118619193", Year = 1998, Authors = "Spyros Makridakis, Steven C. Wheelwright, Rob J. Hyndman")]
 public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

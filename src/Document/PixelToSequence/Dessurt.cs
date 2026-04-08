@@ -54,7 +54,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Dessurt: A Dessert for Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2203.16618", Year = 2022, Authors = "Brian Davis, Bryan Morse, Brian Price, Chris Tensmeyer, Curtis Wigington")]
+[ResearchPaper("Dessurt: A Dessert for Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2203.16618", Year = 2022, Authors = "Brian Davis, Bryan Morse, Brian Price, Chris Tensmeyer, Curtis Wigington")]
 public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly DessurtOptions _options;

@@ -50,7 +50,7 @@ namespace AiDotNet.Classification.Neighbors;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
+    [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
 public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>

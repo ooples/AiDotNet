@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoFlow: Exploiting Temporal Cues for Multi-frame Optical Flow Estimation",
+[ResearchPaper("VideoFlow: Exploiting Temporal Cues for Multi-frame Optical Flow Estimation",
     "https://arxiv.org/abs/2303.08340",
     Year = 2023,
     Authors = "Xiaoyu Shi, Zhaoyang Huang, Weikang Bian, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]

@@ -106,10 +106,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Differentiable Closed-Form Solvers",
+[ResearchPaper("Meta-Learning with Differentiable Closed-Form Solvers",
     "https://arxiv.org/abs/1805.08136",
     Year = 2019,
     Authors = "Luca Bertinetto, Joao F. Henriques, Philip H.S. Torr, Andrea Vedaldi")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

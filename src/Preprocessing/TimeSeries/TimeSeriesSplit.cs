@@ -1,3 +1,6 @@
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
+
 namespace AiDotNet.Preprocessing.TimeSeries;
 
 /// <summary>
@@ -38,6 +41,8 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// }
 /// </code>
 /// </example>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TimeSeriesSplit
 {
     #region Properties

@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
+[ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
 public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

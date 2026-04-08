@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Side Adapter Network for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2302.12242", Year = 2023, Authors = "Xu et al.")]
+[ResearchPaper("Side Adapter Network for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2302.12242", Year = 2023, Authors = "Xu et al.")]
 public class SAN<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly SANOptions _options;

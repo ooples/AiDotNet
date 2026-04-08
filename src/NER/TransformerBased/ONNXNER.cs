@@ -66,7 +66,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ONNX: Open Neural Network Exchange",
+[ResearchPaper("ONNX: Open Neural Network Exchange",
     "https://arxiv.org/abs/1901.05350",
     Year = 2019,
     Authors = "Junjie Bai, Fang Lu, Ke Zhang, et al.")]

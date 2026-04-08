@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Real-time Scene Text Detection with Differentiable Binarization",
+[ResearchPaper("Real-time Scene Text Detection with Differentiable Binarization",
     "https://arxiv.org/abs/1911.08947",
     Year = 2020,
     Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]

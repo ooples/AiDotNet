@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Exploration of State Space Models and Mamba for Speech Recognition", "https://arxiv.org/abs/2406.02832", Year = 2024, Authors = "Miyazaki et al.")]
+[ResearchPaper("An Exploration of State Space Models and Mamba for Speech Recognition", "https://arxiv.org/abs/2406.02832", Year = 2024, Authors = "Miyazaki et al.")]
 public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;

@@ -61,7 +61,7 @@ namespace AiDotNet.Video.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Sora: Democratizing Efficient Video Production for All",
+[ResearchPaper("Open-Sora: Democratizing Efficient Video Production for All",
     "https://arxiv.org/abs/2412.00131",
     Year = 2024,
     Authors = "Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, Yang You")]

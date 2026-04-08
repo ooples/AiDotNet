@@ -34,7 +34,7 @@ namespace AiDotNet.Safety.Guardrails;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
+[ResearchPaper("NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
     "https://arxiv.org/abs/2310.10501",
     Year = 2024,
     Authors = "Traian Rebedea, Razvan Dinu, Makesh Narsimhan Sreedhar, et al.")]

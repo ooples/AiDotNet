@@ -65,7 +65,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LEGAL-BERT: The Muppets straight out of Law School",
+[ResearchPaper("LEGAL-BERT: The Muppets straight out of Law School",
     "https://arxiv.org/abs/2010.02559",
     Year = 2020,
     Authors = "Ilias Chalkidis, Manos Fergadiotis, Prodromos Malakasiotis, Nikolaos Aletras, Ion Androutsopoulos")]

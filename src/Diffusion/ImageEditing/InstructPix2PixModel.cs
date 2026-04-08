@@ -94,7 +94,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstructPix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800", Year = 2023, Authors = "Brooks et al.")]
+[ResearchPaper("InstructPix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800", Year = 2023, Authors = "Brooks et al.")]
 public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

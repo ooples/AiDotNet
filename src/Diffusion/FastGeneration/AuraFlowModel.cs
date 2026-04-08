@@ -63,7 +63,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AuraFlow v0.3", "https://blog.fal.ai/auraflow/", Year = 2024, Authors = "Fal.ai")]
+[ResearchPaper("AuraFlow v0.3", "https://blog.fal.ai/auraflow/", Year = 2024, Authors = "Fal.ai")]
 public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

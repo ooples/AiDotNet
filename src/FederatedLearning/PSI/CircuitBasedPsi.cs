@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -28,6 +30,8 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// Better than Custom Protocols?", NDSS 2012. Pinkas et al., "Efficient Circuit-Based PSI",
 /// EUROCRYPT 2018.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class CircuitBasedPsi : PsiBase
 {
     /// <inheritdoc/>

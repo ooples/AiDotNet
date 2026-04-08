@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Hybrid Computing Using a Neural Network with Dynamic External Memory", "https://www.nature.com/articles/nature20101", Year = 2016, Authors = "Alex Graves, Greg Wayne, Malcolm Reynolds, Tim Harley, Ivo Danihelka, Agnieszka Grabska-Barwinska, Sergio Gomez Colmenarejo, Edward Grefenstette, Tiago Ramalho, John Agapiou, Adrià Puigdomènech Badia, Karl Moritz Hermann, Yori Zwols, Georg Ostrovski, Adam Cain, Helen King, Christopher Summerfield, Phil Blunsom, Koray Kavukcuoglu, Demis Hassabis")]
+[ResearchPaper("Hybrid Computing Using a Neural Network with Dynamic External Memory", "https://www.nature.com/articles/nature20101", Year = 2016, Authors = "Alex Graves, Greg Wayne, Malcolm Reynolds, Tim Harley, Ivo Danihelka, Agnieszka Grabska-Barwinska, Sergio Gomez Colmenarejo, Edward Grefenstette, Tiago Ramalho, John Agapiou, Adrià Puigdomènech Badia, Karl Moritz Hermann, Yori Zwols, Georg Ostrovski, Adam Cain, Helen King, Christopher Summerfield, Phil Blunsom, Koray Kavukcuoglu, Demis Hassabis")]
 public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly DifferentiableNeuralComputerOptions _options;

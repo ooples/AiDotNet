@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Understanding;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InternVideo2: Scaling Video Foundation Models for Multimodal Video Understanding",
+[ResearchPaper("InternVideo2: Scaling Video Foundation Models for Multimodal Video Understanding",
     "https://arxiv.org/abs/2403.15377",
     Year = 2024,
     Authors = "Yi Wang, Kunchang Li, Xinhao Li, Jiashuo Yu, Yinan He, Guo Chen, Baoqi Pei, Rongkun Zheng, Jilan Xu, Zun Wang, Yansong Shi, Tianxiang Jiang, Songze Li, Hongjie Zhang, Yifei Huang, Yu Qiao, Yali Wang, Limin Wang")]

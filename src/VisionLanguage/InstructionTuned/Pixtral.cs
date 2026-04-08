@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pixtral 12B", "https://arxiv.org/abs/2410.07073", Year = 2024, Authors = "Agrawal et al.")]
+[ResearchPaper("Pixtral 12B", "https://arxiv.org/abs/2410.07073", Year = 2024, Authors = "Agrawal et al.")]
 public class Pixtral<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly PixtralOptions _options; public override ModelOptions GetOptions() => _options;

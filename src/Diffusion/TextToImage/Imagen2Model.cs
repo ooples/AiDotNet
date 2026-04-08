@@ -68,7 +68,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Imagen 2", "https://deepmind.google/technologies/imagen-2/")]
+    [ResearchPaper("Imagen 2", "https://deepmind.google/technologies/imagen-2/")]
 public class Imagen2Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

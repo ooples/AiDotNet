@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Long Short-Term Memory", "https://www.bioinf.jku.at/publications/older/2604.pdf", Year = 1997, Authors = "Sepp Hochreiter, Jurgen Schmidhuber")]
+[ResearchPaper("Long Short-Term Memory", "https://www.bioinf.jku.at/publications/older/2604.pdf", Year = 1997, Authors = "Sepp Hochreiter, Jurgen Schmidhuber")]
 public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly LSTMOptions _options;

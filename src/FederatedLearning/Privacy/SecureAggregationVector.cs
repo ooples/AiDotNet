@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// protocol step and is intentionally not part of this in-memory component).
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class SecureAggregationVector<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private readonly Dictionary<long, byte[]> _pairwiseMaskSeeds = new();

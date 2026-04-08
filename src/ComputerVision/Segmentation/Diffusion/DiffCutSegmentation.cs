@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2407.00555", Year = 2024, Authors = "Couairon et al.")]
+[ResearchPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2407.00555", Year = 2024, Authors = "Couairon et al.")]
 public class DiffCutSegmentation<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffCutSegmentationOptions _options;

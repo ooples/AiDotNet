@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Trainers;
 
 /// <summary>
@@ -28,6 +30,8 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// Convergence and Efficiency." IEEE TPDS 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _asyncRoundsPerBarrier;

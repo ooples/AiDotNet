@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation", "https://arxiv.org/abs/2410.13848", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation", "https://arxiv.org/abs/2410.13848", Year = 2024, Authors = "Wu et al.")]
 public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusOptions _options; public override ModelOptions GetOptions() => _options;

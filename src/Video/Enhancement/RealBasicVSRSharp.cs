@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Investigating Tradeoffs in Real-World Video Super-Resolution",
+[ResearchPaper("Investigating Tradeoffs in Real-World Video Super-Resolution",
     "https://arxiv.org/abs/2111.12704",
     Year = 2022,
     Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]

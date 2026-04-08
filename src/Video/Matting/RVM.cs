@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Matting;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Robust High-Resolution Video Matting with Temporal Guidance",
+[ResearchPaper("Robust High-Resolution Video Matting with Temporal Guidance",
     "https://arxiv.org/abs/2108.11515",
     Year = 2021,
     Authors = "Shanchuan Lin, Linjie Yang, Imran Saleemi, Soumyadip Sengupta")]

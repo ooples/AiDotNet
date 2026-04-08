@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("emotion2vec: Self-Supervised Pre-Training for Speech Emotion Representation", "https://arxiv.org/abs/2312.15185", Year = 2023, Authors = "Ziyang Ma, Zhisheng Zheng, Jiaxin Ye, Jinchao Li, Zhifu Gao, Shiliang Zhang, Xie Chen")]
+[ResearchPaper("emotion2vec: Self-Supervised Pre-Training for Speech Emotion Representation", "https://arxiv.org/abs/2312.15185", Year = 2023, Authors = "Ziyang Ma, Zhisheng Zheng, Jiaxin Ye, Jinchao Li, Zhifu Gao, Shiliang Zhang, Xie Chen")]
 public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields

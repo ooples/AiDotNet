@@ -59,7 +59,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Gaussian Processes for Machine Learning", "https://gaussianprocess.org/gpml/")]
+    [ResearchPaper("Gaussian Processes for Machine Learning", "https://gaussianprocess.org/gpml/")]
 public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

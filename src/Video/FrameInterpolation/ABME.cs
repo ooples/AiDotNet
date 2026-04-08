@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Asymmetric Bilateral Motion Estimation for Video Frame Interpolation",
+[ResearchPaper("Asymmetric Bilateral Motion Estimation for Video Frame Interpolation",
     "https://arxiv.org/abs/2108.06815",
     Year = 2021,
     Authors = "Junheum Park, Chul Lee, Chang-Su Kim")]

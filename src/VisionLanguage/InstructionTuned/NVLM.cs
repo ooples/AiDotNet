@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NVLM: Open Frontier-Class Multimodal LLMs", "https://arxiv.org/abs/2409.11402", Year = 2024, Authors = "Dai et al.")]
+[ResearchPaper("NVLM: Open Frontier-Class Multimodal LLMs", "https://arxiv.org/abs/2409.11402", Year = 2024, Authors = "Dai et al.")]
 public class NVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly NVLMOptions _options; public override ModelOptions GetOptions() => _options;

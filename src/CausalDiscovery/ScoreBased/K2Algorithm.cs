@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Bayesian Method for the Induction of Probabilistic Networks from Data", "https://link.springer.com/article/10.1007/BF00994110", Year = 1992, Authors = "Gregory F. Cooper, Edward Herskovits")]
+[ResearchPaper("A Bayesian Method for the Induction of Probabilistic Networks from Data", "https://link.springer.com/article/10.1007/BF00994110", Year = 1992, Authors = "Gregory F. Cooper, Edward Herskovits")]
 public class K2Algorithm<T> : ScoreBasedBase<T>
 {
     private readonly int _maxParentsPerNode;

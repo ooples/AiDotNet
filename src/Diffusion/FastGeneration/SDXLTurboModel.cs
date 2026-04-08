@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Adversarial Diffusion Distillation", "https://arxiv.org/abs/2311.17042", Year = 2023, Authors = "Sauer et al.")]
+[ResearchPaper("Adversarial Diffusion Distillation", "https://arxiv.org/abs/2311.17042", Year = 2023, Authors = "Sauer et al.")]
 public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

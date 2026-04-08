@@ -51,6 +51,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - Reranking 1000s of docs: Too slow, only rerank top candidates
 /// </para>
 /// </remarks>
+[Attributes.ComponentType(Enums.ComponentType.Reranker)]
+[Attributes.PipelineStage(Enums.PipelineStage.PostRetrieval)]
 public class CrossEncoderReranker<T> : RerankerBase<T>
 {
     private readonly Func<string, string, T> _scoreFunction;

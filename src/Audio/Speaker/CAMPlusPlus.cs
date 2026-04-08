@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CAM++: A Fast and Efficient Network for Speaker Verification Using Context-Aware Masking", "https://arxiv.org/abs/2303.00332", Year = 2023, Authors = "Hui Wang, Siqi Zheng, Yafeng Chen, Luyao Cheng, Qian Chen")]
+[ResearchPaper("CAM++: A Fast and Efficient Network for Speaker Verification Using Context-Aware Masking", "https://arxiv.org/abs/2303.00332", Year = 2023, Authors = "Hui Wang, Siqi Zheng, Yafeng Chen, Luyao Cheng, Qian Chen")]
 public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields

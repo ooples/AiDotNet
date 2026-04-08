@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Audio Fingerprint for High-Specific Audio Retrieval Based on Contrastive Learning", "https://arxiv.org/abs/2010.11910", Year = 2021, Authors = "Sungkyun Chang, Donmoon Lee, Jeongsoo Park, Hyungui Lim, Kyogu Lee, Karam Ko, Yoonchang Han")]
+[ResearchPaper("Neural Audio Fingerprint for High-Specific Audio Retrieval Based on Contrastive Learning", "https://arxiv.org/abs/2010.11910", Year = 2021, Authors = "Sungkyun Chang, Donmoon Lee, Jeongsoo Park, Hyungui Lim, Kyogu Lee, Karam Ko, Yoonchang Han")]
 internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields

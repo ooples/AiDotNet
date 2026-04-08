@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PWStableNet: Learning Pixel-Wise Warping Maps for Video Stabilization",
+[ResearchPaper("PWStableNet: Learning Pixel-Wise Warping Maps for Video Stabilization",
     "https://arxiv.org/abs/2009.10721",
     Year = 2021,
     Authors = "Minda Zhao, Qiang Ling")]

@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SenseFlow: Accelerated Flow-Matching Generation", "https://arxiv.org/abs/2501.04601", Year = 2024, Authors = "SenseTime")]
+[ResearchPaper("SenseFlow: Accelerated Flow-Matching Generation", "https://arxiv.org/abs/2501.04601", Year = 2024, Authors = "SenseTime")]
 public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

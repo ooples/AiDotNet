@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
+    [ResearchPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
 public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
     private readonly RestrictedBoltzmannMachineOptions _options;

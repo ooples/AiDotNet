@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unsupervised Deep Video Denoising",
+[ResearchPaper("Unsupervised Deep Video Denoising",
     "https://arxiv.org/abs/2011.15045",
     Year = 2021,
     Authors = "Dev Yashpal Sheth, Sreyas Mohan, Joshua L. Vincent, Ramon Manzorro, Peter A. Crozier, Mitesh M. Khapra, Eero P. Simoncelli, Carlos Fernandez-Granda")]

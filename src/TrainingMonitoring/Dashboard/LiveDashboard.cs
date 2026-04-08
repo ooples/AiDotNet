@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TrainingMonitoring.Dashboard;
@@ -33,6 +35,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 /// dashboard.Stop();
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class LiveDashboard : ITrainingDashboard
 {
     private readonly HtmlDashboard _htmlDashboard;

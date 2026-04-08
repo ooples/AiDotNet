@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
+[ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
 public class TDTDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly TDTDecoderOptions _options; public override ModelOptions GetOptions() => _options;

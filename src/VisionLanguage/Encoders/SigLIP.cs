@@ -82,7 +82,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
+[ResearchPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
 public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields

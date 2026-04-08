@@ -50,7 +50,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Musical Genre Classification of Audio Signals", "https://doi.org/10.1109/TSA.2002.800560", Year = 2002, Authors = "George Tzanetakis, Perry Cook")]
+[ResearchPaper("Musical Genre Classification of Audio Signals", "https://doi.org/10.1109/TSA.2002.800560", Year = 2002, Authors = "George Tzanetakis, Perry Cook")]
 public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 {
     #region Fields

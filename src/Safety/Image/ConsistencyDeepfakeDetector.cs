@@ -39,7 +39,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NACO: Self-Supervised Natural Consistency Learning for Face Forgery Detection",
+[ResearchPaper("NACO: Self-Supervised Natural Consistency Learning for Face Forgery Detection",
     "https://arxiv.org/abs/2407.10550",
     Year = 2024,
     Authors = "Yinglong Nie, et al.")]

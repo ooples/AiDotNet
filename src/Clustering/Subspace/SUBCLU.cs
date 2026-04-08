@@ -54,7 +54,7 @@ namespace AiDotNet.Clustering.Subspace;
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Density-Connected Subspace Clustering for High-Dimensional Data", "https://doi.org/10.1137/1.9781611972740.23", Year = 2004, Authors = "Karin Kailing, Hans-Peter Kriegel, Peer Kroger")]
+[ResearchPaper("Density-Connected Subspace Clustering for High-Dimensional Data", "https://doi.org/10.1137/1.9781611972740.23", Year = 2004, Authors = "Karin Kailing, Hans-Peter Kriegel, Peer Kroger")]
 public class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;

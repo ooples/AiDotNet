@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// rather than just boundaries.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class LineArtPreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     /// <inheritdoc />

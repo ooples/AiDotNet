@@ -65,7 +65,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Separate Anything You Describe", "https://arxiv.org/abs/2308.05037", Year = 2024, Authors = "Xubo Liu, Qiuqiang Kong, Yan Zhao, Haohe Liu, Yi Yuan, Yuzhuo Liu, Rui Xia, Yuxuan Wang, Mark D. Plumbley, Wenwu Wang")]
+[ResearchPaper("Separate Anything You Describe", "https://arxiv.org/abs/2308.05037", Year = 2024, Authors = "Xubo Liu, Qiuqiang Kong, Yan Zhao, Haohe Liu, Yi Yuan, Yuzhuo Liu, Rui Xia, Yuxuan Wang, Mark D. Plumbley, Wenwu Wang")]
 public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

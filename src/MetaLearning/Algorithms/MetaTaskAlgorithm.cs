@@ -43,10 +43,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MetaMix: Improved Meta-Learning with Task Interpolation",
+[ResearchPaper("MetaMix: Improved Meta-Learning with Task Interpolation",
     "https://arxiv.org/abs/2003.04274",
     Year = 2021,
     Authors = "Yangbin Chen, Yun Ma, Tom Ko, Jianping Wang")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

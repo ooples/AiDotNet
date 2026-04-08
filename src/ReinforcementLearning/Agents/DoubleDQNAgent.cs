@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Reinforcement Learning with Double Q-learning",
+[ResearchPaper("Deep Reinforcement Learning with Double Q-learning",
     "https://arxiv.org/abs/1509.06461",
     Year = 2016,
     Authors = "van Hasselt, H., Guez, A., & Silver, D.")]

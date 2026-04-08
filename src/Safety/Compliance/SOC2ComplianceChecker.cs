@@ -43,7 +43,7 @@ namespace AiDotNet.Safety.Compliance;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AICPA SOC 2 Trust Services Criteria",
+[ResearchPaper("AICPA SOC 2 Trust Services Criteria",
     "https://www.aicpa.org/resources/landing/system-and-organization-controls-soc-suite-of-services",
     Year = 2024,
     Authors = "AICPA")]

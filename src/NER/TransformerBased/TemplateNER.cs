@@ -69,7 +69,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Template-Based Named Entity Recognition Using BART",
+[ResearchPaper("Template-Based Named Entity Recognition Using BART",
     "https://arxiv.org/abs/2106.01760",
     Year = 2021,
     Authors = "Leyang Cui, Yu Wu, Jian Liu, Sen Yang, Yue Zhang")]

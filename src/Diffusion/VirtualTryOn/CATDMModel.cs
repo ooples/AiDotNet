@@ -42,7 +42,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CATDM: Controllable Appearance Transfer Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2311.18405", Year = 2024, Authors = "Zeng et al.")]
+[ResearchPaper("CATDM: Controllable Appearance Transfer Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2311.18405", Year = 2024, Authors = "Zeng et al.")]
 public class CATDMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

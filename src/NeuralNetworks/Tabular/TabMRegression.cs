@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabM: Advancing Tabular Deep Learning With Parameter-Efficient Ensembling",
+[ResearchPaper("TabM: Advancing Tabular Deep Learning With Parameter-Efficient Ensembling",
     "https://arxiv.org/abs/2410.24210",
     Year = 2024,
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]

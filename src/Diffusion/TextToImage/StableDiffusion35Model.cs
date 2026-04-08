@@ -99,7 +99,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206", Year = 2024, Authors = "Esser et al.")]
+[ResearchPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206", Year = 2024, Authors = "Esser et al.")]
 public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

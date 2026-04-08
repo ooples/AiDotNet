@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improving the Stability and Efficiency of Diffusion Models for Content Consistent Super-Resolution", "https://arxiv.org/abs/2401.00877", Year = 2024, Authors = "Sun et al.")]
+[ResearchPaper("Improving the Stability and Efficiency of Diffusion Models for Content Consistent Super-Resolution", "https://arxiv.org/abs/2401.00877", Year = 2024, Authors = "Sun et al.")]
 public class CCSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

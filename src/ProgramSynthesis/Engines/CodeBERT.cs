@@ -52,7 +52,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CodeBERT: A Pre-Trained Model for Programming and Natural Languages",
+[ResearchPaper("CodeBERT: A Pre-Trained Model for Programming and Natural Languages",
     "https://arxiv.org/abs/2002.08155",
     Year = 2020,
     Authors = "Zhangyin Feng, Daya Guo, Duyu Tang, Nan Duan, Xiaocheng Feng, Ming Gong, Linjun Shou, Bing Qin, Ting Liu, Daxin Jiang, Ming Zhou")]

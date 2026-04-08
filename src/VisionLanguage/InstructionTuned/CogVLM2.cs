@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CogVLM2: Visual Language Models for Image and Video Understanding", "https://arxiv.org/abs/2408.16500", Year = 2024, Authors = "Hong et al.")]
+[ResearchPaper("CogVLM2: Visual Language Models for Image and Video Understanding", "https://arxiv.org/abs/2408.16500", Year = 2024, Authors = "Hong et al.")]
 public class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLM2Options _options; public override ModelOptions GetOptions() => _options;

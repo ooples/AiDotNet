@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -64,6 +66,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - Fact lookups: "Paris population" (one correct answer)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Reranker)]
+[PipelineStage(PipelineStage.PostRetrieval)]
 public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
 {
     private readonly double _lambda;

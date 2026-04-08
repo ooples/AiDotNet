@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Lumina-T2X: Transforming Text into Any Modality, Resolution, and Duration via Flow-based Large Diffusion Transformers", "https://arxiv.org/abs/2405.05945", Year = 2024, Authors = "Gao et al.")]
+[ResearchPaper("Lumina-T2X: Transforming Text into Any Modality, Resolution, and Duration via Flow-based Large Diffusion Transformers", "https://arxiv.org/abs/2405.05945", Year = 2024, Authors = "Gao et al.")]
 public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
@@ -28,6 +30,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 /// - Coarsest level: Grade levels or departments
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class LeidenCommunityDetector<T>
 {
     /// <summary>

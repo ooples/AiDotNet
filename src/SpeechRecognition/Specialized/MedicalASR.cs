@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Clinical NLP for Healthcare", "https://arxiv.org/abs/2305.09617")]
+[ResearchPaper("Clinical NLP for Healthcare", "https://arxiv.org/abs/2305.09617")]
 public class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MedicalASROptions _options; public override ModelOptions GetOptions() => _options;

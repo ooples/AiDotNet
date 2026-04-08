@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - ARI < 0: Worse than random (rare)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class AdjustedRandIndex<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

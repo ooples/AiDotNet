@@ -35,7 +35,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Causal Additive Models with Unobserved Variables", "https://arxiv.org/abs/2005.09042", Year = 2021, Authors = "Takashi Nicholas Maeda, Shohei Shimizu")]
+[ResearchPaper("Causal Additive Models with Unobserved Variables", "https://arxiv.org/abs/2005.09042", Year = 2021, Authors = "Takashi Nicholas Maeda, Shohei Shimizu")]
 public class CAMUVAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;

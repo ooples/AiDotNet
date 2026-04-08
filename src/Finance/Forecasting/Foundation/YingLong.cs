@@ -57,7 +57,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("YingLong: A Foundation Model for Weather Forecasting", "https://arxiv.org/abs/2312.11575")]
+[ResearchPaper("YingLong: A Foundation Model for Weather Forecasting", "https://arxiv.org/abs/2312.11575")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 {

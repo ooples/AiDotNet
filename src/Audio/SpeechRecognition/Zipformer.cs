@@ -47,7 +47,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Zipformer: A faster and better encoder for automatic speech recognition", "https://arxiv.org/abs/2310.11230", Year = 2023, Authors = "Zengwei Yao, Liyong Guo, Xiaoyu Yang, Wei Kang, Fangjun Kuang, Yifan Yang, Zengrui Jin, Long Lin, Daniel Povey")]
+[ResearchPaper("Zipformer: A faster and better encoder for automatic speech recognition", "https://arxiv.org/abs/2310.11230", Year = 2023, Authors = "Zengwei Yao, Liyong Guo, Xiaoyu Yang, Wei Kang, Fangjun Kuang, Yifan Yang, Zengrui Jin, Long Lin, Daniel Povey")]
 public class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.Neural;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
+[ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
 public class SelfOrganizingMap<T> : ClusteringBase<T>
 {
     private readonly SOMOptions<T> _options;

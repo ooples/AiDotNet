@@ -52,7 +52,7 @@ namespace AiDotNet.Classification.Calibration;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
+[ResearchPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
 public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {

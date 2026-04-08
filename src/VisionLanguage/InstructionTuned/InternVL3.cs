@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models", "https://arxiv.org/abs/2504.10479", Year = 2025, Authors = "Zhu et al.")]
+[ResearchPaper("InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models", "https://arxiv.org/abs/2504.10479", Year = 2025, Authors = "Zhu et al.")]
 public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly InternVL3Options _options; public override ModelOptions GetOptions() => _options;

@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm", "https://arxiv.org/abs/2110.05208", Year = 2022, Authors = "Li et al.")]
+[ResearchPaper("Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm", "https://arxiv.org/abs/2110.05208", Year = 2022, Authors = "Li et al.")]
 public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DeCLIPOptions _options; public override ModelOptions GetOptions() => _options;

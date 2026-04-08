@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Audio.TextToSpeech;
 
@@ -20,6 +22,8 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// For example: "Dr. Smith, 123 Main St." becomes phonemes like "D AH K T ER S M IH TH..."
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TtsPreprocessor
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

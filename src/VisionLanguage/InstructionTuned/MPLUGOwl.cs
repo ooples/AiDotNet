@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("mPLUG-Owl: Modularization Empowers Large Language Models with Multimodality", "https://arxiv.org/abs/2304.14178", Year = 2023, Authors = "Ye et al.")]
+[ResearchPaper("mPLUG-Owl: Modularization Empowers Large Language Models with Multimodality", "https://arxiv.org/abs/2304.14178", Year = 2023, Authors = "Ye et al.")]
 public class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MPLUGOwlOptions _options; public override ModelOptions GetOptions() => _options;

@@ -96,7 +96,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Shap-E: Generating Conditional 3D Implicit Functions", "https://arxiv.org/abs/2305.02463", Year = 2023, Authors = "Jun & Nichol")]
+[ResearchPaper("Shap-E: Generating Conditional 3D Implicit Functions", "https://arxiv.org/abs/2305.02463", Year = 2023, Authors = "Jun & Nichol")]
 public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

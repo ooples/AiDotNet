@@ -69,7 +69,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ControlNet-XS: Designing an Efficient and Effective Architecture for Controlling Text-to-Image Diffusion Models", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
+[ResearchPaper("ControlNet-XS: Designing an Efficient and Effective Architecture for Controlling Text-to-Image Diffusion Models", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
 public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

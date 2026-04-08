@@ -63,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("VisionTS: Visual Masked Autoencoders as Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2408.17253")]
+[ResearchPaper("VisionTS: Visual Masked Autoencoders as Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2408.17253")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 {

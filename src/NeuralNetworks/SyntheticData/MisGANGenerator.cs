@@ -96,7 +96,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MisGAN: Learning from Incomplete Data with Generative Adversarial Networks",
+[ResearchPaper("MisGAN: Learning from Incomplete Data with Generative Adversarial Networks",
     "https://arxiv.org/abs/1902.09599",
     Year = 2019,
     Authors = "Steven Cheng-Xian Li, Bo Jiang, Benjamin Marlin")]

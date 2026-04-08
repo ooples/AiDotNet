@@ -60,7 +60,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
+[ResearchPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
 public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LiLTOptions _options;

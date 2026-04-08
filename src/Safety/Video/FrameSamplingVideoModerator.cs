@@ -41,7 +41,7 @@ namespace AiDotNet.Safety.Video;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Efficient Video Understanding via Temporal Sampling Strategies",
+[ResearchPaper("Efficient Video Understanding via Temporal Sampling Strategies",
     "https://arxiv.org/abs/2312.14135",
     Year = 2024,
     Authors = "Various")]

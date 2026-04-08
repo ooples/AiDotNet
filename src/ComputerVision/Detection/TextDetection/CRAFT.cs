@@ -32,7 +32,7 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Character Region Awareness for Text Detection",
+[ResearchPaper("Character Region Awareness for Text Detection",
     "https://arxiv.org/abs/1904.01941",
     Year = 2019,
     Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]

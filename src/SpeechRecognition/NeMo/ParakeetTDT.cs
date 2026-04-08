@@ -45,7 +45,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Token-and-Duration Transducer for Streaming ASR", "https://arxiv.org/abs/2304.06795", Year = 2024, Authors = "Xu et al.")]
+[ResearchPaper("Token-and-Duration Transducer for Streaming ASR", "https://arxiv.org/abs/2304.06795", Year = 2024, Authors = "Xu et al.")]
 public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParakeetTDTOptions _options; public override ModelOptions GetOptions() => _options;

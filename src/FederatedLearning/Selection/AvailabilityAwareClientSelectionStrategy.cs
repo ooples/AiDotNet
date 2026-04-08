@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -8,6 +10,8 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <remarks>
 /// <para><b>For Beginners:</b> AvailabilityAwareClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class AvailabilityAwareClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly double _availabilityThreshold;

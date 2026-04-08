@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VILA: On Pre-training for Visual Language Models", "https://arxiv.org/abs/2312.07533", Year = 2024, Authors = "Lin et al.")]
+[ResearchPaper("VILA: On Pre-training for Visual Language Models", "https://arxiv.org/abs/2312.07533", Year = 2024, Authors = "Lin et al.")]
 public class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly VILAOptions _options; public override ModelOptions GetOptions() => _options;

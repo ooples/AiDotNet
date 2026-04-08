@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform", "https://arxiv.org/abs/2203.02395", Year = 2022, Authors = "Kaneko et al.")]
+[ResearchPaper("iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform", "https://arxiv.org/abs/2203.02395", Year = 2022, Authors = "Kaneko et al.")]
 public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly ISTFTNetOptions _options; public override ModelOptions GetOptions() => _options;

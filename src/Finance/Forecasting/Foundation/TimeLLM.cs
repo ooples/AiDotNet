@@ -74,7 +74,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Time-LLM: Time Series Forecasting by Reprogramming Large Language Models", "https://arxiv.org/abs/2310.01728", Year = 2024, Authors = "Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y. Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, Qingsong Wen")]
+[ResearchPaper("Time-LLM: Time Series Forecasting by Reprogramming Large Language Models", "https://arxiv.org/abs/2310.01728", Year = 2024, Authors = "Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y. Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, Qingsong Wen")]
 public class TimeLLM<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

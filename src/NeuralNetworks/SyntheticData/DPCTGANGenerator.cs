@@ -81,7 +81,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Learning with Differential Privacy",
+[ResearchPaper("Deep Learning with Differential Privacy",
     "https://arxiv.org/abs/1607.00133",
     Year = 2016,
     Authors = "Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, Li Zhang")]

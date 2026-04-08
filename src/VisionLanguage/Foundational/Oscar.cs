@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks", "https://arxiv.org/abs/2004.06165", Year = 2020, Authors = "Li et al.")]
+[ResearchPaper("Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks", "https://arxiv.org/abs/2004.06165", Year = 2020, Authors = "Li et al.")]
 public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly OscarOptions _options; public override ModelOptions GetOptions() => _options;

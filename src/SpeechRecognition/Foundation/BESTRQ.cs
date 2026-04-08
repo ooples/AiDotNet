@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
+[ResearchPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
 public class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly BESTRQOptions _options; public override ModelOptions GetOptions() => _options;

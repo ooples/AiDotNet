@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
+    [ResearchPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
 public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Investigating Causal Relations by Econometric Models and Cross-spectral Methods", "https://doi.org/10.2307/1912791", Year = 1969, Authors = "Clive W. J. Granger")]
+[ResearchPaper("Investigating Causal Relations by Econometric Models and Cross-spectral Methods", "https://doi.org/10.2307/1912791", Year = 1969, Authors = "Clive W. J. Granger")]
 public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private readonly double _significanceLevel = 0.05;

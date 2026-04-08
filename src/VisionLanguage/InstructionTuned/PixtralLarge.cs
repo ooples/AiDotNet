@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pixtral Large", "https://mistral.ai/news/pixtral-large", Year = 2024, Authors = "Mistral AI")]
+[ResearchPaper("Pixtral Large", "https://mistral.ai/news/pixtral-large", Year = 2024, Authors = "Mistral AI")]
 public class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly PixtralLargeOptions _options; public override ModelOptions GetOptions() => _options;

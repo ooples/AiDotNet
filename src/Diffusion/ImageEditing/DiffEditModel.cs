@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", "https://arxiv.org/abs/2210.11427", Year = 2023, Authors = "Couairon et al.")]
+[ResearchPaper("DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", "https://arxiv.org/abs/2210.11427", Year = 2023, Authors = "Couairon et al.")]
 public class DiffEditModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -64,7 +64,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OCR-free Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2111.15664", Year = 2022, Authors = "Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park")]
+[ResearchPaper("OCR-free Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2111.15664", Year = 2022, Authors = "Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park")]
 public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
 {
     private readonly DonutOptions _options;

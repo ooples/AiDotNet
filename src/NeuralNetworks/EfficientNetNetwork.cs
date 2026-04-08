@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
+[ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
 public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly EfficientNetOptions _options;

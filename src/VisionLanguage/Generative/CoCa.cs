@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CoCa: Contrastive Captioners are Image-Text Foundation Models", "https://arxiv.org/abs/2205.01917", Year = 2022, Authors = "Yu et al.")]
+[ResearchPaper("CoCa: Contrastive Captioners are Image-Text Foundation Models", "https://arxiv.org/abs/2205.01917", Year = 2022, Authors = "Yu et al.")]
 public class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly CoCaOptions _options; public override ModelOptions GetOptions() => _options;

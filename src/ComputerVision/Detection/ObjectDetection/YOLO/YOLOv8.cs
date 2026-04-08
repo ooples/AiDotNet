@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("YOLOv8",
+[ResearchPaper("YOLOv8",
     "https://github.com/ultralytics/ultralytics",
     Year = 2023,
     Authors = "Glenn Jocher, Ayush Chaurasia, Jing Qiu")]

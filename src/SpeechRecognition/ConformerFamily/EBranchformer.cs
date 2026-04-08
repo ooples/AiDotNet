@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
+[ResearchPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
 public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EBranchformerOptions _options;

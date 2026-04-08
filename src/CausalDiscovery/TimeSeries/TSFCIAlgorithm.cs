@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("On Causal Discovery from Time Series Data using FCI", "https://doi.org/10.1007/978-3-642-15114-9_12", Year = 2010, Authors = "Doris Entner, Patrik O. Hoyer")]
+[ResearchPaper("On Causal Discovery from Time Series Data using FCI", "https://doi.org/10.1007/978-3-642-15114-9_12", Year = 2010, Authors = "Doris Entner, Patrik O. Hoyer")]
 public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

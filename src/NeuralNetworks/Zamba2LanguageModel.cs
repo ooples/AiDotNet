@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Zamba2-7B", "https://arxiv.org/abs/2501.01725", Year = 2025, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
+[ResearchPaper("Zamba2-7B", "https://arxiv.org/abs/2501.01725", Year = 2025, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
 public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
 {
     private readonly Zamba2Options _options;

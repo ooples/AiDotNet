@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelTask(ModelTask.BinaryClassification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine",
+[ResearchPaper("Greedy Function Approximation: A Gradient Boosting Machine",
     "https://doi.org/10.1214/aos/1013203451",
     Year = 2001,
     Authors = "Jerome H. Friedman")]

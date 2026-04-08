@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SMOTE: Synthetic Minority Over-sampling Technique",
+[ResearchPaper("SMOTE: Synthetic Minority Over-sampling Technique",
     "https://arxiv.org/abs/1106.1813",
     Year = 2002,
     Authors = "Nitesh V. Chawla, Kevin W. Bowyer, Lawrence O. Hall, W. Philip Kegelmeyer")]

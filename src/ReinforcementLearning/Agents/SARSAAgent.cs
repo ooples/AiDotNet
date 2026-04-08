@@ -51,7 +51,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("On-line Q-learning Using Connectionist Systems",
+[ResearchPaper("On-line Q-learning Using Connectionist Systems",
     "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
     Year = 1994,
     Authors = "Rummery, G. A. & Niranjan, M.")]

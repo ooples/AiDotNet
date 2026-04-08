@@ -32,7 +32,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Optimal Structure Identification with Greedy Search", "https://jmlr.org/papers/v3/chickering02b.html", Year = 2002, Authors = "David Maxwell Chickering")]
+[ResearchPaper("Optimal Structure Identification with Greedy Search", "https://jmlr.org/papers/v3/chickering02b.html", Year = 2002, Authors = "David Maxwell Chickering")]
 public class GESAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

@@ -1,4 +1,6 @@
-﻿using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -30,6 +32,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Regularizer)]
+[PipelineStage(PipelineStage.Training)]
 public class GhostBatchNormalization<T>
 {
     private readonly INumericOperations<T> _numOps;

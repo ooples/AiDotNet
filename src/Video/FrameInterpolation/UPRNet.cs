@@ -59,7 +59,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Unified Pyramid Recurrent Network for Video Frame Interpolation",
+[ResearchPaper("A Unified Pyramid Recurrent Network for Video Frame Interpolation",
     "https://arxiv.org/abs/2211.03456",
     Year = 2023,
     Authors = "Xin Jin, Longhai Wu, Jie Chen, Youxin Chen, Jayoon Koo, Cheul-hee Hahm")]

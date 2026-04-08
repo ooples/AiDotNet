@@ -39,7 +39,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Sensitive Image Classification by Vision Transformers",
+[ResearchPaper("Sensitive Image Classification by Vision Transformers",
     "https://arxiv.org/abs/2412.16446",
     Year = 2024,
     Authors = "Various")]

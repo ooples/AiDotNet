@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Text Anonymization Benchmark: A Survey on NER and LLMs for PII Detection",
+[ResearchPaper("Text Anonymization Benchmark: A Survey on NER and LLMs for PII Detection",
     "https://arxiv.org/abs/2508.21587",
     Year = 2025,
     Authors = "Various")]

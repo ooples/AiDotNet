@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices",
+[ResearchPaper("NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices",
     "https://arxiv.org/abs/2408.10161",
     Year = 2024,
     Authors = "Zhiyong Zhang, Anurag Ranjan, Huaizu Jiang")]

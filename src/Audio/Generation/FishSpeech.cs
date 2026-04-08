@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Shijia Liao, Yuxuan Wang, Tianyu Li, Yifan Hu, Ruobing Xie")]
+[ResearchPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Shijia Liao, Yuxuan Wang, Tianyu Li, Yifan Hu, Ruobing Xie")]
 public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FireRedTTS: A Foundation Text-To-Speech Framework for Industry-Level Generative Speech Applications", "https://arxiv.org/abs/2409.03283", Year = 2024, Authors = "Guo et al.")]
+[ResearchPaper("FireRedTTS: A Foundation Text-To-Speech Framework for Industry-Level Generative Speech Applications", "https://arxiv.org/abs/2409.03283", Year = 2024, Authors = "Guo et al.")]
 public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FireRedTTSOptions _options; public override ModelOptions GetOptions() => _options;

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
+    [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
 public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
 {
     private const int FLUX_LATENT_CHANNELS = 16;

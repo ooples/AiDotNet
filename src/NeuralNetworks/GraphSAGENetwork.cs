@@ -75,7 +75,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
+[ResearchPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
 public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GraphSAGEOptions _options;

@@ -64,7 +64,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TinyBERT: Distilling BERT for Natural Language Understanding",
+[ResearchPaper("TinyBERT: Distilling BERT for Natural Language Understanding",
     "https://arxiv.org/abs/1909.10351",
     Year = 2020,
     Authors = "Xiaoqi Jiao, Yichun Yin, Lifeng Shang, Xin Jiang, Xiao Chen, Linlin Li, Fang Wang, Qun Liu")]

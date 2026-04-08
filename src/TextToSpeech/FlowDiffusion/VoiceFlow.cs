@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoiceFlow: Efficient Text-to-Speech with Rectified Flow Matching", "https://arxiv.org/abs/2309.05027", Year = 2024, Authors = "Guo et al.")]
+[ResearchPaper("VoiceFlow: Efficient Text-to-Speech with Rectified Flow Matching", "https://arxiv.org/abs/2309.05027", Year = 2024, Authors = "Guo et al.")]
 public class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VoiceFlowOptions _options; public override ModelOptions GetOptions() => _options;

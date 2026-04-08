@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Show-o: One Single Transformer to Unify Multimodal Understanding and Generation", "https://arxiv.org/abs/2408.12528", Year = 2024, Authors = "Xie et al.")]
+[ResearchPaper("Show-o: One Single Transformer to Unify Multimodal Understanding and Generation", "https://arxiv.org/abs/2408.12528", Year = 2024, Authors = "Xie et al.")]
 public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ShowOOptions _options; public override ModelOptions GetOptions() => _options;

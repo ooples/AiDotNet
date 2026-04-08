@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Maya: An Instruction Finetuned Multilingual Multimodal Model", "https://arxiv.org/abs/2412.07112", Year = 2024, Authors = "Gupta et al.")]
+[ResearchPaper("Maya: An Instruction Finetuned Multilingual Multimodal Model", "https://arxiv.org/abs/2412.07112", Year = 2024, Authors = "Gupta et al.")]
 public class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MayaOptions _options; public override ModelOptions GetOptions() => _options;

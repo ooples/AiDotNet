@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://arxiv.org/abs/2204.08387", Year = 2022, Authors = "Huang et al.")]
+[ResearchPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://arxiv.org/abs/2204.08387", Year = 2022, Authors = "Huang et al.")]
 public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly LayoutLMv3Options _options; public override ModelOptions GetOptions() => _options;

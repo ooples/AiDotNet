@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OMG-Seg: Is One Model Good Enough For All Segmentation?", "https://arxiv.org/abs/2401.10229", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("OMG-Seg: Is One Model Good Enough For All Segmentation?", "https://arxiv.org/abs/2401.10229", Year = 2024, Authors = "Li et al.")]
 public class OMGSeg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly OMGSegOptions _options;

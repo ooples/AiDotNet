@@ -63,7 +63,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Zero-Inflated Poisson Regression, with an Application to Defects in Manufacturing", "https://doi.org/10.1080/00401706.1992.10485228", Year = 1992, Authors = "Diane Lambert")]
+[ResearchPaper("Zero-Inflated Poisson Regression, with an Application to Defects in Manufacturing", "https://doi.org/10.1080/00401706.1992.10485228", Year = 1992, Authors = "Diane Lambert")]
 public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

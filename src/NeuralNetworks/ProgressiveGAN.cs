@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Progressive Growing of GANs for Improved Quality, Stability, and Variation", "https://arxiv.org/abs/1710.10196", Year = 2018, Authors = "Tero Karras, Timo Aila, Samuli Laine, Jaakko Lehtinen")]
+[ResearchPaper("Progressive Growing of GANs for Improved Quality, Stability, and Variation", "https://arxiv.org/abs/1710.10196", Year = 2018, Authors = "Tero Karras, Timo Aila, Samuli Laine, Jaakko Lehtinen")]
 public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 {
     private readonly ProgressiveGANOptions _options;

@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Guidance;
 
@@ -23,6 +24,8 @@ namespace AiDotNet.Diffusion.Guidance;
 /// Reference: Ahn et al., "Self-Rectifying Diffusion Sampling with Perturbed-Attention Guidance", ECCV 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class PerturbedAttentionGuidance<T> : IGuidanceMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

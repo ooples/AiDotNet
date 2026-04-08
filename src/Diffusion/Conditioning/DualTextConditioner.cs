@@ -1,5 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// - Imagen: T5-XXL (text only, no CLIP)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DualTextConditioner<T> : IConditioningModule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

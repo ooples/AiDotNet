@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SANA Sprint: One-Step Diffusion with Continuous-Time Consistency Distillation", "https://arxiv.org/abs/2503.09641", Year = 2025, Authors = "NVIDIA")]
+[ResearchPaper("SANA Sprint: One-Step Diffusion with Continuous-Time Consistency Distillation", "https://arxiv.org/abs/2503.09641", Year = 2025, Authors = "NVIDIA")]
 public class SANASprintModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 32;

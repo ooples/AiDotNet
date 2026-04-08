@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoxtLM: Unified Decoder-Only Models for Consolidating Speech Recognition/Synthesis and Speech/Text Continuation", "https://arxiv.org/abs/2309.07937", Year = 2024, Authors = "Maiti et al.")]
+[ResearchPaper("VoxtLM: Unified Decoder-Only Models for Consolidating Speech Recognition/Synthesis and Speech/Text Continuation", "https://arxiv.org/abs/2309.07937", Year = 2024, Authors = "Maiti et al.")]
 public class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly VoxtLMOptions _options; public override ModelOptions GetOptions() => _options;

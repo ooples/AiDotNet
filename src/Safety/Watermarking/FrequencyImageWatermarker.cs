@@ -29,7 +29,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Tree-Ring Watermarks: Fingerprints for Diffusion Images that are Invisible and Robust",
+[ResearchPaper("Tree-Ring Watermarks: Fingerprints for Diffusion Images that are Invisible and Robust",
     "https://arxiv.org/abs/2305.20030",
     Year = 2023,
     Authors = "Yuxin Wen, John Kirchenbauer, Jonas Geiping, Tom Goldstein")]

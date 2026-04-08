@@ -46,10 +46,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Embedding Propagation: Smoother Manifold for Few-Shot Classification",
+[ResearchPaper("Embedding Propagation: Smoother Manifold for Few-Shot Classification",
     "https://arxiv.org/abs/2003.04557",
     Year = 2020,
     Authors = "Pau Rodriguez, Issam Laradji, Alexandre Drouin, Alexandre Lacoste")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

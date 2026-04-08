@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Trajectory Consistency Distillation", "https://arxiv.org/abs/2402.19159", Year = 2024, Authors = "Zheng et al.")]
+[ResearchPaper("Trajectory Consistency Distillation", "https://arxiv.org/abs/2402.19159", Year = 2024, Authors = "Zheng et al.")]
 public class TCDModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

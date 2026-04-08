@@ -47,7 +47,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
+[ResearchPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
 public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

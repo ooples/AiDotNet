@@ -68,7 +68,7 @@ namespace AiDotNet.Video.Understanding;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding",
+[ResearchPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding",
     "https://arxiv.org/abs/2109.14084",
     Year = 2021,
     Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Armen Aghajanyan, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]

@@ -61,10 +61,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("How to Train Your MAML",
+[ResearchPaper("How to Train Your MAML",
     "https://arxiv.org/abs/1810.09502",
     Year = 2019,
     Authors = "Antreas Antoniou, Harrison Edwards, Amos Storkey")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

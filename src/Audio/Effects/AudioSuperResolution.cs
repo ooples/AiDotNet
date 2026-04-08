@@ -52,7 +52,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelTask(ModelTask.Restoration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Audio Super Resolution using Neural Networks", "https://arxiv.org/abs/1708.00853", Year = 2017, Authors = "Volodymyr Kuleshov, S. Zayd Enam, Stefano Ermon")]
+[ResearchPaper("Audio Super Resolution using Neural Networks", "https://arxiv.org/abs/1708.00853", Year = 2017, Authors = "Volodymyr Kuleshov, S. Zayd Enam, Stefano Ermon")]
 public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

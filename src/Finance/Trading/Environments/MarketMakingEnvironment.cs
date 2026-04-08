@@ -36,7 +36,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Reinforcement Learning for Market Making", "https://arxiv.org/abs/2004.06985")]
+[ResearchPaper("Deep Reinforcement Learning for Market Making", "https://arxiv.org/abs/2004.06985")]
 public sealed class MarketMakingEnvironment<T> : TradingEnvironment<T>
 {
     private readonly int _maxInventory;

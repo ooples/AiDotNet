@@ -32,7 +32,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AudioSeal: Proactive Detection of Voice Cloning with Localized Watermarking",
+[ResearchPaper("AudioSeal: Proactive Detection of Voice Cloning with Localized Watermarking",
     "https://arxiv.org/abs/2401.17264",
     Year = 2024,
     Authors = "Robin San Roman, Pierre Fernandez, et al.")]

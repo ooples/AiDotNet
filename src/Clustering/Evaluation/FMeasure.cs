@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -32,6 +34,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Higher is better! 1.0 = perfect, 0 = no agreement.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class FMeasure<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

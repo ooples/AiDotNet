@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Qwen2-Audio Technical Report", "https://doi.org/10.48550/arXiv.2407.10759", Year = 2024, Authors = "Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou")]
+[ResearchPaper("Qwen2-Audio Technical Report", "https://doi.org/10.48550/arXiv.2407.10759", Year = 2024, Authors = "Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou")]
 public class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     #region Fields

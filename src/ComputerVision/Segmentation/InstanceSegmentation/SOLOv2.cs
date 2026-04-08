@@ -33,7 +33,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SOLOv2: Dynamic and Fast Instance Segmentation", "https://arxiv.org/abs/2003.10152", Year = 2020, Authors = "Wang et al.")]
+[ResearchPaper("SOLOv2: Dynamic and Fast Instance Segmentation", "https://arxiv.org/abs/2003.10152", Year = 2020, Authors = "Wang et al.")]
 public class SOLOv2<T> : InstanceSegmenterBase<T>
 {
     private readonly ResNet<T> _backbone;

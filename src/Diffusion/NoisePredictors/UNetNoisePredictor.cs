@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
+    [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
 public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>

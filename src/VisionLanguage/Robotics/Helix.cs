@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Helix: A Vision-Language-Action Model for Generalist Humanoid Control", "https://arxiv.org/abs/2502.07092", Year = 2025, Authors = "Figure AI")]
+[ResearchPaper("Helix: A Vision-Language-Action Model for Generalist Humanoid Control", "https://arxiv.org/abs/2502.07092", Year = 2025, Authors = "Figure AI")]
 public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly HelixOptions _options; public override ModelOptions GetOptions() => _options;

@@ -40,7 +40,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MiniCheck: Efficient Fact-Checking of LLMs on Grounding Documents",
+[ResearchPaper("MiniCheck: Efficient Fact-Checking of LLMs on Grounding Documents",
     "https://arxiv.org/abs/2404.10774",
     Year = 2024,
     Authors = "Liyan Tang, Philippe Laban, Greg Durrett")]

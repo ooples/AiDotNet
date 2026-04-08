@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2303.01164", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
+[ResearchPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2303.01164", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
 public class DiffusionTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

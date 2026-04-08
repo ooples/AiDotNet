@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition", "https://arxiv.org/abs/1905.11235", Year = 2020, Authors = "Dong and Xu")]
+[ResearchPaper("CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition", "https://arxiv.org/abs/1905.11235", Year = 2020, Authors = "Dong and Xu")]
 public class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CIFDecoderOptions _options; public override ModelOptions GetOptions() => _options;

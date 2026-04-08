@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UniVS: Unified and Universal Video Segmentation with Prompts as Queries", "https://arxiv.org/abs/2402.18115", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("UniVS: Unified and Universal Video Segmentation with Prompts as Queries", "https://arxiv.org/abs/2402.18115", Year = 2024, Authors = "Li et al.")]
 public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
 {
     private readonly UniVSOptions _options;

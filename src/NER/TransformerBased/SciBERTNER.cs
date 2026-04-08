@@ -59,7 +59,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SciBERT: A Pretrained Language Model for Scientific Text",
+[ResearchPaper("SciBERT: A Pretrained Language Model for Scientific Text",
     "https://arxiv.org/abs/1903.10676",
     Year = 2019,
     Authors = "Iz Beltagy, Kyle Lo, Arman Cohan")]

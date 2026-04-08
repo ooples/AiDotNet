@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain", "https://arxiv.org/abs/2311.11810", Year = 2024, Authors = "Feng et al.")]
+[ResearchPaper("DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain", "https://arxiv.org/abs/2311.11810", Year = 2024, Authors = "Feng et al.")]
 public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DocPediaOptions _options; public override ModelOptions GetOptions() => _options;

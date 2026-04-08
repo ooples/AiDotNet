@@ -97,7 +97,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]
+[ResearchPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]
 public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

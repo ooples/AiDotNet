@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Simple and Efficient Non-Autoregressive Text-to-Speech (E3 TTS)", "https://arxiv.org/abs/2311.04571", Year = 2023, Authors = "Gao et al.")]
+[ResearchPaper("Simple and Efficient Non-Autoregressive Text-to-Speech (E3 TTS)", "https://arxiv.org/abs/2311.04571", Year = 2023, Authors = "Gao et al.")]
 public class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly E3TTSOptions _options; public override ModelOptions GetOptions() => _options;

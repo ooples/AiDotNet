@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -18,6 +19,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// math (polynomial extrapolation) to take bigger steps while maintaining quality.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FlowDPMSolverScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly int _solverOrder;

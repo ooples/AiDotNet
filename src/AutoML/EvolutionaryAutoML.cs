@@ -39,7 +39,7 @@ namespace AiDotNet.AutoML;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Large-Scale Evolution of Image Classifiers", "https://arxiv.org/abs/1703.01041")]
+    [ResearchPaper("Large-Scale Evolution of Image Classifiers", "https://arxiv.org/abs/1703.01041")]
 public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     private const int MinSuccessfulTrialsForEvolution = 10;

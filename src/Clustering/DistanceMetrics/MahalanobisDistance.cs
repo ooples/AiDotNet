@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -32,6 +34,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// - When features have different scales or correlations
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class MahalanobisDistance<T> : DistanceMetricBase<T>
 {
     private Matrix<T>? _inverseCovarianceMatrix;

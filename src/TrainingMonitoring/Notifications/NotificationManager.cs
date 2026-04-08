@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TrainingMonitoring.Notifications;
 
@@ -64,6 +66,7 @@ public class NotificationEventArgs : EventArgs
 /// await manager.SendAsync(TrainingNotification.TrainingCompleted("MyExp", 100, 0.05));
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class NotificationManager : IDisposable
 {
     private readonly ConcurrentDictionary<string, INotificationService> _services = new();

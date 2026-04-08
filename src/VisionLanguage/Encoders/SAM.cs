@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Kirillov et al.")]
+[ResearchPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Kirillov et al.")]
 public class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options; public override ModelOptions GetOptions() => _options;

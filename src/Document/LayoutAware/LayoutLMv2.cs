@@ -55,7 +55,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding", "https://doi.org/10.48550/arXiv.2012.14740", Year = 2021, Authors = "Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou")]
+[ResearchPaper("LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding", "https://doi.org/10.48550/arXiv.2012.14740", Year = 2021, Authors = "Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou")]
 public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv2Options _options;

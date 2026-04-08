@@ -48,7 +48,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Linear Non-Gaussian Acyclic Model for Causal Discovery", "https://jmlr.org/papers/v7/shimizu06a.html", Year = 2006, Authors = "Shohei Shimizu, Patrik O. Hoyer, Aapo Hyvarinen, Antti Kerminen")]
+[ResearchPaper("A Linear Non-Gaussian Acyclic Model for Causal Discovery", "https://jmlr.org/papers/v7/shimizu06a.html", Year = 2006, Authors = "Shohei Shimizu, Patrik O. Hoyer, Aapo Hyvarinen, Antti Kerminen")]
 public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     /// <inheritdoc/>

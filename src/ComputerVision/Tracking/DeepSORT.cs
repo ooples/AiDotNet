@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Tracking;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Simple Online and Realtime Tracking with a Deep Association Metric",
+[ResearchPaper("Simple Online and Realtime Tracking with a Deep Association Metric",
     "https://arxiv.org/abs/1703.07402",
     Year = 2017,
     Authors = "Nicolai Wojke, Alex Bewley, Dietrich Paulus")]

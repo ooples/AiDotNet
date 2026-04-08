@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", "https://arxiv.org/abs/2406.19389", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", "https://arxiv.org/abs/2406.19389", Year = 2024, Authors = "Zhang et al.")]
 public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly OMGLLaVAOptions _options;

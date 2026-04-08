@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239", Year = 2020, Authors = "Ho et al.")]
+[ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239", Year = 2020, Authors = "Ho et al.")]
 public class DDPMModel<T> : DiffusionModelBase<T>
 {
     #region Fields

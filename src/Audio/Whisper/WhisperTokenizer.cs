@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Audio.Whisper;
 
 /// <summary>
@@ -17,6 +20,8 @@ namespace AiDotNet.Audio.Whisper;
 /// </list>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class WhisperTokenizer
 {
     // Standard Whisper special token IDs

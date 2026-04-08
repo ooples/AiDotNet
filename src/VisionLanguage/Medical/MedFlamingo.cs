@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Med-Flamingo: A Multimodal Medical Few-shot Learner", "https://arxiv.org/abs/2307.15189", Year = 2023, Authors = "Moor et al.")]
+[ResearchPaper("Med-Flamingo: A Multimodal Medical Few-shot Learner", "https://arxiv.org/abs/2307.15189", Year = 2023, Authors = "Moor et al.")]
 public class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly MedFlamingoOptions _options; public override ModelOptions GetOptions() => _options;

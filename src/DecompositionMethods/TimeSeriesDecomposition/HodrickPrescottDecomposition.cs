@@ -24,7 +24,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-[ModelPaper("Postwar U.S. Business Cycles: An Empirical Investigation", "https://doi.org/10.2307/2953682", Year = 1997, Authors = "Robert J. Hodrick, Edward C. Prescott")]
+[ResearchPaper("Postwar U.S. Business Cycles: An Empirical Investigation", "https://doi.org/10.2307/2953682", Year = 1997, Authors = "Robert J. Hodrick, Edward C. Prescott")]
 public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     /// <summary>

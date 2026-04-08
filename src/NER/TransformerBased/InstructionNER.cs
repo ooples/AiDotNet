@@ -74,7 +74,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstructionNER: A Multi-Task Instruction-Based Generative Framework for Few-shot NER",
+[ResearchPaper("InstructionNER: A Multi-Task Instruction-Based Generative Framework for Few-shot NER",
     "https://arxiv.org/abs/2203.03903",
     Year = 2022,
     Authors = "Liwen Wang, Rumei Li, Yang Yan, Yuanmeng Yan, Sirui Wang, Wei Wu, Weiran Xu")]

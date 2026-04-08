@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("k-means Mask Transformer", "https://arxiv.org/abs/2207.04044", Year = 2022, Authors = "Yu et al.")]
+[ResearchPaper("k-means Mask Transformer", "https://arxiv.org/abs/2207.04044", Year = 2022, Authors = "Yu et al.")]
 public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly KMaXDeepLabOptions _options;

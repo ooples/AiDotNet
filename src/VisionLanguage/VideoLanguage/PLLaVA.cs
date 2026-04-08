@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PLLaVA: Parameter-free LLaVA Extension from Images to Videos for Video Dense Captioning", "https://arxiv.org/abs/2404.16994", Year = 2024, Authors = "Xu et al.")]
+[ResearchPaper("PLLaVA: Parameter-free LLaVA Extension from Images to Videos for Video Dense Captioning", "https://arxiv.org/abs/2404.16994", Year = 2024, Authors = "Xu et al.")]
 public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly PLLaVAOptions _options; public override ModelOptions GetOptions() => _options;

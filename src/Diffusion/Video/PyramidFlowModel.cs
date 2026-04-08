@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pyramidal Flow Matching for Efficient Video Generative Modeling", "https://arxiv.org/abs/2410.05954", Year = 2024, Authors = "Jin et al.")]
+[ResearchPaper("Pyramidal Flow Matching for Efficient Video Generative Modeling", "https://arxiv.org/abs/2410.05954", Year = 2024, Authors = "Jin et al.")]
 public class PyramidFlowModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

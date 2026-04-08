@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -9,6 +11,8 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <b>For Beginners:</b> This strategy tries to pick clients from different "types" of behavior by clustering
 /// clients into groups and sampling from each cluster.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly int _clusterCount;

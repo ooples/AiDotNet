@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffPano: Scalable and Consistent Text to Panorama Generation with Spherical Epipolar-Aware Diffusion", "https://arxiv.org/abs/2407.10642", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("DiffPano: Scalable and Consistent Text to Panorama Generation with Spherical Epipolar-Aware Diffusion", "https://arxiv.org/abs/2407.10642", Year = 2024, Authors = "Wang et al.")]
 public class DiffPanoModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

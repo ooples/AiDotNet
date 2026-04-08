@@ -101,7 +101,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ModelScope Text-to-Video Technical Report", "https://arxiv.org/abs/2308.06571", Year = 2023, Authors = "Wang et al.")]
+[ResearchPaper("ModelScope Text-to-Video Technical Report", "https://arxiv.org/abs/2308.06571", Year = 2023, Authors = "Wang et al.")]
 public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

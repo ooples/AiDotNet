@@ -45,7 +45,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation",
+[ResearchPaper("FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation",
     "https://arxiv.org/abs/2303.01237",
     Year = 2023,
     Authors = "Xiaoyu Shi, Zhaoyang Huang, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]

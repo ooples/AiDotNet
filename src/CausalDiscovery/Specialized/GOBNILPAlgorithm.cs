@@ -49,7 +49,7 @@ namespace AiDotNet.CausalDiscovery.Specialized;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Bayesian Network Learning with Cutting Planes", "https://auai.org/uai2012/papers/162.pdf", Year = 2012, Authors = "James Cussens")]
+[ResearchPaper("Bayesian Network Learning with Cutting Planes", "https://auai.org/uai2012/papers/162.pdf", Year = 2012, Authors = "James Cussens")]
 public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
 {
     /// <inheritdoc/>

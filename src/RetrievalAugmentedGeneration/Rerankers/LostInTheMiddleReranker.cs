@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
@@ -13,6 +15,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 /// Research shows LLMs often ignore information in the middle of long contexts.
 /// This reranker places most relevant documents at the beginning and end of the context.
 /// </remarks>
+[ComponentType(ComponentType.Reranker)]
+[PipelineStage(PipelineStage.PostRetrieval)]
 public class LostInTheMiddleReranker<T> : RerankerBase<T>
 {
     /// <summary>

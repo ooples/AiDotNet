@@ -82,7 +82,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers", "https://arxiv.org/abs/2205.15868", Year = 2023, Authors = "Hong et al.")]
+[ResearchPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers", "https://arxiv.org/abs/2205.15868", Year = 2023, Authors = "Hong et al.")]
 public class CogVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Empirical Study of Training End-to-End Vision-and-Language Transformers", "https://arxiv.org/abs/2111.02387", Year = 2022, Authors = "Dou et al.")]
+[ResearchPaper("An Empirical Study of Training End-to-End Vision-and-Language Transformers", "https://arxiv.org/abs/2111.02387", Year = 2022, Authors = "Dou et al.")]
 public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly METEROptions _options; public override ModelOptions GetOptions() => _options;

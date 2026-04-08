@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206", Year = 2024, Authors = "Esser et al.")]
+[ResearchPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206", Year = 2024, Authors = "Esser et al.")]
 public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

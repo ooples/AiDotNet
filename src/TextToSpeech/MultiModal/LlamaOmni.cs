@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaMA-Omni: Seamless Speech Interaction with Large Language Model", "https://arxiv.org/abs/2409.06666", Year = 2024, Authors = "Fang et al.")]
+[ResearchPaper("LLaMA-Omni: Seamless Speech Interaction with Large Language Model", "https://arxiv.org/abs/2409.06666", Year = 2024, Authors = "Fang et al.")]
 public class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly LlamaOmniOptions _options; public override ModelOptions GetOptions() => _options;

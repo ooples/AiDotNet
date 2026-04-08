@@ -34,10 +34,12 @@ namespace AiDotNet.MetaLearning.Models;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning",
+[ResearchPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning",
     "https://arxiv.org/abs/1805.10123",
     Year = 2018,
     Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -41,7 +41,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware", "https://arxiv.org/abs/1812.00332")]
+    [ResearchPaper("ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware", "https://arxiv.org/abs/1812.00332")]
     public class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

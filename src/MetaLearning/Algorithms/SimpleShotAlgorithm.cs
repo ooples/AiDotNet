@@ -82,10 +82,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SimpleShot: Revisiting Nearest-Neighbor Classification for Few-Shot Learning",
+[ResearchPaper("SimpleShot: Revisiting Nearest-Neighbor Classification for Few-Shot Learning",
     "https://arxiv.org/abs/1911.04623",
     Year = 2019,
     Authors = "Yan Wang, Wei-Lun Chao, Kilian Q. Weinberger, Laurens van der Maaten")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

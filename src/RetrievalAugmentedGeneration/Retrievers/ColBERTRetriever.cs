@@ -1,6 +1,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -64,6 +66,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - You have computational resources for token-level matching
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class ColBERTRetriever<T> : RetrieverBase<T>
 {
     private readonly string _modelPath;

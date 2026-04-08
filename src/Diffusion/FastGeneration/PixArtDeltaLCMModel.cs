@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
 public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

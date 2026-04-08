@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", "https://arxiv.org/abs/2509.25826")]
+[ResearchPaper("Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", "https://arxiv.org/abs/2509.25826")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Kairos<T> : TimeSeriesFoundationModelBase<T>
 {

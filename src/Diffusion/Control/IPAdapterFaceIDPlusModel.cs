@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
+[ResearchPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
 public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

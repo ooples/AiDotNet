@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Self-Attention Generative Adversarial Networks", "https://arxiv.org/abs/1805.08318", Year = 2019, Authors = "Han Zhang, Ian Goodfellow, Dimitris Metaxas, Augustus Odena")]
+[ResearchPaper("Self-Attention Generative Adversarial Networks", "https://arxiv.org/abs/1805.08318", Year = 2019, Authors = "Han Zhang, Ian Goodfellow, Dimitris Metaxas, Augustus Odena")]
 public class SAGAN<T> : NeuralNetworkBase<T>
 {
     private readonly SAGANOptions _options;

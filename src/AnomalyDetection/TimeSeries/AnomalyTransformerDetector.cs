@@ -51,7 +51,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy",
+[ResearchPaper("Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy",
     "https://openreview.net/forum?id=LzQQ89U1qm_",
     Year = 2022,
     Authors = "Jiehui Xu, Haixu Wu, Jianmin Wang, Mingsheng Long")]

@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-CoT: Let Vision Language Models Reason Step-by-Step", "https://arxiv.org/abs/2411.10440", Year = 2024, Authors = "Xu et al.")]
+[ResearchPaper("LLaVA-CoT: Let Vision Language Models Reason Step-by-Step", "https://arxiv.org/abs/2411.10440", Year = 2024, Authors = "Xu et al.")]
 public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly LLaVACoTOptions _options; public override ModelOptions GetOptions() => _options;

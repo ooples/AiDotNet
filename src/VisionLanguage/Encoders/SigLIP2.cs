@@ -91,7 +91,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding", "https://arxiv.org/abs/2502.14786", Year = 2025, Authors = "Tschannen et al.")]
+[ResearchPaper("SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding", "https://arxiv.org/abs/2502.14786", Year = 2025, Authors = "Tschannen et al.")]
 public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields

@@ -40,7 +40,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Reliable Evaluation of Adversarial Robustness with an Ensemble of Diverse Parameter-Free Attacks", "https://arxiv.org/abs/2003.01690", Year = 2020, Authors = "Francesco Croce, Matthias Hein")]
+[ResearchPaper("Reliable Evaluation of Adversarial Robustness with an Ensemble of Diverse Parameter-Free Attacks", "https://arxiv.org/abs/2003.01690", Year = 2020, Authors = "Francesco Croce, Matthias Hein")]
 public class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     private readonly PGDAttack<T, TInput, TOutput> pgdAttack;

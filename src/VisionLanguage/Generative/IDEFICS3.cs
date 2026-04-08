@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Building and better understanding vision-language models: insights and future directions", "https://arxiv.org/abs/2408.12637", Year = 2024, Authors = "Laurencon et al.")]
+[ResearchPaper("Building and better understanding vision-language models: insights and future directions", "https://arxiv.org/abs/2408.12637", Year = 2024, Authors = "Laurencon et al.")]
 public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICS3Options _options; public override ModelOptions GetOptions() => _options;

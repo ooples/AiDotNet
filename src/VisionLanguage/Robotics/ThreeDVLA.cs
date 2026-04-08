@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3D-VLA: A 3D Vision-Language-Action Generative World Model", "https://arxiv.org/abs/2403.09631", Year = 2024, Authors = "Zhen et al.")]
+[ResearchPaper("3D-VLA: A 3D Vision-Language-Action Generative World Model", "https://arxiv.org/abs/2403.09631", Year = 2024, Authors = "Zhen et al.")]
 public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly ThreeDVLAOptions _options; public override ModelOptions GetOptions() => _options;

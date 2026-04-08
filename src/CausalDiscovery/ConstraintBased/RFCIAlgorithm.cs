@@ -37,7 +37,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Learning High-Dimensional Directed Acyclic Graphs with Latent and Selection Variables", "https://doi.org/10.1214/11-AOS940", Year = 2012, Authors = "Diego Colombo, Marloes H. Maathuis, Markus Kalisch, Thomas S. Richardson")]
+[ResearchPaper("Learning High-Dimensional Directed Acyclic Graphs with Latent and Selection Variables", "https://doi.org/10.1214/11-AOS940", Year = 2012, Authors = "Diego Colombo, Marloes H. Maathuis, Markus Kalisch, Thomas S. Richardson")]
 public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>

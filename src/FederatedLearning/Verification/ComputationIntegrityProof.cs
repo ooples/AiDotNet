@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Verification;
@@ -37,6 +39,8 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ComputationIntegrityProof<T> : FederatedLearningComponentBase<T>, IVerifiableComputation
 {
     private readonly IZkProofSystem _proofSystem;

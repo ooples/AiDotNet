@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelTask(ModelTask.Classification)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Reinforcement Learning: An Introduction",
+    [ResearchPaper("Reinforcement Learning: An Introduction",
         "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]

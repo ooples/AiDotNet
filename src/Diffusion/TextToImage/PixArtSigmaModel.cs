@@ -72,7 +72,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PixArt-Sigma: Weak-to-Strong Training of Diffusion Transformer for 4K Text-to-Image Generation", "https://arxiv.org/abs/2403.04692", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("PixArt-Sigma: Weak-to-Strong Training of Diffusion Transformer for 4K Text-to-Image Generation", "https://arxiv.org/abs/2403.04692", Year = 2024, Authors = "Chen et al.")]
 public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

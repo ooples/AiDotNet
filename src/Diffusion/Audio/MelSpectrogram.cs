@@ -1,6 +1,8 @@
 ﻿using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -42,6 +44,8 @@ namespace AiDotNet.Diffusion.Audio;
 /// ```
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class MelSpectrogram<T>
 {
     /// <summary>

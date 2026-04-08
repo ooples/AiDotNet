@@ -75,7 +75,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TimeGPT-1", "https://arxiv.org/abs/2310.03589", Year = 2023, Authors = "Azul Garza, Max Mergenthaler-Canseco")]
+[ResearchPaper("TimeGPT-1", "https://arxiv.org/abs/2310.03589", Year = 2023, Authors = "Azul Garza, Max Mergenthaler-Canseco")]
 public class TimeGPT<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

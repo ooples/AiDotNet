@@ -1,3 +1,6 @@
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
+
 namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Basic;
 
 /// <summary>
@@ -16,6 +19,8 @@ namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Basic;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class RandomSplitter<T> : TrainTestSplitter<T>
 {
     /// <summary>

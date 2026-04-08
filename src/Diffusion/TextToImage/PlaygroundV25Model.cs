@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Playground v2.5: Three Insights towards Enhancing Aesthetic Quality in Text-to-Image Generation", "https://arxiv.org/abs/2402.17245", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("Playground v2.5: Three Insights towards Enhancing Aesthetic Quality in Text-to-Image Generation", "https://arxiv.org/abs/2402.17245", Year = 2024, Authors = "Li et al.")]
 public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

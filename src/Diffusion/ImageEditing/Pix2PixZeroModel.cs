@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Zero-shot Image-to-Image Translation", "https://arxiv.org/abs/2302.03027", Year = 2023, Authors = "Parmar et al.")]
+[ResearchPaper("Zero-shot Image-to-Image Translation", "https://arxiv.org/abs/2302.03027", Year = 2023, Authors = "Parmar et al.")]
 public class Pix2PixZeroModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration", "https://arxiv.org/abs/2311.04257", Year = 2024, Authors = "Ye et al.")]
+[ResearchPaper("mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration", "https://arxiv.org/abs/2311.04257", Year = 2024, Authors = "Ye et al.")]
 public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MPLUGOwl2Options _options; public override ModelOptions GetOptions() => _options;

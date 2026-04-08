@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Chen et al.")]
+[ResearchPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Chen et al.")]
 public class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WavLMRobustOptions _options; public override ModelOptions GetOptions() => _options;

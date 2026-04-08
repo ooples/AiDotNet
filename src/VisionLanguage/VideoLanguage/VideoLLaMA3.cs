@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoLLaMA 3: Frontier Multimodal Foundation Models for Image and Video Understanding", "https://arxiv.org/abs/2501.13106", Year = 2025, Authors = "Zhang et al.")]
+[ResearchPaper("VideoLLaMA 3: Frontier Multimodal Foundation Models for Image and Video Understanding", "https://arxiv.org/abs/2501.13106", Year = 2025, Authors = "Zhang et al.")]
 public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA3Options _options; public override ModelOptions GetOptions() => _options;

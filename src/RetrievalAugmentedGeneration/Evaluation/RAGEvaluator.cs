@@ -1,4 +1,5 @@
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -34,6 +35,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Make data-driven optimization decisions
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class RAGEvaluator<T>
 {
     private readonly IReadOnlyList<IRAGMetric<T>> _metrics;

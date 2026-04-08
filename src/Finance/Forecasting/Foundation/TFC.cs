@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", "https://arxiv.org/abs/2206.08496", Year = 2022, Authors = "Xiang Zhang, Ziyuan Zhao, Theodoros Tsiligkaridis, Marinka Zitnik")]
+[ResearchPaper("Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", "https://arxiv.org/abs/2206.08496", Year = 2022, Authors = "Xiang Zhang, Ziyuan Zhao, Theodoros Tsiligkaridis, Marinka Zitnik")]
 public class TFC<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

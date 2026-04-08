@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models", "https://arxiv.org/abs/2311.06607", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models", "https://arxiv.org/abs/2311.06607", Year = 2024, Authors = "Li et al.")]
 public class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MonkeyOptions _options; public override ModelOptions GetOptions() => _options;

@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Causal Discovery with Continuous Additive Noise Models", "https://jmlr.org/papers/v14/peters13a.html", Year = 2013, Authors = "Jonas Peters, Joris M. Mooij, Dominik Janzing, Bernhard Scholkopf")]
+[ResearchPaper("Causal Discovery with Continuous Additive Noise Models", "https://jmlr.org/papers/v14/peters13a.html", Year = 2013, Authors = "Jonas Peters, Joris M. Mooij, Dominik Janzing, Bernhard Scholkopf")]
 public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <summary>

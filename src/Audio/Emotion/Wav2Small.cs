@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Wav2Small: Distilling Wav2Vec2.0 to 72K Parameters for Low-Resource Speech Emotion Recognition", "https://arxiv.org/abs/2408.13920", Year = 2024, Authors = "Alejandro Gomez-Alanis, Jose A. Gonzalez-Lopez, S. Pavankumar Dubagunta")]
+[ResearchPaper("Wav2Small: Distilling Wav2Vec2.0 to 72K Parameters for Low-Resource Speech Emotion Recognition", "https://arxiv.org/abs/2408.13920", Year = 2024, Authors = "Alejandro Gomez-Alanis, Jose A. Gonzalez-Lopez, S. Pavankumar Dubagunta")]
 public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields

@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("One-Step Image Translation with Text-to-Image Models", "https://arxiv.org/abs/2403.12036", Year = 2024, Authors = "Parmar et al.")]
+[ResearchPaper("One-Step Image Translation with Text-to-Image Models", "https://arxiv.org/abs/2403.12036", Year = 2024, Authors = "Parmar et al.")]
 public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

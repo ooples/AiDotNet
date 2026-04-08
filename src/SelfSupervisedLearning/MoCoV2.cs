@@ -32,7 +32,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improved Baselines with Momentum Contrastive Learning", "https://arxiv.org/abs/2003.04297", Year = 2020, Authors = "Xinlei Chen, Haoqi Fan, Ross Girshick, Kaiming He")]
+[ResearchPaper("Improved Baselines with Momentum Contrastive Learning", "https://arxiv.org/abs/2003.04297", Year = 2020, Authors = "Xinlei Chen, Haoqi Fan, Ross Girshick, Kaiming He")]
 public class MoCoV2<T> : MoCo<T>
 {
     /// <inheritdoc />

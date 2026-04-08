@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MoG: Motion-Aware Generative Frame Interpolation",
+[ResearchPaper("MoG: Motion-Aware Generative Frame Interpolation",
     "https://arxiv.org/abs/2501.03782",
     Year = 2025,
     Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]

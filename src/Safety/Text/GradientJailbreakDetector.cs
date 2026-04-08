@@ -46,7 +46,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GradSafe: Detecting Unsafe Prompts for LLMs via Safety-Critical Gradient Analysis",
+[ResearchPaper("GradSafe: Detecting Unsafe Prompts for LLMs via Safety-Critical Gradient Analysis",
     "https://arxiv.org/abs/2402.13494",
     Year = 2024,
     Authors = "Yueqi Xie, Minghong Fang, Renjie Pi, Neil Gong")]

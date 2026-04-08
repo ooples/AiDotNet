@@ -2,6 +2,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -37,6 +39,8 @@ namespace AiDotNet.Diffusion.Audio;
 /// ```
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ShortTimeFourierTransform<T>
 {
     /// <summary>

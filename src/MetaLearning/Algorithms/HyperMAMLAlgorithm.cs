@@ -82,10 +82,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Hypernetworks",
+[ResearchPaper("Meta-Learning with Hypernetworks",
     "https://arxiv.org/abs/1906.05838",
     Year = 2019,
     Authors = "Johannes von Oswald, Christian Henning, Benjamin F. Grewe, Joao Sacramento")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

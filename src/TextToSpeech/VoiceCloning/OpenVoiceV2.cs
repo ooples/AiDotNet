@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OpenVoice V2: Improved Instant Voice Cloning", "https://arxiv.org/abs/2312.01479", Year = 2024, Authors = "Qin et al.")]
+[ResearchPaper("OpenVoice V2: Improved Instant Voice Cloning", "https://arxiv.org/abs/2312.01479", Year = 2024, Authors = "Qin et al.")]
 public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly OpenVoiceV2Options _options; public override ModelOptions GetOptions() => _options;

@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation",
+[ResearchPaper("RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation",
     "https://arxiv.org/abs/2011.06294",
     Year = 2022,
     Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]

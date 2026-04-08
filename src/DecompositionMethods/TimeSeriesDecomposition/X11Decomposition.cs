@@ -25,7 +25,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-    [ModelPaper("X-11 Seasonal Adjustment Method", "https://www.census.gov/library/working-papers/1965/adrm/shiskin-01.html")]
+    [ResearchPaper("X-11 Seasonal Adjustment Method", "https://www.census.gov/library/working-papers/1965/adrm/shiskin-01.html")]
 public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
 {
     /// <summary>

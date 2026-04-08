@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MetaTox: A Unified Knowledge Graph for Enhanced LLM Toxicity Detection",
+[ResearchPaper("MetaTox: A Unified Knowledge Graph for Enhanced LLM Toxicity Detection",
     "https://arxiv.org/abs/2412.15268",
     Year = 2024,
     Authors = "Yifan Li, Zhengnan Hou, et al.")]

@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DIFRINT: A Framework for Full-Frame Video Stabilization",
+[ResearchPaper("DIFRINT: A Framework for Full-Frame Video Stabilization",
     "https://arxiv.org/abs/2005.07055",
     Year = 2020,
     Authors = "Zhenmei Shi, Fuhao Shi, Wei-Sheng Lai, Chia-Kai Liang, Yingyu Liang")]

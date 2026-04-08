@@ -42,7 +42,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Exploring Simple Siamese Representation Learning", "https://arxiv.org/abs/2011.10566", Year = 2021, Authors = "Xinlei Chen, Kaiming He")]
+[ResearchPaper("Exploring Simple Siamese Representation Learning", "https://arxiv.org/abs/2011.10566", Year = 2021, Authors = "Xinlei Chen, Kaiming He")]
 public class SimSiam<T> : SSLMethodBase<T>
 {
     private readonly BYOLLoss<T> _loss;

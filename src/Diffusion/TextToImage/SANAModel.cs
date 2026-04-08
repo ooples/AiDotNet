@@ -98,7 +98,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers", "https://arxiv.org/abs/2410.10629", Year = 2024, Authors = "Xie et al.")]
+[ResearchPaper("SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers", "https://arxiv.org/abs/2410.10629", Year = 2024, Authors = "Xie et al.")]
 public class SANAModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

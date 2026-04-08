@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.DriftDetection;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ModelDriftDetector<T> : FederatedLearningComponentBase<T>, IFederatedDriftDetector<T>
 {
     private readonly FederatedDriftOptions _options;

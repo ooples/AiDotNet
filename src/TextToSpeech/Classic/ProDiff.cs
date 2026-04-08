@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech", "https://arxiv.org/abs/2207.06389", Year = 2022, Authors = "Huang et al.")]
+[ResearchPaper("ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech", "https://arxiv.org/abs/2207.06389", Year = 2022, Authors = "Huang et al.")]
 public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;

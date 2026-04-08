@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Saliency Detection: A Spectral Residual Approach", "https://doi.org/10.1109/CVPR.2007.383267", Year = 2007, Authors = "Xiaodi Hou, Liqing Zhang")]
+[ResearchPaper("Saliency Detection: A Spectral Residual Approach", "https://doi.org/10.1109/CVPR.2007.383267", Year = 2007, Authors = "Xiaodi Hou, Liqing Zhang")]
 public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.Evaluation;
@@ -36,6 +38,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - Computationally expensive for large datasets (O(n²))
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class DunnIndex<T> : IClusterMetric<T>
 {
     /// <inheritdoc />

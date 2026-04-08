@@ -63,7 +63,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging",
+[ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging",
     "https://arxiv.org/abs/2203.06482",
     Year = 2022,
     Authors = "Lefteris Loukas, Manos Fergadiotis, Ilias Chalkidis, Eirini Spyropoulou, Prodromos Malakasiotis, Ion Androutsopoulos, Georgios Paliouras")]

@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Hybrid Causal Search Algorithm for Latent Variable Models", "https://doi.org/10.48550/arXiv.1602.01426", Year = 2016, Authors = "Juan Miguel Ogarrio, Peter Spirtes, Joe Ramsey")]
+[ResearchPaper("A Hybrid Causal Search Algorithm for Latent Variable Models", "https://doi.org/10.48550/arXiv.1602.01426", Year = 2016, Authors = "Juan Miguel Ogarrio, Peter Spirtes, Joe Ramsey")]
 public class GFCIAlgorithm<T> : HybridBase<T>
 {
     private readonly int _maxConditioningSetSize;

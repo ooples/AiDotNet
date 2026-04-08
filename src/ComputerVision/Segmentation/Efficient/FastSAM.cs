@@ -51,7 +51,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Fast Segment Anything", "https://arxiv.org/abs/2306.12156", Year = 2023, Authors = "Xu Zhao, Wenchao Ding, Yongqi An, Yinglong Du, Tao Yu, Min Li, Ming Tang, Jinqiao Wang")]
+[ResearchPaper("Fast Segment Anything", "https://arxiv.org/abs/2306.12156", Year = 2023, Authors = "Xu Zhao, Wenchao Ding, Yongqi An, Yinglong Du, Tao Yu, Min Li, Ming Tang, Jinqiao Wang")]
 public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly FastSAMOptions _options;

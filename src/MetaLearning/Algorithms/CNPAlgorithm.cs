@@ -39,10 +39,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conditional Neural Processes",
+[ResearchPaper("Conditional Neural Processes",
     "https://arxiv.org/abs/1807.01613",
     Year = 2018,
     Authors = "Marta Garnelo, Dan Rosenbaum, Christopher Maddison, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class CNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly CNPOptions<T, TInput, TOutput> _cnpOptions;

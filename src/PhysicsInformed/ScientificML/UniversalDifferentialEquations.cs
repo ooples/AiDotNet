@@ -74,7 +74,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Universal Differential Equations for Scientific Machine Learning", "https://doi.org/10.48550/arXiv.2001.04385", Year = 2021, Authors = "Christopher Rackauckas, Yingbo Ma, Julius Martensen, Collin Warner, Kirill Zubov, Rohit Supekar, Dominic Skinner, Ali Ramadhan, Alan Edelman")]
+    [ResearchPaper("Universal Differential Equations for Scientific Machine Learning", "https://doi.org/10.48550/arXiv.2001.04385", Year = 2021, Authors = "Christopher Rackauckas, Yingbo Ma, Julius Martensen, Collin Warner, Kirill Zubov, Rohit Supekar, Dominic Skinner, Ali Ramadhan, Alan Edelman")]
     public class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
     {
         private readonly UniversalDifferentialEquationsOptions _options;
@@ -390,6 +390,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentException($"Expected output shape [batch, {_stateDim}].", nameof(expectedOutput));
             }
 
+            SetTrainingMode(true);
             SetTrainingMode(true);
             try
             {

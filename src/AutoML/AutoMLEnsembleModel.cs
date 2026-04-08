@@ -45,7 +45,7 @@ namespace AiDotNet.AutoML;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Ensemble Methods in Machine Learning", "https://doi.org/10.1007/3-540-45014-9_1")]
+[ResearchPaper("Ensemble Methods in Machine Learning", "https://doi.org/10.1007/3-540-45014-9_1")]
 public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 {
 

@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation", "https://arxiv.org/abs/2402.11894", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation", "https://arxiv.org/abs/2402.11894", Year = 2024, Authors = "Wu et al.")]
 public class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly VILAUOptions _options; public override ModelOptions GetOptions() => _options;

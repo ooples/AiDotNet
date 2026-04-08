@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -38,6 +39,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Song et al., "Consistency Models", ICML 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
 {
     private Vector<T>? _sigmas;

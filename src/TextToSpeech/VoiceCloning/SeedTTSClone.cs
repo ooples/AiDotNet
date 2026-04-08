@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Seed-TTS: A Family of High-Quality Versatile Speech Generation Models", "https://arxiv.org/abs/2406.02430", Year = 2024, Authors = "Anastassiou et al.")]
+[ResearchPaper("Seed-TTS: A Family of High-Quality Versatile Speech Generation Models", "https://arxiv.org/abs/2406.02430", Year = 2024, Authors = "Anastassiou et al.")]
 public class SeedTTSClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly SeedTTSCloneOptions _options; public override ModelOptions GetOptions() => _options;

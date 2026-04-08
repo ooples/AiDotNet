@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Regularization;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements L1 regularization (also known as Lasso), a technique that adds a penalty equal to the
@@ -21,6 +24,8 @@
 /// - This means some features are completely eliminated from the model
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Regularizer)]
+[PipelineStage(PipelineStage.Training)]
 public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>

@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
+[ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
 public class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FireRedASRLLMOptions _options; public override ModelOptions GetOptions() => _options;

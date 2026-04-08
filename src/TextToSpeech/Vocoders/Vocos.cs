@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Vocos: Closing the Gap between Time-Domain and Fourier-Based Neural Vocoders for High-Quality Audio Synthesis", "https://arxiv.org/abs/2306.00814", Year = 2023, Authors = "Siuzdak")]
+[ResearchPaper("Vocos: Closing the Gap between Time-Domain and Fourier-Based Neural Vocoders for High-Quality Audio Synthesis", "https://arxiv.org/abs/2306.00814", Year = 2023, Authors = "Siuzdak")]
 public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly VocosOptions _options; public override ModelOptions GetOptions() => _options;

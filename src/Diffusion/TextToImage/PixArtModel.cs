@@ -101,7 +101,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PixArt-alpha: Fast Training of Diffusion Transformer for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2310.00426", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("PixArt-alpha: Fast Training of Diffusion Transformer for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2310.00426", Year = 2024, Authors = "Chen et al.")]
 public class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

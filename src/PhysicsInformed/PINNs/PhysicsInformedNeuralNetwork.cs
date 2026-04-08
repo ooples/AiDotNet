@@ -88,7 +88,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
+    [ResearchPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
     public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;

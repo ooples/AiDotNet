@@ -65,10 +65,12 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Mutual Learning",
+[ResearchPaper("Deep Mutual Learning",
     "https://arxiv.org/abs/1706.00384",
     Year = 2018,
     Authors = "Ying Zhang, Tao Xiang, Timothy M. Hospedales, Huchuan Lu")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>>? _teacherForward;

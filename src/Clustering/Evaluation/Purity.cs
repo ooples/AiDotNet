@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Clustering.Evaluation;
 
 /// <summary>
@@ -31,6 +34,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// But beware: Purity increases as k increases (k=n gives purity=1).
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class Purity<T> : ExternalClusterMetricBase<T>
 {
     /// <summary>

@@ -51,7 +51,7 @@ namespace AiDotNet.AutoML;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("BOHB: Robust and Efficient Hyperparameter Optimization at Scale", "https://arxiv.org/abs/1807.01774")]
+    [ResearchPaper("BOHB: Robust and Efficient Hyperparameter Optimization at Scale", "https://arxiv.org/abs/1807.01774")]
 public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     private const string FidelityFractionKey = "FidelityFraction";

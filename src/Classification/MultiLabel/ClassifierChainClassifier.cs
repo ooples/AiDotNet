@@ -71,7 +71,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
+[ResearchPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
 public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 {
     #region Fields

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// hiding them and checking if they rank highly.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class LinkPredictor<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

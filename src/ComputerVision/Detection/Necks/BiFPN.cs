@@ -30,7 +30,7 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EfficientDet: Scalable and Efficient Object Detection",
+[ResearchPaper("EfficientDet: Scalable and Efficient Object Detection",
     "https://arxiv.org/abs/1911.09070",
     Year = 2020,
     Authors = "Mingxing Tan, Ruoming Pang, Quoc V. Le")]

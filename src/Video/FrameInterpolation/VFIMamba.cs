@@ -60,7 +60,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VFIMamba: Video Frame Interpolation with State Space Models",
+[ResearchPaper("VFIMamba: Video Frame Interpolation with State Space Models",
     "https://arxiv.org/abs/2407.02315",
     Year = 2024,
     Authors = "Guozhen Zhang, Chunxu Liu, Yuhan Zhu, Limin Wang")]

@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Swin UNETR: Swin Transformers for Semantic Segmentation of Brain Tumors in MRI Images", "https://arxiv.org/abs/2201.01266", Year = 2022, Authors = "Ali Hatamizadeh, Vishwesh Nath, Yucheng Tang, Dong Yang, Holger R. Roth, Daguang Xu")]
+[ResearchPaper("Swin UNETR: Swin Transformers for Semantic Segmentation of Brain Tumors in MRI Images", "https://arxiv.org/abs/2201.01266", Year = 2022, Authors = "Ali Hatamizadeh, Vishwesh Nath, Yucheng Tang, Dong Yang, Holger R. Roth, Daguang Xu")]
 public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly SwinUNETROptions _options;

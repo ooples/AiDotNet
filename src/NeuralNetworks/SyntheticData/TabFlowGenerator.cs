@@ -75,7 +75,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Flow Matching for Generative Modeling",
+[ResearchPaper("Flow Matching for Generative Modeling",
     "https://arxiv.org/abs/2210.02747",
     Year = 2023,
     Authors = "Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, Matt Le")]

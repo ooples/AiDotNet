@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", "https://arxiv.org/abs/2408.00874", Year = 2024, Authors = "Zhu et al.")]
+[ResearchPaper("Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", "https://arxiv.org/abs/2408.00874", Year = 2024, Authors = "Zhu et al.")]
 public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSAM2Options _options;

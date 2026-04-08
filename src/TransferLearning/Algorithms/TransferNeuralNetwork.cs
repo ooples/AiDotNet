@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -17,6 +19,8 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// adapter layers and knowledge distillation to make this possible.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.TransferAlgorithm)]
+[PipelineStage(PipelineStage.Training)]
 public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     /// <summary>

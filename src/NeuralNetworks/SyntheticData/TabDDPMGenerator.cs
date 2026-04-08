@@ -88,7 +88,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabDDPM: Modelling Tabular Data with Diffusion Models",
+[ResearchPaper("TabDDPM: Modelling Tabular Data with Diffusion Models",
     "https://arxiv.org/abs/2209.15421",
     Year = 2023,
     Authors = "Akim Kotelnikov, Dmitry Baranchuk, Ivan Rubachev, Artem Babenko")]

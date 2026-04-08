@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks",
+[ResearchPaper("Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks",
     "https://arxiv.org/abs/1506.01497",
     Year = 2015,
     Authors = "Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun")]

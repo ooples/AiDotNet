@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
@@ -40,6 +42,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - You need transparent, verifiable reasoning chains
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

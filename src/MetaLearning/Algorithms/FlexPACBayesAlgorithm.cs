@@ -54,10 +54,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PAC-Bayes Meta-Learning with Implicit Task-Specific Posteriors",
+[ResearchPaper("PAC-Bayes Meta-Learning with Implicit Task-Specific Posteriors",
     "https://arxiv.org/abs/2003.05529",
     Year = 2020,
     Authors = "Cuong Nguyen, Thanh-Toan Do, Gustavo Carneiro")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

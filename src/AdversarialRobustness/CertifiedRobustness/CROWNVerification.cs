@@ -50,7 +50,7 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Efficient Neural Network Robustness Certification with General Activation Functions", "https://arxiv.org/abs/1811.00866", Year = 2018, Authors = "Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, Luca Daniel")]
+[ResearchPaper("Efficient Neural Network Robustness Certification with General Activation Functions", "https://arxiv.org/abs/1811.00866", Year = 2018, Authors = "Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, Luca Daniel")]
 public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
     /// <summary>

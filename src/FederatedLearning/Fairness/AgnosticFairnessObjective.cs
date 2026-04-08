@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Fairness;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para>Reference: Mohri, M., et al. (2019). "Agnostic Federated Learning." ICML 2019.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _lambdaLearningRate;

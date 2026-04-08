@@ -72,7 +72,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Enhancement)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks", "https://arxiv.org/abs/1406.2279", Year = 2015, Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
+[ResearchPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks", "https://arxiv.org/abs/1406.2279", Year = 2015, Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
 public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly NeuralNoiseReducerOptions _options;

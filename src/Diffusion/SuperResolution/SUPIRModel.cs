@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Up to Excellence: Practicing Model Scaling for Photo-Realistic Image Restoration In the Wild", "https://arxiv.org/abs/2401.13627", Year = 2024, Authors = "Yu et al.")]
+[ResearchPaper("Scaling Up to Excellence: Practicing Model Scaling for Photo-Realistic Image Restoration In the Wild", "https://arxiv.org/abs/2401.13627", Year = 2024, Authors = "Yu et al.")]
 public class SUPIRModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

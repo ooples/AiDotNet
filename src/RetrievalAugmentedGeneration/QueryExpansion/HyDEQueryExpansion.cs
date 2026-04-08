@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
@@ -8,6 +10,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
     /// <summary>
     /// Hypothetical Document Embeddings (HyDE) query expansion strategy.
     /// </summary>
+    [ComponentType(ComponentType.QueryExpander)]
+    [PipelineStage(PipelineStage.QueryProcessing)]
     public class HyDEQueryExpansion : QueryExpansionBase
     {
         /// <summary>

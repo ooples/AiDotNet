@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// <para><b>Cloud availability:</b> Azure DCasv5/ECasv5 VMs, Google Cloud C2D, AWS (forthcoming).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class AmdSevSnpTeeProvider<T> : TeeProviderBase<T>
 {
     /// <summary>

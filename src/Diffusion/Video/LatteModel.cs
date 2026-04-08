@@ -103,7 +103,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Latte: Latent Diffusion Transformer for Video Generation", "https://arxiv.org/abs/2401.03048", Year = 2024, Authors = "Ma et al.")]
+[ResearchPaper("Latte: Latent Diffusion Transformer for Video Generation", "https://arxiv.org/abs/2401.03048", Year = 2024, Authors = "Ma et al.")]
 public class LatteModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

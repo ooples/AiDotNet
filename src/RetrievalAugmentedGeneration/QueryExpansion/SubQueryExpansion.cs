@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
@@ -59,6 +61,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// - When retrieval latency is critical (multiple searches = slower)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryExpander)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class SubQueryExpansion : QueryExpansionBase
 {
     /// <summary>

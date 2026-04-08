@@ -50,7 +50,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
+    [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
 public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

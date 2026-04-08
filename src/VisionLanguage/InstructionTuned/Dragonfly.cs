@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Dragonfly: Multi-Resolution Zoom Supercharges Large Visual-Language Model", "https://arxiv.org/abs/2406.00977", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("Dragonfly: Multi-Resolution Zoom Supercharges Large Visual-Language Model", "https://arxiv.org/abs/2406.00977", Year = 2024, Authors = "Chen et al.")]
 public class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DragonflyOptions _options; public override ModelOptions GetOptions() => _options;

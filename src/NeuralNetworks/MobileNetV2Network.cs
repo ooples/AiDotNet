@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MobileNetV2: Inverted Residuals and Linear Bottlenecks", "https://arxiv.org/abs/1801.04381", Year = 2018, Authors = "Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen")]
+[ResearchPaper("MobileNetV2: Inverted Residuals and Linear Bottlenecks", "https://arxiv.org/abs/1801.04381", Year = 2018, Authors = "Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen")]
 public class MobileNetV2Network<T> : NeuralNetworkBase<T>
 {
     private readonly MobileNetV2Options _options;

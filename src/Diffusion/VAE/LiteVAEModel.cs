@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LiteVAE: Lightweight and Efficient Variational Autoencoders for Latent Diffusion Models", "https://arxiv.org/abs/2405.14477", Year = 2024, Authors = "Sauer et al.")]
+[ResearchPaper("LiteVAE: Lightweight and Efficient Variational Autoencoders for Latent Diffusion Models", "https://arxiv.org/abs/2405.14477", Year = 2024, Authors = "Sauer et al.")]
 public class LiteVAEModel<T> : VAEModelBase<T>
 {
     private const double LITE_LATENT_SCALE = 0.18215;

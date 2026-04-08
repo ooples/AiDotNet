@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Nested Learning: The Illusion of Deep Learning Architectures", "https://arxiv.org/abs/2512.24695")]
+    [ResearchPaper("Nested Learning: The Illusion of Deep Learning Architectures", "https://arxiv.org/abs/2512.24695")]
 public class HopeNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopeNetworkOptions _options;

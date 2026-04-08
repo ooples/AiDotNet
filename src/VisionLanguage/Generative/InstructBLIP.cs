@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning", "https://arxiv.org/abs/2305.06500", Year = 2023, Authors = "Dai et al.")]
+[ResearchPaper("InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning", "https://arxiv.org/abs/2305.06500", Year = 2023, Authors = "Dai et al.")]
 public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly InstructBLIPOptions _options; public override ModelOptions GetOptions() => _options;

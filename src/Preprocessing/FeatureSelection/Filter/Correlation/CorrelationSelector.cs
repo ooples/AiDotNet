@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation;
 
@@ -34,6 +36,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly double _threshold;

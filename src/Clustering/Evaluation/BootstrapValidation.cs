@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -33,6 +35,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// If the bootstrap results vary a lot, be cautious about the clustering!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class BootstrapValidation<T>
 {
     private readonly INumericOperations<T> _numOps;

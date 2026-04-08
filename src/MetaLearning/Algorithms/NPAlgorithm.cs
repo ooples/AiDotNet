@@ -38,10 +38,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Processes",
+[ResearchPaper("Neural Processes",
     "https://arxiv.org/abs/1807.01622",
     Year = 2018,
     Authors = "Marta Garnelo, Jonathan Schwarz, Dan Rosenbaum, Fabio Viola, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly NPOptions<T, TInput, TOutput> _npOptions;

@@ -47,7 +47,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Adjacency-Faithfulness and Conservative Causal Inference", "https://arxiv.org/abs/1206.6843", Year = 2012, Authors = "Joseph Ramsey, Jiji Zhang, Peter Spirtes")]
+[ResearchPaper("Adjacency-Faithfulness and Conservative Causal Inference", "https://arxiv.org/abs/1206.6843", Year = 2012, Authors = "Joseph Ramsey, Jiji Zhang, Peter Spirtes")]
 public class CPCAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>

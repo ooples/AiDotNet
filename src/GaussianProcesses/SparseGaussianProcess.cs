@@ -28,7 +28,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("A Unifying View of Sparse Approximate Gaussian Process Regression", "https://doi.org/10.1162/jmlr.2005.6.65.1939", Year = 2005, Authors = "Joaquin Quiñonero-Candela, Carl Edward Rasmussen")]
+[ResearchPaper("A Unifying View of Sparse Approximate Gaussian Process Regression", "https://doi.org/10.1162/jmlr.2005.6.65.1939", Year = 2005, Authors = "Joaquin Quiñonero-Candela, Carl Edward Rasmussen")]
 public class SparseGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>

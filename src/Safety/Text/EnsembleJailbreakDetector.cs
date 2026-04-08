@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GuardReasoner: Towards Reasoning-based LLM Safeguards",
+[ResearchPaper("GuardReasoner: Towards Reasoning-based LLM Safeguards",
     "https://arxiv.org/abs/2501.18492",
     Year = 2025,
     Authors = "Yue Liu, Hongcheng Gao, Shaochen Zhong, et al.")]

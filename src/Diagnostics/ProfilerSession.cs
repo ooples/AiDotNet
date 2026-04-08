@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using AiDotNet.Attributes;
 using AiDotNet.Deployment.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Diagnostics;
@@ -45,6 +47,7 @@ namespace AiDotNet.Diagnostics;
 /// </code>
 /// </para>
 /// </remarks>
+[InfraType(InfraType.Telemetry)]
 public class ProfilerSession
 {
     private readonly ProfilingConfig _config;

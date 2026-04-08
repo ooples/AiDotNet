@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RAPIDFlow: Recurrent Adaptable Pyramids with Iterative Decoding for Efficient Optical Flow",
+[ResearchPaper("RAPIDFlow: Recurrent Adaptable Pyramids with Iterative Decoding for Efficient Optical Flow",
     "https://arxiv.org/abs/2501.04350",
     Year = 2025,
     Authors = "Henrique Morimitsu")]

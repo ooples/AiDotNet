@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ColumnEmbedding<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

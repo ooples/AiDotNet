@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MagicBrush: A Manually Annotated Dataset for Instruction-Guided Image Editing", "https://arxiv.org/abs/2306.10012", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("MagicBrush: A Manually Annotated Dataset for Instruction-Guided Image Editing", "https://arxiv.org/abs/2306.10012", Year = 2024, Authors = "Zhang et al.")]
 public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

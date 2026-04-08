@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
+[ResearchPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
 public class FinMA<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

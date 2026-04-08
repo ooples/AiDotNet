@@ -31,7 +31,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-    [ModelPaper("Matrix Computations", "https://doi.org/10.56021/9781421407944")]
+    [ResearchPaper("Matrix Computations", "https://doi.org/10.56021/9781421407944")]
 public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

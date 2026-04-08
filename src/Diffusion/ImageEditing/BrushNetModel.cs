@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BrushNet: A Plug-and-Play Image Inpainting Model with Decomposed Dual-Branch Diffusion", "https://arxiv.org/abs/2403.06976", Year = 2024, Authors = "Ju et al.")]
+[ResearchPaper("BrushNet: A Plug-and-Play Image Inpainting Model with Decomposed Dual-Branch Diffusion", "https://arxiv.org/abs/2403.06976", Year = 2024, Authors = "Ju et al.")]
 public class BrushNetModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

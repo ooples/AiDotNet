@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Fairness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification",
+[ResearchPaper("Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification",
     "https://proceedings.mlr.press/v81/buolamwini18a.html",
     Year = 2018,
     Authors = "Joy Buolamwini, Timnit Gebru")]

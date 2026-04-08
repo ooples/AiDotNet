@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Distillation;
 
@@ -28,6 +30,8 @@ namespace AiDotNet.Diffusion.Distillation;
 /// guidance with diffusion model scores for text-to-3D generation
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class SemanticScoreDistillation<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

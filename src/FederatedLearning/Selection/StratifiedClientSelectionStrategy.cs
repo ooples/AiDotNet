@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -9,6 +11,8 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <b>For Beginners:</b> If clients are split into groups (for example by region or device type),
 /// stratified sampling tries to pick clients from each group instead of accidentally picking only one group.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyBase
 {
     public override List<int> SelectClients(ClientSelectionRequest request)

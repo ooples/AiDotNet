@@ -32,7 +32,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DAG-GNN: DAG Structure Learning with Graph Neural Networks", "https://proceedings.mlr.press/v97/yu19a.html", Year = 2019, Authors = "Yue Yu, Jie Chen, Tian Gao, Mo Yu")]
+[ResearchPaper("DAG-GNN: DAG Structure Learning with Graph Neural Networks", "https://proceedings.mlr.press/v97/yu19a.html", Year = 2019, Authors = "Yue Yu, Jie Chen, Tian Gao, Mo Yu")]
 public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

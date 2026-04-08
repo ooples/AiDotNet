@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-OneVision: Easy Visual Task Transfer", "https://arxiv.org/abs/2408.03326", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("LLaVA-OneVision: Easy Visual Task Transfer", "https://arxiv.org/abs/2408.03326", Year = 2024, Authors = "Li et al.")]
 public class LLaVAOneVision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVAOneVisionOptions _options; public override ModelOptions GetOptions() => _options;

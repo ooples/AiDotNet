@@ -36,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Integrated Architectures for Learning, Planning, and Reacting Based on Approximating Dynamic Programming",
+[ResearchPaper("Integrated Architectures for Learning, Planning, and Reacting Based on Approximating Dynamic Programming",
     "https://doi.org/10.1016/B978-1-55860-213-7.50013-X",
     Year = 1991,
     Authors = "Sutton, R. S.")]

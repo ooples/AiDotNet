@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
@@ -58,6 +60,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// - Chunk 5: "Third paragraph."
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Chunker)]
+[PipelineStage(PipelineStage.DataIngestion)]
 public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
 {
     private readonly string[] _separators;

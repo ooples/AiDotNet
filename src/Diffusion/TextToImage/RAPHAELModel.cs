@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RAPHAEL: Text-to-Image Generation via Large Mixture of Diffusion Paths", "https://arxiv.org/abs/2305.18295", Year = 2023, Authors = "Xue et al.")]
+[ResearchPaper("RAPHAEL: Text-to-Image Generation via Large Mixture of Diffusion Paths", "https://arxiv.org/abs/2305.18295", Year = 2023, Authors = "Xue et al.")]
 public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

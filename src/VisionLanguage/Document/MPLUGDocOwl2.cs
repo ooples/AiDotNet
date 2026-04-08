@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("mPLUG-DocOwl 2: High-resolution Compressing for OCR-free Multi-page Document Understanding", "https://arxiv.org/abs/2409.03420", Year = 2024, Authors = "Hu et al.")]
+[ResearchPaper("mPLUG-DocOwl 2: High-resolution Compressing for OCR-free Multi-page Document Understanding", "https://arxiv.org/abs/2409.03420", Year = 2024, Authors = "Hu et al.")]
 public class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwl2Options _options; public override ModelOptions GetOptions() => _options;

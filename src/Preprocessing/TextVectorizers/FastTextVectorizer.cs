@@ -1,6 +1,8 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class FastTextVectorizer<T> : TextVectorizerBase<T>
 {
     private readonly int _vectorSize;

@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -14,6 +16,7 @@ namespace AiDotNet.Serialization
     /// of numbers) into JSON text format and back. It saves the shape (dimensions) and all the data values,
     /// so the tensor can be perfectly reconstructed later.</para>
     /// </remarks>
+    [InfraType(InfraType.Persistence)]
     public class TensorJsonConverter : JsonConverter
     {
         /// <summary>

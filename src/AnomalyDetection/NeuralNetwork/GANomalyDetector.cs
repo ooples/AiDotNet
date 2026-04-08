@@ -49,7 +49,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("GANomaly: Semi-Supervised Anomaly Detection via Adversarial Training", "https://doi.org/10.1007/978-3-030-20893-6_39", Year = 2018, Authors = "Samet Akcay, Amir Atapour-Abarghouei, Toby P. Breckon")]
+[ResearchPaper("GANomaly: Semi-Supervised Anomaly Detection via Adversarial Training", "https://doi.org/10.1007/978-3-030-20893-6_39", Year = 2018, Authors = "Samet Akcay, Amir Atapour-Abarghouei, Toby P. Breckon")]
 public class GANomalyDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;

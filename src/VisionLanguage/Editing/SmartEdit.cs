@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs", "https://arxiv.org/abs/2312.06739", Year = 2024, Authors = "Huang et al.")]
+[ResearchPaper("SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs", "https://arxiv.org/abs/2312.06739", Year = 2024, Authors = "Huang et al.")]
 public class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly SmartEditOptions _options; public override ModelOptions GetOptions() => _options;

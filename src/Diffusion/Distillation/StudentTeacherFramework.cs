@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Distillation;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Diffusion.Distillation;
 /// of Diffusion Models", ICLR 2022
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class StudentTeacherFramework<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

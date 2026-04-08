@@ -91,7 +91,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OmniGen: Unified Image Generation", "https://arxiv.org/abs/2409.11340", Year = 2024, Authors = "Xiao et al.")]
+[ResearchPaper("OmniGen: Unified Image Generation", "https://arxiv.org/abs/2409.11340", Year = 2024, Authors = "Xiao et al.")]
 public class OmniGenModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

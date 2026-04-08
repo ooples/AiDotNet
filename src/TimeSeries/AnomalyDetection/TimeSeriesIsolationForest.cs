@@ -62,7 +62,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Isolation Forest", "https://doi.org/10.1109/ICDM.2008.17", Year = 2008, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
+[ResearchPaper("Isolation Forest", "https://doi.org/10.1109/ICDM.2008.17", Year = 2008, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
 public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 {
     private readonly TimeSeriesIsolationForestOptions<T> _options;

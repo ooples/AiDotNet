@@ -102,7 +102,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
+    [ResearchPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
 public class Flux1Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -96,10 +96,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning",
+[ResearchPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning",
     "https://arxiv.org/abs/1805.10123",
     Year = 2018,
     Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

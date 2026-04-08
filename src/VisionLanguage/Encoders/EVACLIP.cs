@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EVA-CLIP: Improved Training Techniques for CLIP at Scale", "https://arxiv.org/abs/2303.15389", Year = 2023, Authors = "Sun et al.")]
+[ResearchPaper("EVA-CLIP: Improved Training Techniques for CLIP at Scale", "https://arxiv.org/abs/2303.15389", Year = 2023, Authors = "Sun et al.")]
 public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly EVACLIPOptions _options;

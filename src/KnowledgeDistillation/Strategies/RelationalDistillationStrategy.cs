@@ -81,10 +81,12 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Relational Knowledge Distillation",
+[ResearchPaper("Relational Knowledge Distillation",
     "https://arxiv.org/abs/1904.05068",
     Year = 2019,
     Authors = "Wonpyo Park, Dongju Kim, Yan Lu, Minsu Cho")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _distanceWeight;

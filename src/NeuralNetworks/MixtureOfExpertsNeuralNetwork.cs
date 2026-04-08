@@ -64,7 +64,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer", "https://arxiv.org/abs/1701.06538", Year = 2017, Authors = "Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, Jeff Dean")]
+[ResearchPaper("Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer", "https://arxiv.org/abs/1701.06538", Year = 2017, Authors = "Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, Jeff Dean")]
 public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>

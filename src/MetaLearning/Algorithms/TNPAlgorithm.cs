@@ -20,10 +20,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transformer Neural Processes: Uncertainty-Aware Meta Learning Via Sequence Modeling",
+[ResearchPaper("Transformer Neural Processes: Uncertainty-Aware Meta Learning Via Sequence Modeling",
     "https://arxiv.org/abs/2207.04179",
     Year = 2023,
     Authors = "Nguyen, T. & Grover, A.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TNPOptions<T, TInput, TOutput> _algoOptions;

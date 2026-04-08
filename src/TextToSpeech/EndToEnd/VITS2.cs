@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial Learning and Architecture Design", "https://arxiv.org/abs/2307.16430", Year = 2023, Authors = "Kong et al.")]
+[ResearchPaper("VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial Learning and Architecture Design", "https://arxiv.org/abs/2307.16430", Year = 2023, Authors = "Kong et al.")]
 public class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITS2Options _options; public override ModelOptions GetOptions() => _options;

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Occupancy Networks: Learning 3D Reconstruction in Function Space", "https://arxiv.org/abs/1812.03828", Year = 2019, Authors = "Lars Mescheder, Michael Oechsle, Michael Niemeyer, Sebastian Nowozin, Andreas Geiger")]
+[ResearchPaper("Occupancy Networks: Learning 3D Reconstruction in Function Space", "https://arxiv.org/abs/1812.03828", Year = 2019, Authors = "Lars Mescheder, Michael Oechsle, Michael Niemeyer, Sebastian Nowozin, Andreas Geiger")]
 public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly OccupancyNeuralNetworkOptions _options;

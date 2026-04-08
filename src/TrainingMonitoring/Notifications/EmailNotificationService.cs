@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Mail;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.TrainingMonitoring.Notifications;
@@ -140,6 +142,7 @@ public class EmailConfiguration
 /// Note: For Gmail, you need to use an "App Password" (not your regular password).
 /// Enable 2FA and generate an app password in your Google Account settings.
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class EmailNotificationService : INotificationService
 {
     private readonly EmailConfiguration _config;

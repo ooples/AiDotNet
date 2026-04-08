@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Time-MoE: Billion-Scale Time Series Foundation Models with Mixture of Experts", "https://arxiv.org/abs/2409.16040", Year = 2025, Authors = "Xiaoming Shi, Shiyu Wang, Yuqi Nie, Dianqi Li, Zhou Ye, Qingsong Wen, Ming Jin")]
+[ResearchPaper("Time-MoE: Billion-Scale Time Series Foundation Models with Mixture of Experts", "https://arxiv.org/abs/2409.16040", Year = 2025, Authors = "Xiaoming Shi, Shiyu Wang, Yuqi Nie, Dianqi Li, Zhou Ye, Qingsong Wen, Ming Jin")]
 public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

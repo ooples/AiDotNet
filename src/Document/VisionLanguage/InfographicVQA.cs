@@ -55,7 +55,7 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
+[ResearchPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
 public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly InfographicVQAOptions _options;

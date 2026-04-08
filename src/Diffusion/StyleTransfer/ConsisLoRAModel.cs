@@ -42,7 +42,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ConsisLoRA: Enhancing Content and Style Consistency for LoRA-based Style Transfer", "https://arxiv.org/abs/2503.10614", Year = 2025, Authors = "Lin et al.")]
+[ResearchPaper("ConsisLoRA: Enhancing Content and Style Consistency for LoRA-based Style Transfer", "https://arxiv.org/abs/2503.10614", Year = 2025, Authors = "Lin et al.")]
 public class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

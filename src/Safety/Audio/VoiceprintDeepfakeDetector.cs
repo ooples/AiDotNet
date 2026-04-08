@@ -37,7 +37,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoiceRadar: A Speech-Based Framework for Robust Voice Liveness Detection",
+[ResearchPaper("VoiceRadar: A Speech-Based Framework for Robust Voice Liveness Detection",
     "https://www.ndss-symposium.org/ndss-paper/voiceradar/",
     Year = 2025,
     Authors = "Various")]

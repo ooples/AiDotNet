@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder", "https://arxiv.org/abs/2206.04063", Year = 2022, Authors = "Shin et al.")]
+[ResearchPaper("FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder", "https://arxiv.org/abs/2206.04063", Year = 2022, Authors = "Shin et al.")]
 public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly FreGradOptions _options; public override ModelOptions GetOptions() => _options;

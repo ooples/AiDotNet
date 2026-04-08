@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Scaler)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]

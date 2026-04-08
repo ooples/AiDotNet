@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unmasking DeepFakes with Simple Features",
+[ResearchPaper("Unmasking DeepFakes with Simple Features",
     "https://arxiv.org/abs/2003.08685",
     Year = 2020,
     Authors = "Ricard Durall, Margret Keuper, Janis Keuper")]

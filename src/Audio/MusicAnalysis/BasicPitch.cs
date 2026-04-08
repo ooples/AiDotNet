@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
+[ResearchPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
 public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     #region Fields

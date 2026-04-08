@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Segmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("XMem: Long-Term Video Object Segmentation with an Atkinson-Shiffrin Memory Model",
+[ResearchPaper("XMem: Long-Term Video Object Segmentation with an Atkinson-Shiffrin Memory Model",
     "https://arxiv.org/abs/2207.07115",
     Year = 2022,
     Authors = "Ho Kei Cheng, Alexander G. Schwing")]

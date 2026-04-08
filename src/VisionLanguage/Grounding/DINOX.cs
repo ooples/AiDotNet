@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding", "https://arxiv.org/abs/2411.14347", Year = 2024, Authors = "Ren et al.")]
+[ResearchPaper("DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding", "https://arxiv.org/abs/2411.14347", Year = 2024, Authors = "Ren et al.")]
 public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly DINOXOptions _options; public override ModelOptions GetOptions() => _options;

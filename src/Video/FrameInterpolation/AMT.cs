@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AMT: All-Pairs Multi-Field Transforms for Efficient Frame Interpolation",
+[ResearchPaper("AMT: All-Pairs Multi-Field Transforms for Efficient Frame Interpolation",
     "https://arxiv.org/abs/2304.09790",
     Year = 2023,
     Authors = "Zhen Li, Zuo-Liang Zhu, Ling-Hao Han, Qibin Hou, Chun-Le Guo, Ming-Ming Cheng")]

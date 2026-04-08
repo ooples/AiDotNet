@@ -22,10 +22,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Attentive Neural Processes",
+[ResearchPaper("Attentive Neural Processes",
     "https://arxiv.org/abs/1901.05761",
     Year = 2019,
     Authors = "Hyunjik Kim, Andriy Mnih, Jonathan Schwarz, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ANPOptions<T, TInput, TOutput> _anpOptions;

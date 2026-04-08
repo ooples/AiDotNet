@@ -79,7 +79,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Variational Graph Auto-Encoders",
+[ResearchPaper("Variational Graph Auto-Encoders",
     "https://arxiv.org/abs/1611.07308",
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]

@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VinVL: Revisiting Visual Representations in Vision-Language Models", "https://arxiv.org/abs/2101.00529", Year = 2021, Authors = "Zhang et al.")]
+[ResearchPaper("VinVL: Revisiting Visual Representations in Vision-Language Models", "https://arxiv.org/abs/2101.00529", Year = 2021, Authors = "Zhang et al.")]
 public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VinVLOptions _options; public override ModelOptions GetOptions() => _options;

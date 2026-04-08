@@ -50,7 +50,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
+[ResearchPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
 public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly TrOCROptions _options;

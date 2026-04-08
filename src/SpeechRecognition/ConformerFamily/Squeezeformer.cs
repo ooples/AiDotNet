@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Squeezeformer: An Efficient Transformer for Automatic Speech Recognition", "https://arxiv.org/abs/2206.00888", Year = 2022, Authors = "Kim et al.")]
+[ResearchPaper("Squeezeformer: An Efficient Transformer for Automatic Speech Recognition", "https://arxiv.org/abs/2206.00888", Year = 2022, Authors = "Kim et al.")]
 public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SqueezeformerOptions _options; public override ModelOptions GetOptions() => _options;

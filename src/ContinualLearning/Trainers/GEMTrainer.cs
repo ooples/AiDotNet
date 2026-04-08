@@ -127,7 +127,9 @@ public class GEMTrainerOptions<T>
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Gradient Episodic Memory for Continual Learning", "https://arxiv.org/abs/1706.08840", Year = 2017, Authors = "David Lopez-Paz, Marc'Aurelio Ranzato")]
+[ResearchPaper("Gradient Episodic Memory for Continual Learning", "https://arxiv.org/abs/1706.08840", Year = 2017, Authors = "David Lopez-Paz, Marc'Aurelio Ranzato")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]

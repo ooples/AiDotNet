@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
+[ResearchPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FlowState<T> : TimeSeriesFoundationModelBase<T>
 {

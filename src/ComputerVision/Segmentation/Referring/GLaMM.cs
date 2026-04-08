@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GLaMM: Pixel Grounding Large Multimodal Model", "https://arxiv.org/abs/2311.03356", Year = 2024, Authors = "Rasheed et al.")]
+[ResearchPaper("GLaMM: Pixel Grounding Large Multimodal Model", "https://arxiv.org/abs/2311.03356", Year = 2024, Authors = "Rasheed et al.")]
 public class GLaMM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly GLaMMOptions _options;

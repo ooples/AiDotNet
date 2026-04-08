@@ -40,7 +40,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Variational Learning of Inducing Variables in Sparse Gaussian Processes", "https://doi.org/10.48550/arXiv.0905.3486", Year = 2009, Authors = "Michalis K. Titsias")]
+[ResearchPaper("Variational Learning of Inducing Variables in Sparse Gaussian Processes", "https://doi.org/10.48550/arXiv.0905.3486", Year = 2009, Authors = "Michalis K. Titsias")]
 public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>

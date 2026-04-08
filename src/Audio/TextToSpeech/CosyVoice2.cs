@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Zhihao Du, Yuxuan Wang, Qian Chen, Xian Shi, Xiang Lv, Tianyu Zhao, Zhifu Gao, Yexin Yang, Changfeng Gao, Hui Wang, Fan Yu, Huadai Liu, Zhengyan Sheng, Yue Gu, Chong Deng, Wen Wang, Shiliang Zhang, Zhijie Yan, Jinren Zhou")]
+[ResearchPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Zhihao Du, Yuxuan Wang, Qian Chen, Xian Shi, Xiang Lv, Tianyu Zhao, Zhifu Gao, Yexin Yang, Changfeng Gao, Hui Wang, Fan Yu, Huadai Liu, Zhengyan Sheng, Yue Gu, Chong Deng, Wen Wang, Shiliang Zhang, Zhijie Yan, Jinren Zhou")]
 public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

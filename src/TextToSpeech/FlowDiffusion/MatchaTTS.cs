@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Mehta et al.")]
+[ResearchPaper("Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Mehta et al.")]
 public class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MatchaTTSOptions _options; public override ModelOptions GetOptions() => _options;

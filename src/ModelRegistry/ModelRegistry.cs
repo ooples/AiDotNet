@@ -1,4 +1,6 @@
 using AiDotNet.AdversarialRobustness.Documentation;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -22,6 +24,7 @@ namespace AiDotNet.ModelRegistry;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for models.</typeparam>
 /// <typeparam name="TOutput">The output data type for models.</typeparam>
+[InfraType(InfraType.Registry)]
 public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TOutput>
 {
     private readonly Dictionary<string, List<RegisteredModel<T, TInput, TOutput>>> _models;

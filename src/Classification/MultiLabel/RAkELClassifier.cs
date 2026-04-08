@@ -50,7 +50,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Random k-Labelsets for Multilabel Classification", "https://doi.org/10.1109/TKDE.2010.164", Year = 2011, Authors = "Grigorios Tsoumakas, Ioannis Katakis, Ioannis Vlahavas")]
+[ResearchPaper("Random k-Labelsets for Multilabel Classification", "https://doi.org/10.1109/TKDE.2010.164", Year = 2011, Authors = "Grigorios Tsoumakas, Ioannis Katakis, Ioannis Vlahavas")]
 public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
 {
     /// <summary>

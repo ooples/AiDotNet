@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding", "https://arxiv.org/abs/2205.11487", Year = 2022, Authors = "Saharia et al.")]
+[ResearchPaper("Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding", "https://arxiv.org/abs/2205.11487", Year = 2022, Authors = "Saharia et al.")]
 public class ImagenModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

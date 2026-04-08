@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot", "https://arxiv.org/abs/2412.02612", Year = 2024, Authors = "Zeng et al.")]
+[ResearchPaper("GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot", "https://arxiv.org/abs/2412.02612", Year = 2024, Authors = "Zeng et al.")]
 public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly GLM4VoiceOptions _options; public override ModelOptions GetOptions() => _options;

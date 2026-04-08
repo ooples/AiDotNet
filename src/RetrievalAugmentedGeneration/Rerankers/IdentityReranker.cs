@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
@@ -34,6 +36,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// Later, replace with CrossEncoderReranker for better results without changing your code.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Reranker)]
+[PipelineStage(PipelineStage.PostRetrieval)]
 public class IdentityReranker<T> : RerankerBase<T>
 {
     /// <summary>

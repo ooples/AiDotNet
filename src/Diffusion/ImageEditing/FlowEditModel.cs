@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlowEdit: Inversion-Free Text-Based Editing Using Pre-Trained Flow Models", "https://arxiv.org/abs/2412.08629", Year = 2024, Authors = "Kulikov et al.")]
+[ResearchPaper("FlowEdit: Inversion-Free Text-Based Editing Using Pre-Trained Flow Models", "https://arxiv.org/abs/2412.08629", Year = 2024, Authors = "Kulikov et al.")]
 public class FlowEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

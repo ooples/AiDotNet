@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
+[ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
 public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly ODISESegmentationOptions _options;

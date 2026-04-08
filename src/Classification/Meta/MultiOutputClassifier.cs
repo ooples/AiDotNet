@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("A Review on Multi-Label Learning Algorithms", "https://doi.org/10.1109/TKDE.2013.39")]
+    [ResearchPaper("A Review on Multi-Label Learning Algorithms", "https://doi.org/10.1109/TKDE.2013.39")]
 public class MultiOutputClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

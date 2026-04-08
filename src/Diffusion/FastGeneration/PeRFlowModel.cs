@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator", "https://arxiv.org/abs/2405.07510", Year = 2024, Authors = "Yan et al.")]
+[ResearchPaper("PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator", "https://arxiv.org/abs/2405.07510", Year = 2024, Authors = "Yan et al.")]
 public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

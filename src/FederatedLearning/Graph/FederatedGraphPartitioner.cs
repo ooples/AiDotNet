@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FederatedGraphPartitioner<T> : FederatedLearningComponentBase<T>
 {
     private readonly FederatedGraphOptions _options;

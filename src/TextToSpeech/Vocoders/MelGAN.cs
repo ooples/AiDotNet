@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MelGAN: Generative Adversarial Networks for Conditional Waveform Synthesis", "https://arxiv.org/abs/1910.06711", Year = 2019, Authors = "Kumar et al.")]
+[ResearchPaper("MelGAN: Generative Adversarial Networks for Conditional Waveform Synthesis", "https://arxiv.org/abs/1910.06711", Year = 2019, Authors = "Kumar et al.")]
 public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly MelGANOptions _options; public override ModelOptions GetOptions() => _options;

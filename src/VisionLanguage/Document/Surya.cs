@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Surya: Multi-language OCR Toolkit", "https://github.com/VikParuchuri/surya", Year = 2024, Authors = "Paruchuri")]
+[ResearchPaper("Surya: Multi-language OCR Toolkit", "https://github.com/VikParuchuri/surya", Year = 2024, Authors = "Paruchuri")]
 public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly SuryaOptions _options; public override ModelOptions GetOptions() => _options;

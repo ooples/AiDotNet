@@ -81,7 +81,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Reproducible Scaling Laws for Contrastive Language-Image Learning", "https://arxiv.org/abs/2212.07143", Year = 2023, Authors = "Cherti et al.")]
+[ResearchPaper("Reproducible Scaling Laws for Contrastive Language-Image Learning", "https://arxiv.org/abs/2212.07143", Year = 2023, Authors = "Cherti et al.")]
 public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields

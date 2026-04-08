@@ -76,7 +76,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unified Training of Universal Time Series Forecasting Transformers", "https://arxiv.org/abs/2402.02592", Year = 2024, Authors = "Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo")]
+[ResearchPaper("Unified Training of Universal Time Series Forecasting Transformers", "https://arxiv.org/abs/2402.02592", Year = 2024, Authors = "Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo")]
 public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

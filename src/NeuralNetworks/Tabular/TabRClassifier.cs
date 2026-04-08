@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabR: Tabular Deep Learning Meets Nearest Neighbors",
+[ResearchPaper("TabR: Tabular Deep Learning Meets Nearest Neighbors",
     "https://arxiv.org/abs/2307.14338",
     Year = 2024,
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]

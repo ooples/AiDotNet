@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <b>For Beginners:</b> For each model parameter, this strategy takes the middle value across clients.
 /// This makes the aggregation resistant to outliers (e.g., a client sending extremely large values).
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

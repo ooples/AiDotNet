@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -36,6 +38,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Unlike ARI, NMI is always non-negative.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class NormalizedMutualInformation<T> : IExternalClusterMetric<T>
 {
     private readonly NMINormalization _normalization;

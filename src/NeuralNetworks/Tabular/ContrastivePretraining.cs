@@ -1,4 +1,6 @@
-﻿using AiDotNet.Engines;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Engines;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -23,6 +25,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ContrastivePretraining<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

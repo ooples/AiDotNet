@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Wan: Open and Advanced Large-Scale Video Generative Models", "https://arxiv.org/abs/2503.20314", Year = 2025, Authors = "Alibaba")]
+[ResearchPaper("Wan: Open and Advanced Large-Scale Video Generative Models", "https://arxiv.org/abs/2503.20314", Year = 2025, Authors = "Alibaba")]
 public class Wan21Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

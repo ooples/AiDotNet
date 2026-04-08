@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ViM-UNet: Vision Mamba for Biomedical Segmentation", "https://arxiv.org/abs/2404.07705", Year = 2024, Authors = "Archit and Pape")]
+[ResearchPaper("ViM-UNet: Vision Mamba for Biomedical Segmentation", "https://arxiv.org/abs/2404.07705", Year = 2024, Authors = "Archit and Pape")]
 public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ViMUNetOptions _options;

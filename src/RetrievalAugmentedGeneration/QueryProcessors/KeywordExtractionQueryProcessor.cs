@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This focuses your search on what really matters!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryProcessor)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class KeywordExtractionQueryProcessor : QueryProcessorBase
 {
     /// <summary>

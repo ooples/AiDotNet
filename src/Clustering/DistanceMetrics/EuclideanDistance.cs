@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -21,6 +23,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// (using the Pythagorean theorem: sqrt(3² + 4²) = sqrt(9 + 16) = sqrt(25) = 5)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class EuclideanDistance<T> : DistanceMetricBase<T>
 {
     /// <inheritdoc />

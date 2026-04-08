@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning", "https://arxiv.org/abs/1710.07654", Year = 2018, Authors = "Ping et al.")]
+[ResearchPaper("Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning", "https://arxiv.org/abs/1710.07654", Year = 2018, Authors = "Ping et al.")]
 public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly DeepVoice3Options _options; public override ModelOptions GetOptions() => _options;

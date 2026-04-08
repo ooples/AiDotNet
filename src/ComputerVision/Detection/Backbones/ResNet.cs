@@ -28,7 +28,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Residual Learning for Image Recognition",
+[ResearchPaper("Deep Residual Learning for Image Recognition",
     "https://arxiv.org/abs/1512.03385",
     Year = 2016,
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]

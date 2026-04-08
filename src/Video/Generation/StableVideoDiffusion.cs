@@ -66,7 +66,7 @@ namespace AiDotNet.Video.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
+[ResearchPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
     "https://arxiv.org/abs/2311.15127",
     Year = 2023,
     Authors = "Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, Varun Jampani, Robin Rombach")]

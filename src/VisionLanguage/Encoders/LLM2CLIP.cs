@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation", "https://arxiv.org/abs/2411.04997", Year = 2024, Authors = "Huang et al.")]
+[ResearchPaper("LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation", "https://arxiv.org/abs/2411.04997", Year = 2024, Authors = "Huang et al.")]
 public class LLM2CLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly LLM2CLIPOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -61,6 +63,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// ICDE 2021.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedBNAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly HashSet<string> _batchNormLayerPatterns;

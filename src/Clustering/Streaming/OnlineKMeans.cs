@@ -59,7 +59,7 @@ namespace AiDotNet.Clustering.Streaming;
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Mini-Batch K-Means Clustering", "https://www.eecs.tufts.edu/~dsculley/papers/fastkmeans.pdf")]
+    [ResearchPaper("Mini-Batch K-Means Clustering", "https://www.eecs.tufts.edu/~dsculley/papers/fastkmeans.pdf")]
 public class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;

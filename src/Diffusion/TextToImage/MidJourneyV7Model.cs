@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Midjourney V7", "https://www.midjourney.com")]
+    [ResearchPaper("Midjourney V7", "https://www.midjourney.com")]
 public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

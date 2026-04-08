@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Movie Gen: A Cast of Media Foundation Models", "https://arxiv.org/abs/2410.13720", Year = 2024, Authors = "Meta")]
+[ResearchPaper("Movie Gen: A Cast of Media Foundation Models", "https://arxiv.org/abs/2410.13720", Year = 2024, Authors = "Meta")]
 public class MovieGenModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

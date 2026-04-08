@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CAPID: Context-Aware PII Detection Reducing Over-Redaction in QA",
+[ResearchPaper("CAPID: Context-Aware PII Detection Reducing Over-Redaction in QA",
     "https://arxiv.org/abs/2602.10074",
     Year = 2026,
     Authors = "Various")]

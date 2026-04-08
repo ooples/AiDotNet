@@ -2,6 +2,9 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -15,6 +18,8 @@ namespace AiDotNet.Optimizers;
 /// resulting in better handling of data dependencies in token space.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ModifiedGradientDescentOptimizer<T>
 {
     private readonly T _learningRate;

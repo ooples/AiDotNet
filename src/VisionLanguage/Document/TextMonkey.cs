@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document", "https://arxiv.org/abs/2403.04473", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document", "https://arxiv.org/abs/2403.04473", Year = 2024, Authors = "Liu et al.")]
 public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly TextMonkeyOptions _options; public override ModelOptions GetOptions() => _options;

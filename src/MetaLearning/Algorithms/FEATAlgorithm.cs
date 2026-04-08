@@ -90,10 +90,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Few-Shot Learning via Embedding Adaptation with Set-to-Set Functions",
+[ResearchPaper("Few-Shot Learning via Embedding Adaptation with Set-to-Set Functions",
     "https://arxiv.org/abs/1812.03664",
     Year = 2020,
     Authors = "Han-Jia Ye, Hexiang Hu, De-Chuan Zhan, Fei Sha")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

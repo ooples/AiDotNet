@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Constitutional AI: Harmlessness from AI Feedback", "https://arxiv.org/abs/2212.08073")]
+[ResearchPaper("Constitutional AI: Harmlessness from AI Feedback", "https://arxiv.org/abs/2212.08073")]
 public class ClaudeVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly ClaudeVisionOptions _options; public override ModelOptions GetOptions() => _options;

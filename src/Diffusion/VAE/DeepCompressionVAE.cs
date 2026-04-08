@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models", "https://arxiv.org/abs/2410.10733", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models", "https://arxiv.org/abs/2410.10733", Year = 2024, Authors = "Chen et al.")]
 public class DeepCompressionVAE<T> : VAEModelBase<T>
 {
     private const double DCAE_LATENT_SCALE = 0.3611;

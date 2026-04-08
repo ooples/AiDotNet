@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
+[ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
 public class CycleGAN<T> : NeuralNetworkBase<T>
 {
     private readonly CycleGANOptions _options;

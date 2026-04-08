@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram", "https://arxiv.org/abs/1910.11480", Year = 2020, Authors = "Yamamoto et al.")]
+[ResearchPaper("Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram", "https://arxiv.org/abs/1910.11480", Year = 2020, Authors = "Yamamoto et al.")]
 public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly ParallelWaveGANOptions _options; public override ModelOptions GetOptions() => _options;

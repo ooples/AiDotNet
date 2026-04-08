@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers", "https://arxiv.org/abs/2401.08740")]
+    [ResearchPaper("SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers", "https://arxiv.org/abs/2401.08740")]
 public class SiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

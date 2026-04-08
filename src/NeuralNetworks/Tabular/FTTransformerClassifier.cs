@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Revisiting Deep Learning Models for Tabular Data",
+[ResearchPaper("Revisiting Deep Learning Models for Tabular Data",
     "https://arxiv.org/abs/2106.11959",
     Year = 2021,
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]

@@ -1,5 +1,7 @@
 global using AiDotNet.RetrievalAugmentedGeneration.Models;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -31,6 +33,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class WeaviateDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly Dictionary<string, VectorDocument<T>> _documents;

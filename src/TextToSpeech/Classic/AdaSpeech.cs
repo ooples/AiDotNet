@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AdaSpeech: Adaptive Text to Speech for Custom Voice", "https://arxiv.org/abs/2103.00993", Year = 2021, Authors = "Chen et al.")]
+[ResearchPaper("AdaSpeech: Adaptive Text to Speech for Custom Voice", "https://arxiv.org/abs/2103.00993", Year = 2021, Authors = "Chen et al.")]
 public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeechOptions _options;

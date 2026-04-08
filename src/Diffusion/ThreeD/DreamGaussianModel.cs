@@ -105,7 +105,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation", "https://arxiv.org/abs/2310.08529", Year = 2024, Authors = "Tang et al.")]
+[ResearchPaper("DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation", "https://arxiv.org/abs/2310.08529", Year = 2024, Authors = "Tang et al.")]
 public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

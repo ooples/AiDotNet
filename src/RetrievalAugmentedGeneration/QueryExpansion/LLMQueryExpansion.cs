@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
 {
     /// <summary>
     /// LLM-based query expansion for generating additional query variations.
     /// </summary>
+    [ComponentType(ComponentType.QueryExpander)]
+    [PipelineStage(PipelineStage.QueryProcessing)]
     public class LLMQueryExpansion : QueryExpansionBase
     {
         private readonly string _llmEndpoint;

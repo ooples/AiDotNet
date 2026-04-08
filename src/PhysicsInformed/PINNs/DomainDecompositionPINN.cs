@@ -80,7 +80,7 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Extended Physics-Informed Neural Networks (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework", "https://doi.org/10.4208/cicp.OA-2020-0164", Year = 2020, Authors = "Ameya D. Jagtap, George Em Karniadakis")]
+[ResearchPaper("Extended Physics-Informed Neural Networks (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework", "https://doi.org/10.4208/cicp.OA-2020-0164", Year = 2020, Authors = "Ameya D. Jagtap, George Em Karniadakis")]
 public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
     private readonly DomainDecompositionPINNOptions _options;

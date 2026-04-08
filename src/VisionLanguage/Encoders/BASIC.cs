@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Combined Scaling for Zero-shot Transfer Learning", "https://arxiv.org/abs/2111.10050", Year = 2022, Authors = "Pham et al.")]
+[ResearchPaper("Combined Scaling for Zero-shot Transfer Learning", "https://arxiv.org/abs/2111.10050", Year = 2022, Authors = "Pham et al.")]
 public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly BASICOptions _options;

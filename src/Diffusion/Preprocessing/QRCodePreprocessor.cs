@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// is a high-contrast black-and-white image that clearly shows the QR pattern.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class QRCodePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _blockSize;

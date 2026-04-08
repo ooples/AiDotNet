@@ -103,7 +103,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data", "https://arxiv.org/abs/2107.10833", Year = 2021, Authors = "Wang et al.")]
+[ResearchPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data", "https://arxiv.org/abs/2107.10833", Year = 2021, Authors = "Wang et al.")]
 public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -89,10 +89,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Leveraging the Feature Distribution in Transfer-based Few-Shot Learning",
+[ResearchPaper("Leveraging the Feature Distribution in Transfer-based Few-Shot Learning",
     "https://arxiv.org/abs/2006.03806",
     Year = 2021,
     Authors = "Yuqing Hu, Vincent Gripon, Stephane Pateux")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TrainingMonitoring.Dashboard;
 
@@ -33,6 +35,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 /// dashboard.Stop();
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class ConsoleDashboard : ITrainingDashboard
 {
     private readonly ConcurrentDictionary<string, List<ScalarDataPoint>> _scalars = new();

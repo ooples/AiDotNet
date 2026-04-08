@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HiPPO: Recurrent Memory with Optimal Polynomial Projections", "https://arxiv.org/abs/2008.07669", Year = 2020, Authors = "Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, Christopher Re")]
+[ResearchPaper("HiPPO: Recurrent Memory with Optimal Polynomial Projections", "https://arxiv.org/abs/2008.07669", Year = 2020, Authors = "Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, Christopher Re")]
 public class Hippo<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

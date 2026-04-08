@@ -60,7 +60,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Generalized Additive Models", "https://doi.org/10.1214/ss/1177013604", Year = 1986, Authors = "Trevor Hastie, Robert Tibshirani")]
+[ResearchPaper("Generalized Additive Models", "https://doi.org/10.1214/ss/1177013604", Year = 1986, Authors = "Trevor Hastie, Robert Tibshirani")]
 public class GeneralizedAdditiveModel<T> : RegressionBase<T>
 {
     /// <summary>

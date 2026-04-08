@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// It achieves this by using complex numbers, which naturally distinguish direction.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class ComplExEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

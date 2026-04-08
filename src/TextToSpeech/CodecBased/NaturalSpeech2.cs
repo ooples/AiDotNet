@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers", "https://arxiv.org/abs/2304.09116", Year = 2023, Authors = "Shen et al.")]
+[ResearchPaper("NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers", "https://arxiv.org/abs/2304.09116", Year = 2023, Authors = "Shen et al.")]
 public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech2Options _options;

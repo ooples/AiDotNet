@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow",
+[ResearchPaper("SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow",
     "https://arxiv.org/abs/2405.14793",
     Year = 2024,
     Authors = "Yihan Wang, Lahav Lipson, Jia Deng")]

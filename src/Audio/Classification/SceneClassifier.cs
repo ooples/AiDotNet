@@ -49,7 +49,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Large-Scale Evaluation of Acoustic and Subjective Music-Similarity Measures", "https://doi.org/10.1016/j.csl.2017.01.007", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
+[ResearchPaper("A Large-Scale Evaluation of Acoustic and Subjective Music-Similarity Measures", "https://doi.org/10.1016/j.csl.2017.01.007", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
 public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 {
     #region Fields

@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Large Scale GAN Training for High Fidelity Natural Image Synthesis", "https://arxiv.org/abs/1809.11096", Year = 2019, Authors = "Andrew Brock, Jeff Donahue, Karen Simonyan")]
+[ResearchPaper("Large Scale GAN Training for High Fidelity Natural Image Synthesis", "https://arxiv.org/abs/1809.11096", Year = 2019, Authors = "Andrew Brock, Jeff Donahue, Karen Simonyan")]
 public class BigGAN<T> : NeuralNetworkBase<T>
 {
     private readonly BigGANOptions _options;

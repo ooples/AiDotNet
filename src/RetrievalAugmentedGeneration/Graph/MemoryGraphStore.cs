@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -45,6 +47,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// For persistent storage, use FileGraphStore or Neo4jGraphStore instead.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class MemoryGraphStore<T> : IGraphStore<T>
 {
     private readonly Dictionary<string, GraphNode<T>> _nodes;

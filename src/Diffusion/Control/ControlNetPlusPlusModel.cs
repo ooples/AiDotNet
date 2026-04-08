@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987", Year = 2024, Authors = "Li et al.")]
 public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

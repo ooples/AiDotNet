@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
@@ -64,6 +65,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
 {
     private readonly IGenerator<T> _generator;

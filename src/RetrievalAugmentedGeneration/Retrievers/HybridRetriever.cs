@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -11,6 +13,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// Hybrid retriever combining dense and sparse retrieval strategies.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.Retriever)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class HybridRetriever<T> : RetrieverBase<T>
     {
         private readonly IRetriever<T> _denseRetriever;

@@ -20,7 +20,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-    [ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193")]
+    [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193")]
 public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly MultiplicativeAlgorithmType _algorithm;

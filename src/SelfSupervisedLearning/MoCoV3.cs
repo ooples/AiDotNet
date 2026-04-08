@@ -40,7 +40,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Empirical Study of Training Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.02057", Year = 2021, Authors = "Xinlei Chen, Saining Xie, Kaiming He")]
+[ResearchPaper("An Empirical Study of Training Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.02057", Year = 2021, Authors = "Xinlei Chen, Saining Xie, Kaiming He")]
 public class MoCoV3<T> : SSLMethodBase<T>
 {
     private readonly IMomentumEncoder<T> _momentumEncoder;

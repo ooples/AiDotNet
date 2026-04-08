@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly double _percentile;

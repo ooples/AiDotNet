@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision", "https://arxiv.org/abs/2302.03540", Year = 2023, Authors = "Kharitonov et al.")]
+[ResearchPaper("Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision", "https://arxiv.org/abs/2302.03540", Year = 2023, Authors = "Kharitonov et al.")]
 public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SPEARTTSOptions _options;

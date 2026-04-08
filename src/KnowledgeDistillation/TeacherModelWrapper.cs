@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
@@ -28,6 +30,8 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - Deep network (teacher) → Shallow network (student): 10x faster inference
 /// - Ensemble (teacher) → Single model (student): Deployable on resource-constrained devices</para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 {
     private readonly Func<Vector<T>, Vector<T>> _forwardFunc;

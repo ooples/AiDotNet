@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Point-E: A System for Generating 3D Point Clouds from Complex Prompts", "https://arxiv.org/abs/2212.08751", Year = 2022, Authors = "Nichol et al.")]
+[ResearchPaper("Point-E: A System for Generating 3D Point Clouds from Complex Prompts", "https://arxiv.org/abs/2212.08751", Year = 2022, Authors = "Nichol et al.")]
 public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

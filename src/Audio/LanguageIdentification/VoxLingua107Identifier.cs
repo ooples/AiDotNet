@@ -66,7 +66,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoxLingua107: A Dataset for Spoken Language Recognition", "https://arxiv.org/abs/2011.12998", Year = 2021, Authors = "Jörgen Valk, Tanel Alumäe")]
+[ResearchPaper("VoxLingua107: A Dataset for Spoken Language Recognition", "https://arxiv.org/abs/2011.12998", Year = 2021, Authors = "Jörgen Valk, Tanel Alumäe")]
 public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
     #region Constants

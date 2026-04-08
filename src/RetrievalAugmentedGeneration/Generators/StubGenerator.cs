@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -35,6 +37,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// This enables development on Issue #284 without waiting for transformer integration.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Generator)]
+[PipelineStage(PipelineStage.Generation)]
 public class StubGenerator<T> : IGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

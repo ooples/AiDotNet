@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 
@@ -10,6 +12,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// Reciprocal Rank Fusion for combining multiple ranking lists.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.Reranker)]
+    [PipelineStage(PipelineStage.PostRetrieval)]
     public class ReciprocalRankFusion<T> : Rerankers.RerankerBase<T>
     {
         private readonly int _k;

@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -29,6 +30,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// Reference: Yang et al., "Qwen2 Technical Report", 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class Qwen2TextConditioner<T> : TextConditioningBase<T>
 {
     /// <inheritdoc />

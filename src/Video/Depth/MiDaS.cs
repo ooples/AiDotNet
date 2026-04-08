@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Depth;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-shot Cross-dataset Transfer",
+[ResearchPaper("Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-shot Cross-dataset Transfer",
     "https://arxiv.org/abs/1907.01341",
     Year = 2020,
     Authors = "Rene Ranftl, Katrin Lasinger, David Hafner, Konrad Schindler, Vladlen Koltun")]

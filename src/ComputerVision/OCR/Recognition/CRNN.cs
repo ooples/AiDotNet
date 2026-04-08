@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition",
+[ResearchPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition",
     "https://arxiv.org/abs/1507.05717",
     Year = 2017,
     Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]

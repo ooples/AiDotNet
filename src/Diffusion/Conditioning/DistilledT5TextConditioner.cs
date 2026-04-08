@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -29,6 +30,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// Reference: Hinton et al., "Distilling the Knowledge in a Neural Network", 2015 (distillation technique)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
 {
     /// <inheritdoc />

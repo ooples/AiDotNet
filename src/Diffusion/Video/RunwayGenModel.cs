@@ -111,7 +111,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Structure and Content-Guided Video Synthesis with Diffusion Models", "https://arxiv.org/abs/2302.03011", Year = 2023, Authors = "Esser et al.")]
+[ResearchPaper("Structure and Content-Guided Video Synthesis with Diffusion Models", "https://arxiv.org/abs/2302.03011", Year = 2023, Authors = "Esser et al.")]
 public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

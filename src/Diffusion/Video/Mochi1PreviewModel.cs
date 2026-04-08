@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Mochi 1: A New SOTA in Open-Source Video Generation", "https://github.com/genmoai/mochi")]
+    [ResearchPaper("Mochi 1: A New SOTA in Open-Source Video Generation", "https://github.com/genmoai/mochi")]
 public class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 12;

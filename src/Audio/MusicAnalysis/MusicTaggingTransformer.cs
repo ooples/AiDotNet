@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transformer-based Tag Prediction for Music Auto-tagging", "https://doi.org/10.48550/arXiv.2106.02072", Year = 2021, Authors = "Minz Won, Keunwoo Choi, Xavier Serra")]
+[ResearchPaper("Transformer-based Tag Prediction for Music Auto-tagging", "https://doi.org/10.48550/arXiv.2106.02072", Year = 2021, Authors = "Minz Won, Keunwoo Choi, Xavier Serra")]
 public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
 {
     #region Fields

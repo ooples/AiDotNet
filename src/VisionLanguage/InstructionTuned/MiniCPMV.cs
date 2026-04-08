@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MiniCPM-V: A GPT-4V Level MLLM on Your Phone", "https://arxiv.org/abs/2408.01800", Year = 2024, Authors = "Yao et al.")]
+[ResearchPaper("MiniCPM-V: A GPT-4V Level MLLM on Your Phone", "https://arxiv.org/abs/2408.01800", Year = 2024, Authors = "Yao et al.")]
 public class MiniCPMV<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniCPMVOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// that simple 0-1 slider into the right technical settings for the diffusion process.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public class StrengthBasedScheduling<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

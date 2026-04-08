@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding", "https://arxiv.org/abs/2210.03347", Year = 2023, Authors = "Lee et al.")]
+[ResearchPaper("Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding", "https://arxiv.org/abs/2210.03347", Year = 2023, Authors = "Lee et al.")]
 public class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly Pix2StructOptions _options; public override ModelOptions GetOptions() => _options;

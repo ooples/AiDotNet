@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VALL-E X: Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling", "https://arxiv.org/abs/2303.03926", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("VALL-E X: Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling", "https://arxiv.org/abs/2303.03926", Year = 2023, Authors = "Zhang et al.")]
 public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEXOptions _options;

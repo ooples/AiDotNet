@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072")]
+    [ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072")]
 public class ImprovedVideoVAE<T> : VAEModelBase<T>
 {
     private const double VIDEO_LATENT_SCALE = 0.18215;

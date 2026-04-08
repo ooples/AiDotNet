@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Data Filtering Networks", "https://arxiv.org/abs/2309.17425", Year = 2023, Authors = "Fang et al.")]
+[ResearchPaper("Data Filtering Networks", "https://arxiv.org/abs/2309.17425", Year = 2023, Authors = "Fang et al.")]
 public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DFNCLIPOptions _options; public override ModelOptions GetOptions() => _options;

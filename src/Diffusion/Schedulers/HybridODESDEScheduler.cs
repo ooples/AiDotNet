@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -18,6 +19,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// This gives you both reliable composition and natural-looking textures.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class HybridODESDEScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly double _transitionPoint;

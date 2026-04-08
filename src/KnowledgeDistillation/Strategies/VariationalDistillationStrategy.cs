@@ -44,10 +44,12 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Variational Information Distillation for Knowledge Transfer",
+[ResearchPaper("Variational Information Distillation for Knowledge Transfer",
     "https://arxiv.org/abs/1904.05835",
     Year = 2019,
     Authors = "Sungsoo Ahn, Shell Xu Hu, Andreas Damianou, et al.")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _variationalWeight;

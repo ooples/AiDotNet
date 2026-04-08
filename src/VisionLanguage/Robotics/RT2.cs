@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control", "https://arxiv.org/abs/2307.15818", Year = 2023, Authors = "Brohan et al.")]
+[ResearchPaper("RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control", "https://arxiv.org/abs/2307.15818", Year = 2023, Authors = "Brohan et al.")]
 public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly RT2Options _options; public override ModelOptions GetOptions() => _options;

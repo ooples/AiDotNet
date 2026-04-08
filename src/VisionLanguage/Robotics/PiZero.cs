@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("pi0: A Vision-Language-Action Flow Model for General Robot Control", "https://arxiv.org/abs/2410.24164", Year = 2024, Authors = "Black et al.")]
+[ResearchPaper("pi0: A Vision-Language-Action Flow Model for General Robot Control", "https://arxiv.org/abs/2410.24164", Year = 2024, Authors = "Black et al.")]
 public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PiZeroOptions _options; public override ModelOptions GetOptions() => _options;

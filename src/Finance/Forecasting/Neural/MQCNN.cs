@@ -81,7 +81,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Multi-Horizon Quantile Recurrent Forecaster", "https://arxiv.org/abs/1711.11053", Year = 2017, Authors = "Ruofeng Wen, Kari Torkkola, Balakrishnan Narayanaswamy, Dhruv Madeka")]
+[ResearchPaper("A Multi-Horizon Quantile Recurrent Forecaster", "https://arxiv.org/abs/1711.11053", Year = 2017, Authors = "Ruofeng Wen, Kari Torkkola, Balakrishnan Narayanaswamy, Dhruv Madeka")]
 public class MQCNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

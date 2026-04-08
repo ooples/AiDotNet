@@ -91,7 +91,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Decoder-Only Foundation Model for Time-Series Forecasting", "https://arxiv.org/abs/2310.10688", Year = 2024, Authors = "Abhimanyu Das, Weihao Kong, Rajat Sen, Yichen Zhou")]
+[ResearchPaper("A Decoder-Only Foundation Model for Time-Series Forecasting", "https://arxiv.org/abs/2310.10688", Year = 2024, Authors = "Abhimanyu Das, Weihao Kong, Rajat Sen, Yichen Zhou")]
 public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

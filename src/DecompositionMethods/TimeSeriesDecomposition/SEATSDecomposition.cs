@@ -24,7 +24,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-    [ModelPaper("SEATS: Signal Extraction in ARIMA Time Series", "https://www.bde.es/f/webbde/SES/Secciones/Publicaciones/PublicacionesSeriadas/DocumentosTrabajo/01/Fich/dt0109e.pdf")]
+    [ResearchPaper("SEATS: Signal Extraction in ARIMA Time Series", "https://www.bde.es/f/webbde/SES/Secciones/Publicaciones/PublicacionesSeriadas/DocumentosTrabajo/01/Fich/dt0109e.pdf")]
 public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly SARIMAOptions<T> _sarimaOptions;

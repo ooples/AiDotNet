@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CoMoSpeech: One-Step Speech Synthesis via Consistency Model", "https://arxiv.org/abs/2305.06908", Year = 2023, Authors = "Ye et al.")]
+[ResearchPaper("CoMoSpeech: One-Step Speech Synthesis via Consistency Model", "https://arxiv.org/abs/2305.06908", Year = 2023, Authors = "Ye et al.")]
 public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options; public override ModelOptions GetOptions() => _options;

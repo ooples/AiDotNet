@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
+    [ResearchPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
 public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Execution Mode

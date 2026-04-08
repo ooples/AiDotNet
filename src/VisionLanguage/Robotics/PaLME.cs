@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PaLM-E: An Embodied Multimodal Language Model", "https://arxiv.org/abs/2303.03378", Year = 2023, Authors = "Driess et al.")]
+[ResearchPaper("PaLM-E: An Embodied Multimodal Language Model", "https://arxiv.org/abs/2303.03378", Year = 2023, Authors = "Driess et al.")]
 public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PaLMEOptions _options; public override ModelOptions GetOptions() => _options;

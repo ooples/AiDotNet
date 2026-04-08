@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 
@@ -33,6 +35,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 /// - Entities appearing near each other = likely related
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.DataIngestion)]
 public class KGConstructor<T>
 {
     // Matches capitalized phrases including:

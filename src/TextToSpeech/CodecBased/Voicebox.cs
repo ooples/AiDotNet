@@ -45,7 +45,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale", "https://arxiv.org/abs/2306.15687", Year = 2023, Authors = "Le et al.")]
+[ResearchPaper("Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale", "https://arxiv.org/abs/2306.15687", Year = 2023, Authors = "Le et al.")]
 public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceboxOptions _options;

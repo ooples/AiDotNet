@@ -60,7 +60,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Kernel Methods for Pattern Analysis", "https://doi.org/10.1017/CBO9780511809682")]
+    [ResearchPaper("Kernel Methods for Pattern Analysis", "https://doi.org/10.1017/CBO9780511809682")]
 public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

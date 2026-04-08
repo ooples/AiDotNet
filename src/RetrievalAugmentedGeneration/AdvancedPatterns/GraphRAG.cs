@@ -1,8 +1,9 @@
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -98,6 +99,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Simple boosting strategy (more sophisticated approaches possible)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class GraphRAG<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

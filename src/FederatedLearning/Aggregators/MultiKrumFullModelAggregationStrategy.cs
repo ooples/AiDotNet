@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <b>For Beginners:</b> Multi-Krum is like Krum, but instead of picking only one client update,
 /// it picks a small group of the most "central" updates and averages them.
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class MultiKrumFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

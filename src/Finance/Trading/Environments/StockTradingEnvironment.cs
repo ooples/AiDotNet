@@ -35,7 +35,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Deep Reinforcement Learning for Automated Stock Trading", "https://arxiv.org/abs/2011.09607")]
+[ResearchPaper("Deep Reinforcement Learning for Automated Stock Trading", "https://arxiv.org/abs/2011.09607")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public sealed class StockTradingEnvironment<T> : TradingEnvironment<T>
 {

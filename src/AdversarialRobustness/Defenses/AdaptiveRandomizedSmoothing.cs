@@ -46,7 +46,7 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Certified Adversarial Robustness via Randomized Smoothing", "https://arxiv.org/abs/1902.02918", Year = 2019, Authors = "Jeremy Cohen, Elan Rosenfeld, J. Zico Kolter")]
+[ResearchPaper("Certified Adversarial Robustness via Randomized Smoothing", "https://arxiv.org/abs/1902.02918", Year = 2019, Authors = "Jeremy Cohen, Elan Rosenfeld, J. Zico Kolter")]
 public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
     /// <summary>

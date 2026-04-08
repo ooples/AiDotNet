@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns", "https://arxiv.org/abs/2005.02634", Year = 2020, Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
+[ResearchPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns", "https://arxiv.org/abs/2005.02634", Year = 2020, Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
 public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

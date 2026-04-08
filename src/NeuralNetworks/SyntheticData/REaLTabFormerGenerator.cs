@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("REaLTabFormer: Generating Realistic Relational and Tabular Data using Transformers",
+[ResearchPaper("REaLTabFormer: Generating Realistic Relational and Tabular Data using Transformers",
     "https://arxiv.org/abs/2302.02041",
     Year = 2023,
     Authors = "Aivin V. Solatorio, Olivier Dupriez")]

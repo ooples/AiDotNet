@@ -30,7 +30,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Microsoft Presidio: Data Protection and De-identification SDK",
+[ResearchPaper("Microsoft Presidio: Data Protection and De-identification SDK",
     "https://github.com/microsoft/presidio",
     Year = 2024,
     Authors = "Microsoft")]

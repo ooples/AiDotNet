@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Fairness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StereoSet: Measuring Stereotypical Bias in Pretrained Language Models",
+[ResearchPaper("StereoSet: Measuring Stereotypical Bias in Pretrained Language Models",
     "https://arxiv.org/abs/2004.09456",
     Year = 2021,
     Authors = "Moin Nadeem, Anna Bethke, Siva Reddy")]

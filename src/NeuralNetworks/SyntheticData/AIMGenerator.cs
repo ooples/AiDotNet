@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AIM: An Adaptive and Iterative Mechanism for Differentially Private Synthetic Data",
+[ResearchPaper("AIM: An Adaptive and Iterative Mechanism for Differentially Private Synthetic Data",
     "https://arxiv.org/abs/2201.12677",
     Year = 2022,
     Authors = "Ryan McKenna, Gerome Miklau, Daniel Sheldon")]

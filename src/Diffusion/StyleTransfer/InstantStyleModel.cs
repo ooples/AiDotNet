@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstantStyle: Free Lunch towards Style-Preserving in Text-to-Image Generation", "https://arxiv.org/abs/2407.00788", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("InstantStyle: Free Lunch towards Style-Preserving in Text-to-Image Generation", "https://arxiv.org/abs/2407.00788", Year = 2024, Authors = "Wang et al.")]
 public class InstantStyleModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

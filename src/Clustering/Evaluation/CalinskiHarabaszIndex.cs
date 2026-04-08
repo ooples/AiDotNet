@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - We want big numerator, small denominator.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class CalinskiHarabaszIndex<T> : IClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

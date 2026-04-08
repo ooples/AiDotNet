@@ -34,7 +34,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Amphion: An Open-Source Audio, Music and Speech Generation Toolkit", "https://arxiv.org/abs/2312.09911", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("Amphion: An Open-Source Audio, Music and Speech Generation Toolkit", "https://arxiv.org/abs/2312.09911", Year = 2024, Authors = "Zhang et al.")]
 public class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AmphionOptions _options; public override ModelOptions GetOptions() => _options;

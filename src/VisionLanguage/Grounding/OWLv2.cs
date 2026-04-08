@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Open-Vocabulary Object Detection", "https://arxiv.org/abs/2306.09683", Year = 2023, Authors = "Minderer et al.")]
+[ResearchPaper("Scaling Open-Vocabulary Object Detection", "https://arxiv.org/abs/2306.09683", Year = 2023, Authors = "Minderer et al.")]
 public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly OWLv2Options _options; public override ModelOptions GetOptions() => _options;

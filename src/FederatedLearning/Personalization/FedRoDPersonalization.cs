@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -22,6 +24,8 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// Federated Learning for Image Classification." ICLR 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _headFraction;

@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Acceleration;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// This maintains temporal consistency across windows while extending generation length.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class FreeNoiseModule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

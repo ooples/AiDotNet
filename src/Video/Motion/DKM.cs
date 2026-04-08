@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DKM: Dense Kernelized Feature Matching for Geometry Estimation",
+[ResearchPaper("DKM: Dense Kernelized Feature Matching for Geometry Estimation",
     "https://arxiv.org/abs/2202.00667",
     Year = 2023,
     Authors = "Johan Edstedt, Ioannis Athanasiadis, Marten Wadenbäck, Michael Felsberg")]

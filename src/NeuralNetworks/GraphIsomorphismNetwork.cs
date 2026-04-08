@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("How Powerful are Graph Neural Networks?", "https://arxiv.org/abs/1810.00826", Year = 2019, Authors = "Keyulu Xu, Weihua Hu, Jure Leskovec, Stefanie Jegelka")]
+[ResearchPaper("How Powerful are Graph Neural Networks?", "https://arxiv.org/abs/1810.00826", Year = 2019, Authors = "Keyulu Xu, Weihua Hu, Jure Leskovec, Stefanie Jegelka")]
 public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GraphIsomorphismNetworkOptions _options;

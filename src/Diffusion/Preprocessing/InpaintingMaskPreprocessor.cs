@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// option creates smooth transitions at mask edges for more natural blending.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class InpaintingMaskPreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly double _binarizeThreshold;

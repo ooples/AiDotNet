@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression.MixedEffects;
 
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
@@ -23,6 +26,8 @@ namespace AiDotNet.Regression.MixedEffects;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class VarianceComponent<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]

@@ -53,7 +53,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MIA-VSR: Masked Inter and Intra-Frame Attention for Video Super-Resolution",
+[ResearchPaper("MIA-VSR: Masked Inter and Intra-Frame Attention for Video Super-Resolution",
     "https://arxiv.org/abs/2401.03402",
     Year = 2024,
     Authors = "Yinuo Zhou, Hongjun Du, Xin Li")]

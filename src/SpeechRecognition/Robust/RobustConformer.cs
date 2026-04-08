@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction", "https://arxiv.org/abs/2306.01500", Year = 2023, Authors = "Chang et al.")]
+[ResearchPaper("Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction", "https://arxiv.org/abs/2306.01500", Year = 2023, Authors = "Chang et al.")]
 public class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RobustConformerOptions _options; public override ModelOptions GetOptions() => _options;

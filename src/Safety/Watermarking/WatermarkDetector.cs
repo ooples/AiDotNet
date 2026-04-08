@@ -26,7 +26,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SoK: Watermarking for AI-Generated Content",
+[ResearchPaper("SoK: Watermarking for AI-Generated Content",
     "https://arxiv.org/abs/2411.18479",
     Year = 2024,
     Authors = "Various")]

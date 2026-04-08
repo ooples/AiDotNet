@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Kimi-VL Technical Report", "https://arxiv.org/abs/2504.07491", Year = 2025, Authors = "Moonshot AI")]
+[ResearchPaper("Kimi-VL Technical Report", "https://arxiv.org/abs/2504.07491", Year = 2025, Authors = "Moonshot AI")]
 public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly KimiVLOptions _options; public override ModelOptions GetOptions() => _options;

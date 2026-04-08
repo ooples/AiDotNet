@@ -54,7 +54,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Unbiased Recursive Partitioning: A Conditional Inference Framework", "https://doi.org/10.1198/106186006X133933")]
+    [ResearchPaper("Unbiased Recursive Partitioning: A Conditional Inference Framework", "https://doi.org/10.1198/106186006X133933")]
 public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

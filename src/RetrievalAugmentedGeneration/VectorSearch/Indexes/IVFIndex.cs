@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
@@ -18,6 +20,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// Best for medium to large datasets (10K - 10M vectors).
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class IVFIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Kandinsky: an Improved Text-to-Image Synthesis with Image Prior and Latent Diffusion", "https://arxiv.org/abs/2310.03502", Year = 2023, Authors = "Razzhigaev et al.")]
+[ResearchPaper("Kandinsky: an Improved Text-to-Image Synthesis with Image Prior and Latent Diffusion", "https://arxiv.org/abs/2310.03502", Year = 2023, Authors = "Razzhigaev et al.")]
 public class KandinskyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

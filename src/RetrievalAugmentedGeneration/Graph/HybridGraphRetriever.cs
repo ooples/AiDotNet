@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -40,6 +42,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Graph connections provide context vectors can't capture!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class HybridGraphRetriever<T>
 {
     private readonly KnowledgeGraph<T> _graph;

@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Emu Video: Factorizing Text-to-Video Generation by Explicit Image Conditioning", "https://arxiv.org/abs/2311.10709", Year = 2023, Authors = "Girdhar et al.")]
+[ResearchPaper("Emu Video: Factorizing Text-to-Video Generation by Explicit Image Conditioning", "https://arxiv.org/abs/2311.10709", Year = 2023, Authors = "Girdhar et al.")]
 public class EmuVideoModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

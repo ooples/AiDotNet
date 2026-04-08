@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Language Is Not All You Need: Aligning Perception with Language Models", "https://arxiv.org/abs/2302.14045", Year = 2023, Authors = "Huang et al.")]
+[ResearchPaper("Language Is Not All You Need: Aligning Perception with Language Models", "https://arxiv.org/abs/2302.14045", Year = 2023, Authors = "Huang et al.")]
 public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly KOSMOS1Options _options; public override ModelOptions GetOptions() => _options;

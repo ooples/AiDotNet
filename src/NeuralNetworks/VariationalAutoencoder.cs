@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
+[ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
 public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly VariationalAutoencoderOptions _options;

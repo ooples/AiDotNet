@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
@@ -12,6 +14,8 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 ///
 /// <para>Reference: Reddi, S., et al. (2021). "Adaptive Federated Optimization." ICLR 2021.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

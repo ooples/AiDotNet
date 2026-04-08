@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improved Techniques for Training Consistency Models", "https://arxiv.org/abs/2310.14189", Year = 2024, Authors = "Song and Dhariwal")]
+[ResearchPaper("Improved Techniques for Training Consistency Models", "https://arxiv.org/abs/2310.14189", Year = 2024, Authors = "Song and Dhariwal")]
 public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

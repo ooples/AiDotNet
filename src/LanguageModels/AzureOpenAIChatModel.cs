@@ -58,7 +58,7 @@ namespace AiDotNet.LanguageModels;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(string), typeof(string))]
-[ModelPaper("GPT-4 Technical Report", "https://arxiv.org/abs/2303.08774")]
+[ResearchPaper("GPT-4 Technical Report", "https://arxiv.org/abs/2303.08774")]
 public class AzureOpenAIChatModel<T> : ChatModelBase<T>
 {
     private readonly string _apiKey;

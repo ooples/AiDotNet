@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("FILM: Frame Interpolation for Large Motion", "https://arxiv.org/abs/2202.04901")]
+    [ResearchPaper("FILM: Frame Interpolation for Large Motion", "https://arxiv.org/abs/2202.04901")]
 public class TemporalInterpolationVAE<T> : VAEModelBase<T>
 {
     private readonly int _inputChannels;

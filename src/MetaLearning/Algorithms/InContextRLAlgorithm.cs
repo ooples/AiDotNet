@@ -50,10 +50,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transformers are Sample Efficient World Models",
+[ResearchPaper("Transformers are Sample Efficient World Models",
     "https://arxiv.org/abs/2209.00588",
     Year = 2022,
     Authors = "Vincent Micheli, Eloi Alonso, Francois Fleuret")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

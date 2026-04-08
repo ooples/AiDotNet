@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -33,6 +34,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Karras et al., "Elucidating the Design Space of Diffusion-Based Generative Models", NeurIPS 2022
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class EulerAncestralDiscreteScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

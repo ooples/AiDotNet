@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Gemma 3 Technical Report", "https://arxiv.org/abs/2503.19786", Year = 2025, Authors = "Gemma Team")]
+[ResearchPaper("Gemma 3 Technical Report", "https://arxiv.org/abs/2503.19786", Year = 2025, Authors = "Gemma Team")]
 public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Gemma3Options _options; public override ModelOptions GetOptions() => _options;

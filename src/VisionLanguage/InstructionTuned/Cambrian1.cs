@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Cambrian-1: A Fully Open, Vision-Centric Exploration of Multimodal LLMs", "https://arxiv.org/abs/2406.16860", Year = 2024, Authors = "Tong et al.")]
+[ResearchPaper("Cambrian-1: A Fully Open, Vision-Centric Exploration of Multimodal LLMs", "https://arxiv.org/abs/2406.16860", Year = 2024, Authors = "Tong et al.")]
 public class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Cambrian1Options _options; public override ModelOptions GetOptions() => _options;

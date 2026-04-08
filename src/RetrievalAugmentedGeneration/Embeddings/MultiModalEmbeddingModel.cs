@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -102,6 +104,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// - Limited to English text in most CLIP models (multilingual versions available)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _modelPath;

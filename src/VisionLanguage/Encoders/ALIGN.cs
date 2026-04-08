@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision", "https://arxiv.org/abs/2102.05918", Year = 2021, Authors = "Jia et al.")]
+[ResearchPaper("Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision", "https://arxiv.org/abs/2102.05918", Year = 2021, Authors = "Jia et al.")]
 public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly ALIGNOptions _options;

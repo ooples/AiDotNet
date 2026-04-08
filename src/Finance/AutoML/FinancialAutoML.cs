@@ -39,7 +39,7 @@ namespace AiDotNet.Finance.AutoML;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AutoML: A Survey of the State-of-the-Art",
+[ResearchPaper("AutoML: A Survey of the State-of-the-Art",
     "https://arxiv.org/abs/1908.00709",
     Year = 2021,
     Authors = "Xin He, Kaiyong Zhao, Xiaowen Chu")]

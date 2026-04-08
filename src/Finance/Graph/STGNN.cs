@@ -88,7 +88,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting", "https://arxiv.org/abs/1709.04875", Year = 2018, Authors = "Bing Yu, Haoteng Yin, Zhanxing Zhu")]
+[ResearchPaper("Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting", "https://arxiv.org/abs/1709.04875", Year = 2018, Authors = "Bing Yu, Haoteng Yin, Zhanxing Zhu")]
 public class STGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

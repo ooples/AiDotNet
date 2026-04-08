@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection", "https://arxiv.org/abs/2303.05499", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection", "https://arxiv.org/abs/2303.05499", Year = 2024, Authors = "Liu et al.")]
 public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundingDINOOptions _options; public override ModelOptions GetOptions() => _options;

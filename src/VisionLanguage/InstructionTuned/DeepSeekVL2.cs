@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding", "https://arxiv.org/abs/2412.10302", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding", "https://arxiv.org/abs/2412.10302", Year = 2024, Authors = "Wu et al.")]
 public class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DeepSeekVL2Options _options; public override ModelOptions GetOptions() => _options;

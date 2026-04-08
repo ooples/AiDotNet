@@ -62,7 +62,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Audio Set: An Ontology and Human-Labeled Dataset for Audio Events", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Jort F. Gemmeke, Daniel P. W. Ellis, Dylan Freedman, Aren Jansen, Wade Lawrence, R. Channing Moore, Manoj Plakal, Marvin Ritter")]
+[ResearchPaper("Audio Set: An Ontology and Human-Labeled Dataset for Audio Events", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Jort F. Gemmeke, Daniel P. W. Ellis, Dylan Freedman, Aren Jansen, Wade Lawrence, R. Channing Moore, Manoj Plakal, Marvin Ritter")]
 public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Masked Diffusion Transformer is a Strong Image Synthesizer", "https://arxiv.org/abs/2303.14389")]
+    [ResearchPaper("Masked Diffusion Transformer is a Strong Image Synthesizer", "https://arxiv.org/abs/2303.14389")]
 public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

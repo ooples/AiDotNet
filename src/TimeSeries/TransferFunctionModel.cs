@@ -46,7 +46,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
+[ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
 public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

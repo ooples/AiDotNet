@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Bootstrap;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Bootstrap;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class Bootstrap632Splitter<T> : BootstrapSplitter<T>
 {
     /// <summary>

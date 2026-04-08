@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("USD: Unseen Sensitive Detection via Scene Graph Generation for NSFW Detection",
+[ResearchPaper("USD: Unseen Sensitive Detection via Scene Graph Generation for NSFW Detection",
     "https://www.usenix.org/conference/usenixsecurity25",
     Year = 2025,
     Authors = "Various")]

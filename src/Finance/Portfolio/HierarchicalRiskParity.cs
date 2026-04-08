@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Building Diversified Portfolios that Outperform Out of Sample", "https://doi.org/10.3905/jpm.2016.42.4.059", Year = 2016, Authors = "Marcos Lopez de Prado")]
+[ResearchPaper("Building Diversified Portfolios that Outperform Out of Sample", "https://doi.org/10.3905/jpm.2016.42.4.059", Year = 2016, Authors = "Marcos Lopez de Prado")]
 public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

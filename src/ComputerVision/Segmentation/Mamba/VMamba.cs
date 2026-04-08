@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VMamba: Visual State Space Model", "https://arxiv.org/abs/2401.10166", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("VMamba: Visual State Space Model", "https://arxiv.org/abs/2401.10166", Year = 2024, Authors = "Liu et al.")]
 public class VMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly VMambaOptions _options;

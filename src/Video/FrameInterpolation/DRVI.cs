@@ -50,7 +50,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DRVI: Disentangled Representations for Video Interpolation",
+[ResearchPaper("DRVI: Disentangled Representations for Video Interpolation",
     "https://arxiv.org/abs/2401.05765",
     Year = 2024,
     Authors = "Rong Du, Zhiwei Xiong")]

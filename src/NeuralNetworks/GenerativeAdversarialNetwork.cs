@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
+[ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GenerativeAdversarialNetworkOptions _options;

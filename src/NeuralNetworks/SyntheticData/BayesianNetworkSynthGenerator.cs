@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PrivBayes: Private Data Release via Bayesian Networks",
+[ResearchPaper("PrivBayes: Private Data Release via Bayesian Networks",
     "https://arxiv.org/abs/1401.0939",
     Year = 2017,
     Authors = "Jun Zhang, Graham Cormode, Cecilia M. Procopiuc, Divesh Srivastava, Xiaokui Xiao")]

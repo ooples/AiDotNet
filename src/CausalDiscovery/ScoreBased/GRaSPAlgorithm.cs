@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Greedy Relaxations of the Sparsest Permutation Algorithm", "https://arxiv.org/abs/2211.02763", Year = 2022, Authors = "Wai-Yin Lam, Bryan Andrews, Joseph Ramsey")]
+[ResearchPaper("Greedy Relaxations of the Sparsest Permutation Algorithm", "https://arxiv.org/abs/2211.02763", Year = 2022, Authors = "Wai-Yin Lam, Bryan Andrews, Joseph Ramsey")]
 public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

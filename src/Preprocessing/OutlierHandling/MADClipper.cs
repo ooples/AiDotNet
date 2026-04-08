@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -41,6 +43,8 @@ namespace AiDotNet.Preprocessing.OutlierHandling;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     /// <summary>

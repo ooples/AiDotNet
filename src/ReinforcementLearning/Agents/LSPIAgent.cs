@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Least-Squares Policy Iteration",
+[ResearchPaper("Least-Squares Policy Iteration",
     "https://www.jmlr.org/papers/v4/lagoudakis03a.html",
     Year = 2003,
     Authors = "Lagoudakis, M. G. & Parr, R.")]

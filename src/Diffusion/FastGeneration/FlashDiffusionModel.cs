@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Flash Diffusion: Accelerating Any Conditional Diffusion Model for Few Steps Image Generation", "https://arxiv.org/abs/2406.02347", Year = 2024, Authors = "Chadebec et al.")]
+[ResearchPaper("Flash Diffusion: Accelerating Any Conditional Diffusion Model for Few Steps Image Generation", "https://arxiv.org/abs/2406.02347", Year = 2024, Authors = "Chadebec et al.")]
 public class FlashDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

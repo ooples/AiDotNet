@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TrainingMonitoring.Resources;
 
@@ -36,6 +38,7 @@ namespace AiDotNet.TrainingMonitoring.Resources;
 /// monitor.Stop();
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class ResourceMonitor : IDisposable
 {
     private readonly object _lock = new();

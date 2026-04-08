@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Foundations;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("data2vec 2.0: Highly Efficient Self-Supervised Learning for Vision, Speech and Text", "https://arxiv.org/abs/2212.07525", Year = 2023, Authors = "Alexei Baevski, Arun Babu, Wei-Ning Hsu, Michael Auli")]
+[ResearchPaper("data2vec 2.0: Highly Efficient Self-Supervised Learning for Vision, Speech and Text", "https://arxiv.org/abs/2212.07525", Year = 2023, Authors = "Alexei Baevski, Arun Babu, Wei-Ning Hsu, Michael Auli")]
 public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     #region Fields

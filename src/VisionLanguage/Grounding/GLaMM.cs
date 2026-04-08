@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GLaMM: Pixel Grounding Large Multimodal Model", "https://arxiv.org/abs/2311.03356", Year = 2024, Authors = "Rasheed et al.")]
+[ResearchPaper("GLaMM: Pixel Grounding Large Multimodal Model", "https://arxiv.org/abs/2311.03356", Year = 2024, Authors = "Rasheed et al.")]
 public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GLaMMOptions _options; public override ModelOptions GetOptions() => _options;

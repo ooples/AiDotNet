@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
@@ -55,6 +57,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// - Extremely short queries (no room for variation)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryExpander)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class MultiQueryExpansion : QueryExpansionBase
 {
     /// <summary>

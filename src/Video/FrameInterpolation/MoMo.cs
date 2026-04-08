@@ -51,7 +51,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MoMo: Momentum Diffusion Model for Bi-Directional Video Frame Interpolation",
+[ResearchPaper("MoMo: Momentum Diffusion Model for Bi-Directional Video Frame Interpolation",
     "https://arxiv.org/abs/2404.07547",
     Year = 2024,
     Authors = "Xiang Zhang, Zekun Xu, Fuhai Chen, Li Song")]

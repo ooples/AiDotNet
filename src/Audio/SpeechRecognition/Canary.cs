@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelTask(ModelTask.Translation)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NVIDIA Canary: An Open Multilingual Large ASR Model", "https://doi.org/10.48550/arXiv.2404.02592", Year = 2024, Authors = "Ankur Rekesh, Taejin Park, Subhankar Ghosh, Kolya Malkin, Samuel Kriman, Somshubra Majumdar, Boris Ginsburg")]
+[ResearchPaper("NVIDIA Canary: An Open Multilingual Large ASR Model", "https://doi.org/10.48550/arXiv.2404.02592", Year = 2024, Authors = "Ankur Rekesh, Taejin Park, Subhankar Ghosh, Kolya Malkin, Samuel Kriman, Somshubra Majumdar, Boris Ginsburg")]
 public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

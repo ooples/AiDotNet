@@ -87,7 +87,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CausalGAN: Learning Causal Implicit Generative Models with Adversarial Training",
+[ResearchPaper("CausalGAN: Learning Causal Implicit Generative Models with Adversarial Training",
     "https://arxiv.org/abs/1709.02023",
     Year = 2018,
     Authors = "Murat Kocaoglu, Christopher Snyder, Alexandros G. Dimakis, Sriram Vishwanath")]

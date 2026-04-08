@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
@@ -52,6 +54,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Distributed systems (use Neo4j or similar instead)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 {
     private readonly string _storageDirectory;

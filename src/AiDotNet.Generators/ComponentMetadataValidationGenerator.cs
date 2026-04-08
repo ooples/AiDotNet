@@ -14,6 +14,23 @@ namespace AiDotNet.Generators;
 [Generator]
 public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 {
+    // Diagnostic descriptors for Tier 2 component attribute pairing
+    private static readonly DiagnosticDescriptor ComponentTypeMissingPipelineStage = new(
+        id: "AIDN060",
+        title: "Component has [ComponentType] but is missing [PipelineStage]",
+        messageFormat: "Component '{0}' has [ComponentType] but is missing [PipelineStage]. All components should declare which pipeline stage they operate in.",
+        category: "AiDotNet.ComponentMetadata",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor PipelineStageMissingComponentType = new(
+        id: "AIDN061",
+        title: "Component has [PipelineStage] but is missing [ComponentType]",
+        messageFormat: "Component '{0}' has [PipelineStage] but is missing [ComponentType]. All pipeline components should declare their component type.",
+        category: "AiDotNet.ComponentMetadata",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     // Diagnostic descriptors
     // NOTE: Temporarily set to Warning while annotations are being added across all
     // component classes. Will be restored to Error once all components are annotated.
@@ -60,6 +77,10 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
     private const string LayerCategoryAttr = "AiDotNet.Attributes.LayerCategoryAttribute";
     private const string LayerTaskAttr = "AiDotNet.Attributes.LayerTaskAttribute";
 
+    // Tier 2 component attribute names
+    private const string ComponentTypeAttr = "AiDotNet.Attributes.ComponentTypeAttribute";
+    private const string PipelineStageAttr = "AiDotNet.Attributes.PipelineStageAttribute";
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
@@ -97,10 +118,29 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
             return null;
 
         var kind = ClassifyComponent(symbol);
-        if (kind == ComponentKind.None)
-            return null;
+        if (kind != ComponentKind.None)
+            return new ComponentCandidate(symbol, kind);
 
-        return new ComponentCandidate(symbol, kind);
+        // Also include classes that have [ComponentType] or [PipelineStage] for Tier 2 validation
+        if (HasComponentTypeOrPipelineStage(symbol))
+            return new ComponentCandidate(symbol, ComponentKind.General);
+
+        return null;
+    }
+
+    private static bool HasComponentTypeOrPipelineStage(INamedTypeSymbol symbol)
+    {
+        var attrs = symbol.GetAttributes();
+        foreach (var attr in attrs)
+        {
+            if (attr.AttributeClass is not null)
+            {
+                string fullName = attr.AttributeClass.ToDisplayString();
+                if (fullName == ComponentTypeAttr || fullName == PipelineStageAttr)
+                    return true;
+            }
+        }
+        return false;
     }
 
     private static ComponentKind ClassifyComponent(INamedTypeSymbol symbol)
@@ -167,6 +207,9 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
                     ValidateLayer(context, symbol);
                     break;
             }
+
+            // Tier 2: Validate [ComponentType] / [PipelineStage] pairing on all candidates
+            ValidateComponentPipelinePairing(context, symbol);
         }
     }
 
@@ -218,6 +261,42 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(MissingLayerAttributes, location, name, "LayerTask"));
     }
 
+    private static void ValidateComponentPipelinePairing(SourceProductionContext context, INamedTypeSymbol symbol)
+    {
+        var attrs = symbol.GetAttributes();
+        bool hasComponentType = HasAttributeByFullName(attrs, ComponentTypeAttr);
+        bool hasPipelineStage = HasAttributeByFullName(attrs, PipelineStageAttr);
+
+        if (hasComponentType && !hasPipelineStage)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                ComponentTypeMissingPipelineStage,
+                symbol.Locations.FirstOrDefault(),
+                symbol.Name));
+        }
+
+        if (hasPipelineStage && !hasComponentType)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                PipelineStageMissingComponentType,
+                symbol.Locations.FirstOrDefault(),
+                symbol.Name));
+        }
+    }
+
+    private static bool HasAttributeByFullName(ImmutableArray<AttributeData> attrs, string fullName)
+    {
+        foreach (var attr in attrs)
+        {
+            if (attr.AttributeClass is not null &&
+                attr.AttributeClass.ToDisplayString() == fullName)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool HasAttributeEndingWith(ImmutableArray<AttributeData> attrs, string suffix)
     {
         // Match only AiDotNet attributes to avoid false positives from third-party assemblies
@@ -254,6 +333,7 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         None,
         Activation,
         Loss,
-        Layer
+        Layer,
+        General
     }
 }

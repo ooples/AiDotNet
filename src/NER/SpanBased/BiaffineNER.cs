@@ -73,7 +73,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Named Entity Recognition as Dependency Parsing",
+[ResearchPaper("Named Entity Recognition as Dependency Parsing",
     "https://arxiv.org/abs/2005.07150",
     Year = 2020,
     Authors = "Juntao Yu, Bernd Bohnet, Massimo Poesio")]

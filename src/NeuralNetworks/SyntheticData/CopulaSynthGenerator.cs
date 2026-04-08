@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("The Synthetic Data Vault",
+[ResearchPaper("The Synthetic Data Vault",
     "https://doi.org/10.1109/DSAA.2016.49",
     Year = 2016,
     Authors = "Neha Patki, Roy Wedge, Kalyan Veeramachaneni")]

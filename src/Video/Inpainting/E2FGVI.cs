@@ -53,7 +53,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Towards An End-to-End Framework for Flow-Guided Video Inpainting",
+[ResearchPaper("Towards An End-to-End Framework for Flow-Guided Video Inpainting",
     "https://arxiv.org/abs/2204.02663",
     Year = 2022,
     Authors = "Zhen Li, Cheng-Ze Lu, Jianhua Qin, Chun-Le Guo, Ming-Ming Cheng")]

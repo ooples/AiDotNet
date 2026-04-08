@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Compression;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Gradient Descent." EMNLP 2017.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _compressionRatio;

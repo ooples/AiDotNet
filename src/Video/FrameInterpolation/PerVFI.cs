@@ -47,7 +47,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PerVFI: Perception-Oriented Video Frame Interpolation via Asymmetric Blending",
+[ResearchPaper("PerVFI: Perception-Oriented Video Frame Interpolation via Asymmetric Blending",
     "https://arxiv.org/abs/2404.06692",
     Year = 2024,
     Authors = "Guangyang Wu, Xin Tao, Changlin Li, Wenyi Wang, Xiaohong Liu, Qingqing Zheng")]

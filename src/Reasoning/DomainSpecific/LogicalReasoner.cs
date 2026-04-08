@@ -138,7 +138,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(string))]
-[ModelPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://doi.org/10.48550/arXiv.2305.10601", Year = 2023, Authors = "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan")]
+[ResearchPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://doi.org/10.48550/arXiv.2305.10601", Year = 2023, Authors = "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan")]
 public class LogicalReasoner<T> : IDomainReasoner<T>
 {
     private readonly IChatModel<T> _chatModel;

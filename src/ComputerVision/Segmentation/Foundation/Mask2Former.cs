@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
+[ResearchPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
 public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly Mask2FormerOptions _options;

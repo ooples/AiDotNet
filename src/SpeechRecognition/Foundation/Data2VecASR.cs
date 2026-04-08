@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language", "https://arxiv.org/abs/2202.03555", Year = 2022, Authors = "Baevski et al.")]
+[ResearchPaper("data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language", "https://arxiv.org/abs/2202.03555", Year = 2022, Authors = "Baevski et al.")]
 public class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Data2VecASROptions _options; public override ModelOptions GetOptions() => _options;

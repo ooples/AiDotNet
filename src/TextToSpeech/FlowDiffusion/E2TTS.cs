@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Embarrassingly Easy Text-to-Speech (E2 TTS)", "https://arxiv.org/abs/2406.18009", Year = 2024, Authors = "Eskimez et al.")]
+[ResearchPaper("Embarrassingly Easy Text-to-Speech (E2 TTS)", "https://arxiv.org/abs/2406.18009", Year = 2024, Authors = "Eskimez et al.")]
 public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly E2TTSOptions _options; public override ModelOptions GetOptions() => _options;

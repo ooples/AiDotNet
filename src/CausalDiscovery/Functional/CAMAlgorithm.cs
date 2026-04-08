@@ -40,7 +40,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("CAM: Causal Additive Models, High-Dimensional Order Search and Penalized Regression", "https://doi.org/10.1214/14-AOS1260", Year = 2014, Authors = "Peter Buhlmann, Jonas Peters, Jan Ernest")]
+[ResearchPaper("CAM: Causal Additive Models, High-Dimensional Order Search and Penalized Regression", "https://doi.org/10.1214/14-AOS1260", Year = 2014, Authors = "Peter Buhlmann, Jonas Peters, Jan Ernest")]
 public class CAMAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.01;

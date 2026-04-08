@@ -41,7 +41,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
+[ResearchPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
 public class MoCo<T> : SSLMethodBase<T>
 {
     private readonly IMomentumEncoder<T> _momentumEncoder;

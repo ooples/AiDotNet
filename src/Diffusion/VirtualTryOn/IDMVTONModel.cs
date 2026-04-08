@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improving Diffusion Models for Authentic Virtual Try-on in the Wild", "https://arxiv.org/abs/2403.05139", Year = 2024, Authors = "Choi et al.")]
+[ResearchPaper("Improving Diffusion Models for Authentic Virtual Try-on in the Wild", "https://arxiv.org/abs/2403.05139", Year = 2024, Authors = "Choi et al.")]
 public class IDMVTONModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

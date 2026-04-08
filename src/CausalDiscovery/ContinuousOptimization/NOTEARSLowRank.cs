@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("On Low-Rank Directed Acyclic Graphs and Causal Structure Learning", "https://arxiv.org/abs/2006.05691", Year = 2023, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
+[ResearchPaper("On Low-Rank Directed Acyclic Graphs and Causal Structure Learning", "https://arxiv.org/abs/2006.05691", Year = 2023, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRateValue;

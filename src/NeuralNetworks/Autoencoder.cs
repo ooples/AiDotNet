@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Reducing the Dimensionality of Data with Neural Networks", "https://doi.org/10.1126/science.1127647")]
+    [ResearchPaper("Reducing the Dimensionality of Data with Neural Networks", "https://doi.org/10.1126/science.1127647")]
 public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AutoencoderOptions _options;

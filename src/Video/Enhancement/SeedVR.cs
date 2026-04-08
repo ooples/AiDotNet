@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SeedVR: Seeding Infinity in Diffusion Transformer Towards Generic Video Restoration",
+[ResearchPaper("SeedVR: Seeding Infinity in Diffusion Transformer Towards Generic Video Restoration",
     "https://arxiv.org/abs/2501.01320",
     Year = 2025,
     Authors = "Jianyi Wang, Kelvin C.K. Chan, Shangchen Zhou, Chen Change Loy")]

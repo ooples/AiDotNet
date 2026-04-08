@@ -26,7 +26,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
     private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
     private const string ModelComplexityAttr = "AiDotNet.Attributes.ModelComplexityAttribute";
-    private const string ModelPaperAttr = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ResearchPaperAttr = "AiDotNet.Attributes.ResearchPaperAttribute";
     private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -97,7 +97,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
         var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ModelPaperAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 
         if (domainAttrSymbol is null || categoryAttrSymbol is null ||

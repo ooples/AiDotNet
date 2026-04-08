@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling", "https://arxiv.org/abs/2501.17811", Year = 2025, Authors = "Chen et al.")]
+[ResearchPaper("Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling", "https://arxiv.org/abs/2501.17811", Year = 2025, Authors = "Chen et al.")]
 public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options; public override ModelOptions GetOptions() => _options;

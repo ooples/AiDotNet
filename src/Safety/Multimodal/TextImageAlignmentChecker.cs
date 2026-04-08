@@ -40,7 +40,7 @@ namespace AiDotNet.Safety.Multimodal;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning Transferable Visual Models From Natural Language Supervision",
+[ResearchPaper("Learning Transferable Visual Models From Natural Language Supervision",
     "https://arxiv.org/abs/2103.00020",
     Year = 2021,
     Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, et al.")]

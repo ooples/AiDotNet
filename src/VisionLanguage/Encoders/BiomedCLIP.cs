@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BiomedCLIP: A Multimodal Biomedical Foundation Model Pretrained from Fifteen Million Scientific Image-Text Pairs", "https://arxiv.org/abs/2303.00915", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("BiomedCLIP: A Multimodal Biomedical Foundation Model Pretrained from Fifteen Million Scientific Image-Text Pairs", "https://arxiv.org/abs/2303.00915", Year = 2023, Authors = "Zhang et al.")]
 public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly BiomedCLIPOptions _options; public override ModelOptions GetOptions() => _options;

@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CMGAN: Conformer-based Metric GAN for Speech Enhancement", "https://arxiv.org/abs/2203.15149", Year = 2022, Authors = "Ruizhe Cao, Sherif Abdulatif, Bin Yang")]
+[ResearchPaper("CMGAN: Conformer-based Metric GAN for Speech Enhancement", "https://arxiv.org/abs/2203.15149", Year = 2022, Authors = "Ruizhe Cao, Sherif Abdulatif, Bin Yang")]
 public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

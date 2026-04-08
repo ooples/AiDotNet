@@ -132,7 +132,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
+[ResearchPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
 public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
     private readonly NeRFOptions _options;

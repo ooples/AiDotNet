@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OBELICS: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents", "https://arxiv.org/abs/2306.16527", Year = 2023, Authors = "Laurencon et al.")]
+[ResearchPaper("OBELICS: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents", "https://arxiv.org/abs/2306.16527", Year = 2023, Authors = "Laurencon et al.")]
 public class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICSOptions _options; public override ModelOptions GetOptions() => _options;

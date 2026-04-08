@@ -5,6 +5,8 @@ using AiDotNet.Preprocessing.DataPreparation.Splitting.Stratified;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
 
@@ -46,6 +48,8 @@ namespace AiDotNet.Preprocessing.DataPreparation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DataPreparationPipeline<T>
 {
     private readonly List<(string Name, IRowOperation<T> Operation)> _operations;

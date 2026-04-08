@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Lumiere: A Space-Time Diffusion Model for Video Generation", "https://arxiv.org/abs/2401.12945", Year = 2024, Authors = "Bar-Tal et al.")]
+[ResearchPaper("Lumiere: A Space-Time Diffusion Model for Video Generation", "https://arxiv.org/abs/2401.12945", Year = 2024, Authors = "Bar-Tal et al.")]
 public class LumiereModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

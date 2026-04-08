@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
+[ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;

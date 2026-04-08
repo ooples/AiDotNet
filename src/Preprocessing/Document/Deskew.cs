@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.Document;
 
@@ -34,6 +36,8 @@ namespace AiDotNet.Preprocessing.Document;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class Deskew<T> : IDisposable
 {
     #region Fields

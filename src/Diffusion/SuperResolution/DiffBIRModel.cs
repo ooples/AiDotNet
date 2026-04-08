@@ -103,7 +103,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffBIR: Towards Blind Image Restoration with Generative Diffusion Prior", "https://arxiv.org/abs/2308.15070", Year = 2024, Authors = "Lin et al.")]
+[ResearchPaper("DiffBIR: Towards Blind Image Restoration with Generative Diffusion Prior", "https://arxiv.org/abs/2308.15070", Year = 2024, Authors = "Lin et al.")]
 public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

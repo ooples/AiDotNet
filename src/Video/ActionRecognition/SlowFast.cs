@@ -55,7 +55,7 @@ namespace AiDotNet.Video.ActionRecognition;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SlowFast Networks for Video Recognition",
+[ResearchPaper("SlowFast Networks for Video Recognition",
     "https://arxiv.org/abs/1812.03982",
     Year = 2019,
     Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]

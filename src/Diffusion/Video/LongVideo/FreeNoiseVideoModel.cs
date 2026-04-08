@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling", "https://arxiv.org/abs/2310.15169", Year = 2023, Authors = "Qiu et al.")]
+[ResearchPaper("FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling", "https://arxiv.org/abs/2310.15169", Year = 2023, Authors = "Qiu et al.")]
 public class FreeNoiseVideoModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

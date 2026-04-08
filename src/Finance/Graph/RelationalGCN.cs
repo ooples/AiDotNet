@@ -88,7 +88,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Modeling Relational Data with Graph Convolutional Networks", "https://arxiv.org/abs/1703.06103", Year = 2018, Authors = "Michael Schlichtkrull, Thomas N. Kipf, Peter Bloem, Rianne van den Berg, Ivan Titov, Max Welling")]
+[ResearchPaper("Modeling Relational Data with Graph Convolutional Networks", "https://arxiv.org/abs/1703.06103", Year = 2018, Authors = "Michael Schlichtkrull, Thomas N. Kipf, Peter Bloem, Rianne van den Berg, Ivan Titov, Max Welling")]
 public class RelationalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

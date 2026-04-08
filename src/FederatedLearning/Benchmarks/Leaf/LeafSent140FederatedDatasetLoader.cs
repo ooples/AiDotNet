@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 using Newtonsoft.Json.Linq;
 
@@ -16,6 +18,8 @@ namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 /// simulations match the benchmark's per-user partitioning.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class LeafSent140FederatedDatasetLoader
 {
     /// <summary>

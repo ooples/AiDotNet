@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 [ModelTask(ModelTask.MotionGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Human Motion Diffusion Model", "https://arxiv.org/abs/2209.14916", Year = 2023, Authors = "Tevet et al.")]
+[ResearchPaper("Human Motion Diffusion Model", "https://arxiv.org/abs/2209.14916", Year = 2023, Authors = "Tevet et al.")]
 public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 263;

@@ -60,10 +60,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("On First-Order Meta-Learning Algorithms",
+[ResearchPaper("On First-Order Meta-Learning Algorithms",
     "https://arxiv.org/abs/1803.02999",
     Year = 2018,
     Authors = "Alex Nichol, Joshua Achiam, John Schulman")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ReptileOptions<T, TInput, TOutput> _reptileOptions;

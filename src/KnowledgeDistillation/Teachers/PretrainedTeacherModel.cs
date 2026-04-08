@@ -24,10 +24,12 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Distilling the Knowledge in a Neural Network",
+[ResearchPaper("Distilling the Knowledge in a Neural Network",
     "https://arxiv.org/abs/1503.02531",
     Year = 2015,
     Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>>? _pretrainedForward;

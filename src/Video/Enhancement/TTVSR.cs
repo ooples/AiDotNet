@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning Trajectory-Aware Transformer for Video Super-Resolution",
+[ResearchPaper("Learning Trajectory-Aware Transformer for Video Super-Resolution",
     "https://arxiv.org/abs/2204.04216",
     Year = 2022,
     Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]

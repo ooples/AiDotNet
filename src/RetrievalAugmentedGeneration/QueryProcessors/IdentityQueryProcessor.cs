@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// exactly what you gave it, no changes at all.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryProcessor)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class IdentityQueryProcessor : QueryProcessorBase
 {
     /// <summary>

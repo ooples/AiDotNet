@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3DGraphLLM: Combining Semantic Graphs and Large Language Models for 3D Scene Understanding", "https://arxiv.org/abs/2412.18450", Year = 2025, Authors = "Rygalev et al.")]
+[ResearchPaper("3DGraphLLM: Combining Semantic Graphs and Large Language Models for 3D Scene Understanding", "https://arxiv.org/abs/2412.18450", Year = 2025, Authors = "Rygalev et al.")]
 public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly ThreeDGraphLLMOptions _options; public override ModelOptions GetOptions() => _options;

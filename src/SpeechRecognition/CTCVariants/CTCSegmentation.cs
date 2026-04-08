@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CTC-Segmentation of Large Corpora for German End-to-End Speech Recognition", "https://arxiv.org/abs/2007.09127", Year = 2020, Authors = "Kurzinger et al.")]
+[ResearchPaper("CTC-Segmentation of Large Corpora for German End-to-End Speech Recognition", "https://arxiv.org/abs/2007.09127", Year = 2020, Authors = "Kurzinger et al.")]
 public class CTCSegmentation<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CTCSegmentationOptions _options; public override ModelOptions GetOptions() => _options;

@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UltraEdit: Instruction-based Fine-Grained Image Editing at Scale", "https://arxiv.org/abs/2407.05282", Year = 2024, Authors = "Zhao et al.")]
+[ResearchPaper("UltraEdit: Instruction-based Fine-Grained Image Editing at Scale", "https://arxiv.org/abs/2407.05282", Year = 2024, Authors = "Zhao et al.")]
 public class UltraEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

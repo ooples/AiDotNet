@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -39,6 +41,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - Kotsiantis et al. (2006). "Handling imbalanced datasets: A review"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class RandomOverSampler<T> : OversamplingBase<T>
 {
     /// <summary>

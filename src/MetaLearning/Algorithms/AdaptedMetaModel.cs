@@ -38,7 +38,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks", "https://arxiv.org/abs/1703.03400")]
+[ResearchPaper("Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks", "https://arxiv.org/abs/1703.03400")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
     private Vector<T> _adaptedParams;

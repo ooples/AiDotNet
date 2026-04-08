@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AnyEdit: Mastering Unified High-Quality Image Editing for Any Idea", "https://arxiv.org/abs/2411.15738", Year = 2024, Authors = "Yu et al.")]
+[ResearchPaper("AnyEdit: Mastering Unified High-Quality Image Editing for Any Idea", "https://arxiv.org/abs/2411.15738", Year = 2024, Authors = "Yu et al.")]
 public class AnyEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

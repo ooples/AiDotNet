@@ -1,6 +1,9 @@
 using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -22,6 +25,8 @@ namespace AiDotNet.Optimizers;
 /// This method is particularly effective for problems with many local optima.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

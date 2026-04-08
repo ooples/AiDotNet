@@ -80,7 +80,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MVDream: Multi-view Diffusion for 3D Generation", "https://arxiv.org/abs/2308.16512", Year = 2024, Authors = "Shi et al.")]
+[ResearchPaper("MVDream: Multi-view Diffusion for 3D Generation", "https://arxiv.org/abs/2308.16512", Year = 2024, Authors = "Shi et al.")]
 public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

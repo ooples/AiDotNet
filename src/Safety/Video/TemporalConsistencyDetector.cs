@@ -45,7 +45,7 @@ namespace AiDotNet.Safety.Video;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Spatio-Temporal Consistency for Video Deepfake Detection",
+[ResearchPaper("Spatio-Temporal Consistency for Video Deepfake Detection",
     "https://arxiv.org/abs/2502.08216",
     Year = 2025,
     Authors = "Various")]

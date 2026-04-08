@@ -36,7 +36,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Forecasting at Scale", "https://doi.org/10.1080/00031305.2017.1380080", Year = 2018, Authors = "Sean J. Taylor, Benjamin Letham")]
+[ResearchPaper("Forecasting at Scale", "https://doi.org/10.1080/00031305.2017.1380080", Year = 2018, Authors = "Sean J. Taylor, Benjamin Letham")]
 public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>

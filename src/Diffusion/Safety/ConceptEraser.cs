@@ -2,6 +2,8 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Safety;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Diffusion.Safety;
 /// Reference: Gandikota et al., "Erasing Concepts from Diffusion Models", ICCV 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ConceptEraser<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

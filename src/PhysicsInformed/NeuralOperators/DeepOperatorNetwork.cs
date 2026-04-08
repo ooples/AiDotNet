@@ -132,7 +132,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
+    [ResearchPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
     public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly DeepOperatorNetworkOptions _options;

@@ -1,5 +1,8 @@
 ﻿using AiDotNet.Interfaces;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -22,6 +25,8 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// - Conditional anchor frames: use last frames of previous window as conditioning
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 internal class SlidingWindowVideoGen<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

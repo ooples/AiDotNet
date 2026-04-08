@@ -100,7 +100,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TripoSR: Fast 3D Object Reconstruction from a Single Image", "https://arxiv.org/abs/2403.02151", Year = 2024, Authors = "Tochilkin et al.")]
+[ResearchPaper("TripoSR: Fast 3D Object Reconstruction from a Single Image", "https://arxiv.org/abs/2403.02151", Year = 2024, Authors = "Tochilkin et al.")]
 public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

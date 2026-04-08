@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VALL-E X: Speak Foreign Languages with Your Own Voice via Cross-Lingual Neural Codec Language Modeling", "https://arxiv.org/abs/2303.03926", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("VALL-E X: Speak Foreign Languages with Your Own Voice via Cross-Lingual Neural Codec Language Modeling", "https://arxiv.org/abs/2303.03926", Year = 2023, Authors = "Zhang et al.")]
 public class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly VALLEXCloneOptions _options; public override ModelOptions GetOptions() => _options;

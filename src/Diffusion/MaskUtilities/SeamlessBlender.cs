@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -20,6 +22,8 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// patches meet — similar to how panorama photo apps stitch multiple photos together.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SeamlessBlender<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

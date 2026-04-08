@@ -44,7 +44,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Safe-CLIP: Removing NSFW Concepts from Vision-and-Language Models",
+[ResearchPaper("Safe-CLIP: Removing NSFW Concepts from Vision-and-Language Models",
     "https://arxiv.org/abs/2311.16254",
     Year = 2024,
     Authors = "Samuele Poppi, Tobia Carletti, Marco Galatolo, et al.")]

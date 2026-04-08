@@ -35,7 +35,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Improving Stochastic Policy Gradients in Continuous Control with Deep Reinforcement Learning using the Beta Distribution",
+    [ResearchPaper("Improving Stochastic Policy Gradients in Continuous Control with Deep Reinforcement Learning using the Beta Distribution",
         "https://arxiv.org/abs/1707.04544",
         Year = 2017,
         Authors = "Chou, P.-W., Maturana, D., & Scherer, S.")]

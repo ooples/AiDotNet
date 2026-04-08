@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BrushEdit: All-In-One Image Inpainting and Editing", "https://arxiv.org/abs/2412.10316", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("BrushEdit: All-In-One Image Inpainting and Editing", "https://arxiv.org/abs/2412.10316", Year = 2024, Authors = "Li et al.")]
 public class BrushEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

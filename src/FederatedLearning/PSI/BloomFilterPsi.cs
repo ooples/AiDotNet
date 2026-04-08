@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -33,6 +35,8 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para><b>Reference:</b> Dong et al., "When Private Set Intersection Meets Big Data",
 /// ACM CCS 2013.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class BloomFilterPsi : PsiBase
 {
     /// <inheritdoc/>

@@ -69,7 +69,7 @@ namespace AiDotNet.Video;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data",
+[ResearchPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data",
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]

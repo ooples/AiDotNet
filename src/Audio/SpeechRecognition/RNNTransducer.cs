@@ -50,7 +50,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
+[ResearchPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
 public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

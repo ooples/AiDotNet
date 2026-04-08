@@ -75,7 +75,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Bidirectional LSTM-CRF Models for Sequence Tagging",
+[ResearchPaper("Bidirectional LSTM-CRF Models for Sequence Tagging",
     "https://arxiv.org/abs/1508.01991",
     Year = 2015,
     Authors = "Zhiheng Huang, Wei Xu, Kai Yu")]

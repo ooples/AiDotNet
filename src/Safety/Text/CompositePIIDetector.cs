@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Hybrid Multilingual PII Detection",
+[ResearchPaper("Hybrid Multilingual PII Detection",
     "https://arxiv.org/abs/2510.07551",
     Year = 2025,
     Authors = "Various")]

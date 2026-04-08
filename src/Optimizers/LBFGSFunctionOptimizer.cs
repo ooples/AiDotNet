@@ -1,6 +1,9 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -19,6 +22,8 @@ namespace AiDotNet.Optimizers;
 /// <see cref="INumericOperations{T}"/> for all arithmetic, making it work with any
 /// numeric type (float, double, decimal, etc.).</para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class LBFGSFunctionOptimizer<T> : IFunctionOptimizer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

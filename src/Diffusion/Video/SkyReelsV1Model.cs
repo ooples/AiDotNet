@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("SkyReels V1", "https://github.com/SkyworkAI/SkyReels-V1")]
+    [ResearchPaper("SkyReels V1", "https://github.com/SkyworkAI/SkyReels-V1")]
 public class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

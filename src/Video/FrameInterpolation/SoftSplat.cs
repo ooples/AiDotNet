@@ -49,7 +49,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Softmax Splatting for Video Frame Interpolation",
+[ResearchPaper("Softmax Splatting for Video Frame Interpolation",
     "https://arxiv.org/abs/2003.05534",
     Year = 2020,
     Authors = "Simon Niklaus, Feng Liu")]

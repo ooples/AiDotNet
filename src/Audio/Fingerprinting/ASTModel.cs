@@ -83,7 +83,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
+[ResearchPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly ASTModelOptions _options;

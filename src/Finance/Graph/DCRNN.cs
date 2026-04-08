@@ -85,7 +85,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting", "https://arxiv.org/abs/1707.01926", Year = 2018, Authors = "Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu")]
+[ResearchPaper("Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting", "https://arxiv.org/abs/1707.01926", Year = 2018, Authors = "Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu")]
 public class DCRNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

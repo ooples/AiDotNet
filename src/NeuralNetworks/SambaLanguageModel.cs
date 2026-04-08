@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling", "https://arxiv.org/abs/2406.07522", Year = 2024, Authors = "Liliang Ren, Yang Liu, Yadong Lu, Yelong Shen, Chen Liang, Weizhu Chen")]
+[ResearchPaper("Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling", "https://arxiv.org/abs/2406.07522", Year = 2024, Authors = "Liliang Ren, Yang Liu, Yadong Lu, Yelong Shen, Chen Liang, Weizhu Chen")]
 public class SambaLanguageModel<T> : NeuralNetworkBase<T>
 {
     private readonly SambaOptions _options;

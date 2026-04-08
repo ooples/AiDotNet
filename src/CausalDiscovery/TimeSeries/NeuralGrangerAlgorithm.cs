@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Neural Granger Causality", "https://doi.org/10.1109/TPAMI.2021.3065601", Year = 2021, Authors = "Alex Tank, Ian Covert, Nicholas Foti, Ali Shojaie, Emily B. Fox")]
+[ResearchPaper("Neural Granger Causality", "https://doi.org/10.1109/TPAMI.2021.3065601", Year = 2021, Authors = "Alex Tank, Ian Covert, Nicholas Foti, Ali Shojaie, Emily B. Fox")]
 public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

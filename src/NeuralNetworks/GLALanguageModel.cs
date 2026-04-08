@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Gated Linear Attention Transformers with Hardware-Efficient Training", "https://arxiv.org/abs/2312.06635", Year = 2024, Authors = "Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, Yoon Kim")]
+[ResearchPaper("Gated Linear Attention Transformers with Hardware-Efficient Training", "https://arxiv.org/abs/2312.06635", Year = 2024, Authors = "Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, Yoon Kim")]
 public class GLALanguageModel<T> : NeuralNetworkBase<T>
 {
     private readonly GLAOptions _options;

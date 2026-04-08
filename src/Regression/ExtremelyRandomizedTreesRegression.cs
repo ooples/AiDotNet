@@ -55,7 +55,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Extremely randomized trees", "https://doi.org/10.1007/s10994-006-6226-1", Year = 2006, Authors = "Pierre Geurts, Damien Ernst, Louis Wehenkel")]
+[ResearchPaper("Extremely randomized trees", "https://doi.org/10.1007/s10994-006-6226-1", Year = 2006, Authors = "Pierre Geurts, Damien Ernst, Louis Wehenkel")]
 public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

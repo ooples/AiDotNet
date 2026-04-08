@@ -82,7 +82,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Learning multi-label scene classification", "https://doi.org/10.1016/j.patcog.2004.01.013", Year = 2004, Authors = "Matthew R. Boutell, Jiebo Luo, Xipeng Shen, Christopher M. Brown")]
+[ResearchPaper("Learning multi-label scene classification", "https://doi.org/10.1016/j.patcog.2004.01.013", Year = 2004, Authors = "Matthew R. Boutell, Jiebo Luo, Xipeng Shen, Christopher M. Brown")]
 public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
     #region Fields

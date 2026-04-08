@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", "https://arxiv.org/abs/2206.02066", Year = 2023, Authors = "Jiacong Xu, Zixiang Xiong, Shankar P. Bhatt, Ravi Tandon")]
+[ResearchPaper("PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", "https://arxiv.org/abs/2206.02066", Year = 2023, Authors = "Jiacong Xu, Zixiang Xiong, Shankar P. Bhatt, Ravi Tandon")]
 public class PIDNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly PIDNetOptions _options;

@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("A Fast Algorithm for the Minimum Covariance Determinant Estimator",
+[ResearchPaper("A Fast Algorithm for the Minimum Covariance Determinant Estimator",
     "https://doi.org/10.1080/00401706.1999.10485670",
     Year = 1999,
     Authors = "Peter J. Rousseeuw, Katrien Van Driessen")]

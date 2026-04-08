@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -51,6 +53,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Helps evaluate production reliability
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class NoiseRobustnessMetric<T> : RAGMetricBase<T>
 {
     private readonly T _noiseRatio;

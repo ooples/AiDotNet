@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ControlNeXt: Powerful and Efficient Control for Image and Video Generation", "https://arxiv.org/abs/2408.06070", Year = 2024, Authors = "Peng et al.")]
+[ResearchPaper("ControlNeXt: Powerful and Efficient Control for Image and Video Generation", "https://arxiv.org/abs/2408.06070", Year = 2024, Authors = "Peng et al.")]
 public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

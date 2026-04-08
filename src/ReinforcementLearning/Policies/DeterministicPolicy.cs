@@ -34,7 +34,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Deterministic Policy Gradient Algorithms",
+    [ResearchPaper("Deterministic Policy Gradient Algorithms",
         "https://proceedings.mlr.press/v32/silver14.pdf",
         Year = 2014,
         Authors = "Silver, D., Lever, G., Heess, N., Degris, T., Wierstra, D., & Riedmiller, M.")]

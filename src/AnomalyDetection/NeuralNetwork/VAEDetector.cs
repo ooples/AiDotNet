@@ -48,7 +48,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Auto-Encoding Variational Bayes", "https://doi.org/10.48550/arXiv.1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
+[ResearchPaper("Auto-Encoding Variational Bayes", "https://doi.org/10.48550/arXiv.1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
 public class VAEDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;

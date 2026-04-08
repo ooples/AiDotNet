@@ -19,10 +19,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Equivariant Learning of Stochastic Fields",
+[ResearchPaper("Equivariant Learning of Stochastic Fields",
     "https://arxiv.org/abs/2106.10972",
     Year = 2021,
     Authors = "Peter Holderrieth, Michael J. Hutchinson, Yee Whye Teh")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly SteerCNPOptions<T, TInput, TOutput> _algoOptions;

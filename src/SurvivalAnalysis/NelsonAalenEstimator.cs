@@ -50,7 +50,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Theory of Counting Processes", "https://doi.org/10.1007/978-1-4612-4532-4")]
+[ResearchPaper("Theory of Counting Processes", "https://doi.org/10.1007/978-1-4612-4532-4")]
 public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>

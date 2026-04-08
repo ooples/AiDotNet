@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
+[ResearchPaper("CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
 public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoiceOptions _options;

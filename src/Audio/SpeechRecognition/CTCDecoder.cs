@@ -50,7 +50,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with Recurrent Neural Networks", "https://dl.acm.org/doi/10.1145/1143844.1143891", Year = 2006, Authors = "Alex Graves, Santiago Fernandez, Faustino Gomez, Jurgen Schmidhuber")]
+[ResearchPaper("Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with Recurrent Neural Networks", "https://dl.acm.org/doi/10.1145/1143844.1143891", Year = 2006, Authors = "Alex Graves, Santiago Fernandez, Faustino Gomez, Jurgen Schmidhuber")]
 public class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

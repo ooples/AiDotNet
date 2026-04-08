@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -44,6 +46,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Helps tune retrieval parameters (topK, similarity threshold)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ContextCoverageMetric<T> : RAGMetricBase<T>
 {
     /// <summary>

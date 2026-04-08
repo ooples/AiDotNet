@@ -3,6 +3,8 @@
 #endif
 using System.Net.Http;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
@@ -113,6 +115,7 @@ public class SlackConfiguration
 /// 4. Add a webhook to your workspace
 /// 5. Copy the webhook URL
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class SlackNotificationService : INotificationService
 {
     private readonly SlackConfiguration _config;

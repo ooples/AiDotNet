@@ -39,7 +39,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Once-for-All: Train One Network and Specialize it for Efficient Deployment", "https://arxiv.org/abs/1908.09791")]
+    [ResearchPaper("Once-for-All: Train One Network and Specialize it for Efficient Deployment", "https://arxiv.org/abs/1908.09791")]
     public class OnceForAll<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

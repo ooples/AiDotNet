@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", "https://arxiv.org/abs/2405.17401", Year = 2024, Authors = "Rout et al.")]
+[ResearchPaper("RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", "https://arxiv.org/abs/2405.17401", Year = 2024, Authors = "Rout et al.")]
 public class RBModulationModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

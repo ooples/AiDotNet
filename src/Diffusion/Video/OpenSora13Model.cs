@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Sora: Democratizing Efficient Video Production for All", "https://arxiv.org/abs/2412.00131", Year = 2024, Authors = "Zheng et al.")]
+[ResearchPaper("Open-Sora: Democratizing Efficient Video Production for All", "https://arxiv.org/abs/2412.00131", Year = 2024, Authors = "Zheng et al.")]
 public class OpenSora13Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

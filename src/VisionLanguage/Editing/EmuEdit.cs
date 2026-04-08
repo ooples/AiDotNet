@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Emu Edit: Precise Image Editing via Recognition and Generation Tasks", "https://arxiv.org/abs/2311.10089", Year = 2024, Authors = "Sheynin et al.")]
+[ResearchPaper("Emu Edit: Precise Image Editing via Recognition and Generation Tasks", "https://arxiv.org/abs/2311.10089", Year = 2024, Authors = "Sheynin et al.")]
 public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly EmuEditOptions _options; public override ModelOptions GetOptions() => _options;

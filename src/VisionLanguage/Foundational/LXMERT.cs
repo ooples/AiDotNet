@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LXMERT: Learning Cross-Modality Encoder Representations from Transformers", "https://arxiv.org/abs/1908.07490", Year = 2019, Authors = "Tan and Bansal")]
+[ResearchPaper("LXMERT: Learning Cross-Modality Encoder Representations from Transformers", "https://arxiv.org/abs/1908.07490", Year = 2019, Authors = "Tan and Bansal")]
 public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly LXMERTOptions _options; public override ModelOptions GetOptions() => _options;

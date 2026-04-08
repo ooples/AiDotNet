@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models", "https://arxiv.org/abs/2304.10592", Year = 2023, Authors = "Zhu et al.")]
+[ResearchPaper("MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models", "https://arxiv.org/abs/2304.10592", Year = 2023, Authors = "Zhu et al.")]
 public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPT4Options _options; public override ModelOptions GetOptions() => _options;

@@ -32,7 +32,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         category: "AiDotNet.ModelMetadata",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, ModelInput, and ModelPaper.");
+        description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, ModelInput, and ResearchPaper.");
 
     // NOTE: AIDN010/011/012 temporarily set to Warning while XML docs are being
     // added across ~5000 model classes. Will be restored to Error once complete.
@@ -63,8 +63,8 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor InvalidPaperUrl = new(
         id: "AIDN020",
-        title: "Invalid ModelPaper URL",
-        messageFormat: "ModelPaper URL '{0}' on '{1}' is not well-formed (must start with https://)",
+        title: "Invalid ResearchPaper URL",
+        messageFormat: "ResearchPaper URL '{0}' on '{1}' is not well-formed (must start with https://)",
         category: "AiDotNet.ModelMetadata",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -76,7 +76,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     private const string ModelTaskAttributeName = "AiDotNet.Attributes.ModelTaskAttribute";
     private const string ModelComplexityAttributeName = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelInputAttributeName = "AiDotNet.Attributes.ModelInputAttribute";
-    private const string ModelPaperAttributeName = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ResearchPaperAttributeName = "AiDotNet.Attributes.ResearchPaperAttribute";
     private const string ModelMetadataExemptAttributeName = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     // Interface/base type names to detect model classes
@@ -168,7 +168,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var taskAttr = compilation.GetTypeByMetadataName(ModelTaskAttributeName);
         var complexityAttr = compilation.GetTypeByMetadataName(ModelComplexityAttributeName);
         var inputAttr = compilation.GetTypeByMetadataName(ModelInputAttributeName);
-        var paperAttr = compilation.GetTypeByMetadataName(ModelPaperAttributeName);
+        var paperAttr = compilation.GetTypeByMetadataName(ResearchPaperAttributeName);
 
         var exemptAttr = compilation.GetTypeByMetadataName(ModelMetadataExemptAttributeName);
 
@@ -245,7 +245,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         if (paperAttr is null || !HasAttribute(attributes, paperAttr))
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                MissingAttribute, location, className, "ModelPaper"));
+                MissingAttribute, location, className, "ResearchPaper"));
         }
     }
 
@@ -266,7 +266,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             if (!SymbolEqualityComparer.Default.Equals(attr.AttributeClass, paperAttr))
                 continue;
 
-            // ModelPaperAttribute(string title, string url) - url is the second constructor arg
+            // ResearchPaperAttribute(string title, string url) - url is the second constructor arg
             if (attr.ConstructorArguments.Length >= 2)
             {
                 var url = attr.ConstructorArguments[1].Value as string;

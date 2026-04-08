@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UNITER: UNiversal Image-TExt Representation Learning", "https://arxiv.org/abs/1909.11740", Year = 2020, Authors = "Chen et al.")]
+[ResearchPaper("UNITER: UNiversal Image-TExt Representation Learning", "https://arxiv.org/abs/1909.11740", Year = 2020, Authors = "Chen et al.")]
 public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly UNITEROptions _options; public override ModelOptions GetOptions() => _options;

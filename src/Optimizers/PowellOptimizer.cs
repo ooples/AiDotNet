@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
@@ -26,6 +28,8 @@ using Newtonsoft.Json;
 /// - It can discover and follow valleys or ridges to reach peaks more quickly
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

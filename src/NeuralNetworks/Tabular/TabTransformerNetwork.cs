@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabTransformer: Tabular Data Modeling Using Contextual Embeddings",
+[ResearchPaper("TabTransformer: Tabular Data Modeling Using Contextual Embeddings",
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]

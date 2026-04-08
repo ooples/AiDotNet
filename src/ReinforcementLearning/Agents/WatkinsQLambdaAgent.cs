@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning from Delayed Rewards",
+[ResearchPaper("Learning from Delayed Rewards",
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]

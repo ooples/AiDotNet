@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("APNet: An All-Frame-Level Neural Vocoder Incorporating Direct Prediction of Amplitude and Phase Spectra", "https://arxiv.org/abs/2305.07952", Year = 2023, Authors = "Ai et al.")]
+[ResearchPaper("APNet: An All-Frame-Level Neural Vocoder Incorporating Direct Prediction of Amplitude and Phase Spectra", "https://arxiv.org/abs/2305.07952", Year = 2023, Authors = "Ai et al.")]
 public class APNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly APNetOptions _options; public override ModelOptions GetOptions() => _options;

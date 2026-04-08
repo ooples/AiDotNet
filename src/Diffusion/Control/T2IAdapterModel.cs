@@ -90,7 +90,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.08453", Year = 2024, Authors = "Mou et al.")]
+[ResearchPaper("T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.08453", Year = 2024, Authors = "Mou et al.")]
 public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

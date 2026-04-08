@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EQ-VAE: Equivariance Regularized Latent Space for Improved Generative Image Modeling", "https://arxiv.org/abs/2502.09509", Year = 2025, Authors = "Xu et al.")]
+[ResearchPaper("EQ-VAE: Equivariance Regularized Latent Space for Improved Generative Image Modeling", "https://arxiv.org/abs/2502.09509", Year = 2025, Authors = "Xu et al.")]
 public class EQVAEModel<T> : VAEModelBase<T>
 {
     private const double EQVAE_LATENT_SCALE = 0.18215;

@@ -60,7 +60,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("XVFI: eXtreme Video Frame Interpolation",
+[ResearchPaper("XVFI: eXtreme Video Frame Interpolation",
     "https://arxiv.org/abs/2103.16206",
     Year = 2021,
     Authors = "Hyeonjun Sim, Jihyong Oh, Munchurl Kim")]

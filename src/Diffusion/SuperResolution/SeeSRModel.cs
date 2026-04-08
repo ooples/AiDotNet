@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution", "https://arxiv.org/abs/2311.16518", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution", "https://arxiv.org/abs/2311.16518", Year = 2024, Authors = "Wu et al.")]
 public class SeeSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

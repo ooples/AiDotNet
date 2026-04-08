@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("QueryMeldNet: Learning Query Representations for Dense Prediction", "https://arxiv.org/abs/2312.15600")]
+[ResearchPaper("QueryMeldNet: Learning Query Representations for Dense Prediction", "https://arxiv.org/abs/2312.15600")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {

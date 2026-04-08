@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;

@@ -36,7 +36,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
+[ResearchPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
 public class MemoryBank<T> : IMemoryBank<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

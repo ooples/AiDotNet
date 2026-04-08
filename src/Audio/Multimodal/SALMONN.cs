@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SALMONN: Towards Generic Hearing Abilities for Large Language Models", "https://arxiv.org/abs/2310.13289", Year = 2024, Authors = "Changli Tang, Wenyi Yu, Guangzhi Sun, Xianzhao Chen, Tian Tan, Wei Li, Lu Lu, Zejun Ma, Chao Zhang")]
+[ResearchPaper("SALMONN: Towards Generic Hearing Abilities for Large Language Models", "https://arxiv.org/abs/2310.13289", Year = 2024, Authors = "Changli Tang, Wenyi Yu, Guangzhi Sun, Xianzhao Chen, Tian Tan, Wei Li, Lu Lu, Zejun Ma, Chao Zhang")]
 public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     #region Fields

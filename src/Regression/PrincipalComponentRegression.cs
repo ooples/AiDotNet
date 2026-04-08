@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Principal Component Analysis", "https://doi.org/10.1007/978-1-4757-1904-8")]
+    [ResearchPaper("Principal Component Analysis", "https://doi.org/10.1007/978-1-4757-1904-8")]
 public class PrincipalComponentRegression<T> : RegressionBase<T>
 {
     /// <summary>

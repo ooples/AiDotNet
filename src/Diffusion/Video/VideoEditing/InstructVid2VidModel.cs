@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstructVid2Vid: Controllable Video Editing with Natural Language Instructions", "https://arxiv.org/abs/2305.12328", Year = 2023, Authors = "Qin et al.")]
+[ResearchPaper("InstructVid2Vid: Controllable Video Editing with Natural Language Instructions", "https://arxiv.org/abs/2305.12328", Year = 2023, Authors = "Qin et al.")]
 public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

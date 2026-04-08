@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -16,6 +18,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// Best for small datasets (< 10K vectors) where accuracy is critical.
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class FlatIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

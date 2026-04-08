@@ -105,7 +105,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Exploiting Diffusion Prior for Real-World Image Super-Resolution", "https://arxiv.org/abs/2305.07015", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("Exploiting Diffusion Prior for Real-World Image Super-Resolution", "https://arxiv.org/abs/2305.07015", Year = 2024, Authors = "Wang et al.")]
 public class StableSRModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

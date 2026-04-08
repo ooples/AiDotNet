@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DINOv2: Learning Robust Visual Features without Supervision", "https://arxiv.org/abs/2304.07193", Year = 2024, Authors = "Oquab et al.")]
+[ResearchPaper("DINOv2: Learning Robust Visual Features without Supervision", "https://arxiv.org/abs/2304.07193", Year = 2024, Authors = "Oquab et al.")]
 public class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv2Options _options; public override ModelOptions GetOptions() => _options;

@@ -47,7 +47,7 @@ namespace AiDotNet.Safety.Multimodal;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MM-SafetyBench: A Benchmark for Safety Evaluation of Multimodal Large Language Models",
+[ResearchPaper("MM-SafetyBench: A Benchmark for Safety Evaluation of Multimodal Large Language Models",
     "https://arxiv.org/abs/2311.17600",
     Year = 2024,
     Authors = "Xin Liu, Yichen Zhu, Yunshi Lan, et al.")]

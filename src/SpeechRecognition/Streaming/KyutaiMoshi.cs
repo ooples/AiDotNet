@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Moshi: a speech-text foundation model for real-time dialogue", "https://arxiv.org/abs/2410.00037", Year = 2024, Authors = "Kyutai")]
+[ResearchPaper("Moshi: a speech-text foundation model for real-time dialogue", "https://arxiv.org/abs/2410.00037", Year = 2024, Authors = "Kyutai")]
 public class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly KyutaiMoshiOptions _options; public override ModelOptions GetOptions() => _options;

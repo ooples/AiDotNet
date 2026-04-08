@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -32,6 +34,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// techniques like NLI (Natural Language Inference) models.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class FaithfulnessMetric<T> : RAGMetricBase<T>
 {
     /// <summary>

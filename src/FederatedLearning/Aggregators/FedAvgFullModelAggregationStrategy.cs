@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <remarks>
 /// <para><b>For Beginners:</b> FedAvgFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {

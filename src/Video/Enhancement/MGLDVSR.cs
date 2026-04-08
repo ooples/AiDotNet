@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MGLD-VSR: Motion-Guided Latent Diffusion for Video Super-Resolution",
+[ResearchPaper("MGLD-VSR: Motion-Guided Latent Diffusion for Video Super-Resolution",
     "https://arxiv.org/abs/2312.00853",
     Year = 2024,
     Authors = "Yang Zheng, Xiaoming Zhu, Jianlong Wu, Liqiang Nie")]

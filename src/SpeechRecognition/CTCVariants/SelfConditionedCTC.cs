@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Self-Conditioned CTC: CTC Alignment Conditioning on Intermediate Predictions", "https://arxiv.org/abs/2104.02724", Year = 2021, Authors = "Nozaki and Komatsu")]
+[ResearchPaper("Self-Conditioned CTC: CTC Alignment Conditioning on Intermediate Predictions", "https://arxiv.org/abs/2104.02724", Year = 2021, Authors = "Nozaki and Komatsu")]
 public class SelfConditionedCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SelfConditionedCTCOptions _options; public override ModelOptions GetOptions() => _options;

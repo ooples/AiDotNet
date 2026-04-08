@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Decision Transformer: Reinforcement Learning via Sequence Modeling",
+[ResearchPaper("Decision Transformer: Reinforcement Learning via Sequence Modeling",
     "https://arxiv.org/abs/2106.01345",
     Year = 2021,
     Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]

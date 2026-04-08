@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SKFlow: Learning Optical Flow with Super Kernels",
+[ResearchPaper("SKFlow: Learning Optical Flow with Super Kernels",
     "https://arxiv.org/abs/2205.14623",
     Year = 2022,
     Authors = "Shangkun Sun, Yuanqi Chen, Yu Zhu, Guodong Guo, Ge Li")]

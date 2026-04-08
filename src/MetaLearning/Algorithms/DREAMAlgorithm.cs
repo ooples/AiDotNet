@@ -47,10 +47,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning via Learned Loss",
+[ResearchPaper("Meta-Learning via Learned Loss",
     "https://arxiv.org/abs/1906.05374",
     Year = 2021,
     Authors = "Sarah Bechtle, Artem Molchanov, Yevgen Chebotar, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

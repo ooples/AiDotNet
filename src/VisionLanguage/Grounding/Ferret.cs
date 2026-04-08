@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Ferret: Refer and Ground Anything Anywhere at Any Granularity", "https://arxiv.org/abs/2310.07704", Year = 2023, Authors = "You et al.")]
+[ResearchPaper("Ferret: Refer and Ground Anything Anywhere at Any Granularity", "https://arxiv.org/abs/2310.07704", Year = 2023, Authors = "You et al.")]
 public class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly FerretOptions _options; public override ModelOptions GetOptions() => _options;

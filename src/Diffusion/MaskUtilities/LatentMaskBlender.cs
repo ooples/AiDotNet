@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// content according to a mask that says "use new content here, keep old content there."
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class LatentMaskBlender<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

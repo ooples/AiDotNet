@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -34,6 +35,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Ho et al., "Denoising Diffusion Probabilistic Models", NeurIPS 2020
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class DDPMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -26,6 +28,8 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// methods fail verification. Very expensive — O(R * C) where R = rounds, C = clients.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
     private const double CosineEpsilon = 1e-10;

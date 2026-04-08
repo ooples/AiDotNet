@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ImageBind: One Embedding Space To Bind Them All", "https://arxiv.org/abs/2305.05665", Year = 2023, Authors = "Rohit Girdhar, Alaaeldin El-Nouby, Zhuang Liu, Mannat Singh, Kalyan Vasudev Alwala, Armand Joulin, Ishan Misra")]
+[ResearchPaper("ImageBind: One Embedding Space To Bind Them All", "https://arxiv.org/abs/2305.05665", Year = 2023, Authors = "Rohit Girdhar, Alaaeldin El-Nouby, Zhuang Liu, Mannat Singh, Kalyan Vasudev Alwala, Armand Joulin, Ishan Misra")]
 public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T>
 {
     private readonly ImageBindOptions _options;

@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training",
+[ResearchPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training",
     "https://arxiv.org/abs/2106.01342",
     Year = 2021,
     Authors = "Somepalli, G., Goldblum, M., Schwarzschild, A., Bruss, C. B., & Goldstein, T.")]

@@ -49,10 +49,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields",
+[ResearchPaper("HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields",
     "https://arxiv.org/abs/2106.13228",
     Year = 2021,
     Authors = "Keunhong Park, Utkarsh Sinha, Peter Hedman, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

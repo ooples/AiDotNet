@@ -29,7 +29,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-    [ModelPaper("Learning Bayesian Networks: The Combination of Knowledge and Statistical Data", "https://doi.org/10.1023/A:1022623210503")]
+    [ResearchPaper("Learning Bayesian Networks: The Combination of Knowledge and Statistical Data", "https://doi.org/10.1023/A:1022623210503")]
 public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

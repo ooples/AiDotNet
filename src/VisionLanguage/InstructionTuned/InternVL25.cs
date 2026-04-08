@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Expanding Performance Boundaries of Open-Source Multimodal Models with InternVL 2.5", "https://arxiv.org/abs/2412.05819", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("Expanding Performance Boundaries of Open-Source Multimodal Models with InternVL 2.5", "https://arxiv.org/abs/2412.05819", Year = 2024, Authors = "Chen et al.")]
 public class InternVL25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly InternVL25Options _options; public override ModelOptions GetOptions() => _options;

@@ -86,7 +86,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning", "https://arxiv.org/abs/2307.04725", Year = 2023, Authors = "Guo et al.")]
+[ResearchPaper("AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning", "https://arxiv.org/abs/2307.04725", Year = 2023, Authors = "Guo et al.")]
 public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

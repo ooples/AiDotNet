@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Many-to-many Splatting for Efficient Video Frame Interpolation",
+[ResearchPaper("Many-to-many Splatting for Efficient Video Frame Interpolation",
     "https://arxiv.org/abs/2204.03513",
     Year = 2022,
     Authors = "Ping Hu, Simon Niklaus, Stan Sclaroff, Kate Saenko")]

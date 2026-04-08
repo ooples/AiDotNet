@@ -32,7 +32,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AutoDAN: Generating Stealthy Jailbreak Prompts on Aligned Large Language Models",
+[ResearchPaper("AutoDAN: Generating Stealthy Jailbreak Prompts on Aligned Large Language Models",
     "https://arxiv.org/abs/2310.04451",
     Year = 2024,
     Authors = "Xiaogeng Liu, Nan Xu, Muhao Chen, Chaowei Xiao")]

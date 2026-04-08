@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AquilaVL: Advanced Vision-Language Model", "https://huggingface.co/BAAI/Aquila-VL-2B", Year = 2024, Authors = "BAAI")]
+[ResearchPaper("AquilaVL: Advanced Vision-Language Model", "https://huggingface.co/BAAI/Aquila-VL-2B", Year = 2024, Authors = "BAAI")]
 public class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AquilaVLOptions _options; public override ModelOptions GetOptions() => _options;

@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection",
+[ResearchPaper("DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection",
     "https://arxiv.org/abs/2203.03605",
     Year = 2023,
     Authors = "Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, Heung-Yeung Shum")]

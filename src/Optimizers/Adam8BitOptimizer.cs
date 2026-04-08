@@ -2,6 +2,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -35,6 +38,8 @@ namespace AiDotNet.Optimizers;
 /// </list>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

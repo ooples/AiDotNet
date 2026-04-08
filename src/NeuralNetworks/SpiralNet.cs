@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
+[ResearchPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
 public class SpiralNet<T> : NeuralNetworkBase<T>
 {
     /// <summary>

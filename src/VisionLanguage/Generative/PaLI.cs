@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PaLI: A Jointly-Scaled Multilingual Language-Image Model", "https://arxiv.org/abs/2209.06794", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("PaLI: A Jointly-Scaled Multilingual Language-Image Model", "https://arxiv.org/abs/2209.06794", Year = 2023, Authors = "Chen et al.")]
 public class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLIOptions _options; public override ModelOptions GetOptions() => _options;

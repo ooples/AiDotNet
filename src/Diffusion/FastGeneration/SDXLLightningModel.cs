@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SDXL-Lightning: Progressive Adversarial Diffusion Distillation", "https://arxiv.org/abs/2402.13929", Year = 2024, Authors = "Lin et al.")]
+[ResearchPaper("SDXL-Lightning: Progressive Adversarial Diffusion Distillation", "https://arxiv.org/abs/2402.13929", Year = 2024, Authors = "Lin et al.")]
 public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

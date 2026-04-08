@@ -41,7 +41,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Time series forecasting using a hybrid ARIMA and neural network model", "https://doi.org/10.1016/S0925-2312(01)00702-0", Year = 2003, Authors = "G. Peter Zhang")]
+[ResearchPaper("Time series forecasting using a hybrid ARIMA and neural network model", "https://doi.org/10.1016/S0925-2312(01)00702-0", Year = 2003, Authors = "G. Peter Zhang")]
 public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

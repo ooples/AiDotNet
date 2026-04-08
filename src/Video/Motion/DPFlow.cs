@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DPFlow: Deformable Patches for Optical Flow Estimation",
+[ResearchPaper("DPFlow: Deformable Patches for Optical Flow Estimation",
     "https://arxiv.org/abs/2501.10440",
     Year = 2025,
     Authors = "Donghao Zhang, Yibing Song")]

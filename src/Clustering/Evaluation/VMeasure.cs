@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// V-Measure ranges from 0 to 1, where 1 is perfect agreement.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class VMeasure<T> : IClusterMetric<T>, IExternalClusterMetric<T>
 {
     private readonly double _beta;

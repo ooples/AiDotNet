@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -39,6 +41,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - Chawla et al. (2002). "SMOTE: Synthetic Minority Over-sampling Technique"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SMOTE<T> : OversamplingBase<T>
 {
     /// <summary>

@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
+[ResearchPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
 public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly PSENetOptions _options;

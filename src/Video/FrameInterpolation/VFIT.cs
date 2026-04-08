@@ -58,7 +58,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VFIT: Video Frame Interpolation Transformer",
+[ResearchPaper("VFIT: Video Frame Interpolation Transformer",
     "https://arxiv.org/abs/2111.13817",
     Year = 2022,
     Authors = "Zhihao Shi, Xiangyu Xu, Xiaohong Liu, Jun Chen, Ming-Hsuan Yang")]

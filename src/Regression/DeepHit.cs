@@ -64,7 +64,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("DeepHit: A Deep Learning Approach to Survival Analysis with Competing Risks", "https://ojs.aaai.org/index.php/AAAI/article/view/11842", Year = 2018, Authors = "Changhee Lee, William R. Zame, Jinsung Yoon, Mihaela van der Schaar")]
+[ResearchPaper("DeepHit: A Deep Learning Approach to Survival Analysis with Competing Risks", "https://ojs.aaai.org/index.php/AAAI/article/view/11842", Year = 2018, Authors = "Changhee Lee, William R. Zame, Jinsung Yoon, Mihaela van der Schaar")]
 public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

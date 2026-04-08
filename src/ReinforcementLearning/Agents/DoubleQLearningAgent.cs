@@ -46,7 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Double Q-learning",
+[ResearchPaper("Double Q-learning",
     "https://papers.nips.cc/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html",
     Year = 2010,
     Authors = "van Hasselt, H.")]

@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// <para>Reference: FedPAC: Personalization via Aggregation and Calibration (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _similarityThreshold;

@@ -42,7 +42,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("PC-DARTS: Partial Channel Connections for Memory-Efficient Architecture Search", "https://arxiv.org/abs/1907.05737")]
+    [ResearchPaper("PC-DARTS: Partial Channel Connections for Memory-Efficient Architecture Search", "https://arxiv.org/abs/1907.05737")]
     public class PCDARTS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

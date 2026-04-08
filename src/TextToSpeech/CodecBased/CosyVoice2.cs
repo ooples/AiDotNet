@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Du et al.")]
+[ResearchPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Du et al.")]
 public class CosyVoice2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice2Options _options; public override ModelOptions GetOptions() => _options;

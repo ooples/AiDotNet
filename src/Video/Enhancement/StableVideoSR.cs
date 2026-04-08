@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution",
+[ResearchPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution",
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]

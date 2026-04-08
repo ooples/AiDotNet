@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality", "https://arxiv.org/abs/2205.04421", Year = 2022, Authors = "Tan et al.")]
+[ResearchPaper("NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality", "https://arxiv.org/abs/2205.04421", Year = 2022, Authors = "Tan et al.")]
 public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeechOptions _options; public override ModelOptions GetOptions() => _options;

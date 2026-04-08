@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers",
+[ResearchPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers",
     "https://arxiv.org/abs/2205.15868",
     Year = 2022,
     Authors = "Wenyi Hong, Ming Ding, Wendi Zheng, Xinghan Liu, Jie Tang")]

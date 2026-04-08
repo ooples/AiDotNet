@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech", "https://arxiv.org/abs/2005.05106", Year = 2021, Authors = "Yang et al.")]
+[ResearchPaper("Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech", "https://arxiv.org/abs/2005.05106", Year = 2021, Authors = "Yang et al.")]
 public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly MultiBandMelGANOptions _options; public override ModelOptions GetOptions() => _options;

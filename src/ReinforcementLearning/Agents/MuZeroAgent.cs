@@ -55,7 +55,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model",
+[ResearchPaper("Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model",
     "https://arxiv.org/abs/1911.08265",
     Year = 2020,
     Authors = "Schrittwieser, J., Antonoglou, I., Hubert, T., Simonyan, K., Sifre, L., Schmitt, S., et al.")]

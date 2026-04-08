@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.BackdoorDefense;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.BackdoorDefense;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class NeuralCleanseDetector<T> : Infrastructure.FederatedLearningComponentBase<T>, IBackdoorDetector<T>
 {
     private readonly double _anomalyThreshold;

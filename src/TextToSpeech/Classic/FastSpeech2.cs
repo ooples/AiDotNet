@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2020, Authors = "Ren et al.")]
+[ResearchPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2020, Authors = "Ren et al.")]
 public class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeech2Options _options; public override ModelOptions GetOptions() => _options;

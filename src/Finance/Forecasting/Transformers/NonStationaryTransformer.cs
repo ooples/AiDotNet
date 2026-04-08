@@ -69,7 +69,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Non-stationary Transformers: Exploring the Stationarity in Time Series Forecasting", "https://arxiv.org/abs/2205.14415", Year = 2022, Authors = "Yong Liu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
+[ResearchPaper("Non-stationary Transformers: Exploring the Stationarity in Time Series Forecasting", "https://arxiv.org/abs/2205.14415", Year = 2022, Authors = "Yong Liu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
 public class NonStationaryTransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

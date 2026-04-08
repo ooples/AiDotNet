@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor",
+[ResearchPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor",
     "https://arxiv.org/abs/1801.01290",
     Year = 2018,
     Authors = "Haarnoja, T., Zhou, A., Abbeel, P., & Levine, S.")]

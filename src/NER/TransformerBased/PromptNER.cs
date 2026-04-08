@@ -70,7 +70,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PromptNER: Prompt Locating and Typing for Named Entity Recognition",
+[ResearchPaper("PromptNER: Prompt Locating and Typing for Named Entity Recognition",
     "https://arxiv.org/abs/2305.17104",
     Year = 2023,
     Authors = "Yongliang Shen, Zeqi Tan, Shuhui Wu, Wenqi Zhang, Rongsheng Zhang, Yadong Xi, Weiming Lu, Yueting Zhuang")]

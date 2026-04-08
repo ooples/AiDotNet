@@ -46,7 +46,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Min-K%++: Improved Baseline for Detecting Pre-Training Data from Large Language Models",
+[ResearchPaper("Min-K%++: Improved Baseline for Detecting Pre-Training Data from Large Language Models",
     "https://arxiv.org/abs/2404.02936",
     Year = 2024,
     Authors = "Jingyang Zhang, Jingwei Sun, Eric Yeats, et al.")]

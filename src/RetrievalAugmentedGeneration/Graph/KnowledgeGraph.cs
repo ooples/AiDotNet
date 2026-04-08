@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
@@ -40,6 +42,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Neo4jGraphStore: Professional graph database (future)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class KnowledgeGraph<T>
 {
     private readonly IGraphStore<T> _store;

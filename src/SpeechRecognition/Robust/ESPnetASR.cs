@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ESPnet: End-to-End Speech Processing Toolkit", "https://arxiv.org/abs/1804.00015", Year = 2018, Authors = "Watanabe et al.")]
+[ResearchPaper("ESPnet: End-to-End Speech Processing Toolkit", "https://arxiv.org/abs/1804.00015", Year = 2018, Authors = "Watanabe et al.")]
 public class ESPnetASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ESPnetASROptions _options; public override ModelOptions GetOptions() => _options;

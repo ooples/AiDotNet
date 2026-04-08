@@ -86,7 +86,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Semi-Supervised Classification with Graph Convolutional Networks",
+[ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks",
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]

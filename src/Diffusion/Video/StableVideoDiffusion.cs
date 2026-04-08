@@ -82,7 +82,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets", "https://arxiv.org/abs/2311.15127", Year = 2023, Authors = "Blattmann et al.")]
+[ResearchPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets", "https://arxiv.org/abs/2311.15127", Year = 2023, Authors = "Blattmann et al.")]
 public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 {
     /// <summary>

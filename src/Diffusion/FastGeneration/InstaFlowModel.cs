@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstaFlow: One Step is Enough for High-Quality Diffusion-Based Text-to-Image Generation", "https://arxiv.org/abs/2309.06380", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("InstaFlow: One Step is Enough for High-Quality Diffusion-Based Text-to-Image Generation", "https://arxiv.org/abs/2309.06380", Year = 2024, Authors = "Liu et al.")]
 public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

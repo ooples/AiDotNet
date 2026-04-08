@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Non-Attentive Tacotron: Robust and Controllable Neural TTS Synthesis Including Unsupervised Duration Modeling", "https://arxiv.org/abs/2010.04301", Year = 2021, Authors = "Shen et al.")]
+[ResearchPaper("Non-Attentive Tacotron: Robust and Controllable Neural TTS Synthesis Including Unsupervised Duration Modeling", "https://arxiv.org/abs/2010.04301", Year = 2021, Authors = "Shen et al.")]
 public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ForwardTacotronOptions _options;

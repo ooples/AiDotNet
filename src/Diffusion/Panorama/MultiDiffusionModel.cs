@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation", "https://arxiv.org/abs/2302.08113", Year = 2023, Authors = "Bar-Tal et al.")]
+[ResearchPaper("MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation", "https://arxiv.org/abs/2302.08113", Year = 2023, Authors = "Bar-Tal et al.")]
 public class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

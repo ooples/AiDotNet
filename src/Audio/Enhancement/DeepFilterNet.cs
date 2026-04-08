@@ -59,7 +59,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DeepFilterNet: A Low Complexity Speech Enhancement Framework for Full-Band Audio Based on Deep Filtering", "https://arxiv.org/abs/2110.05588", Year = 2022, Authors = "Hendrik Schröter, Alberto N. Escalante-B., Tobias Rosenkranz, Andreas Maier")]
+[ResearchPaper("DeepFilterNet: A Low Complexity Speech Enhancement Framework for Full-Band Audio Based on Deep Filtering", "https://arxiv.org/abs/2110.05588", Year = 2022, Authors = "Hendrik Schröter, Alberto N. Escalante-B., Tobias Rosenkranz, Andreas Maier")]
 public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DeepFilterNetOptions _options;

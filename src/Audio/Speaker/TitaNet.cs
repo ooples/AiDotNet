@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TitaNet: Neural Model for Speaker Representation with 1D Depth-wise Separable Convolutions and Global Context", "https://arxiv.org/abs/2110.04410", Year = 2022, Authors = "Nithin Rao Koluguri, Taejin Park, Boris Ginsburg")]
+[ResearchPaper("TitaNet: Neural Model for Speaker Representation with 1D Depth-wise Separable Convolutions and Global Context", "https://arxiv.org/abs/2110.04410", Year = 2022, Authors = "Nithin Rao Koluguri, Taejin Park, Boris Ginsburg")]
 public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields

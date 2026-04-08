@@ -55,7 +55,7 @@ namespace AiDotNet.Clustering.AutoK;
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Learning the k in k-means", "https://proceedings.neurips.cc/paper/2003/hash/234833147b97bb6aed53a8f4f1c7a7d8-Abstract.html", Year = 2004, Authors = "Greg Hamerly, Charles Elkan")]
+[ResearchPaper("Learning the k in k-means", "https://proceedings.neurips.cc/paper/2003/hash/234833147b97bb6aed53a8f4f1c7a7d8-Abstract.html", Year = 2004, Authors = "Greg Hamerly, Charles Elkan")]
 public class GMeans<T> : ClusteringBase<T>
 {
     private readonly GMeansOptions<T> _options;

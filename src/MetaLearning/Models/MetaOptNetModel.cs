@@ -37,10 +37,12 @@ namespace AiDotNet.MetaLearning.Models;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Differentiable Convex Optimization",
+[ResearchPaper("Meta-Learning with Differentiable Convex Optimization",
     "https://arxiv.org/abs/1904.03758",
     Year = 2019,
     Authors = "Lee, K., Maji, S., Ravichandran, A., & Soatto, S.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

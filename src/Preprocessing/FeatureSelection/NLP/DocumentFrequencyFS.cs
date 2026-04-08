@@ -28,7 +28,9 @@ namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Foundations of Statistical Natural Language Processing", "https://nlp.stanford.edu/fsnlp/", Year = 1999, Authors = "Christopher D. Manning, Hinrich Schütze")]
+[ResearchPaper("Foundations of Statistical Natural Language Processing", "https://nlp.stanford.edu/fsnlp/", Year = 1999, Authors = "Christopher D. Manning, Hinrich Schütze")]
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

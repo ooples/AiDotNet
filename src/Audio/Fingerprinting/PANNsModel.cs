@@ -77,7 +77,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition", "https://arxiv.org/abs/1912.10211", Year = 2020, Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
+[ResearchPaper("PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition", "https://arxiv.org/abs/1912.10211", Year = 2020, Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
 public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly PANNsModelOptions _options;

@@ -91,10 +91,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DPGN: Distribution Propagation Graph Network for Few-Shot Learning",
+[ResearchPaper("DPGN: Distribution Propagation Graph Network for Few-Shot Learning",
     "https://arxiv.org/abs/2003.14247",
     Year = 2020,
     Authors = "Ling Yang, Liangliang Li, Zilun Zhang, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

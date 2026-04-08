@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206")]
+    [ResearchPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206")]
 public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

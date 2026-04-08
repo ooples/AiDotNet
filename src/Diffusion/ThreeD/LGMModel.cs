@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LGM: Large Multi-View Gaussian Model for High-Resolution 3D Content Creation", "https://arxiv.org/abs/2402.05054", Year = 2024, Authors = "Tang et al.")]
+[ResearchPaper("LGM: Large Multi-View Gaussian Model for High-Resolution 3D Content Creation", "https://arxiv.org/abs/2402.05054", Year = 2024, Authors = "Tang et al.")]
 public class LGMModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

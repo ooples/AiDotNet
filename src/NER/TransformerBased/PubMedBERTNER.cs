@@ -75,7 +75,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Domain-Specific Language Model Pretraining for Biomedical Natural Language Processing",
+[ResearchPaper("Domain-Specific Language Model Pretraining for Biomedical Natural Language Processing",
     "https://arxiv.org/abs/2007.15779",
     Year = 2021,
     Authors = "Yu Gu, Robert Tinn, Hao Cheng, Michael Lucas, Naoto Usuyama, Xiaodong Liu, Tristan Naumann, Jianfeng Gao, Hoifung Poon")]

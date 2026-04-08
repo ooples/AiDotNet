@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DINOv3: Self-Supervised Vision at Scale", "https://arxiv.org/abs/2503.08936", Year = 2025, Authors = "Meta")]
+[ResearchPaper("DINOv3: Self-Supervised Vision at Scale", "https://arxiv.org/abs/2503.08936", Year = 2025, Authors = "Meta")]
 public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv3Options _options; public override ModelOptions GetOptions() => _options;

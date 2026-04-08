@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("NTS-NOTEARS: Learning Nonparametric DBN Structure from Nonstationary Time Series", "https://doi.org/10.48550/arXiv.2109.04286", Year = 2021, Authors = "Xiangyu Sun, Guiliang Liu, Pascal Poupart, Oliver Schulte")]
+[ResearchPaper("NTS-NOTEARS: Learning Nonparametric DBN Structure from Nonstationary Time Series", "https://doi.org/10.48550/arXiv.2109.04286", Year = 2021, Authors = "Xiangyu Sun, Guiliang Liu, Pascal Poupart, Oliver Schulte")]
 public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

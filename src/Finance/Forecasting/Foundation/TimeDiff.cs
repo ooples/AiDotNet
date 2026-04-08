@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Non-autoregressive Conditional Diffusion Models for Time Series Prediction", "https://arxiv.org/abs/2306.05043", Year = 2023, Authors = "Lifeng Shen, James Kwok")]
+[ResearchPaper("Non-autoregressive Conditional Diffusion Models for Time Series Prediction", "https://arxiv.org/abs/2306.05043", Year = 2023, Authors = "Lifeng Shen, James Kwok")]
 public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

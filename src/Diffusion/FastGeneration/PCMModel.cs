@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Phased Consistency Model", "https://arxiv.org/abs/2405.18407", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("Phased Consistency Model", "https://arxiv.org/abs/2405.18407", Year = 2024, Authors = "Wang et al.")]
 public class PCMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

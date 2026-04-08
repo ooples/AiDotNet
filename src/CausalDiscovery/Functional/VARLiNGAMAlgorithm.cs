@@ -38,7 +38,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Estimation of a Structural Vector Autoregression Model Using Non-Gaussianity", "https://jmlr.org/papers/v11/hyvarinen10a.html", Year = 2010, Authors = "Aapo Hyvarinen, Kun Zhang, Shohei Shimizu, Patrik O. Hoyer")]
+[ResearchPaper("Estimation of a Structural Vector Autoregression Model Using Non-Gaussianity", "https://jmlr.org/papers/v11/hyvarinen10a.html", Year = 2010, Authors = "Aapo Hyvarinen, Kun Zhang, Shohei Shimizu, Patrik O. Hoyer")]
 public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     private readonly int _maxLag = 3;

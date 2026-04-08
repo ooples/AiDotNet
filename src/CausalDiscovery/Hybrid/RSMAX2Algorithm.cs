@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Learning Bayesian Networks with the bnlearn R Package", "https://www.jstatsoft.org/article/view/v035i03", Year = 2010, Authors = "Marco Scutari")]
+[ResearchPaper("Learning Bayesian Networks with the bnlearn R Package", "https://www.jstatsoft.org/article/view/v035i03", Year = 2010, Authors = "Marco Scutari")]
 public class RSMAX2Algorithm<T> : HybridBase<T>
 {
     private readonly int _maxConditioningSetSize;

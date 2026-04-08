@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Causal Discovery from Heterogeneous/Nonstationary Data", "https://jmlr.org/papers/v21/19-232.html", Year = 2020, Authors = "Biwei Huang, Kun Zhang, Jiji Zhang, Joseph Ramsey, Ruben Sanchez-Romero, Clark Glymour, Bernhard Scholkopf")]
+[ResearchPaper("Causal Discovery from Heterogeneous/Nonstationary Data", "https://jmlr.org/papers/v21/19-232.html", Year = 2020, Authors = "Biwei Huang, Kun Zhang, Jiji Zhang, Joseph Ramsey, Ruben Sanchez-Romero, Clark Glymour, Bernhard Scholkopf")]
 public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>

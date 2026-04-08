@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Gemini: A Family of Highly Capable Multimodal Models", "https://arxiv.org/abs/2312.11805", Year = 2024, Authors = "Gemini Team, Google")]
+[ResearchPaper("Gemini: A Family of Highly Capable Multimodal Models", "https://arxiv.org/abs/2312.11805", Year = 2024, Authors = "Gemini Team, Google")]
 public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly GeminiVisionOptions _options; public override ModelOptions GetOptions() => _options;

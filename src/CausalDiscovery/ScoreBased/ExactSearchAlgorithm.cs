@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Simple Approach for Finding the Globally Optimal Bayesian Network Structure", "https://arxiv.org/abs/1206.6875", Year = 2006, Authors = "Tomi Silander, Petri Myllymaki")]
+[ResearchPaper("A Simple Approach for Finding the Globally Optimal Bayesian Network Structure", "https://arxiv.org/abs/1206.6875", Year = 2006, Authors = "Tomi Silander, Petri Myllymaki")]
 public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
 {
     private const int MaxVariablesForExactSearch = 20;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// at the true label. Always use label protection in production deployments.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IVerticalParty<T>
 {
     private readonly Tensor<T> _localData;

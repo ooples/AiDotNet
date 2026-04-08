@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models", "https://arxiv.org/abs/2407.15886", Year = 2024, Authors = "Chong et al.")]
+[ResearchPaper("CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models", "https://arxiv.org/abs/2407.15886", Year = 2024, Authors = "Chong et al.")]
 public class CatVTONModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

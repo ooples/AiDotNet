@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding", "https://arxiv.org/abs/2307.02499", Year = 2023, Authors = "Ye et al.")]
+[ResearchPaper("mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding", "https://arxiv.org/abs/2307.02499", Year = 2023, Authors = "Ye et al.")]
 public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwlOptions _options; public override ModelOptions GetOptions() => _options;

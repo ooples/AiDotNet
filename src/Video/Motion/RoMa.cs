@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RoMa: Robust Dense Feature Matching",
+[ResearchPaper("RoMa: Robust Dense Feature Matching",
     "https://arxiv.org/abs/2305.15404",
     Year = 2024,
     Authors = "Johan Edstedt, Qiyu Sun, Georg Bökman, Marten Wadenbäck, Michael Felsberg")]

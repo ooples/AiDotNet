@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Efficient Neural Audio Synthesis", "https://arxiv.org/abs/1802.08435", Year = 2018, Authors = "Kalchbrenner et al.")]
+[ResearchPaper("Efficient Neural Audio Synthesis", "https://arxiv.org/abs/1802.08435", Year = 2018, Authors = "Kalchbrenner et al.")]
 public class WaveRNN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveRNNOptions _options; public override ModelOptions GetOptions() => _options;

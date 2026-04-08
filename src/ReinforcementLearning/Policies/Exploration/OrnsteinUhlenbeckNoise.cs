@@ -27,7 +27,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Continuous Control with Deep Reinforcement Learning",
+    [ResearchPaper("Continuous Control with Deep Reinforcement Learning",
         "https://arxiv.org/abs/1509.02971",
         Year = 2016,
         Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]

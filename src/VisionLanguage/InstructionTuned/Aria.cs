@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Aria: An Open Multimodal Native Mixture-of-Experts Model", "https://arxiv.org/abs/2410.05993", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("Aria: An Open Multimodal Native Mixture-of-Experts Model", "https://arxiv.org/abs/2410.05993", Year = 2024, Authors = "Li et al.")]
 public class Aria<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AriaOptions _options; public override ModelOptions GetOptions() => _options;

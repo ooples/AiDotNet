@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Clearer Frames, Anytime: Resolving Velocity Ambiguity in Video Frame Interpolation",
+[ResearchPaper("Clearer Frames, Anytime: Resolving Velocity Ambiguity in Video Frame Interpolation",
     "https://arxiv.org/abs/2311.08007",
     Year = 2024,
     Authors = "Zhihang Zhong, Gurunandan Krishnan, Xiao Sun, Yu Qiao, Sizhuo Ma, Jian Wang")]

@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RemoteCLIP: A Vision Language Foundation Model for Remote Sensing", "https://arxiv.org/abs/2306.11029", Year = 2023, Authors = "Liu et al.")]
+[ResearchPaper("RemoteCLIP: A Vision Language Foundation Model for Remote Sensing", "https://arxiv.org/abs/2306.11029", Year = 2023, Authors = "Liu et al.")]
 public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RemoteCLIPOptions _options; public override ModelOptions GetOptions() => _options;

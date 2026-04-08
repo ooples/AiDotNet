@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Tacotron: Towards End-to-End Speech Synthesis", "https://arxiv.org/abs/1703.10135", Year = 2017, Authors = "Wang et al.")]
+[ResearchPaper("Tacotron: Towards End-to-End Speech Synthesis", "https://arxiv.org/abs/1703.10135", Year = 2017, Authors = "Wang et al.")]
 public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TacotronOptions _options;

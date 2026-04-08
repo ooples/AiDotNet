@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks",
+[ResearchPaper("AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks",
     "https://arxiv.org/abs/1810.11921",
     Year = 2019,
     Authors = "Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J.")]

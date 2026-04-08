@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Towards Generalist Foundation Model for Radiology by Leveraging Web-scale 2D&3D Medical Data", "https://arxiv.org/abs/2308.02463", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("Towards Generalist Foundation Model for Radiology by Leveraging Web-scale 2D&3D Medical Data", "https://arxiv.org/abs/2308.02463", Year = 2024, Authors = "Wu et al.")]
 public class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly RadFMOptions _options; public override ModelOptions GetOptions() => _options;

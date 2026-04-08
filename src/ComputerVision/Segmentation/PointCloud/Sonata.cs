@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
+[ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
 public class Sonata<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly SonataOptions _options;

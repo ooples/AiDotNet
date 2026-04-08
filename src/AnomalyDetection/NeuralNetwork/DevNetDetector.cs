@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Deep Anomaly Detection with Deviation Networks", "https://doi.org/10.1145/3292500.3330871", Year = 2019, Authors = "Guansong Pang, Chunhua Shen, Anton van den Hengel")]
+[ResearchPaper("Deep Anomaly Detection with Deviation Networks", "https://doi.org/10.1145/3292500.3330871", Year = 2019, Authors = "Guansong Pang, Chunhua Shen, Anton van den Hengel")]
 public class DevNetDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _hiddenDim;

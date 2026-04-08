@@ -59,7 +59,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpanBERT: Improving Pre-training by Representing and Predicting Spans",
+[ResearchPaper("SpanBERT: Improving Pre-training by Representing and Predicting Spans",
     "https://arxiv.org/abs/1907.10529",
     Year = 2020,
     Authors = "Mandar Joshi, Danqi Chen, Yinhan Liu, Daniel S. Weld, Luke Zettlemoyer, Omer Levy")]

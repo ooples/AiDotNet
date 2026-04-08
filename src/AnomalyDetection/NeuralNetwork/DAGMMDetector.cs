@@ -50,7 +50,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection",
+[ResearchPaper("Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection",
     "https://openreview.net/forum?id=BJJLHbb0-",
     Year = 2018,
     Authors = "Bo Zong, Qi Song, Martin Renqiang Min, Wei Cheng, Cristian Lumezanu, Daeki Cho, Haifeng Chen")]

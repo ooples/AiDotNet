@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Yang et al., "Effective Whole-body Pose Estimation with Two-stages Distillation", ICCV 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DWPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     /// <inheritdoc />

@@ -77,7 +77,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Fusing Heterogeneous Factors with Triaffine Mechanism for Nested Named Entity Recognition",
+[ResearchPaper("Fusing Heterogeneous Factors with Triaffine Mechanism for Nested Named Entity Recognition",
     "https://arxiv.org/abs/2110.07480",
     Year = 2022,
     Authors = "Zheng Yuan, Chuanqi Tan, Songfang Huang, Fei Huang")]

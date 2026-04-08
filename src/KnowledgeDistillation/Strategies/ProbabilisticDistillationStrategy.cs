@@ -36,10 +36,12 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Distilling the Knowledge in a Neural Network",
+[ResearchPaper("Distilling the Knowledge in a Neural Network",
     "https://arxiv.org/abs/1503.02531",
     Year = 2015,
     Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _distributionWeight;

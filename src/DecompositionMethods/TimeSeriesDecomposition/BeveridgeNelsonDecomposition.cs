@@ -22,7 +22,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-[ModelPaper("A New Approach to Decomposition of Economic Time Series into Permanent and Transitory Components", "https://doi.org/10.1016/0304-3932(81)90040-4", Year = 1981, Authors = "Stephen Beveridge, Charles R. Nelson")]
+[ResearchPaper("A New Approach to Decomposition of Economic Time Series into Permanent and Transitory Components", "https://doi.org/10.1016/0304-3932(81)90040-4", Year = 1981, Authors = "Stephen Beveridge, Charles R. Nelson")]
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly BeveridgeNelsonAlgorithmType _algorithm;

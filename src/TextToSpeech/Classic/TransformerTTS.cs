@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Speech Synthesis with Transformer Network", "https://arxiv.org/abs/1809.08895", Year = 2019, Authors = "Li et al.")]
+[ResearchPaper("Neural Speech Synthesis with Transformer Network", "https://arxiv.org/abs/1809.08895", Year = 2019, Authors = "Li et al.")]
 public class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TransformerTTSOptions _options; public override ModelOptions GetOptions() => _options;

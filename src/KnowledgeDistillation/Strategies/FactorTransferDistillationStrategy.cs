@@ -52,10 +52,12 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Paraphrasing Complex Network: Network Compression via Factor Transfer",
+[ResearchPaper("Paraphrasing Complex Network: Network Compression via Factor Transfer",
     "https://arxiv.org/abs/1802.04977",
     Year = 2018,
     Authors = "Jangho Kim, SeongUk Park, Nojun Kwak")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _factorWeight;

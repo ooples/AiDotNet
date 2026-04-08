@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.FederatedLearning.PSI;
 using AiDotNet.Models.Options;
@@ -32,6 +34,8 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// <para><b>Reference:</b> Based on the FATE framework architecture and VFLAIR (ICLR 2025).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class VerticalFederatedTrainer<T> : FederatedLearningComponentBase<T>, IVerticalFederatedTrainer<T>
 {
     private readonly VerticalFederatedLearningOptions _options;

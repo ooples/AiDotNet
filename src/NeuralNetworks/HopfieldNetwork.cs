@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Networks and Physical Systems with Emergent Collective Computational Abilities", "https://www.pnas.org/doi/10.1073/pnas.79.8.2554", Year = 1982, Authors = "John J. Hopfield")]
+[ResearchPaper("Neural Networks and Physical Systems with Emergent Collective Computational Abilities", "https://www.pnas.org/doi/10.1073/pnas.79.8.2554", Year = 1982, Authors = "John J. Hopfield")]
 public class HopfieldNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopfieldNetworkOptions _options;

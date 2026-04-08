@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Emu3: Next-Token Prediction is All You Need", "https://arxiv.org/abs/2409.18869", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("Emu3: Next-Token Prediction is All You Need", "https://arxiv.org/abs/2409.18869", Year = 2024, Authors = "Wang et al.")]
 public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu3Options _options; public override ModelOptions GetOptions() => _options;

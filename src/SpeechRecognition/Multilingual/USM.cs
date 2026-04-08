@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly USMOptions _options; public override ModelOptions GetOptions() => _options;

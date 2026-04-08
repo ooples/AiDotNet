@@ -57,7 +57,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
+[ResearchPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
 public class NBEATSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NBEATSModelOptions<T> _options;

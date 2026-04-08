@@ -112,7 +112,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.VideoToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Video Generation Models as World Simulators", "https://openai.com/index/video-generation-models-as-world-simulators/")]
+    [ResearchPaper("Video Generation Models as World Simulators", "https://openai.com/index/video-generation-models-as-world-simulators/")]
 public class SoraModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

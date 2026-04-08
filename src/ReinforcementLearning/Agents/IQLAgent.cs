@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Offline Reinforcement Learning with Implicit Q-Learning",
+[ResearchPaper("Offline Reinforcement Learning with Implicit Q-Learning",
     "https://arxiv.org/abs/2110.06169",
     Year = 2022,
     Authors = "Kostrikov, I., Nair, A., & Levine, S.")]

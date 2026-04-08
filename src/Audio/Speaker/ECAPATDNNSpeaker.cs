@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
+[ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
 public class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields

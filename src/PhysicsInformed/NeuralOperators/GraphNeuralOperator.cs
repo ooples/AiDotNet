@@ -68,7 +68,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Neural Operator: Graph Kernel Network for Partial Differential Equations", "https://doi.org/10.48550/arXiv.2003.03485", Year = 2020, Authors = "Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, Anima Anandkumar")]
+    [ResearchPaper("Neural Operator: Graph Kernel Network for Partial Differential Equations", "https://doi.org/10.48550/arXiv.2003.03485", Year = 2020, Authors = "Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, Anima Anandkumar")]
     public class GraphNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly GraphNeuralOperatorOptions _options;

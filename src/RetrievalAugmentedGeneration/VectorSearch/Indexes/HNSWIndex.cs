@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -27,6 +29,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class HNSWIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

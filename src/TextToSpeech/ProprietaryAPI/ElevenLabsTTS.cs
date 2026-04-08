@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ElevenLabs", "https://elevenlabs.io")]
+[ResearchPaper("ElevenLabs", "https://elevenlabs.io")]
 public class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly ElevenLabsTTSOptions _options; public override ModelOptions GetOptions() => _options;

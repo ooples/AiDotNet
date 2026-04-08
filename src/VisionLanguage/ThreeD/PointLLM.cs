@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PointLLM: Empowering Large Language Models to Understand Point Clouds", "https://arxiv.org/abs/2308.16911", Year = 2024, Authors = "Xu et al.")]
+[ResearchPaper("PointLLM: Empowering Large Language Models to Understand Point Clouds", "https://arxiv.org/abs/2308.16911", Year = 2024, Authors = "Xu et al.")]
 public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly PointLLMOptions _options; public override ModelOptions GetOptions() => _options;

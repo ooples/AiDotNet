@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks", "https://arxiv.org/abs/2312.14238", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks", "https://arxiv.org/abs/2312.14238", Year = 2024, Authors = "Chen et al.")]
 public class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly InternViTOptions _options; public override ModelOptions GetOptions() => _options;

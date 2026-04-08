@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning Audio-Visual Speech Representation by Masked Multimodal Cluster Prediction", "https://arxiv.org/abs/2201.02184", Year = 2022, Authors = "Shi et al.")]
+[ResearchPaper("Learning Audio-Visual Speech Representation by Masked Multimodal Cluster Prediction", "https://arxiv.org/abs/2201.02184", Year = 2022, Authors = "Shi et al.")]
 public class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AVHuBERTOptions _options; public override ModelOptions GetOptions() => _options;

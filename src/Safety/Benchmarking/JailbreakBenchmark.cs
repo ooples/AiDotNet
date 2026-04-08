@@ -31,7 +31,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("JailbreakBench: An Open Robustness Benchmark for Jailbreaking Large Language Models",
+[ResearchPaper("JailbreakBench: An Open Robustness Benchmark for Jailbreaking Large Language Models",
     "https://arxiv.org/abs/2404.01318",
     Year = 2024,
     Authors = "Patrick Chao, Edoardo Debenedetti, Alexander Robey, et al.")]

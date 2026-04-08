@@ -78,7 +78,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Stable Audio Open", "https://arxiv.org/abs/2407.14358", Year = 2024, Authors = "Evans et al.")]
+[ResearchPaper("Stable Audio Open", "https://arxiv.org/abs/2407.14358", Year = 2024, Authors = "Evans et al.")]
 public class StableAudioModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

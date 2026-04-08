@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -28,6 +30,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class AdaptiveCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;

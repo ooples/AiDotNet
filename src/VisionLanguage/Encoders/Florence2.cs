@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks", "https://arxiv.org/abs/2311.06242", Year = 2024, Authors = "Xiao et al.")]
+[ResearchPaper("Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks", "https://arxiv.org/abs/2311.06242", Year = 2024, Authors = "Xiao et al.")]
 public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly Florence2Options _options; public override ModelOptions GetOptions() => _options;

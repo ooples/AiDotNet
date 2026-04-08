@@ -1,5 +1,7 @@
 global using System.Text.RegularExpressions;
 global using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -51,6 +53,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Documents lacking entity mentions or relationships
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class GraphRetriever<T> : RetrieverBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

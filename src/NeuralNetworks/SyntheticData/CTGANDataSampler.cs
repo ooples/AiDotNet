@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -33,6 +35,8 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.DataLoader)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class CTGANDataSampler<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

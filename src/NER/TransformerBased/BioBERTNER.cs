@@ -57,7 +57,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BioBERT: a pre-trained biomedical language representation model for biomedical text mining",
+[ResearchPaper("BioBERT: a pre-trained biomedical language representation model for biomedical text mining",
     "https://arxiv.org/abs/1901.08746",
     Year = 2020,
     Authors = "Jinhyuk Lee, Wonjin Yoon, Sungdong Kim, Donghyeon Kim, Sunkyu Kim, Chan Ho So, Jaewoo Kang")]

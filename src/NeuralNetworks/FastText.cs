@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Classification)]
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
+    [ResearchPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
     public class FastText<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly FastTextOptions _options;

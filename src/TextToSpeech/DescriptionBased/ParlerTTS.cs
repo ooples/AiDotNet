@@ -45,7 +45,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Natural Language Guidance of High-Fidelity Text-to-Speech with Synthetic Annotations", "https://arxiv.org/abs/2402.01912", Year = 2024, Authors = "Lyth et al.")]
+[ResearchPaper("Natural Language Guidance of High-Fidelity Text-to-Speech with Synthetic Annotations", "https://arxiv.org/abs/2402.01912", Year = 2024, Authors = "Lyth et al.")]
 public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ParlerTTSOptions _options;

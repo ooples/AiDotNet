@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("QVQ: To See the World with Wisdom", "https://qwenlm.github.io/blog/qvq-72b-preview/", Year = 2024, Authors = "Qwen Team")]
+[ResearchPaper("QVQ: To See the World with Wisdom", "https://qwenlm.github.io/blog/qvq-72b-preview/", Year = 2024, Authors = "Qwen Team")]
 public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly QVQ72BOptions _options; public override ModelOptions GetOptions() => _options;

@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("GPT-4 Technical Report", "https://arxiv.org/abs/2303.08774")]
+    [ResearchPaper("GPT-4 Technical Report", "https://arxiv.org/abs/2303.08774")]
 public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel<T>
 {
     private readonly Gpt4VisionOptions _options;

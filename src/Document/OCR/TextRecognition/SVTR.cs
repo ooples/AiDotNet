@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SVTR: Scene Text Recognition with a Single Visual Model", "https://doi.org/10.48550/arXiv.2205.00159", Year = 2022, Authors = "Yongkun Du, Zhineng Chen, Caiyan Jia, Xiaoting Yin, Tianlun Zheng, Chenxia Li, Yuning Du, Yu-Gang Jiang")]
+[ResearchPaper("SVTR: Scene Text Recognition with a Single Visual Model", "https://doi.org/10.48550/arXiv.2205.00159", Year = 2022, Authors = "Yongkun Du, Zhineng Chen, Caiyan Jia, Xiaoting Yin, Tianlun Zheng, Chenxia Li, Yuning Du, Yu-Gang Jiang")]
 public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly SVTROptions _options;

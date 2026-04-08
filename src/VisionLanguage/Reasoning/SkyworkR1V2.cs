@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Skywork R1V2: Multimodal Hybrid Reinforcement Learning for Reasoning", "https://arxiv.org/abs/2503.12361", Year = 2025, Authors = "Skywork Team")]
+[ResearchPaper("Skywork R1V2: Multimodal Hybrid Reinforcement Learning for Reasoning", "https://arxiv.org/abs/2503.12361", Year = 2025, Authors = "Skywork Team")]
 public class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly SkyworkR1V2Options _options; public override ModelOptions GetOptions() => _options;

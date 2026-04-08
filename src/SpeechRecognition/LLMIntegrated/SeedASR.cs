@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Seed-ASR: Understanding Diverse Speech and Contexts with LLM-based Speech Recognition", "https://arxiv.org/abs/2407.04675", Year = 2024, Authors = "Bai et al.")]
+[ResearchPaper("Seed-ASR: Understanding Diverse Speech and Contexts with LLM-based Speech Recognition", "https://arxiv.org/abs/2407.04675", Year = 2024, Authors = "Bai et al.")]
 public class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SeedASROptions _options; public override ModelOptions GetOptions() => _options;

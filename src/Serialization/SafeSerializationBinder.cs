@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.Serialization;
@@ -21,6 +23,7 @@ namespace AiDotNet.Serialization;
 /// <para><b>Security Note:</b> Always prefer TypeNameHandling.Auto over TypeNameHandling.All as it minimizes
 /// type information exposure while still supporting polymorphic deserialization.</para>
 /// </remarks>
+[InfraType(InfraType.Persistence)]
 public class SafeSerializationBinder : ISerializationBinder
 {
     /// <summary>

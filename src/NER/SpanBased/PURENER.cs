@@ -75,7 +75,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Frustratingly Easy Approach for Entity and Relation Extraction",
+[ResearchPaper("A Frustratingly Easy Approach for Entity and Relation Extraction",
     "https://arxiv.org/abs/2010.12812",
     Year = 2021,
     Authors = "Zexuan Zhong, Danqi Chen")]

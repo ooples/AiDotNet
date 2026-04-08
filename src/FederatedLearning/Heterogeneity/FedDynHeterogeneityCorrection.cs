@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Heterogeneity;
@@ -10,6 +12,8 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// accumulates how the client tends to move away from the global model.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FedDynHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     private readonly double _alpha;

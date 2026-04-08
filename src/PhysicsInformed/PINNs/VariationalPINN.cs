@@ -90,7 +90,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Variational Physics-Informed Neural Networks For Solving Partial Differential Equations", "https://doi.org/10.48550/arXiv.1912.00873", Year = 2020, Authors = "Ehsan Kharazmi, Zhongqiang Zhang, George Em Karniadakis")]
+    [ResearchPaper("Variational Physics-Informed Neural Networks For Solving Partial Differential Equations", "https://doi.org/10.48550/arXiv.1912.00873", Year = 2020, Authors = "Ehsan Kharazmi, Zhongqiang Zhang, George Em Karniadakis")]
     public class VariationalPINN<T> : NeuralNetworkBase<T>
     {
         private readonly VariationalPINNOptions _options;

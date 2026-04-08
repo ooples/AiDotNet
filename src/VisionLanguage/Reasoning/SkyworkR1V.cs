@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought", "https://arxiv.org/abs/2501.12368", Year = 2025, Authors = "Skywork Team")]
+[ResearchPaper("Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought", "https://arxiv.org/abs/2501.12368", Year = 2025, Authors = "Skywork Team")]
 public class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly SkyworkR1VOptions _options; public override ModelOptions GetOptions() => _options;

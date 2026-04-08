@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MetaVoice-1B: 1.2B Parameter Voice Cloning Model", "https://github.com/metavoiceio/metavoice-src")]
+[ResearchPaper("MetaVoice-1B: 1.2B Parameter Voice Cloning Model", "https://github.com/metavoiceio/metavoice-src")]
 public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly MetaVoice1BOptions _options; public override ModelOptions GetOptions() => _options;

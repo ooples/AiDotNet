@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PaLI-X: On Scaling up a Multilingual Vision and Language Model", "https://arxiv.org/abs/2305.18565", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("PaLI-X: On Scaling up a Multilingual Vision and Language Model", "https://arxiv.org/abs/2305.18565", Year = 2023, Authors = "Chen et al.")]
 public class PaLIX<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLIXOptions _options; public override ModelOptions GetOptions() => _options;

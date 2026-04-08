@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.AutoML;
 using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Interfaces;
@@ -41,6 +42,8 @@ namespace AiDotNet.Clustering.AutoML;
 ///     numClusters: (int)p["NumClusters"]), paramGrid);
 /// </code>
 /// </example>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ClusteringGridSearch<T> : UnsupervisedAutoMLBase<T>
 {
     private readonly ClusteringEvaluator<T> _evaluator;

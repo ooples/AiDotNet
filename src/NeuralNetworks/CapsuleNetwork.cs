@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Dynamic Routing Between Capsules", "https://arxiv.org/abs/1710.09829", Year = 2017, Authors = "Sara Sabour, Nicholas Frosst, Geoffrey E. Hinton")]
+[ResearchPaper("Dynamic Routing Between Capsules", "https://arxiv.org/abs/1710.09829", Year = 2017, Authors = "Sara Sabour, Nicholas Frosst, Geoffrey E. Hinton")]
 public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly CapsuleNetworkOptions _options;

@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Point Transformer V3: Simpler, Faster, Stronger", "https://arxiv.org/abs/2312.10035", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("Point Transformer V3: Simpler, Faster, Stronger", "https://arxiv.org/abs/2312.10035", Year = 2024, Authors = "Wu et al.")]
 public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly PointTransformerV3Options _options;

@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
+[ResearchPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
 public class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MMSOptions _options;

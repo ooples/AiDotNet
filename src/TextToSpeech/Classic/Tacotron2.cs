@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Shen et al.")]
+[ResearchPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Shen et al.")]
 public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly Tacotron2Options _options;

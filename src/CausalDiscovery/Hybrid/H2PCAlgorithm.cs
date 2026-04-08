@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("A Hybrid Algorithm for Bayesian Network Structure Learning with Application to Multi-Label Learning", "https://doi.org/10.1016/j.eswa.2014.03.032", Year = 2014, Authors = "Maxime Gasse, Alex Aussem, Haytham Elghazel")]
+[ResearchPaper("A Hybrid Algorithm for Bayesian Network Structure Learning with Application to Multi-Label Learning", "https://doi.org/10.1016/j.eswa.2014.03.032", Year = 2014, Authors = "Maxime Gasse, Alex Aussem, Haytham Elghazel")]
 public class H2PCAlgorithm<T> : HybridBase<T>
 {
     private readonly int _maxConditioningSetSize;

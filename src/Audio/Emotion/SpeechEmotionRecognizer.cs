@@ -83,7 +83,7 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Speech Emotion Recognition Using Deep Learning Techniques: A Review", "https://arxiv.org/abs/2101.06572", Year = 2021, Authors = "Kexin Luo, Yun Cai")]
+[ResearchPaper("Speech Emotion Recognition Using Deep Learning Techniques: A Review", "https://arxiv.org/abs/2101.06572", Year = 2021, Authors = "Kexin Luo, Yun Cai")]
 public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Execution Mode

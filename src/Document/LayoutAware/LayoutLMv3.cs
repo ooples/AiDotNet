@@ -66,7 +66,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://doi.org/10.48550/arXiv.2204.08387", Year = 2022, Authors = "Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei")]
+[ResearchPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://doi.org/10.48550/arXiv.2204.08387", Year = 2022, Authors = "Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei")]
 public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv3Options _options;

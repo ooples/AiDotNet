@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Dueling Network Architectures for Deep Reinforcement Learning",
+[ResearchPaper("Dueling Network Architectures for Deep Reinforcement Learning",
     "https://arxiv.org/abs/1511.06581",
     Year = 2016,
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]

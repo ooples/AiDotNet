@@ -28,7 +28,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Automated Hate Speech Detection and the Problem of Offensive Language", "https://arxiv.org/abs/1703.04009", Year = 2017, Authors = "Thomas Davidson, Dana Warmsley, Michael Macy, Ingmar Weber")]
+[ResearchPaper("Automated Hate Speech Detection and the Problem of Offensive Language", "https://arxiv.org/abs/1703.04009", Year = 2017, Authors = "Thomas Davidson, Dana Warmsley, Michael Macy, Ingmar Weber")]
 public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 {
     /// <summary>

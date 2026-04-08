@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Guardrails;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaMA Guard: LLM-based Input-Output Safeguard for Human-AI Conversations",
+[ResearchPaper("LLaMA Guard: LLM-based Input-Output Safeguard for Human-AI Conversations",
     "https://arxiv.org/abs/2312.06674",
     Year = 2024,
     Authors = "Hakan Inan, Kartikeya Upasani, Jianfeng Chi, et al.")]

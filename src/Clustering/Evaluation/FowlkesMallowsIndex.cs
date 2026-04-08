@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -39,6 +41,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Random clustering: FM ≈ sqrt(1/K) where K is number of clusters
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class FowlkesMallowsIndex<T> : IClusterMetric<T>, IExternalClusterMetric<T>
 {
     /// <inheritdoc />

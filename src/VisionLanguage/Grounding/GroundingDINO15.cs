@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Grounding DINO 1.5: Advance the Edge of Open-Set Object Detection", "https://arxiv.org/abs/2405.10300", Year = 2024, Authors = "Ren et al.")]
+[ResearchPaper("Grounding DINO 1.5: Advance the Edge of Open-Set Object Detection", "https://arxiv.org/abs/2405.10300", Year = 2024, Authors = "Ren et al.")]
 public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundingDINO15Options _options; public override ModelOptions GetOptions() => _options;

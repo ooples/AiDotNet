@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Measuring Information Transfer", "https://doi.org/10.1103/PhysRevLett.85.461", Year = 2000, Authors = "Thomas Schreiber")]
+[ResearchPaper("Measuring Information Transfer", "https://doi.org/10.1103/PhysRevLett.85.461", Year = 2000, Authors = "Thomas Schreiber")]
 public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
 {
     /// <inheritdoc/>

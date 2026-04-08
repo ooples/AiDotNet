@@ -99,7 +99,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("HiDream-I1: High-Quality Imaginative Image Generation", "https://arxiv.org/abs/2505.22705")]
+    [ResearchPaper("HiDream-I1: High-Quality Imaginative Image Generation", "https://arxiv.org/abs/2505.22705")]
 public class HiDreamModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

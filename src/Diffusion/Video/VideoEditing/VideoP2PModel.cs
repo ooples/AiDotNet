@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelTask(ModelTask.TextToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Video-P2P: Video Editing with Cross-attention Control", "https://arxiv.org/abs/2303.12688", Year = 2023, Authors = "Liu et al.")]
+[ResearchPaper("Video-P2P: Video Editing with Cross-attention Control", "https://arxiv.org/abs/2303.12688", Year = 2023, Authors = "Liu et al.")]
 public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

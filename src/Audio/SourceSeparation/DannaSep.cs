@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelTask(ModelTask.SourceSeparation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
+[ResearchPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
 public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields

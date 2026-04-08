@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -25,6 +28,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// - You need a robust metric that isn't sensitive to many small differences
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ChebyshevDistance<T> : DistanceMetricBase<T>
 {
     /// <inheritdoc />

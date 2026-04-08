@@ -100,10 +100,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks",
+[ResearchPaper("Meta-Learning with Memory-Augmented Neural Networks",
     "https://arxiv.org/abs/1605.06065",
     Year = 2016,
     Authors = "Adam Santoro, Sergey Bartunov, Matthew Botvinick, Daan Wierstra, Timothy Lillicrap")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MANNOptions<T, TInput, TOutput> _mannOptions;

@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Data Synthesis based on Generative Adversarial Networks",
+[ResearchPaper("Data Synthesis based on Generative Adversarial Networks",
     "https://arxiv.org/abs/1806.03384",
     Year = 2018,
     Authors = "Noseong Park, Mahmoud Mohammadi, Kshitij Gorde, Sushil Jajodia, Hongkyu Park, Youngmin Kim")]

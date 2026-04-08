@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SEED-Edit", "https://arxiv.org/abs/2411.06686", Year = 2024, Authors = "ByteDance")]
+[ResearchPaper("SEED-Edit", "https://arxiv.org/abs/2411.06686", Year = 2024, Authors = "ByteDance")]
 public class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

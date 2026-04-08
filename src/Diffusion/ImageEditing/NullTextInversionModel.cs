@@ -63,7 +63,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Null-text Inversion for Editing Real Images using Guided Diffusion Models", "https://arxiv.org/abs/2211.09794", Year = 2023, Authors = "Mokady et al.")]
+[ResearchPaper("Null-text Inversion for Editing Real Images using Guided Diffusion Models", "https://arxiv.org/abs/2211.09794", Year = 2023, Authors = "Mokady et al.")]
 public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

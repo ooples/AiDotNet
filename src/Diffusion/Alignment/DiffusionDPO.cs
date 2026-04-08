@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Alignment;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.Diffusion.Alignment;
 /// Reference: Wallace et al., "Diffusion Model Alignment Using Direct Preference Optimization", CVPR 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class DiffusionDPO<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

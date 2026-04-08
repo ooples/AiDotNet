@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Percentage Points for a Generalized ESD Many-Outlier Procedure", "https://doi.org/10.1080/00401706.1983.10487848", Year = 1983, Authors = "Bernard Rosner")]
+[ResearchPaper("Percentage Points for a Generalized ESD Many-Outlier Procedure", "https://doi.org/10.1080/00401706.1983.10487848", Year = 1983, Authors = "Bernard Rosner")]
 public class ESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

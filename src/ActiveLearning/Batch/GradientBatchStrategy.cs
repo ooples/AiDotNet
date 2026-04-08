@@ -40,7 +40,9 @@ namespace AiDotNet.ActiveLearning.Batch;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Batch Active Learning by Diverse, Uncertain Gradient Lower Bounds", "https://arxiv.org/abs/1906.03671", Year = 2020, Authors = "Jordan T. Ash, Chicheng Zhang, Akshay Krishnamurthy, John Langford, Alekh Agarwal")]
+[ResearchPaper("Deep Batch Active Learning by Diverse, Uncertain Gradient Lower Bounds", "https://arxiv.org/abs/1906.03671", Year = 2020, Authors = "Jordan T. Ash, Chicheng Zhang, Akshay Krishnamurthy, John Langford, Alekh Agarwal")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

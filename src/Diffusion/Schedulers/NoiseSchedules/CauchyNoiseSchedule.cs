@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 
@@ -20,6 +22,8 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 /// sharp, high-contrast images but needs careful tuning.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public class CauchyNoiseSchedule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

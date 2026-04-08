@@ -70,10 +70,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Few-Shot Learning with Graph Neural Networks",
+[ResearchPaper("Few-Shot Learning with Graph Neural Networks",
     "https://arxiv.org/abs/1711.04043",
     Year = 2018,
     Authors = "Victor Garcia, Joan Bruna")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly GNNMetaOptions<T, TInput, TOutput> _gnnOptions;

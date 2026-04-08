@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Cao et al., "OpenPose: Realtime Multi-Person 2D Pose Estimation", IEEE TPAMI 2019
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     /// <inheritdoc />

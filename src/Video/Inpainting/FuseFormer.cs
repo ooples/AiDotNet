@@ -47,7 +47,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FuseFormer: Fusing Fine-Grained Information in Transformers for Video Inpainting",
+[ResearchPaper("FuseFormer: Fusing Fine-Grained Information in Transformers for Video Inpainting",
     "https://arxiv.org/abs/2109.02974",
     Year = 2021,
     Authors = "Rui Liu, Hanming Deng, Yangyi Huang, Xiaoyu Shi, Lewei Lu, Wenxiu Sun, Xiaogang Wang, Jifeng Dai, Hongsheng Li")]

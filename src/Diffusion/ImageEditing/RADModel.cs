@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Region-Aware Diffusion for Zero-shot Text-driven Image Editing", "https://arxiv.org/abs/2302.11797")]
+    [ResearchPaper("Region-Aware Diffusion for Zero-shot Text-driven Image Editing", "https://arxiv.org/abs/2302.11797")]
 public class RADModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

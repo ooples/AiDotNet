@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improved Distribution Matching Distillation for Fast Image Synthesis", "https://arxiv.org/abs/2405.14867", Year = 2024, Authors = "Yin et al.")]
+[ResearchPaper("Improved Distribution Matching Distillation for Fast Image Synthesis", "https://arxiv.org/abs/2405.14867", Year = 2024, Authors = "Yin et al.")]
 public class DMD2Model<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

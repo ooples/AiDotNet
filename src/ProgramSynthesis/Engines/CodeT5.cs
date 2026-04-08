@@ -53,7 +53,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation",
+[ResearchPaper("CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation",
     "https://arxiv.org/abs/2109.00859",
     Year = 2021,
     Authors = "Yue Wang, Weishi Wang, Shafiq Joty, Steven C.H. Hoi")]

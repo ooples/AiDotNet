@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Privacy;
 
 /// <summary>
@@ -34,6 +36,8 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// Shuffle Model." Crypto 2019.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
     private readonly double _localEpsilon;

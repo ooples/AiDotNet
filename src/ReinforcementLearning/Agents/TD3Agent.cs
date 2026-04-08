@@ -55,7 +55,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Addressing Function Approximation Error in Actor-Critic Methods",
+[ResearchPaper("Addressing Function Approximation Error in Actor-Critic Methods",
     "https://arxiv.org/abs/1802.09477",
     Year = 2018,
     Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]

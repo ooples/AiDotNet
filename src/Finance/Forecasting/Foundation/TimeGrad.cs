@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2101.12072", Year = 2021, Authors = "Kashif Rasul, Calvin Seward, Ingmar Schuster, Roland Vollgraf")]
+[ResearchPaper("Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2101.12072", Year = 2021, Authors = "Kashif Rasul, Calvin Seward, Ingmar Schuster, Roland Vollgraf")]
 public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

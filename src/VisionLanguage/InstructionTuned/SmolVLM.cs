@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SmolVLM: Redefining Small and Efficient Multimodal Models", "https://huggingface.co/blog/smolvlm", Year = 2025, Authors = "HuggingFace")]
+[ResearchPaper("SmolVLM: Redefining Small and Efficient Multimodal Models", "https://huggingface.co/blog/smolvlm", Year = 2025, Authors = "HuggingFace")]
 public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly SmolVLMOptions _options; public override ModelOptions GetOptions() => _options;

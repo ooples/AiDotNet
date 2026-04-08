@@ -72,7 +72,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
 public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

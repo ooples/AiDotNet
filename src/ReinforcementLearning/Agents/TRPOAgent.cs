@@ -56,7 +56,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Trust Region Policy Optimization",
+[ResearchPaper("Trust Region Policy Optimization",
     "https://arxiv.org/abs/1502.05477",
     Year = 2015,
     Authors = "Schulman, J., Levine, S., Moritz, P., Jordan, M. I., & Abbeel, P.")]

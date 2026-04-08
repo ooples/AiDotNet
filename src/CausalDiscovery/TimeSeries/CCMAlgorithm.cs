@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Detecting Causality in Complex Ecosystems", "https://doi.org/10.1126/science.1227079", Year = 2012, Authors = "George Sugihara, Robert May, Hao Ye, Chih-hao Hsieh, Ethan Deyle, Michael Fogarty, Stephan Munch")]
+[ResearchPaper("Detecting Causality in Complex Ecosystems", "https://doi.org/10.1126/science.1227079", Year = 2012, Authors = "George Sugihara, Robert May, Hao Ye, Chih-hao Hsieh, Ethan Deyle, Michael Fogarty, Stephan Munch")]
 public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

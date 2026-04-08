@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoPoet: A Large Language Model for Zero-Shot Video Generation", "https://arxiv.org/abs/2312.14125", Year = 2024, Authors = "Kondratyuk et al.")]
+[ResearchPaper("VideoPoet: A Large Language Model for Zero-Shot Video Generation", "https://arxiv.org/abs/2312.14125", Year = 2024, Authors = "Kondratyuk et al.")]
 public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -32,6 +34,8 @@ namespace AiDotNet.AnomalyDetection;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     private readonly IAnomalyDetector<T> _detector;

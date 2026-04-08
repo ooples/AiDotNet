@@ -57,7 +57,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Task is Worth One Word: Learning with Task Prompts for High-Quality Versatile Image Inpainting", "https://arxiv.org/abs/2312.03594", Year = 2024, Authors = "Zhuang et al.")]
+[ResearchPaper("A Task is Worth One Word: Learning with Task Prompts for High-Quality Versatile Image Inpainting", "https://arxiv.org/abs/2312.03594", Year = 2024, Authors = "Zhuang et al.")]
 public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

@@ -81,7 +81,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
-[ModelPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
+[ResearchPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
 public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>{
     private readonly List<RocketKernel> _kernels;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -45,6 +47,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// from Decentralized Data." AISTATS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedAvgAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     /// <summary>

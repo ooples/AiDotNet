@@ -37,7 +37,7 @@ namespace AiDotNet.Safety.Fairness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Equality of Opportunity in Supervised Learning",
+[ResearchPaper("Equality of Opportunity in Supervised Learning",
     "https://arxiv.org/abs/1610.02413",
     Year = 2016,
     Authors = "Moritz Hardt, Eric Price, Nathan Srebro")]

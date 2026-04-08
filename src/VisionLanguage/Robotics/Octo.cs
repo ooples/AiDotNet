@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Octo: An Open-Source Generalist Robot Policy", "https://arxiv.org/abs/2405.12213", Year = 2024, Authors = "Ghosh et al.")]
+[ResearchPaper("Octo: An Open-Source Generalist Robot Policy", "https://arxiv.org/abs/2405.12213", Year = 2024, Authors = "Ghosh et al.")]
 public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly OctoOptions _options; public override ModelOptions GetOptions() => _options;

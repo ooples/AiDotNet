@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
+[ResearchPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
 public class DenseNetNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DenseNetOptions _options;

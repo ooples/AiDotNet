@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// NDSS 2021.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly int _numByzantine;

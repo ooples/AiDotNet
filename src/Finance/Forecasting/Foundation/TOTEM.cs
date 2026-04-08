@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("TOTEM: TOkenized Time Series EMbeddings", "https://arxiv.org/abs/2402.16412")]
+[ResearchPaper("TOTEM: TOkenized Time Series EMbeddings", "https://arxiv.org/abs/2402.16412")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 {

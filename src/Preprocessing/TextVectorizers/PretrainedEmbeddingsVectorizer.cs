@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
@@ -26,6 +28,8 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
 {
     private readonly PretrainedFormat _format;

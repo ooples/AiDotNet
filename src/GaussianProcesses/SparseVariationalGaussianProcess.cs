@@ -44,7 +44,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Scalable Variational Gaussian Process Classification", "https://doi.org/10.48550/arXiv.1411.2005", Year = 2015, Authors = "James Hensman, Alexander G. de G. Matthews, Zoubin Ghahramani")]
+[ResearchPaper("Scalable Variational Gaussian Process Classification", "https://doi.org/10.48550/arXiv.1411.2005", Year = 2015, Authors = "James Hensman, Alexander G. de G. Matthews, Zoubin Ghahramani")]
 public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>

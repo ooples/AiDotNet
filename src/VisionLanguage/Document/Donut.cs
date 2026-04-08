@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OCR-free Document Understanding Transformer", "https://arxiv.org/abs/2111.15664", Year = 2022, Authors = "Kim et al.")]
+[ResearchPaper("OCR-free Document Understanding Transformer", "https://arxiv.org/abs/2111.15664", Year = 2022, Authors = "Kim et al.")]
 public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DonutOptions _options; public override ModelOptions GetOptions() => _options;

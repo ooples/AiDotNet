@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-NeXT: A Strong Zero-shot Video Understanding Model", "https://arxiv.org/abs/2408.03303", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("LLaVA-NeXT: A Strong Zero-shot Video Understanding Model", "https://arxiv.org/abs/2408.03303", Year = 2024, Authors = "Zhang et al.")]
 public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LLaVANeXTVideoOptions _options; public override ModelOptions GetOptions() => _options;

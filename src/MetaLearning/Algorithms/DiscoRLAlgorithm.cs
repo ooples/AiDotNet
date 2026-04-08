@@ -45,10 +45,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Discovery of Options via Meta-Learned Subgoals",
+[ResearchPaper("Discovery of Options via Meta-Learned Subgoals",
     "https://arxiv.org/abs/2102.06741",
     Year = 2021,
     Authors = "Vivek Veeriah, Tom Zahavy, Matteo Hessel, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

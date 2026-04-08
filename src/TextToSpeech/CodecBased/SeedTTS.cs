@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Seed-TTS: A Family of High-Quality Versatile Speech Generation Models", "https://arxiv.org/abs/2406.02430", Year = 2024, Authors = "Anastassiou et al.")]
+[ResearchPaper("Seed-TTS: A Family of High-Quality Versatile Speech Generation Models", "https://arxiv.org/abs/2406.02430", Year = 2024, Authors = "Anastassiou et al.")]
 public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SeedTTSOptions _options; public override ModelOptions GetOptions() => _options;

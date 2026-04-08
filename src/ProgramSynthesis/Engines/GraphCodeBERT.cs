@@ -50,7 +50,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GraphCodeBERT: Pre-training Code Representations with Data Flow",
+[ResearchPaper("GraphCodeBERT: Pre-training Code Representations with Data Flow",
     "https://arxiv.org/abs/2009.08366",
     Year = 2021,
     Authors = "Daya Guo, Shuo Ren, Shuai Lu, Zhangyin Feng, Duyu Tang, Shujie Liu, Long Zhou, Nan Duan, Alexey Svyatkovskiy, Shengyu Fu, Michele Tufano, Shao Kun Deng, Colin Clement, Dawn Drain, Neel Sundaresan, Jian Yin, Daxin Jiang, Ming Zhou")]

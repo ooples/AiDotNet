@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Newtonsoft.Json;
@@ -21,6 +23,7 @@ namespace AiDotNet.TrainingMonitoring;
 /// - Export to JSON/CSV formats
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[InfraType(InfraType.Metrics)]
 public class TrainingMonitor<T> : TrainingMonitorBase<T>
 {
     /// <summary>

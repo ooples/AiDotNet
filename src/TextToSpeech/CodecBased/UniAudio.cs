@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UniAudio: An Audio Foundation Model Toward Universal Audio Generation", "https://arxiv.org/abs/2310.00704", Year = 2024, Authors = "Yang et al.")]
+[ResearchPaper("UniAudio: An Audio Foundation Model Toward Universal Audio Generation", "https://arxiv.org/abs/2310.00704", Year = 2024, Authors = "Yang et al.")]
 public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly UniAudioOptions _options; public override ModelOptions GetOptions() => _options;

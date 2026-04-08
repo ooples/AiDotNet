@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FILM: Frame Interpolation for Large Motion",
+[ResearchPaper("FILM: Frame Interpolation for Large Motion",
     "https://arxiv.org/abs/2202.04901",
     Year = 2022,
     Authors = "Fitsum Reda, Janne Kontkanen, Eric Tabellion, Deqing Sun, Caroline Pantofaru, Brian Curless")]

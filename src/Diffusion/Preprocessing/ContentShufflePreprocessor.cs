@@ -1,6 +1,8 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// copying the exact arrangement.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _blockSize;

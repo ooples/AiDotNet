@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Score Identity Distillation: Exponentially Fast Distillation of Pretrained Diffusion Models for One-Step Generation", "https://arxiv.org/abs/2404.04057", Year = 2024, Authors = "Zhou et al.")]
+[ResearchPaper("Score Identity Distillation: Exponentially Fast Distillation of Pretrained Diffusion Models for One-Step Generation", "https://arxiv.org/abs/2404.04057", Year = 2024, Authors = "Zhou et al.")]
 public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

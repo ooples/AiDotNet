@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Inverse Scaling Law for CLIP Training", "https://arxiv.org/abs/2305.07017", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper("An Inverse Scaling Law for CLIP Training", "https://arxiv.org/abs/2305.07017", Year = 2023, Authors = "Li et al.")]
 public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly CLIPAOptions _options; public override ModelOptions GetOptions() => _options;

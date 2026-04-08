@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Alignment;
 
@@ -37,6 +39,8 @@ public enum FedLLMStage
 /// Decentralized Private Data via Federated Learning." arXiv:2402.06954.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly OpenFedLLMOptions _options;

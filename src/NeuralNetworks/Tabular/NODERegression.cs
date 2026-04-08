@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Oblivious Decision Ensembles for Deep Learning on Tabular Data",
+[ResearchPaper("Neural Oblivious Decision Ensembles for Deep Learning on Tabular Data",
     "https://arxiv.org/abs/1909.06312",
     Year = 2020,
     Authors = "Popov, S., Morozov, S., & Babenko, A.")]

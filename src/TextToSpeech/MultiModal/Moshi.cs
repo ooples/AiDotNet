@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Moshi: A Speech-Text Foundation Model for Real-Time Dialogue", "https://arxiv.org/abs/2410.00037", Year = 2024, Authors = "Defossez et al.")]
+[ResearchPaper("Moshi: A Speech-Text Foundation Model for Real-Time Dialogue", "https://arxiv.org/abs/2410.00037", Year = 2024, Authors = "Defossez et al.")]
 public class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MoshiOptions _options; public override ModelOptions GetOptions() => _options;

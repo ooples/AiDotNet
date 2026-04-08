@@ -17,7 +17,7 @@ namespace AiDotNet.Generators;
 /// Automatically discovers all non-abstract classes implementing IFullModel anywhere in their
 /// inheritance chain (via Roslyn's AllInterfaces — no hardcoded type list required) and reads
 /// their [ModelDomain], [ModelCategory], [ModelTask], [ModelComplexity], [ModelInput], and
-/// [ModelPaper] attributes to build a zero-reflection static registry.
+/// [ResearchPaper] attributes to build a zero-reflection static registry.
 /// </para>
 /// </remarks>
 [Generator]
@@ -31,7 +31,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
     private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
     private const string ModelComplexityAttr = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelInputAttr = "AiDotNet.Attributes.ModelInputAttribute";
-    private const string ModelPaperAttr = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ResearchPaperAttr = "AiDotNet.Attributes.ResearchPaperAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -111,7 +111,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
         var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ModelPaperAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
 
         // If core attributes don't exist, emit empty registry
         if (domainAttrSymbol is null || categoryAttrSymbol is null ||
@@ -424,11 +424,11 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("namespace AiDotNet.Generated;");
         sb.AppendLine();
 
-        // ModelPaperEntry class
+        // ResearchPaperEntry class
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Represents an academic paper reference for a model.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("internal sealed class ModelPaperEntry");
+        sb.AppendLine("internal sealed class ResearchPaperEntry");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Gets the paper title.</summary>");
         sb.AppendLine("    public string Title { get; }");
@@ -440,7 +440,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    public string Authors { get; }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Initializes a new paper entry.</summary>");
-        sb.AppendLine("    public ModelPaperEntry(string title, string url, int year, string authors)");
+        sb.AppendLine("    public ResearchPaperEntry(string title, string url, int year, string authors)");
         sb.AppendLine("    {");
         sb.AppendLine("        Title = title;");
         sb.AppendLine("        Url = url;");
@@ -475,7 +475,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Gets the expected output type name.</summary>");
         sb.AppendLine("    public string OutputTypeName { get; }");
         sb.AppendLine("    /// <summary>Gets the academic paper references.</summary>");
-        sb.AppendLine("    public IReadOnlyList<ModelPaperEntry> Papers { get; }");
+        sb.AppendLine("    public IReadOnlyList<ResearchPaperEntry> Papers { get; }");
         sb.AppendLine("    /// <summary>Gets the XML doc summary text.</summary>");
         sb.AppendLine("    public string Summary { get; }");
         sb.AppendLine("    /// <summary>Gets the beginner-friendly guide text.</summary>");
@@ -486,7 +486,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        string typeName, string className, int typeParameterCount,");
         sb.AppendLine("        ModelDomain[] domains, ModelCategory[] categories, ModelTask[] tasks,");
         sb.AppendLine("        ModelComplexity complexity, string inputTypeName, string outputTypeName,");
-        sb.AppendLine("        ModelPaperEntry[] papers, string summary, string beginnerGuide)");
+        sb.AppendLine("        ResearchPaperEntry[] papers, string summary, string beginnerGuide)");
         sb.AppendLine("    {");
         sb.AppendLine("        TypeName = typeName;");
         sb.AppendLine("        ClassName = className;");
@@ -745,15 +745,15 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         // Papers array
         if (entry.Papers.Count == 0)
         {
-            sb.AppendLine("            System.Array.Empty<ModelPaperEntry>(),");
+            sb.AppendLine("            System.Array.Empty<ResearchPaperEntry>(),");
         }
         else
         {
-            sb.AppendLine("            new ModelPaperEntry[]");
+            sb.AppendLine("            new ResearchPaperEntry[]");
             sb.AppendLine("            {");
             foreach (var paper in entry.Papers)
             {
-                sb.AppendLine($"                new ModelPaperEntry({EscapeString(paper.Title)}, {EscapeString(paper.Url)}, {paper.Year}, {EscapeString(paper.Authors)}),");
+                sb.AppendLine($"                new ResearchPaperEntry({EscapeString(paper.Title)}, {EscapeString(paper.Url)}, {paper.Year}, {EscapeString(paper.Authors)}),");
             }
             sb.AppendLine("            },");
         }

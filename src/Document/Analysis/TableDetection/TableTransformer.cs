@@ -54,7 +54,7 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
+[ResearchPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
 public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
     private readonly TableTransformerOptions _options;

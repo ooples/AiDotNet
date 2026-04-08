@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Kernels;
@@ -19,6 +21,8 @@ namespace AiDotNet.TransferLearning.DomainAdaptation;
 /// "average photo" from each camera is, and then adjust them to have similar average properties.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DomainAdapter)]
+[PipelineStage(PipelineStage.Training)]
 public class MMDDomainAdapter<T> : IDomainAdapter<T>
 {
     private readonly INumericOperations<T> _numOps;

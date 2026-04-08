@@ -33,7 +33,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Explaining and Harnessing Adversarial Examples", "https://arxiv.org/abs/1412.6572", Year = 2014, Authors = "Ian J. Goodfellow, Jonathon Shlens, Christian Szegedy")]
+[ResearchPaper("Explaining and Harnessing Adversarial Examples", "https://arxiv.org/abs/1412.6572", Year = 2014, Authors = "Ian J. Goodfellow, Jonathon Shlens, Christian Szegedy")]
 public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     /// <summary>

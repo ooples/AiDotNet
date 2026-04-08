@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FRCRN: Boosting Feature Representation Using Frequency Recurrence for Monaural Speech Enhancement", "https://arxiv.org/abs/2206.07293", Year = 2022, Authors = "Shengkui Zhao, Bin Ma, Karn N. Watcharasupat, Woon-Seng Gan")]
+[ResearchPaper("FRCRN: Boosting Feature Representation Using Frequency Recurrence for Monaural Speech Enhancement", "https://arxiv.org/abs/2206.07293", Year = 2022, Authors = "Shengkui Zhao, Bin Ma, Karn N. Watcharasupat, Woon-Seng Gan")]
 public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

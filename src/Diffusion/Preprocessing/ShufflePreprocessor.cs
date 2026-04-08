@@ -1,6 +1,8 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -20,6 +22,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// the colors and textures of your image without copying its exact layout.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _patchSize;

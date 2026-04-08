@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Lumina-T2X: Transforming Text into Any Modality with Flow Matching", "https://arxiv.org/abs/2405.05945")]
+    [ResearchPaper("Lumina-T2X: Transforming Text into Any Modality with Flow Matching", "https://arxiv.org/abs/2405.05945")]
 public class FlagDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

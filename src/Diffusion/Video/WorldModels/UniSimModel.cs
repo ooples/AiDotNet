@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UniSim: Learning Interactive Real-World Simulators", "https://arxiv.org/abs/2310.06114", Year = 2023, Authors = "Yang et al.")]
+[ResearchPaper("UniSim: Learning Interactive Real-World Simulators", "https://arxiv.org/abs/2310.06114", Year = 2023, Authors = "Yang et al.")]
 public class UniSimModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

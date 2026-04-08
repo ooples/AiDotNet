@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Snap Video: Scaled Spatiotemporal Transformers for Text-to-Video Synthesis", "https://arxiv.org/abs/2402.14797", Year = 2024, Authors = "Menapace et al.")]
+[ResearchPaper("Snap Video: Scaled Spatiotemporal Transformers for Text-to-Video Synthesis", "https://arxiv.org/abs/2402.14797", Year = 2024, Authors = "Menapace et al.")]
 public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

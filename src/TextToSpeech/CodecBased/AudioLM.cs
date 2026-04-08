@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Borsos et al.")]
+[ResearchPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Borsos et al.")]
 public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AudioLMOptions _options;

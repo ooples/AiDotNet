@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -41,6 +43,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// SQLite or LevelDB.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class BTreeIndex : IDisposable
 {
     private readonly string _indexFilePath;

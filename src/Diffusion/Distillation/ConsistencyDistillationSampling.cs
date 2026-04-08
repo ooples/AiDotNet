@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Distillation;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.Diffusion.Distillation;
 /// Trajectory of Diffusion", ICLR 2024; adapted for 3D score distillation
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class ConsistencyDistillationSampling<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

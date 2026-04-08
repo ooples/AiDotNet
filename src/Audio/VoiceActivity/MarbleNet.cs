@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MarbleNet: Deep 1D Time-Channel Separable Convolutional Neural Network for Voice Activity Detection", "https://arxiv.org/abs/2010.13886", Year = 2021, Authors = "Fei Jia, Somshubra Majumdar, Boris Ginsburg")]
+[ResearchPaper("MarbleNet: Deep 1D Time-Channel Separable Convolutional Neural Network for Voice Activity Detection", "https://arxiv.org/abs/2010.13886", Year = 2021, Authors = "Fei Jia, Somshubra Majumdar, Boris Ginsburg")]
 public class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     #region Fields

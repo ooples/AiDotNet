@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Room Impulse Response Estimation", "https://arxiv.org/abs/2306.11683", Year = 2023, Authors = "Tobias Thalmann, Nils Werner")]
+[ResearchPaper("Neural Room Impulse Response Estimation", "https://arxiv.org/abs/2306.11683", Year = 2023, Authors = "Tobias Thalmann, Nils Werner")]
 public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

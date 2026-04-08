@@ -56,7 +56,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("World Models",
+[ResearchPaper("World Models",
     "https://arxiv.org/abs/1803.10122",
     Year = 2018,
     Authors = "Ha, D. & Schmidhuber, J.")]

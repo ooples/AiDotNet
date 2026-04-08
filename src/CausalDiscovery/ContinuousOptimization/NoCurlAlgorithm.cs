@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DAGs with No Curl: An Efficient DAG Structure Learning Approach", "https://proceedings.mlr.press/v139/yu21a.html", Year = 2021, Authors = "Yue Yu, Tian Gao, Naiyu Yin, Qiang Ji")]
+[ResearchPaper("DAGs with No Curl: An Efficient DAG Structure Learning Approach", "https://proceedings.mlr.press/v139/yu21a.html", Year = 2021, Authors = "Yue Yu, Tian Gao, Naiyu Yin, Qiang Ji")]
 public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     /// <inheritdoc/>

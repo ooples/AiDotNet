@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MaskGCT: Zero-Shot Text-to-Speech with Masked Generative Codec Transformer", "https://arxiv.org/abs/2409.00750", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("MaskGCT: Zero-Shot Text-to-Speech with Masked Generative Codec Transformer", "https://arxiv.org/abs/2409.00750", Year = 2024, Authors = "Wang et al.")]
 public class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MaskGCTOptions _options; public override ModelOptions GetOptions() => _options;

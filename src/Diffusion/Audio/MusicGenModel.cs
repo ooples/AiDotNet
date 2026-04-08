@@ -77,7 +77,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023, Authors = "Copet et al.")]
+[ResearchPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023, Authors = "Copet et al.")]
 public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

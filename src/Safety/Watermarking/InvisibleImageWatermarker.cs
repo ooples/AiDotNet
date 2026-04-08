@@ -28,7 +28,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StegaStamp: Invisible Hyperlinks in Physical Photographs",
+[ResearchPaper("StegaStamp: Invisible Hyperlinks in Physical Photographs",
     "https://arxiv.org/abs/1904.05343",
     Year = 2019,
     Authors = "Matthew Tancik, Ben Mildenhall, Ren Ng")]

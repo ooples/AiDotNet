@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UniverSeg: Universal Medical Image Segmentation", "https://arxiv.org/abs/2304.06131", Year = 2023, Authors = "Butoi et al.")]
+[ResearchPaper("UniverSeg: Universal Medical Image Segmentation", "https://arxiv.org/abs/2304.06131", Year = 2023, Authors = "Butoi et al.")]
 public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly UniverSegOptions _options;

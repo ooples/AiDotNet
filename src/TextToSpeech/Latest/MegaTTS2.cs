@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis", "https://arxiv.org/abs/2307.07218", Year = 2024, Authors = "Jiang et al.")]
+[ResearchPaper("Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis", "https://arxiv.org/abs/2307.07218", Year = 2024, Authors = "Jiang et al.")]
 public class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTS2Options _options; public override ModelOptions GetOptions() => _options;

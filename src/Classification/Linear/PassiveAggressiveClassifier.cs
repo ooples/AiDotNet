@@ -56,7 +56,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Online Passive-Aggressive Algorithms", "https://jmlr.org/papers/v7/crammer06a.html", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
+[ResearchPaper("Online Passive-Aggressive Algorithms", "https://jmlr.org/papers/v7/crammer06a.html", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
 public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

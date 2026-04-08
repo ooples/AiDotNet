@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor", "https://arxiv.org/abs/1801.01290", Year = 2018, Authors = "Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, Sergey Levine")]
+[ResearchPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor", "https://arxiv.org/abs/1801.01290", Year = 2018, Authors = "Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, Sergey Levine")]
 public class FinancialSACAgent<T> : TradingAgentBase<T>
 {
     #region Fields

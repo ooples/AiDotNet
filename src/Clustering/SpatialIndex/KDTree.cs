@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.SpatialIndex;
 
@@ -28,6 +30,8 @@ namespace AiDotNet.Clustering.SpatialIndex;
 /// - Range searches (find all points in a region)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class KDTree<T>
 {
     private readonly INumericOperations<T> _numOps;

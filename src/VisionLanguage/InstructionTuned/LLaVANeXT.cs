@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-NeXT: Improved reasoning, OCR, and world knowledge", "https://arxiv.org/abs/2408.03326", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("LLaVA-NeXT: Improved reasoning, OCR, and world knowledge", "https://arxiv.org/abs/2408.03326", Year = 2024, Authors = "Liu et al.")]
 public class LLaVANeXT<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVANeXTOptions _options; public override ModelOptions GetOptions() => _options;

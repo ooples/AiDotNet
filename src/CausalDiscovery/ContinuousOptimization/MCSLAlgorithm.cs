@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Masked Gradient-Based Causal Structure Learning", "https://doi.org/10.1137/1.9781611976700.63", Year = 2021, Authors = "Ignavier Ng, Shengyu Zhu, Zhitang Chen, Zhuangyan Fang")]
+[ResearchPaper("Masked Gradient-Based Causal Structure Learning", "https://doi.org/10.1137/1.9781611976700.63", Year = 2021, Authors = "Ignavier Ng, Shengyu Zhu, Zhitang Chen, Zhuangyan Fang")]
 public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRateValue;

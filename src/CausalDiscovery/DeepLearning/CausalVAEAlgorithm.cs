@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("CausalVAE: Disentangled Representation Learning via Neural Structural Causal Models", "https://openaccess.thecvf.com/content/CVPR2021/papers/Yang_CausalVAE_Disentangled_Representation_Learning_via_Neural_Structural_Causal_Models_CVPR_2021_paper.pdf", Year = 2021, Authors = "Mengyue Yang, Furui Liu, Zuozhu Liu, Xiaojian Ma, Zongqing Lu, Jun Zhu")]
+[ResearchPaper("CausalVAE: Disentangled Representation Learning via Neural Structural Causal Models", "https://openaccess.thecvf.com/content/CVPR2021/papers/Yang_CausalVAE_Disentangled_Representation_Learning_via_Neural_Structural_Causal_Models_CVPR_2021_paper.pdf", Year = 2021, Authors = "Mengyue Yang, Furui Liu, Zuozhu Liu, Xiaojian Ma, Zongqing Lu, Jun Zhu")]
 public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

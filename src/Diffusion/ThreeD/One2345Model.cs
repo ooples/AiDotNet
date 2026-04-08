@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("One-2-3-45: Any Single Image to 3D Mesh in 45 Seconds without Per-Shape Optimization", "https://arxiv.org/abs/2306.16928", Year = 2023, Authors = "Liu et al.")]
+[ResearchPaper("One-2-3-45: Any Single Image to 3D Mesh in 45 Seconds without Per-Shape Optimization", "https://arxiv.org/abs/2306.16928", Year = 2023, Authors = "Liu et al.")]
 public class One2345Model<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

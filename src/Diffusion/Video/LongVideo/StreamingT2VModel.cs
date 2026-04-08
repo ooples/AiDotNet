@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StreamingT2V: Consistent, Dynamic, and Extendable Long Video Generation from Text", "https://arxiv.org/abs/2403.14773", Year = 2024, Authors = "Henschel et al.")]
+[ResearchPaper("StreamingT2V: Consistent, Dynamic, and Extendable Long Video Generation from Text", "https://arxiv.org/abs/2403.14773", Year = 2024, Authors = "Henschel et al.")]
 public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

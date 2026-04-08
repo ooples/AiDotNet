@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Trainers;
 
 /// <summary>
@@ -27,6 +29,8 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// Asynchronous Aggregation." AISTATS 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _bufferSize;

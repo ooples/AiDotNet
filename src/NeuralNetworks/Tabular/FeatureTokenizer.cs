@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -34,6 +36,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class FeatureTokenizer<T>
 {
     private readonly INumericOperations<T> _numOps;

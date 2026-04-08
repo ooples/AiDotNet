@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RPKNet: Regional Pooling Kernel Network for Optical Flow Estimation",
+[ResearchPaper("RPKNet: Regional Pooling Kernel Network for Optical Flow Estimation",
     "https://arxiv.org/abs/2407.11506",
     Year = 2024,
     Authors = "Zhiqiang Yan, Jinqiu Sun, Yanning Zhang")]

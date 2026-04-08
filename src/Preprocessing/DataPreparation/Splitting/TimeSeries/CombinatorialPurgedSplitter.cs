@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.DataPreparation.Splitting.TimeSeries;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.Preprocessing.DataPreparation.Splitting.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class CombinatorialPurgedSplitter<T> : DataSplitterBase<T>
 {
     private readonly int _nGroups;

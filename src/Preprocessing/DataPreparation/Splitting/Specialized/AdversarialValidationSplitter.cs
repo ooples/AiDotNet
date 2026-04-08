@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Specialized;
 
@@ -31,6 +33,8 @@ namespace AiDotNet.Preprocessing.DataPreparation.Splitting.Specialized;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class AdversarialValidationSplitter<T> : DataSplitterBase<T>
 {
     private readonly double[] _testProbabilities;

@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.DimensionalityReduction;
 
@@ -34,6 +36,8 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.DimensionReducer)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;

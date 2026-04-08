@@ -60,7 +60,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("TimeBridge: Non-Stationarity Matters for Long-term Forecasting", "https://arxiv.org/abs/2410.04442")]
+[ResearchPaper("TimeBridge: Non-Stationarity Matters for Long-term Forecasting", "https://arxiv.org/abs/2410.04442")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
 {

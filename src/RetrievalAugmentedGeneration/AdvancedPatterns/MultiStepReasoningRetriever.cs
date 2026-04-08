@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -62,6 +64,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class MultiStepReasoningRetriever<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
@@ -343,6 +347,8 @@ Provide a brief 1-2 sentence summary of the key findings from these documents:";
 /// - Custom: User-defined tools
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class ToolAugmentedReasoningRetriever<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

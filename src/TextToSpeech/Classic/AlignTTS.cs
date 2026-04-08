@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment", "https://arxiv.org/abs/2003.01950", Year = 2020, Authors = "Zeng et al.")]
+[ResearchPaper("AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment", "https://arxiv.org/abs/2003.01950", Year = 2020, Authors = "Zeng et al.")]
 public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AlignTTSOptions _options;

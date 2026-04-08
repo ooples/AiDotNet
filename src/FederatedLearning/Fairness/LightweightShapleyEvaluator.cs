@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.FederatedLearning.Fairness;
@@ -20,6 +22,8 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para>Reference: Lightweight Shapley for Federated Contribution Evaluation (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningComponentBase<T>, IClientContributionEvaluator<T>
 {
     private readonly double _freeRiderThreshold;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Privacy;
 
 using System;
@@ -71,6 +73,8 @@ using AiDotNet.FederatedLearning.Infrastructure;
 /// Machine Learning." CCS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class SecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private readonly Dictionary<long, byte[]> _pairwiseMaskSeeds;

@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -47,6 +49,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - Mani & Zhang (2003). "kNN Approach to Unbalanced Data Distributions"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class NearMiss<T> : UndersamplingBase<T>
 {
     private readonly NearMissVersion _version;

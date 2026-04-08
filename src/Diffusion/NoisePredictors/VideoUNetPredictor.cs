@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.VideoGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
+    [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>

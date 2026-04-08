@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
+[ResearchPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
 public class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OWSMOptions _options; public override ModelOptions GetOptions() => _options;

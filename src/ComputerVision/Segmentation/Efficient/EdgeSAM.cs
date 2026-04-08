@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", "https://arxiv.org/abs/2312.06660", Year = 2024, Authors = "Chong Zhou, Xiangtai Li, Chen Change Loy, Bo Dai")]
+[ResearchPaper("EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", "https://arxiv.org/abs/2312.06660", Year = 2024, Authors = "Chong Zhou, Xiangtai Li, Chen Change Loy, Bo Dai")]
 public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly EdgeSAMOptions _options;

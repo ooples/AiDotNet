@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
+[ResearchPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
 public class MobileNetV3Network<T> : NeuralNetworkBase<T>
 {
     private readonly MobileNetV3Options _options;

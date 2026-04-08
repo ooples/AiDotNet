@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.Encoders;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Preprocessing.Encoders;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class LabelEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     // Fitted parameters: mapping from value to label for each column

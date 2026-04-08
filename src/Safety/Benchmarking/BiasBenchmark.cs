@@ -32,7 +32,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BEATS: Bias Evaluation and Assessment Test Suite for Large Language Models",
+[ResearchPaper("BEATS: Bias Evaluation and Assessment Test Suite for Large Language Models",
     "https://arxiv.org/abs/2503.24310",
     Year = 2025,
     Authors = "Various")]

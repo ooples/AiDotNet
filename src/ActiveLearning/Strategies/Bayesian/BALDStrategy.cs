@@ -41,7 +41,9 @@ namespace AiDotNet.ActiveLearning.Strategies.Bayesian;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Bayesian Active Learning with Image Data", "https://arxiv.org/abs/1703.02910", Year = 2017, Authors = "Yarin Gal, Riashat Islam, Zoubin Ghahramani")]
+[ResearchPaper("Deep Bayesian Active Learning with Image Data", "https://arxiv.org/abs/1703.02910", Year = 2017, Authors = "Yarin Gal, Riashat Islam, Zoubin Ghahramani")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOutput>
 {
     [ThreadStatic]

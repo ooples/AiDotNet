@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LEDITS++: Limitless Image Editing using Text-to-Image Models", "https://arxiv.org/abs/2311.16711", Year = 2024, Authors = "Brack et al.")]
+[ResearchPaper("LEDITS++: Limitless Image Editing using Text-to-Image Models", "https://arxiv.org/abs/2311.16711", Year = 2024, Authors = "Brack et al.")]
 public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

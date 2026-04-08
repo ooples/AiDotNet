@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Cascade R-CNN: Delving into High Quality Object Detection",
+[ResearchPaper("Cascade R-CNN: Delving into High Quality Object Detection",
     "https://arxiv.org/abs/1712.00726",
     Year = 2018,
     Authors = "Zhaowei Cai, Nuno Vasconcelos")]

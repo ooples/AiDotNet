@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Fuzzy;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Fuzzy;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _maxFeatures;

@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Foundational Multimodal Vision Language AI Assistant for Human Pathology", "https://arxiv.org/abs/2312.07814", Year = 2024, Authors = "Sun et al.")]
+[ResearchPaper("A Foundational Multimodal Vision Language AI Assistant for Human Pathology", "https://arxiv.org/abs/2312.07814", Year = 2024, Authors = "Sun et al.")]
 public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly PathVLMOptions _options; public override ModelOptions GetOptions() => _options;

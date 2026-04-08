@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Kling 2.6", "https://klingai.com")]
+    [ResearchPaper("Kling 2.6", "https://klingai.com")]
 public class Kling26Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
+[ResearchPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
 public class MemoryNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly MemoryNetworkOptions _options;

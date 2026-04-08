@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
+    [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
 public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
     #region Fields

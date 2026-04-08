@@ -44,7 +44,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SafeEar: Content Privacy-Preserving Audio Deepfake Detection",
+[ResearchPaper("SafeEar: Content Privacy-Preserving Audio Deepfake Detection",
     "https://dl.acm.org/doi/10.1145/3658644.3690291",
     Year = 2024,
     Authors = "Various")]

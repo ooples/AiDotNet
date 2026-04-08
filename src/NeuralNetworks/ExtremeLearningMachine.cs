@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Extreme Learning Machine: Theory and Applications", "https://doi.org/10.1016/j.neucom.2005.12.126", Year = 2006, Authors = "Guang-Bin Huang, Qin-Yu Zhu, Chee-Kheong Siew")]
+[ResearchPaper("Extreme Learning Machine: Theory and Applications", "https://doi.org/10.1016/j.neucom.2005.12.126", Year = 2006, Authors = "Guang-Bin Huang, Qin-Yu Zhu, Chee-Kheong Siew")]
 public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 {
     private readonly ExtremeLearningMachineOptions _options;

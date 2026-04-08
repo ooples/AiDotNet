@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlashVSR: Efficient Real-Time Video Super-Resolution via One-Step Diffusion",
+[ResearchPaper("FlashVSR: Efficient Real-Time Video Super-Resolution via One-Step Diffusion",
     "https://arxiv.org/abs/2501.10918",
     Year = 2025,
     Authors = "Jianyi Zhuang, Hengjian Li, Ying Tai")]

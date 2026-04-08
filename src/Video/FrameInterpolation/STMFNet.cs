@@ -48,7 +48,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("STMFNet: Spatio-Temporal Multi-Flow Network for Video Frame Interpolation",
+[ResearchPaper("STMFNet: Spatio-Temporal Multi-Flow Network for Video Frame Interpolation",
     "https://arxiv.org/abs/2111.15483",
     Year = 2022,
     Authors = "Duolikun Danier, Fan Zhang, David Bull")]

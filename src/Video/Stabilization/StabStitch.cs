@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StabStitch: Real-Time Video Stabilization and Stitching",
+[ResearchPaper("StabStitch: Real-Time Video Stabilization and Stitching",
     "https://arxiv.org/abs/2303.07198",
     Year = 2024,
     Authors = "Lang Nie, Chunyu Lin, Kang Liao, Shuaicheng Liu, Yao Zhao")]

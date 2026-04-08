@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DualX-VSR: Dual Axial Spatial-Temporal Transformer for Video Super-Resolution",
+[ResearchPaper("DualX-VSR: Dual Axial Spatial-Temporal Transformer for Video Super-Resolution",
     "https://arxiv.org/abs/2501.07894",
     Year = 2025,
     Authors = "Pinle Qin, Jie Huang, Zhuo Chen, Rong Huang, Zechao Li")]

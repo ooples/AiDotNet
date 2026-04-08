@@ -37,7 +37,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("End-to-End Object Detection with Transformers",
+[ResearchPaper("End-to-End Object Detection with Transformers",
     "https://arxiv.org/abs/2005.12872",
     Year = 2020,
     Authors = "Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko")]

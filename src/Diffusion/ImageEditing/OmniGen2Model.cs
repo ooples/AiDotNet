@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OmniGen: Unified Image Generation", "https://arxiv.org/abs/2409.11340", Year = 2024, Authors = "Xiao et al.")]
+[ResearchPaper("OmniGen: Unified Image Generation", "https://arxiv.org/abs/2409.11340", Year = 2024, Authors = "Xiao et al.")]
 public class OmniGen2Model<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

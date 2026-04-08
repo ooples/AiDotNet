@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
     /// <summary>
     /// Markdown-aware text splitter that respects markdown structure.
     /// </summary>
+    [ComponentType(ComponentType.Chunker)]
+    [PipelineStage(PipelineStage.DataIngestion)]
     public class MarkdownTextSplitter : ChunkingStrategyBase
     {
         /// <summary>

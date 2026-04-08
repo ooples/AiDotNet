@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelTask(ModelTask.Restoration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
+[ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
 public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     #region Fields

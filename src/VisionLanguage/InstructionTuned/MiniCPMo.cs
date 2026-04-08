@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MiniCPM-o: A GPT-4o Level MLLM for Vision, Speech and Multimodal Live Streaming", "https://arxiv.org/abs/2501.13826", Year = 2025, Authors = "Yao et al.")]
+[ResearchPaper("MiniCPM-o: A GPT-4o Level MLLM for Vision, Speech and Multimodal Live Streaming", "https://arxiv.org/abs/2501.13826", Year = 2025, Authors = "Yao et al.")]
 public class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniCPMoOptions _options; public override ModelOptions GetOptions() => _options;

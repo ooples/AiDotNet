@@ -31,7 +31,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Jigsaw Toxic Comment Classification Challenge",
+[ResearchPaper("Jigsaw Toxic Comment Classification Challenge",
     "https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge",
     Year = 2018,
     Authors = "Jigsaw/Conversation AI")]

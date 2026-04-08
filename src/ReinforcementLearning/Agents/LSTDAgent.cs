@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Least-Squares Temporal Difference Learning",
+[ResearchPaper("Least-Squares Temporal Difference Learning",
     "https://doi.org/10.1023/A:1007382027895",
     Year = 1996,
     Authors = "Bradtke, S. J. & Barto, A. G.")]

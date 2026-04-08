@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TurboEdit: Text-Based Image Editing Using Few-Step Diffusion Models", "https://arxiv.org/abs/2408.00735", Year = 2024, Authors = "Deutch et al.")]
+[ResearchPaper("TurboEdit: Text-Based Image Editing Using Few-Step Diffusion Models", "https://arxiv.org/abs/2408.00735", Year = 2024, Authors = "Deutch et al.")]
 public class TurboEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

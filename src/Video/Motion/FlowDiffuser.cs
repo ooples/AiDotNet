@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlowDiffuser: Advancing Optical Flow Estimation with Diffusion Models",
+[ResearchPaper("FlowDiffuser: Advancing Optical Flow Estimation with Diffusion Models",
     "https://arxiv.org/abs/2404.09117",
     Year = 2024,
     Authors = "Ao Luo, Xin Li, Fan Fang, Jiangyu Liu, Haoqiang Fan, Shuaicheng Liu")]

@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine in One Day", "https://arxiv.org/abs/2306.00890", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper("LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine in One Day", "https://arxiv.org/abs/2306.00890", Year = 2023, Authors = "Li et al.")]
 public class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly LLaVAMedOptions _options; public override ModelOptions GetOptions() => _options;

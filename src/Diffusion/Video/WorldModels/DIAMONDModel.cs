@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DIAMOND: Diffusion for World Modeling", "https://arxiv.org/abs/2405.12399", Year = 2024, Authors = "Alonso et al.")]
+[ResearchPaper("DIAMOND: Diffusion for World Modeling", "https://arxiv.org/abs/2405.12399", Year = 2024, Authors = "Alonso et al.")]
 public class DIAMONDModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

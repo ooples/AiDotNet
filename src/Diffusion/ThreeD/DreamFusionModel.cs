@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DreamFusion: Text-to-3D using 2D Diffusion", "https://arxiv.org/abs/2209.14988", Year = 2022, Authors = "Poole et al.")]
+[ResearchPaper("DreamFusion: Text-to-3D using 2D Diffusion", "https://arxiv.org/abs/2209.14988", Year = 2022, Authors = "Poole et al.")]
 public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

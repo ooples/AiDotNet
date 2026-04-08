@@ -109,7 +109,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LTX-Video: Realtime Video Latent Diffusion", "https://arxiv.org/abs/2501.00103", Year = 2024, Authors = "Lightricks")]
+[ResearchPaper("LTX-Video: Realtime Video Latent Diffusion", "https://arxiv.org/abs/2501.00103", Year = 2024, Authors = "Lightricks")]
 public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

@@ -73,7 +73,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
-[ModelPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
+[ResearchPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
 public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {

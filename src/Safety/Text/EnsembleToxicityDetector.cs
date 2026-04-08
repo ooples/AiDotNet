@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Ensemble Methods for Robust Hate Speech Detection",
+[ResearchPaper("Ensemble Methods for Robust Hate Speech Detection",
     "https://aclanthology.org/2024.findings-acl.123/",
     Year = 2024,
     Authors = "Various")]

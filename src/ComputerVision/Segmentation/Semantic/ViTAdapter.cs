@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
 public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ViTAdapterOptions _options;

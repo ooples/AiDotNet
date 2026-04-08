@@ -53,10 +53,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LoRA-Recycle: Recycling First-Round LoRA for Efficient Second-Round Tuning",
+[ResearchPaper("LoRA-Recycle: Recycling First-Round LoRA for Efficient Second-Round Tuning",
     "https://arxiv.org/abs/2310.00151",
     Year = 2025,
     Authors = "Yixiao Hu, Minghao Chen, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

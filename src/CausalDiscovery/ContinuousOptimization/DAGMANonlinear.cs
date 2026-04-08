@@ -36,7 +36,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DAGMA: Learning DAGs via M-matrices and a Log-Determinant Acyclicity Characterization", "https://proceedings.neurips.cc/paper_files/paper/2022/hash/2e6a3b0e4e43db1cbba0c5e5b7ee8a41-Abstract-Conference.html", Year = 2022, Authors = "Kevin Bello, Bryon Aragam, Pradeep Ravikumar")]
+[ResearchPaper("DAGMA: Learning DAGs via M-matrices and a Log-Determinant Acyclicity Characterization", "https://proceedings.neurips.cc/paper_files/paper/2022/hash/2e6a3b0e4e43db1cbba0c5e5b7ee8a41-Abstract-Conference.html", Year = 2022, Authors = "Kevin Bello, Bryon Aragam, Pradeep Ravikumar")]
 public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 {
     #region Constants

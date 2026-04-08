@@ -38,7 +38,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DYNOTEARS: Structure Learning from Time-Series Data", "https://proceedings.mlr.press/v108/pamfil20a.html", Year = 2020, Authors = "Roxana Pamfil, Nisara Sriwattanaworachai, Shaan Desai, Philip Pilgerstorfer, Konstantinos Georgatzis, Paul Maygsidt, Jesse M. Sheridan")]
+[ResearchPaper("DYNOTEARS: Structure Learning from Time-Series Data", "https://proceedings.mlr.press/v108/pamfil20a.html", Year = 2020, Authors = "Roxana Pamfil, Nisara Sriwattanaworachai, Shaan Desai, Philip Pilgerstorfer, Konstantinos Georgatzis, Paul Maygsidt, Jesse M. Sheridan")]
 public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private double _lambda1 = 0.1;

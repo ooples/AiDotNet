@@ -56,7 +56,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EAT: Self-Supervised Pre-Training with Efficient Audio Transformer", "https://arxiv.org/abs/2401.03497", Year = 2024, Authors = "Wenxi Chen, Yuzhe Liang, Ziyang Ma, Zhisheng Zheng, Xie Chen")]
+[ResearchPaper("EAT: Self-Supervised Pre-Training with Efficient Audio Transformer", "https://arxiv.org/abs/2401.03497", Year = 2024, Authors = "Wenxi Chen, Yuzhe Liang, Ziyang Ma, Zhisheng Zheng, Xie Chen")]
 public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

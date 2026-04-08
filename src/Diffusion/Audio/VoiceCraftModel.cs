@@ -99,7 +99,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Peng et al.")]
+[ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Peng et al.")]
 public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

@@ -34,7 +34,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpeechT5: Unified-Modal Encoder-Decoder Pre-Training for Spoken Language Processing", "https://arxiv.org/abs/2110.07205", Year = 2022, Authors = "Ao et al.")]
+[ResearchPaper("SpeechT5: Unified-Modal Encoder-Decoder Pre-Training for Spoken Language Processing", "https://arxiv.org/abs/2110.07205", Year = 2022, Authors = "Ao et al.")]
 public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly SpeechT5Options _options; public override ModelOptions GetOptions() => _options;

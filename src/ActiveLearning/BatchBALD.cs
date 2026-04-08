@@ -39,7 +39,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BatchBALD: Efficient and Diverse Batch Acquisition for Deep Bayesian Active Learning", "https://arxiv.org/abs/1906.08158", Year = 2019, Authors = "Andreas Kirsch, Joost van Amersfoort, Yarin Gal")]
+[ResearchPaper("BatchBALD: Efficient and Diverse Batch Acquisition for Deep Bayesian Active Learning", "https://arxiv.org/abs/1906.08158", Year = 2019, Authors = "Andreas Kirsch, Joost van Amersfoort, Yarin Gal")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class BatchBALD<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

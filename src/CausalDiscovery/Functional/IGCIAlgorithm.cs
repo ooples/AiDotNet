@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Information-Geometric Approach to Inferring Causal Directions", "https://doi.org/10.1016/j.artint.2012.01.002", Year = 2012, Authors = "Dominik Janzing, Joris Mooij, Kun Zhang, Jan Lemeire, Jakob Zscheischler, Povilas Daniusis, Bernhard Steudel, Bernhard Scholkopf")]
+[ResearchPaper("Information-Geometric Approach to Inferring Causal Directions", "https://doi.org/10.1016/j.artint.2012.01.002", Year = 2012, Authors = "Dominik Janzing, Joris Mooij, Kun Zhang, Jan Lemeire, Jakob Zscheischler, Povilas Daniusis, Bernhard Steudel, Bernhard Scholkopf")]
 public class IGCIAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold;

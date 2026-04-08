@@ -47,7 +47,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RealisVSR: Detail-Enhanced Diffusion for Real-World 4K Video Super-Resolution",
+[ResearchPaper("RealisVSR: Detail-Enhanced Diffusion for Real-World 4K Video Super-Resolution",
     "https://arxiv.org/abs/2502.00459",
     Year = 2025,
     Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]

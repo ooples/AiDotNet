@@ -67,7 +67,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("The Perceptron: A Probabilistic Model for Information Storage and Organization in the Brain", "https://doi.org/10.1037/h0042519", Year = 1958, Authors = "Frank Rosenblatt")]
+[ResearchPaper("The Perceptron: A Probabilistic Model for Information Storage and Organization in the Brain", "https://doi.org/10.1037/h0042519", Year = 1958, Authors = "Frank Rosenblatt")]
 public class PerceptronClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

@@ -47,7 +47,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning", "https://arxiv.org/abs/1506.02142")]
+    [ResearchPaper("Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning", "https://arxiv.org/abs/1506.02142")]
 public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;

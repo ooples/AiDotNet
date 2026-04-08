@@ -1,6 +1,8 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 using Newtonsoft.Json;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing;
 
@@ -16,6 +18,8 @@ namespace AiDotNet.Preprocessing;
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <typeparam name="TInput">The input/output data type for intermediate steps.</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class PipelineStep<T, TInput>
 {
     /// <summary>

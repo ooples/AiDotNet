@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -22,6 +24,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Lugaresi et al., "MediaPipe: A Framework for Building Perception Pipelines", 2019
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class MediaPipeFacePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly double _sensitivity;

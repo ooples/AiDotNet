@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DiBS: Differentiable Bayesian Structure Learning", "https://proceedings.neurips.cc/paper/2021/hash/5e7dff7b20d04e7b47b22b44e6b8a82f-Abstract.html", Year = 2021, Authors = "Lars Lorch, Jonas Rothfuss, Bernhard Scholkopf, Andreas Krause")]
+[ResearchPaper("DiBS: Differentiable Bayesian Structure Learning", "https://proceedings.neurips.cc/paper/2021/hash/5e7dff7b20d04e7b47b22b44e6b8a82f-Abstract.html", Year = 2021, Authors = "Lars Lorch, Jonas Rothfuss, Bernhard Scholkopf, Andreas Krause")]
 public class DiBSAlgorithm<T> : BayesianCausalBase<T>
 {
     private readonly double _learningRate;

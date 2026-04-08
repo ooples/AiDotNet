@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GameGen-X: Interactive Open-world Game Video Generation", "https://arxiv.org/abs/2411.00769", Year = 2024, Authors = "Che et al.")]
+[ResearchPaper("GameGen-X: Interactive Open-world Game Video Generation", "https://arxiv.org/abs/2411.00769", Year = 2024, Authors = "Che et al.")]
 public class GameGenXModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

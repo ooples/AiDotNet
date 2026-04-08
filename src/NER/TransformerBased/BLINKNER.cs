@@ -74,7 +74,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scalable Zero-shot Entity Linking with Dense Entity Retrieval",
+[ResearchPaper("Scalable Zero-shot Entity Linking with Dense Entity Retrieval",
     "https://arxiv.org/abs/1911.03814",
     Year = 2020,
     Authors = "Ledell Wu, Fabio Petroni, Martin Josifoski, Sebastian Riedel, Luke Zettlemoyer")]

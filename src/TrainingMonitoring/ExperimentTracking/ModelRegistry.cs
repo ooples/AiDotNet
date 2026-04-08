@@ -3,6 +3,8 @@
 #endif
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 #if !NET6_0_OR_GREATER
 using AiDotNet.TrainingMonitoring;
@@ -47,6 +49,7 @@ namespace AiDotNet.TrainingMonitoring.ExperimentTracking;
 /// });
 /// </code>
 /// </remarks>
+[InfraType(InfraType.Metrics)]
 public class ModelRegistry : IModelRegistry
 {
     private readonly ConcurrentDictionary<string, RegisteredModel> _models = new();

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
+[ResearchPaper("CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
 public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly CosyVoiceCloneOptions _options; public override ModelOptions GetOptions() => _options;

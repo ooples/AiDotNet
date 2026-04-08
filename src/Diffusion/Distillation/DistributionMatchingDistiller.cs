@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Distillation;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Diffusion.Distillation;
 /// Yin et al., "Improved Distribution Matching Distillation for Fast Image Synthesis", NeurIPS 2024
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class DistributionMatchingDistiller<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

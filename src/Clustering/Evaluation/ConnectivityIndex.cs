@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -39,6 +41,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - Intuitive: "Are nearby points kept together?"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ConnectivityIndex<T> : IClusterMetric<T>
 {
     private readonly int _numNeighbors;

@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning", "https://arxiv.org/abs/2403.11401", Year = 2024, Authors = "Fu et al.")]
+[ResearchPaper("Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning", "https://arxiv.org/abs/2403.11401", Year = 2024, Authors = "Fu et al.")]
 public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly SceneLLMOptions _options; public override ModelOptions GetOptions() => _options;

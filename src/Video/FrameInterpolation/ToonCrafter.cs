@@ -59,7 +59,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ToonCrafter: Generative Cartoon Interpolation",
+[ResearchPaper("ToonCrafter: Generative Cartoon Interpolation",
     "https://arxiv.org/abs/2405.17933",
     Year = 2024,
     Authors = "Jinbo Xing, Hanyuan Liu, Menghan Xia, Yong Zhang, Xintao Wang, Ying Shan, Tien-Tsin Wong")]

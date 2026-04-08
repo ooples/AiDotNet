@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -49,6 +51,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - Tomek (1976). "Two Modifications of CNN"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TomekLinks<T> : IResamplingStrategy<T>
 {
     /// <summary>

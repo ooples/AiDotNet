@@ -69,7 +69,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Modeling Long- and Short-Term Temporal Patterns with Deep Neural Networks", "https://arxiv.org/abs/1703.07015", Year = 2018, Authors = "Guokun Lai, Wei-Cheng Chang, Yiming Yang, Hanxiao Liu")]
+[ResearchPaper("Modeling Long- and Short-Term Temporal Patterns with Deep Neural Networks", "https://arxiv.org/abs/1703.07015", Year = 2018, Authors = "Guokun Lai, Wei-Cheng Chang, Yiming Yang, Hanxiao Liu")]
 public class LSTNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// <para><b>Reference:</b> Based on techniques from Google's production FL system and FATE VFL framework.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
 {
     private readonly byte[] _sessionKey;

@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech", "https://arxiv.org/abs/2105.06337", Year = 2021, Authors = "Popov et al.")]
+[ResearchPaper("Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech", "https://arxiv.org/abs/2105.06337", Year = 2021, Authors = "Popov et al.")]
 public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GradTTSOptions _options; public override ModelOptions GetOptions() => _options;

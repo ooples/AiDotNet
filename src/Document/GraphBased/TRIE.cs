@@ -55,7 +55,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TRIE: End-to-End Text Reading and Information Extraction for Document Understanding", "https://doi.org/10.48550/arXiv.2005.13118", Year = 2020, Authors = "Peng Zhang, Yunlu Xu, Zhanzhan Cheng, Shiliang Pu, Jing Lu, Liang Qiao, Yi Niu, Fei Wu")]
+[ResearchPaper("TRIE: End-to-End Text Reading and Information Extraction for Document Understanding", "https://doi.org/10.48550/arXiv.2005.13118", Year = 2020, Authors = "Peng Zhang, Yunlu Xu, Zhanzhan Cheng, Shiliang Pu, Jing Lu, Liang Qiao, Yi Niu, Fei Wu")]
 public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITextDetector<T>
 {
     private readonly TRIEOptions _options;

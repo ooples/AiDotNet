@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RAFT: Recurrent All-Pairs Field Transforms for Optical Flow",
+[ResearchPaper("RAFT: Recurrent All-Pairs Field Transforms for Optical Flow",
     "https://arxiv.org/abs/2003.12039",
     Year = 2020,
     Authors = "Zachary Teed, Jia Deng")]

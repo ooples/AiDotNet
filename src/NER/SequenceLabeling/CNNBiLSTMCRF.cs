@@ -110,7 +110,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF",
+[ResearchPaper("End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF",
     "https://arxiv.org/abs/1603.01354",
     Year = 2016,
     Authors = "Xuezhe Ma, Eduard Hovy")]

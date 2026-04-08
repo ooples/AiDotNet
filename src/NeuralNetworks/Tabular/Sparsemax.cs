@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.NeuralNetworks.Tabular;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.NeuralNetworks.Tabular;
 
 /// <summary>
 /// Implements the Sparsemax activation function, which projects input onto the probability simplex
@@ -34,6 +37,8 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class Sparsemax<T>
 {
     private readonly INumericOperations<T> _numOps;

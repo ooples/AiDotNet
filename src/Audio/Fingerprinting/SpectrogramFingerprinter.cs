@@ -30,7 +30,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
+[ResearchPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
 public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
 {
     private readonly ShortTimeFourierTransform<T> _stft;

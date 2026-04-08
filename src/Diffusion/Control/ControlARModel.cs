@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ControlAR: Controllable Image Generation with Autoregressive Models", "https://arxiv.org/abs/2410.02705", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("ControlAR: Controllable Image Generation with Autoregressive Models", "https://arxiv.org/abs/2410.02705", Year = 2024, Authors = "Li et al.")]
 public class ControlARModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

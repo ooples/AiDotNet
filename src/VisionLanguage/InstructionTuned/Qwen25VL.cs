@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Qwen2.5-VL Technical Report", "https://arxiv.org/abs/2502.13923", Year = 2025, Authors = "Bai et al.")]
+[ResearchPaper("Qwen2.5-VL Technical Report", "https://arxiv.org/abs/2502.13923", Year = 2025, Authors = "Bai et al.")]
 public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Qwen25VLOptions _options; public override ModelOptions GetOptions() => _options;

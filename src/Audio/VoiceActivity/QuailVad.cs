@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Quality-Aware Voice Activity Detection", "https://doi.org/10.1109/ICASSP40776.2020.9053535")]
+    [ResearchPaper("Quality-Aware Voice Activity Detection", "https://doi.org/10.1109/ICASSP40776.2020.9053535")]
 public class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     #region Fields

@@ -50,7 +50,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DynamiCrafter: Animating Open-domain Images with Video Diffusion Priors",
+[ResearchPaper("DynamiCrafter: Animating Open-domain Images with Video Diffusion Priors",
     "https://arxiv.org/abs/2310.12190",
     Year = 2024,
     Authors = "Jinbo Xing, Menghan Xia, Yong Zhang, Haoxin Chen, Wangbo Yu, Hanyuan Liu, Gongye Liu, Xintao Wang, Ying Shan, Tien-Tsin Wong")]

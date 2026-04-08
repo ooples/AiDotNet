@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", "https://arxiv.org/abs/2108.01073", Year = 2022, Authors = "Meng et al.")]
+[ResearchPaper("SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", "https://arxiv.org/abs/2108.01073", Year = 2022, Authors = "Meng et al.")]
 public class SDEditModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

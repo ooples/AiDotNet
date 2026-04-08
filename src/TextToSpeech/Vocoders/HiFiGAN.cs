@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Kong et al.")]
+[ResearchPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Kong et al.")]
 public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly HiFiGANOptions _options; public override ModelOptions GetOptions() => _options;

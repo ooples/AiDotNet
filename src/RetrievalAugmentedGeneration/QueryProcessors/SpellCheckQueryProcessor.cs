@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// It helps you find documents even when you make typos!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryProcessor)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class SpellCheckQueryProcessor : QueryProcessorBase
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

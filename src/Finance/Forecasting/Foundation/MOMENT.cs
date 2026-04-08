@@ -86,7 +86,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MOMENT: A Family of Open Time-Series Foundation Models", "https://arxiv.org/abs/2402.03885", Year = 2024, Authors = "Mononito Goswami, Konrad Szafer, Arjun Choudhry, Yifu Cai, Shuo Li, Artur Dubrawski")]
+[ResearchPaper("MOMENT: A Family of Open Time-Series Foundation Models", "https://arxiv.org/abs/2402.03885", Year = 2024, Authors = "Mononito Goswami, Konrad Szafer, Arjun Choudhry, Yifu Cai, Shuo Li, Artur Dubrawski")]
 public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -23,6 +25,8 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// inputs because each wire label is a random cryptographic value that reveals nothing about
 /// the underlying bit.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class GarbledCircuitEvaluator : IGarbledCircuit
 {
     private readonly bool _enableFreeXor;

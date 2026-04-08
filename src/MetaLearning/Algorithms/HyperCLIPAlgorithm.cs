@@ -44,10 +44,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning to Learn with Compound HD Models",
+[ResearchPaper("Learning to Learn with Compound HD Models",
     "https://arxiv.org/abs/2106.04989",
     Year = 2021,
     Authors = "Baifeng Shi, Dinghuai Zhang, Qi Dai, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

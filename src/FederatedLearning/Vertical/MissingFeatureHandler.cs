@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -25,6 +27,8 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// Training and Inference" (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class MissingFeatureHandler<T> : FederatedLearningComponentBase<T>
 {
     private readonly MissingFeatureOptions _options;

@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks", "https://arxiv.org/abs/1908.02265", Year = 2019, Authors = "Lu et al.")]
+[ResearchPaper("ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks", "https://arxiv.org/abs/1908.02265", Year = 2019, Authors = "Lu et al.")]
 public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLBERTOptions _options; public override ModelOptions GetOptions() => _options;

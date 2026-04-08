@@ -40,7 +40,7 @@ namespace AiDotNet.Safety.Video;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoGuard: Multimodal Video Safety with Reasoning-Based Instruction Hierarchy",
+[ResearchPaper("VideoGuard: Multimodal Video Safety with Reasoning-Based Instruction Hierarchy",
     "https://arxiv.org/abs/2503.14298",
     Year = 2025,
     Authors = "Various")]

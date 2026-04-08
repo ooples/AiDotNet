@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Fast Learning Algorithm for Deep Belief Nets", "https://www.cs.toronto.edu/~hinton/absps/fastnc.pdf", Year = 2006, Authors = "Geoffrey E. Hinton, Simon Osindero, Yee-Whye Teh")]
+[ResearchPaper("A Fast Learning Algorithm for Deep Belief Nets", "https://www.cs.toronto.edu/~hinton/absps/fastnc.pdf", Year = 2006, Authors = "Geoffrey E. Hinton, Simon Osindero, Yee-Whye Teh")]
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;

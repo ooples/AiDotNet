@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FinDiff: Diffusion Models for Financial Tabular Data Generation",
+[ResearchPaper("FinDiff: Diffusion Models for Financial Tabular Data Generation",
     "https://arxiv.org/abs/2309.01472",
     Year = 2023,
     Authors = "Timur Sattarov, Marco Schreyer, Damian Borth")]

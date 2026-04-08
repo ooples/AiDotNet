@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("The Influence Curve and its Role in Robust Estimation", "https://doi.org/10.1080/01621459.1974.10482962")]
+    [ResearchPaper("The Influence Curve and its Role in Robust Estimation", "https://doi.org/10.1080/01621459.1974.10482962")]
 public class HampelDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

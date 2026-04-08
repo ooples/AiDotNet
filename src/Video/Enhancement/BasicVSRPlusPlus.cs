@@ -61,7 +61,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BasicVSR++: Improving Video Super-Resolution with Enhanced Propagation and Alignment",
+[ResearchPaper("BasicVSR++: Improving Video Super-Resolution with Enhanced Propagation and Alignment",
     "https://arxiv.org/abs/2104.13371",
     Year = 2022,
     Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]

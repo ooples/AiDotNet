@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UReader: Universal OCR-free Visually-situated Language Understanding", "https://arxiv.org/abs/2310.05126", Year = 2024, Authors = "Ye et al.")]
+[ResearchPaper("UReader: Universal OCR-free Visually-situated Language Understanding", "https://arxiv.org/abs/2310.05126", Year = 2024, Authors = "Ye et al.")]
 public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly UReaderOptions _options; public override ModelOptions GetOptions() => _options;

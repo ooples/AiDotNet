@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("NaturalSpeech 3: Zero-Shot Speech Synthesis with a Factorized Codec and Diffusion Models", "https://arxiv.org/abs/2403.03100", Year = 2024, Authors = "Ju et al.")]
+[ResearchPaper("NaturalSpeech 3: Zero-Shot Speech Synthesis with a Factorized Codec and Diffusion Models", "https://arxiv.org/abs/2403.03100", Year = 2024, Authors = "Ju et al.")]
 public class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech3Options _options; public override ModelOptions GetOptions() => _options;

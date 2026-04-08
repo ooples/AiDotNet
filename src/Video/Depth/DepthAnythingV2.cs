@@ -61,7 +61,7 @@ namespace AiDotNet.Video.Depth;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Depth Anything V2",
+[ResearchPaper("Depth Anything V2",
     "https://arxiv.org/abs/2406.09414",
     Year = 2024,
     Authors = "Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao")]

@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
+[ResearchPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
 public class MeshCNN<T> : NeuralNetworkBase<T>
 {
     /// <summary>

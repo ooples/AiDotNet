@@ -40,7 +40,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("A Mathematical Theory of Communication", "https://doi.org/10.1002/j.1538-7305.1948.tb01338.x", Year = 1948, Authors = "Claude E. Shannon")]
+[ResearchPaper("A Mathematical Theory of Communication", "https://doi.org/10.1002/j.1538-7305.1948.tb01338.x", Year = 1948, Authors = "Claude E. Shannon")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class EntropySampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

@@ -1,7 +1,8 @@
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
@@ -14,6 +15,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// Analyzes retrieved documents and selectively extracts only the sentences most relevant
 /// to the query, reducing context length while preserving important information.
 /// </remarks>
+[ComponentType(ComponentType.ContextCompressor)]
+[PipelineStage(PipelineStage.PostRetrieval)]
 public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
 {
     private readonly int _maxSentences;

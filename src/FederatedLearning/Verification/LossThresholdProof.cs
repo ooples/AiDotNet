@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Verification;
@@ -21,6 +23,8 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// <para><b>Reference:</b> ZKP-FedEval (2025) — privacy-preserving FL evaluation using ZKPs.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifiableComputation
 {
     private readonly IZkProofSystem _proofSystem;

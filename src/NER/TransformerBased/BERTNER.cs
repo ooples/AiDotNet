@@ -78,7 +78,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+[ResearchPaper("BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     "https://arxiv.org/abs/1810.04805",
     Year = 2019,
     Authors = "Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova")]

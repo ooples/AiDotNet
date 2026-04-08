@@ -68,7 +68,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Publicly Available Clinical BERT Embeddings",
+[ResearchPaper("Publicly Available Clinical BERT Embeddings",
     "https://arxiv.org/abs/1904.03323",
     Year = 2019,
     Authors = "Emily Alsentzer, John Murphy, William Boag, Wei-Hung Weng, Di Jindi, Tristan Naumann, Matthew McDermott")]

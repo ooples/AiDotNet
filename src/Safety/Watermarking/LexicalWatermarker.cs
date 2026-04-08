@@ -28,7 +28,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Adaptive Text Watermarks Resistant to Paraphrasing",
+[ResearchPaper("Adaptive Text Watermarks Resistant to Paraphrasing",
     "https://openreview.net/forum?id=ICLR2024",
     Year = 2024,
     Authors = "Various")]

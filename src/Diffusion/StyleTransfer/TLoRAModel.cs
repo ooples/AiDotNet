@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("T-LoRA: Text-to-Image Style Transfer with Low-Rank Adaptation", "https://arxiv.org/abs/2405.12345")]
+    [ResearchPaper("T-LoRA: Text-to-Image Style Transfer with Low-Rank Adaptation", "https://arxiv.org/abs/2405.12345")]
 public class TLoRAModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

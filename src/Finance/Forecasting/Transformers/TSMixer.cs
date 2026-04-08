@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
+[ResearchPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
 public class TSMixer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2021, Authors = "Kong et al.")]
+[ResearchPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2021, Authors = "Kong et al.")]
 public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly DiffWaveOptions _options; public override ModelOptions GetOptions() => _options;

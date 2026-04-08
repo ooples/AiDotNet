@@ -78,7 +78,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2020, Authors = "Kong et al.")]
+[ResearchPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2020, Authors = "Kong et al.")]
 public class DiffWaveModel<T> : DiffusionModelBase<T>
 {
     #region Constants

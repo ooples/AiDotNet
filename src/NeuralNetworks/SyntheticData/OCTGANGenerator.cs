@@ -72,7 +72,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OCT-GAN: Neural ODE-based Conditional Tabular GANs",
+[ResearchPaper("OCT-GAN: Neural ODE-based Conditional Tabular GANs",
     "https://arxiv.org/abs/2105.14969",
     Year = 2021,
     Authors = "Jayoung Kim, Jinsung Jeon, Jaehoon Lee, Jihyeon Hyeong, Noseong Park")]

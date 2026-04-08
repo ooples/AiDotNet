@@ -30,7 +30,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Chromaprint: Audio Fingerprinting with Chromagram", "https://acoustid.org/chromaprint", Year = 2010, Authors = "Lukas Lalinsky")]
+[ResearchPaper("Chromaprint: Audio Fingerprinting with Chromagram", "https://acoustid.org/chromaprint", Year = 2010, Authors = "Lukas Lalinsky")]
 public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
 {
     private readonly ChromaExtractor<T> _chromaExtractor;

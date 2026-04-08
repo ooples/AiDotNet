@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Instant3D: Fast Text-to-3D with Sparse-View Generation and Large Reconstruction Model", "https://arxiv.org/abs/2311.08403", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("Instant3D: Fast Text-to-3D with Sparse-View Generation and Large Reconstruction Model", "https://arxiv.org/abs/2311.08403", Year = 2024, Authors = "Li et al.")]
 public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

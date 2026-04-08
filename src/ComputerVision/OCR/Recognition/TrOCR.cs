@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models",
+[ResearchPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models",
     "https://arxiv.org/abs/2109.10282",
     Year = 2023,
     Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]

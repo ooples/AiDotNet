@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoGigaGAN: Towards Detail-rich Video Super-Resolution",
+[ResearchPaper("VideoGigaGAN: Towards Detail-rich Video Super-Resolution",
     "https://arxiv.org/abs/2404.12388",
     Year = 2024,
     Authors = "Yiran Xu, Taesung Park, Richard Zhang, Yang Zhou, Eli Shechtman, Feng Liu, Jia-Bin Huang, Difan Liu")]

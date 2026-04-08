@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -18,6 +20,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly IDecentralizedTopology _topology;

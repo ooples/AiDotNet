@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference", "https://arxiv.org/abs/2310.04378", Year = 2023, Authors = "Luo et al.")]
+[ResearchPaper("Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference", "https://arxiv.org/abs/2310.04378", Year = 2023, Authors = "Luo et al.")]
 public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

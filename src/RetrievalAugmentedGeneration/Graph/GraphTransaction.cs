@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -60,6 +62,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// This ensures your graph is never in a broken state!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class GraphTransaction<T> : IDisposable
 {
     private readonly IGraphStore<T> _store;

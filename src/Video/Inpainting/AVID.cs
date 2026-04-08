@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AVID: Any-Length Video Inpainting with Diffusion Model",
+[ResearchPaper("AVID: Any-Length Video Inpainting with Diffusion Model",
     "https://arxiv.org/abs/2312.03816",
     Year = 2024,
     Authors = "Zhixing Zhang, Bichen Wu, Xiaoyan Wang, Yaqiao Luo, Zijian He, Peter Vajda, Dimitris Metaxas, Licheng Yu")]

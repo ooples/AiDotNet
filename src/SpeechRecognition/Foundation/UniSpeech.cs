@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UniSpeech: Unified Pre-training for Self-Supervised Learning and Supervised Learning for ASR", "https://arxiv.org/abs/2101.07597", Year = 2021, Authors = "Wang et al.")]
+[ResearchPaper("UniSpeech: Unified Pre-training for Self-Supervised Learning and Supervised Learning for ASR", "https://arxiv.org/abs/2101.07597", Year = 2021, Authors = "Wang et al.")]
 public class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly UniSpeechOptions _options; public override ModelOptions GetOptions() => _options;

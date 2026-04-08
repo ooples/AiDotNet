@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// verify proofs, then pass verified updates to the inner aggregator.</para>
 /// </remarks>
 /// <typeparam name="TModel">The type of model being aggregated.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class VerifiableAggregationStrategy<TModel> : IAggregationStrategy<TModel>
 {
     private readonly IAggregationStrategy<TModel> _innerStrategy;

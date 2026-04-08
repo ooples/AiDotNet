@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mantis: Interleaved Multi-Image Instruction Tuning", "https://arxiv.org/abs/2405.01483", Year = 2024, Authors = "Jiang et al.")]
+[ResearchPaper("Mantis: Interleaved Multi-Image Instruction Tuning", "https://arxiv.org/abs/2405.01483", Year = 2024, Authors = "Jiang et al.")]
 public class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MantisOptions _options; public override ModelOptions GetOptions() => _options;

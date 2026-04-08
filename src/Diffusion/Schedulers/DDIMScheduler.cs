@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
@@ -31,6 +34,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> "Denoising Diffusion Implicit Models" by Song et al., 2020
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

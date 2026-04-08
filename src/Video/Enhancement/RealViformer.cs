@@ -53,7 +53,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RealViformer: Investigating Attention for Real-World Video Super-Resolution",
+[ResearchPaper("RealViformer: Investigating Attention for Real-World Video Super-Resolution",
     "https://arxiv.org/abs/2407.13987",
     Year = 2024,
     Authors = "Yuehan Zhang, Angela Yao")]

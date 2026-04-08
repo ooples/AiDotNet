@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Ultralytics YOLO11", "https://docs.ultralytics.com/models/yolo11/")]
+[ResearchPaper("Ultralytics YOLO11", "https://docs.ultralytics.com/models/yolo11/")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 {

@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BiomedParse: a Biomedical Foundation Model for Image Parsing of Everything Everywhere All at Once", "https://arxiv.org/abs/2405.12971", Year = 2024, Authors = "Zhao et al.")]
+[ResearchPaper("BiomedParse: a Biomedical Foundation Model for Image Parsing of Everything Everywhere All at Once", "https://arxiv.org/abs/2405.12971", Year = 2024, Authors = "Zhao et al.")]
 public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly BiomedParseOptions _options;

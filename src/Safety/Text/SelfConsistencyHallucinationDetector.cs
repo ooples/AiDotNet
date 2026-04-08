@@ -44,7 +44,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+[ResearchPaper("SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
     "https://arxiv.org/abs/2303.08896",
     Year = 2023,
     Authors = "Potsawee Manakul, Adian Liusie, Mark J. F. Gales")]

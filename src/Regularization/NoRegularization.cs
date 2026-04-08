@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Regularization;
 
@@ -31,6 +33,8 @@ namespace AiDotNet.Regularization;
 /// - You're using other techniques to prevent overfitting (like early stopping)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Regularizer)]
+[PipelineStage(PipelineStage.Training)]
 public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>

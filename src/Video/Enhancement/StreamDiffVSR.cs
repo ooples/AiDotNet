@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Stream-DiffVSR: Low-Latency Streamable Diffusion-based Video Super-Resolution",
+[ResearchPaper("Stream-DiffVSR: Low-Latency Streamable Diffusion-based Video Super-Resolution",
     "https://arxiv.org/abs/2501.14727",
     Year = 2025,
     Authors = "Guanlin Li, Jianyi Wang, Shangchen Zhou, Chen Change Loy")]

@@ -32,7 +32,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("EmotiVoice: A Multi-Voice and Prompt-Controlled TTS Engine", "https://arxiv.org/abs/2401.12307")]
+[ResearchPaper("EmotiVoice: A Multi-Voice and Prompt-Controlled TTS Engine", "https://arxiv.org/abs/2401.12307")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
 {

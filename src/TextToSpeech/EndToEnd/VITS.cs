@@ -50,7 +50,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Kim et al.")]
+[ResearchPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Kim et al.")]
 public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options;

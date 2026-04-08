@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models", "https://arxiv.org/abs/2409.17146", Year = 2024, Authors = "Deitke et al.")]
+[ResearchPaper("Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models", "https://arxiv.org/abs/2409.17146", Year = 2024, Authors = "Deitke et al.")]
 public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MolmoOptions _options; public override ModelOptions GetOptions() => _options;

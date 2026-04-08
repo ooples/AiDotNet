@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Hsu et al.")]
+[ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Hsu et al.")]
 public class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly HuBERTASROptions _options;

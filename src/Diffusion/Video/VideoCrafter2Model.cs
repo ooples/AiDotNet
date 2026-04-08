@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoCrafter2: Overcoming Data Limitations for High-Quality Video Diffusion Models", "https://arxiv.org/abs/2401.09047", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("VideoCrafter2: Overcoming Data Limitations for High-Quality Video Diffusion Models", "https://arxiv.org/abs/2401.09047", Year = 2024, Authors = "Chen et al.")]
 public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

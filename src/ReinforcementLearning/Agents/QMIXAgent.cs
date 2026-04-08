@@ -56,7 +56,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning",
+[ResearchPaper("QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning",
     "https://arxiv.org/abs/1803.11485",
     Year = 2018,
     Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]

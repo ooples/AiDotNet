@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Allegro: Open the Black Box of Commercial-Level Video Generation Model", "https://arxiv.org/abs/2410.15458", Year = 2024, Authors = "Zhou et al.")]
+[ResearchPaper("Allegro: Open the Black Box of Commercial-Level Video Generation Model", "https://arxiv.org/abs/2410.15458", Year = 2024, Authors = "Zhou et al.")]
 public class AllegroModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LiteDVDNet: A Lightweight Deep Video Denoising Network",
+[ResearchPaper("LiteDVDNet: A Lightweight Deep Video Denoising Network",
     "https://arxiv.org/abs/2004.08569",
     Year = 2020,
     Authors = "Matias Tassano, Julie Delon, Thomas Veit")]

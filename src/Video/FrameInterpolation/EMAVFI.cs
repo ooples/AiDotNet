@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Extracting Motion and Appearance via Inter-Frame Attention for Efficient Video Frame Interpolation",
+[ResearchPaper("Extracting Motion and Appearance via Inter-Frame Attention for Efficient Video Frame Interpolation",
     "https://arxiv.org/abs/2303.00440",
     Year = 2023,
     Authors = "Guozhen Zhang, Yuhan Zhu, Haonan Wang, Youxin Chen, Gangshan Wu, Limin Wang")]

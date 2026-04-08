@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
+[ResearchPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
     "https://arxiv.org/abs/2206.03428",
     Year = 2022,
     Authors = "Zhenyue Qi, Yiran Zhong, Dongwei Ren, Wangmeng Zuo")]

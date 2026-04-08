@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AM-RADIO: Agglomerative Vision Foundation Model", "https://arxiv.org/abs/2312.06709", Year = 2025, Authors = "Ranzinger et al.")]
+[ResearchPaper("AM-RADIO: Agglomerative Vision Foundation Model", "https://arxiv.org/abs/2312.06709", Year = 2025, Authors = "Ranzinger et al.")]
 public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly RADIOv25Options _options; public override ModelOptions GetOptions() => _options;

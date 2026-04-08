@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.MPC;
 
 /// <summary>
@@ -23,6 +25,8 @@ namespace AiDotNet.FederatedLearning.MPC;
 ///
 /// <para><b>Reference:</b> ABY framework (NDSS 2015) for arithmetic, boolean, and Yao sharing.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class BooleanSecretSharing
 {
     private readonly int _numberOfParties;

@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]
+[ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]
 public class VisionMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly VisionMambaOptions _options;

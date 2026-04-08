@@ -53,7 +53,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SEC-BERT: A Pre-trained Language Model for the Securities Domain", "https://doi.org/10.1145/3533271.3561753", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
+[ResearchPaper("SEC-BERT: A Pre-trained Language Model for the Securities Domain", "https://doi.org/10.1145/3533271.3561753", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
 public class SECBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

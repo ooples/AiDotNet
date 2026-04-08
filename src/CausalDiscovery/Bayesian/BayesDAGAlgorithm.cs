@@ -46,7 +46,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("BayesDAG: Gradient-Based Posterior Inference for Causal Discovery", "https://openreview.net/forum?id=VBnYjBJLvS", Year = 2024, Authors = "Yashas Annadani, Nick Pawlowski, Joel Jennings, Stefan Bauer, Cheng Zhang, Wenbo Gong")]
+[ResearchPaper("BayesDAG: Gradient-Based Posterior Inference for Causal Discovery", "https://openreview.net/forum?id=VBnYjBJLvS", Year = 2024, Authors = "Yashas Annadani, Nick Pawlowski, Joel Jennings, Stefan Bauer, Cheng Zhang, Wenbo Gong")]
 public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
 {
     private readonly double _learningRate;

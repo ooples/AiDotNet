@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -29,6 +31,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ClusterMetrics<T>
 {
     private readonly IDistanceMetric<T>? _distanceMetric;

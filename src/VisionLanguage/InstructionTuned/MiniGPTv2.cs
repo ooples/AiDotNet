@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning", "https://arxiv.org/abs/2310.09478", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning", "https://arxiv.org/abs/2310.09478", Year = 2023, Authors = "Chen et al.")]
 public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPTv2Options _options; public override ModelOptions GetOptions() => _options;

@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GIT: A Generative Image-to-text Transformer for Vision and Language", "https://arxiv.org/abs/2205.14100", Year = 2022, Authors = "Wang et al.")]
+[ResearchPaper("GIT: A Generative Image-to-text Transformer for Vision and Language", "https://arxiv.org/abs/2205.14100", Year = 2022, Authors = "Wang et al.")]
 public class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly GITOptions _options; public override ModelOptions GetOptions() => _options;

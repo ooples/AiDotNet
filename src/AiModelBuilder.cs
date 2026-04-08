@@ -1100,6 +1100,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // validate during serialize/deserialize operations within BuildAsync.
         using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
 
+        // Validate RAG pipeline composition if any RAG components were configured
+        bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
+            || _queryProcessors != null || _graphStore != null || _knowledgeGraph != null;
+        if (hasAnyRAG)
+        {
+            var ragValidation = RetrievalAugmentedGeneration.Configuration.PipelineValidator.ValidateRAGConfiguration(
+                hasRetriever: _ragRetriever != null,
+                hasReranker: _ragReranker != null,
+                hasGenerator: _ragGenerator != null,
+                hasQueryProcessors: _queryProcessors != null,
+                hasDocumentStore: _graphStore != null,
+                hasKnowledgeGraph: _knowledgeGraph != null,
+                hasGraphStore: _graphStore != null);
+
+            if (!ragValidation.IsValid)
+            {
+                throw new InvalidOperationException(
+                    "RAG pipeline configuration is invalid:\n" +
+                    string.Join("\n", ragValidation.Errors));
+            }
+        }
+
         AiModelResult<T, TInput, TOutput> result;
 
         // RL TRAINING PATH - check if RL options are configured with an environment

@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search", "https://arxiv.org/abs/2005.11129", Year = 2020, Authors = "Kim et al.")]
+[ResearchPaper("Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search", "https://arxiv.org/abs/2005.11129", Year = 2020, Authors = "Kim et al.")]
 public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GlowTTSOptions _options;

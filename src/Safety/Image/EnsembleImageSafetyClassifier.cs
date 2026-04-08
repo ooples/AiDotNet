@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UnsafeBench: Benchmarking Image Safety Classifiers on Real-World and AI-Generated Images",
+[ResearchPaper("UnsafeBench: Benchmarking Image Safety Classifiers on Real-World and AI-Generated Images",
     "https://arxiv.org/abs/2405.03486",
     Year = 2024,
     Authors = "Yiting Qu, Xinyue Shen, Yixin Wu, et al.")]

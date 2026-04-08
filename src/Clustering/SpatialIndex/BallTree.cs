@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.SpatialIndex;
 
@@ -26,6 +28,8 @@ namespace AiDotNet.Clustering.SpatialIndex;
 /// - You're using non-Euclidean distance metrics (like cosine distance)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class BallTree<T>
 {
     private readonly INumericOperations<T> _numOps;

@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding", "https://arxiv.org/abs/2403.12895", Year = 2024, Authors = "Hu et al.")]
+[ResearchPaper("mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding", "https://arxiv.org/abs/2403.12895", Year = 2024, Authors = "Hu et al.")]
 public class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwl15Options _options; public override ModelOptions GetOptions() => _options;

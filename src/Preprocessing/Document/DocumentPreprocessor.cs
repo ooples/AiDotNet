@@ -1,5 +1,7 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.Document;
 
@@ -33,6 +35,8 @@ namespace AiDotNet.Preprocessing.Document;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DocumentPreprocessor<T> : IDisposable
 {
     #region Fields

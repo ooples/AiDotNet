@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities", "https://arxiv.org/abs/2305.11000", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper("SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities", "https://arxiv.org/abs/2305.11000", Year = 2023, Authors = "Zhang et al.")]
 public class SpeechGPTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechGPTASROptions _options; public override ModelOptions GetOptions() => _options;

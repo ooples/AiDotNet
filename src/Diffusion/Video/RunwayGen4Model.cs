@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Runway Gen-4", "https://runwayml.com/research/gen-4")]
+    [ResearchPaper("Runway Gen-4", "https://runwayml.com/research/gen-4")]
 public class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

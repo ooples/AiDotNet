@@ -86,7 +86,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2307.11494", Year = 2023, Authors = "Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, Yuyang Wang")]
+[ResearchPaper("Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2307.11494", Year = 2023, Authors = "Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, Yuyang Wang")]
 public class TSDiff<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

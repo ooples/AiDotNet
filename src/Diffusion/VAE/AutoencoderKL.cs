@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2013, Authors = "Kingma & Welling")]
+[ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2013, Authors = "Kingma & Welling")]
 public class AutoencoderKL<T> : VAEModelBase<T>
 {
     /// <summary>

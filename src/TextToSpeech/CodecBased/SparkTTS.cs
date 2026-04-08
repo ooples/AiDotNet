@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Spark-TTS: An Efficient LLM-Based Text-to-Speech Model with Single-Stream Decoupled Speech Tokens", "https://arxiv.org/abs/2503.01710", Year = 2025, Authors = "Wang et al.")]
+[ResearchPaper("Spark-TTS: An Efficient LLM-Based Text-to-Speech Model with Single-Stream Decoupled Speech Tokens", "https://arxiv.org/abs/2503.01710", Year = 2025, Authors = "Wang et al.")]
 public class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SparkTTSOptions _options; public override ModelOptions GetOptions() => _options;

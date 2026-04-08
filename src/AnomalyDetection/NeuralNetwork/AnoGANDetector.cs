@@ -48,7 +48,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Unsupervised Anomaly Detection with Generative Adversarial Networks", "https://doi.org/10.1007/978-3-319-59050-9_12", Year = 2017, Authors = "Thomas Schlegl, Philipp Seeböck, Sebastian M. Waldstein, Ursula Schmidt-Erfurth, Georg Langs")]
+[ResearchPaper("Unsupervised Anomaly Detection with Generative Adversarial Networks", "https://doi.org/10.1007/978-3-319-59050-9_12", Year = 2017, Authors = "Thomas Schlegl, Philipp Seeböck, Sebastian M. Waldstein, Ursula Schmidt-Erfurth, Georg Langs")]
 public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;

@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3D Multi-frame Fusion for Video Stabilization",
+[ResearchPaper("3D Multi-frame Fusion for Video Stabilization",
     "https://arxiv.org/abs/2404.12887",
     Year = 2024,
     Authors = "Yuchen Zhang, Xiu Li")]

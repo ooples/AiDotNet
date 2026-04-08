@@ -43,7 +43,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Multimodal Toxicity Detection: Combining Audio and Text Signals",
+[ResearchPaper("Multimodal Toxicity Detection: Combining Audio and Text Signals",
     "https://aclanthology.org/2024.findings-acl/",
     Year = 2024,
     Authors = "Various")]

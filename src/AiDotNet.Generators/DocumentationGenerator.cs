@@ -26,7 +26,7 @@ public class DocumentationGenerator : IIncrementalGenerator
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
     private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
     private const string ModelComplexityAttr = "AiDotNet.Attributes.ModelComplexityAttribute";
-    private const string ModelPaperAttr = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ResearchPaperAttr = "AiDotNet.Attributes.ResearchPaperAttribute";
     private const string ModelInputAttr = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
@@ -91,7 +91,7 @@ public class DocumentationGenerator : IIncrementalGenerator
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
         var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ModelPaperAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
         var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 

@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using Newtonsoft.Json;
@@ -13,6 +15,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// OpenAI embedding model for generating embeddings via OpenAI API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class OpenAIEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _apiKey;

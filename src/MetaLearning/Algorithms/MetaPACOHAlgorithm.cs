@@ -51,10 +51,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PACOH: Bayes-Optimal Meta-Learning with PAC-Guarantees",
+[ResearchPaper("PACOH: Bayes-Optimal Meta-Learning with PAC-Guarantees",
     "https://arxiv.org/abs/2002.05551",
     Year = 2021,
     Authors = "Jonas Rothfuss, Vincent Fortuin, Martin Josifoski, Andreas Krause")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

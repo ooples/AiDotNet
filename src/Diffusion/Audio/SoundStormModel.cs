@@ -96,7 +96,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
+[ResearchPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
 public class SoundStormModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

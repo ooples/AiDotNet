@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StableVITON: Learning Semantic Correspondence with Latent Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2312.01725", Year = 2024, Authors = "Kim et al.")]
+[ResearchPaper("StableVITON: Learning Semantic Correspondence with Latent Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2312.01725", Year = 2024, Authors = "Kim et al.")]
 public class StableVITONModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

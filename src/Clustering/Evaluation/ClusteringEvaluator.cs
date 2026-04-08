@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -30,6 +32,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - Validating clustering results
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ClusteringEvaluator<T>
 {
     private readonly INumericOperations<T> _numOps;

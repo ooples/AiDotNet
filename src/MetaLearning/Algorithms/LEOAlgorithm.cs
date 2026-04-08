@@ -69,10 +69,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Latent Embedding Optimization",
+[ResearchPaper("Meta-Learning with Latent Embedding Optimization",
     "https://arxiv.org/abs/1807.05960",
     Year = 2019,
     Authors = "Andrei A. Rusu, Dushyant Rao, Jakub Sygnowski, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly LEOOptions<T, TInput, TOutput> _leoOptions;

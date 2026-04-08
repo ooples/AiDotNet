@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improved Training of Wasserstein GANs", "https://arxiv.org/abs/1704.00028", Year = 2017, Authors = "Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville")]
+[ResearchPaper("Improved Training of Wasserstein GANs", "https://arxiv.org/abs/1704.00028", Year = 2017, Authors = "Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville")]
 public class WGANGP<T> : NeuralNetworkBase<T>
 {
     private readonly WGANGPOptions _options;

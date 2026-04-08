@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Instruct-Pix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800")]
+    [ResearchPaper("Instruct-Pix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800")]
 public class ReplaceAnythingModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

@@ -53,7 +53,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DCCRN: Deep Complex Convolution Recurrent Network for Phase-Aware Speech Enhancement", "https://arxiv.org/abs/2008.00264", Year = 2020, Authors = "Yanxin Hu, Yun Liu, Shubo Lv, Mengtao Xing, Shimin Zhang, Yihui Fu, Jian Wu, Bihong Zhang, Lei Xie")]
+[ResearchPaper("DCCRN: Deep Complex Convolution Recurrent Network for Phase-Aware Speech Enhancement", "https://arxiv.org/abs/2008.00264", Year = 2020, Authors = "Yanxin Hu, Yun Liu, Shubo Lv, Mengtao Xing, Shimin Zhang, Yihui Fu, Jian Wu, Bihong Zhang, Lei Xie")]
 public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DCCRNOptions _options;

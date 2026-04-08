@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models", "https://arxiv.org/abs/2501.14818", Year = 2025, Authors = "Shi et al.")]
+[ResearchPaper("Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models", "https://arxiv.org/abs/2501.14818", Year = 2025, Authors = "Shi et al.")]
 public class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Eagle25Options _options; public override ModelOptions GetOptions() => _options;

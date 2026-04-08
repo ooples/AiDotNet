@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InvestLM: A Large Language Model for Investment using Financial Domain Instruction Tuning", "https://arxiv.org/abs/2309.13064", Year = 2023, Authors = "Yi Yang, Yixuan Tang, Kar Yan Tam")]
+[ResearchPaper("InvestLM: A Large Language Model for Investment using Financial Domain Instruction Tuning", "https://arxiv.org/abs/2309.13064", Year = 2023, Authors = "Yi Yang, Yixuan Tang, Kar Yan Tam")]
 public class InvestLM<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

@@ -21,7 +21,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Vector<>), typeof(Vector<>))]
-[ModelPaper("The empirical mode decomposition and the Hilbert spectrum for nonlinear and non-stationary time series analysis", "https://doi.org/10.1098/rspa.1998.0193", Year = 1998, Authors = "Norden E. Huang, Zheng Shen, Steven R. Long, Manli C. Wu, Hsing H. Shih, Quanan Zheng, Nai-Chyuan Yen, Chi Chao Tung, Henry H. Liu")]
+[ResearchPaper("The empirical mode decomposition and the Hilbert spectrum for nonlinear and non-stationary time series analysis", "https://doi.org/10.1098/rspa.1998.0193", Year = 1998, Authors = "Norden E. Huang, Zheng Shen, Steven R. Long, Manli C. Wu, Hsing H. Shih, Quanan Zheng, Nai-Chyuan Yen, Chi Chao Tung, Henry H. Liu")]
 public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _maxImf;

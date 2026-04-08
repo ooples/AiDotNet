@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Beat Tracking by Dynamic Programming", "https://doi.org/10.1006/jnca.2006.0150")]
+    [ResearchPaper("Beat Tracking by Dynamic Programming", "https://doi.org/10.1006/jnca.2006.0150")]
 public class BeatTracker<T> : MusicAnalysisBase<T>
 {
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;

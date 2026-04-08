@@ -35,7 +35,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Challenges in Automated Debiasing for Toxic Language Detection", "https://arxiv.org/abs/2102.00086", Year = 2021, Authors = "Xuhui Zhou, Maarten Sap, Swabha Swayamdipta, Yejin Choi, Noah A. Smith")]
+[ResearchPaper("Challenges in Automated Debiasing for Toxic Language Detection", "https://arxiv.org/abs/2102.00086", Year = 2021, Authors = "Xuhui Zhou, Maarten Sap, Swabha Swayamdipta, Yejin Choi, Noah A. Smith")]
 public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
 {
 

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MegaTTS 3: Sparse Diffusion Transformer is a Natural Zero-Shot TTS Engine", "https://arxiv.org/abs/2502.18924", Year = 2025, Authors = "Jiang et al.")]
+[ResearchPaper("MegaTTS 3: Sparse Diffusion Transformer is a Natural Zero-Shot TTS Engine", "https://arxiv.org/abs/2502.18924", Year = 2025, Authors = "Jiang et al.")]
 public class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MegaTTS3Options _options; public override ModelOptions GetOptions() => _options;

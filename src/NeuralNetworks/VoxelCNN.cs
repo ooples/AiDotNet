@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("3D ShapeNets: A Deep Representation for Volumetric Shapes", "https://arxiv.org/abs/1406.5670")]
+    [ResearchPaper("3D ShapeNets: A Deep Representation for Volumetric Shapes", "https://arxiv.org/abs/1406.5670")]
 public class VoxelCNN<T> : NeuralNetworkBase<T>
 {
     private readonly VoxelCNNOptions _options;

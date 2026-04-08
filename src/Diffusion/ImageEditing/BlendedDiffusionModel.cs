@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Blended Diffusion for Text-driven Editing of Natural Images", "https://arxiv.org/abs/2111.14818", Year = 2022, Authors = "Avrahami et al.")]
+[ResearchPaper("Blended Diffusion for Text-driven Editing of Natural Images", "https://arxiv.org/abs/2111.14818", Year = 2022, Authors = "Avrahami et al.")]
 public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

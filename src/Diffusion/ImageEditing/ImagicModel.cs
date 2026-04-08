@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Imagic: Text-Based Real Image Editing with Diffusion Models", "https://arxiv.org/abs/2210.09276", Year = 2023, Authors = "Kawar et al.")]
+[ResearchPaper("Imagic: Text-Based Real Image Editing with Diffusion Models", "https://arxiv.org/abs/2210.09276", Year = 2023, Authors = "Kawar et al.")]
 public class ImagicModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

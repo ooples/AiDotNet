@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
@@ -19,6 +21,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 /// "Physics pioneers community: 3 entities centered around Einstein, with key relations: collaborated_with, influenced"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class CommunitySummarizer<T>
 {
     /// <summary>

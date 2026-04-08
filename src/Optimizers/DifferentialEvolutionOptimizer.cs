@@ -1,6 +1,9 @@
 using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -17,6 +20,8 @@ namespace AiDotNet.Optimizers;
 /// It's inspired by biological evolution and is good at finding global optima in complex problem spaces.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

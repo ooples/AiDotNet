@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
+[ResearchPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
 public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly SegMambaOptions _options;

@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", "https://arxiv.org/abs/2403.09898")]
+[ResearchPaper("TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", "https://arxiv.org/abs/2403.09898")]
 public class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

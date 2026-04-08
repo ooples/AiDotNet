@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Proximal Policy Optimization Algorithms",
+[ResearchPaper("Proximal Policy Optimization Algorithms",
     "https://arxiv.org/abs/1707.06347",
     Year = 2017,
     Authors = "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.")]

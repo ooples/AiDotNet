@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Wuerstchen: An Efficient Architecture for Large-Scale Text-to-Image Diffusion Models", "https://arxiv.org/abs/2306.00637", Year = 2023, Authors = "Pernias et al.")]
+[ResearchPaper("Wuerstchen: An Efficient Architecture for Large-Scale Text-to-Image Diffusion Models", "https://arxiv.org/abs/2306.00637", Year = 2023, Authors = "Pernias et al.")]
 public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

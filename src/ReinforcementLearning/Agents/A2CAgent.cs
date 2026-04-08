@@ -53,7 +53,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Asynchronous Methods for Deep Reinforcement Learning",
+[ResearchPaper("Asynchronous Methods for Deep Reinforcement Learning",
     "https://arxiv.org/abs/1602.01783",
     Year = 2016,
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]

@@ -56,7 +56,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Human-level Control through Deep Reinforcement Learning",
+[ResearchPaper("Human-level Control through Deep Reinforcement Learning",
     "https://arxiv.org/abs/1312.5602",
     Year = 2015,
     Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]

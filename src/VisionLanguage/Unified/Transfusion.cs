@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
+[ResearchPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
 public class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly TransfusionOptions _options; public override ModelOptions GetOptions() => _options;

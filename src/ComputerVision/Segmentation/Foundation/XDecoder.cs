@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
+[ResearchPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
 public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly XDecoderOptions _options;

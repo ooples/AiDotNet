@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("YourTTS: Towards Zero-Shot Multi-Speaker TTS and Zero-Shot Voice Conversion for Everyone", "https://arxiv.org/abs/2112.02418", Year = 2022, Authors = "Casanova et al.")]
+[ResearchPaper("YourTTS: Towards Zero-Shot Multi-Speaker TTS and Zero-Shot Voice Conversion for Everyone", "https://arxiv.org/abs/2112.02418", Year = 2022, Authors = "Casanova et al.")]
 public class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly YourTTSOptions _options; public override ModelOptions GetOptions() => _options;

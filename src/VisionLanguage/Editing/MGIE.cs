@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Guiding Instruction-Based Image Editing via Multimodal Large Language Models", "https://arxiv.org/abs/2309.17102", Year = 2024, Authors = "Fu et al.")]
+[ResearchPaper("Guiding Instruction-Based Image Editing via Multimodal Large Language Models", "https://arxiv.org/abs/2309.17102", Year = 2024, Authors = "Fu et al.")]
 public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly MGIEOptions _options; public override ModelOptions GetOptions() => _options;

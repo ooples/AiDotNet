@@ -32,7 +32,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Murf AI", "https://murf.ai")]
+[ResearchPaper("Murf AI", "https://murf.ai")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Murf<T> : TtsModelBase<T>, IEndToEndTts<T>
 {

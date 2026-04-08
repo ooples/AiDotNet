@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models", "https://arxiv.org/abs/2308.01390", Year = 2023, Authors = "Awadalla et al.")]
+[ResearchPaper("OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models", "https://arxiv.org/abs/2308.01390", Year = 2023, Authors = "Awadalla et al.")]
 public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly OpenFlamingoOptions _options; public override ModelOptions GetOptions() => _options;

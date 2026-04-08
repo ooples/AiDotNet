@@ -62,7 +62,7 @@ namespace AiDotNet.Video.Segmentation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Putting the Object Back into Video Object Segmentation",
+[ResearchPaper("Putting the Object Back into Video Object Segmentation",
     "https://arxiv.org/abs/2310.12982",
     Year = 2024,
     Authors = "Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young Lee, Alexander Schwing")]

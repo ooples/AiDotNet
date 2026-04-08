@@ -52,7 +52,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Rainbow: Combining Improvements in Deep Reinforcement Learning",
+[ResearchPaper("Rainbow: Combining Improvements in Deep Reinforcement Learning",
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]

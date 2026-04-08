@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Moondream: A Tiny Vision Language Model", "https://moondream.ai", Year = 2024, Authors = "Vikhyat Korrapati")]
+[ResearchPaper("Moondream: A Tiny Vision Language Model", "https://moondream.ai", Year = 2024, Authors = "Vikhyat Korrapati")]
 public class Moondream<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MoondreamOptions _options; public override ModelOptions GetOptions() => _options;

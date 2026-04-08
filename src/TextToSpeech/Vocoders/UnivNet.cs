@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminator for High-Fidelity Waveform Generation", "https://arxiv.org/abs/2106.07889", Year = 2021, Authors = "Jang et al.")]
+[ResearchPaper("UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminator for High-Fidelity Waveform Generation", "https://arxiv.org/abs/2106.07889", Year = 2021, Authors = "Jang et al.")]
 public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly UnivNetOptions _options; public override ModelOptions GetOptions() => _options;

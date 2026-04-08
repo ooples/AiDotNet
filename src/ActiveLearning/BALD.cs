@@ -38,7 +38,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Bayesian Active Learning for Classification and Preference Learning", "https://arxiv.org/abs/1112.5745", Year = 2011, Authors = "Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, Máté Lengyel")]
+[ResearchPaper("Bayesian Active Learning for Classification and Preference Learning", "https://arxiv.org/abs/1112.5745", Year = 2011, Authors = "Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, Máté Lengyel")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class BALD<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

@@ -67,7 +67,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models",
+[ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models",
     "https://arxiv.org/abs/1908.10063",
     Year = 2019,
     Authors = "Dogu Araci")]

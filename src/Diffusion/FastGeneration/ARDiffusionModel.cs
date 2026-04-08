@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Autoregressive Image Generation without Vector Quantization", "https://arxiv.org/abs/2406.11838")]
+    [ResearchPaper("Autoregressive Image Generation without Vector Quantization", "https://arxiv.org/abs/2406.11838")]
 public class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 8;

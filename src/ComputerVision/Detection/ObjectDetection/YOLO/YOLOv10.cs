@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("YOLOv10: Real-Time End-to-End Object Detection",
+[ResearchPaper("YOLOv10: Real-Time End-to-End Object Detection",
     "https://arxiv.org/abs/2405.14458",
     Year = 2024,
     Authors = "Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, Guiguang Ding")]

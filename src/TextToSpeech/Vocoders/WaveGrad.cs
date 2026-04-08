@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("WaveGrad: Estimating Gradients for Waveform Generation", "https://arxiv.org/abs/2009.00713", Year = 2021, Authors = "Chen et al.")]
+[ResearchPaper("WaveGrad: Estimating Gradients for Waveform Generation", "https://arxiv.org/abs/2009.00713", Year = 2021, Authors = "Chen et al.")]
 public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGradOptions _options; public override ModelOptions GetOptions() => _options;

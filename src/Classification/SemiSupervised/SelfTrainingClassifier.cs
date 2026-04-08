@@ -61,7 +61,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Semi-Supervised Learning Literature Survey", "https://pages.cs.wisc.edu/~jerryzhu/pub/ssl_survey.pdf")]
+[ResearchPaper("Semi-Supervised Learning Literature Survey", "https://pages.cs.wisc.edu/~jerryzhu/pub/ssl_survey.pdf")]
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -27,6 +29,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Also called "inertia" in scikit-learn.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class WCSS<T> : IClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;

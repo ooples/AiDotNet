@@ -42,7 +42,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("SPOTDiffusion: Spherical Panorama Outpainting", "https://doi.org/10.1007/978-3-031-72989-8_14")]
+    [ResearchPaper("SPOTDiffusion: Spherical Panorama Outpainting", "https://doi.org/10.1007/978-3-031-72989-8_14")]
 public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

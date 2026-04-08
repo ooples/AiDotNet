@@ -71,7 +71,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+    [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
 public class BayesianRegression<T> : RegressionBase<T>
 {
     /// <summary>

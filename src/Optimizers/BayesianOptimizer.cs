@@ -2,6 +2,9 @@ global using AiDotNet.Helpers;
 using AiDotNet.GaussianProcesses;
 using Newtonsoft.Json;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -18,6 +21,8 @@ namespace AiDotNet.Optimizers;
 /// each guess is time-consuming or expensive to evaluate.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>

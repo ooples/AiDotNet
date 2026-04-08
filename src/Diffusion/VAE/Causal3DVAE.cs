@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
+[ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
 public class Causal3DVAE<T> : VAEModelBase<T>
 {
     private readonly int _inputChannels;

@@ -45,7 +45,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unifying Flow, Stereo and Depth Estimation",
+[ResearchPaper("Unifying Flow, Stereo and Depth Estimation",
     "https://arxiv.org/abs/2211.05783",
     Year = 2023,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Fisher Yu, Dacheng Tao, Andreas Geiger")]

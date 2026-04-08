@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Uni-ControlNet: All-in-One Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2305.16322", Year = 2023, Authors = "Zhao et al.")]
+[ResearchPaper("Uni-ControlNet: All-in-One Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2305.16322", Year = 2023, Authors = "Zhao et al.")]
 public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

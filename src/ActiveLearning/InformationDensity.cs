@@ -41,7 +41,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Employing EM and Pool-Based Active Learning for Text Classification", "https://dl.acm.org/doi/10.5555/645527.757765", Year = 1998, Authors = "Andrew McCallum, Kamal Nigam")]
+[ResearchPaper("Employing EM and Pool-Based Active Learning for Text Classification", "https://dl.acm.org/doi/10.5555/645527.757765", Year = 1998, Authors = "Andrew McCallum, Kamal Nigam")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class InformationDensity<T> : IActiveLearningStrategy<T>
 {
     /// <summary>

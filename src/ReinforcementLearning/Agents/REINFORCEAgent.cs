@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning",
+[ResearchPaper("Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning",
     "https://link.springer.com/article/10.1007/BF00992696",
     Year = 1992,
     Authors = "Williams, R. J.")]

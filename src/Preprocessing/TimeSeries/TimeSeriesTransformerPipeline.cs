@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.TimeSeries;
 
@@ -41,6 +43,8 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// var enrichedData = pipeline.FitTransform(data);
 /// </code>
 /// </example>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class TimeSeriesTransformerPipeline<T> : ITimeSeriesFeatureExtractor<T>
 {
     #region Fields

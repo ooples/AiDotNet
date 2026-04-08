@@ -75,7 +75,7 @@ namespace AiDotNet.Reasoning.Strategies;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(string), typeof(string))]
-[ModelPaper("Self-Consistency Improves Chain of Thought Reasoning in Language Models", "https://doi.org/10.48550/arXiv.2203.11171", Year = 2022, Authors = "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou")]
+[ResearchPaper("Self-Consistency Improves Chain of Thought Reasoning in Language Models", "https://doi.org/10.48550/arXiv.2203.11171", Year = 2022, Authors = "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou")]
 public class SelfConsistencyStrategy<T> : ReasoningStrategyBase<T>
 {
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;

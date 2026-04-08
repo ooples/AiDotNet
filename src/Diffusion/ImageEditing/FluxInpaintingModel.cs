@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FLUX.1 Fill", "https://blackforestlabs.ai/flux-1-tools/", Year = 2024, Authors = "Black Forest Labs")]
+[ResearchPaper("FLUX.1 Fill", "https://blackforestlabs.ai/flux-1-tools/", Year = 2024, Authors = "Black Forest Labs")]
 public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

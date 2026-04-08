@@ -47,7 +47,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TDPNet: Temporal Difference Prediction Network for Video Frame Interpolation",
+[ResearchPaper("TDPNet: Temporal Difference Prediction Network for Video Frame Interpolation",
     "https://arxiv.org/abs/2404.05765",
     Year = 2024,
     Authors = "Pengcheng Lei, Fei Gao")]

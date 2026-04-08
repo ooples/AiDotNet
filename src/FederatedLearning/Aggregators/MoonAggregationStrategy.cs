@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// CVPR 2021.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private const double CosineDenominatorEpsilon = 1e-10;

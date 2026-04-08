@@ -91,10 +91,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Prototypical Networks for Few-shot Learning",
+[ResearchPaper("Prototypical Networks for Few-shot Learning",
     "https://arxiv.org/abs/1703.05175",
     Year = 2017,
     Authors = "Snell, J., Swersky, K., & Zemel, R.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;

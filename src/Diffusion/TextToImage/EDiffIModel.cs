@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2022, Authors = "Balaji et al.")]
+[ResearchPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2022, Authors = "Balaji et al.")]
 public class EDiffIModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("OLMo: Accelerating the Science of Language Models", "https://arxiv.org/abs/2402.00838", Year = 2024, Authors = "Groeneveld et al.")]
+[ResearchPaper("OLMo: Accelerating the Science of Language Models", "https://arxiv.org/abs/2402.00838", Year = 2024, Authors = "Groeneveld et al.")]
 public class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OLMoASROptions _options; public override ModelOptions GetOptions() => _options;

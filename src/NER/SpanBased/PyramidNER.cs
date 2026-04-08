@@ -80,7 +80,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pyramid: A Layered Model for Nested Named Entity Recognition",
+[ResearchPaper("Pyramid: A Layered Model for Nested Named Entity Recognition",
     "https://arxiv.org/abs/2006.00333",
     Year = 2020,
     Authors = "Jue Wang, Lidan Shou, Ke Chen, Gang Chen")]

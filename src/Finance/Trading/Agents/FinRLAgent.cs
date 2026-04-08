@@ -43,7 +43,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2011.09607", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
+[ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2011.09607", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
 public class FinRLAgent<T> : TradingAgentBase<T>
 {
     #region Fields

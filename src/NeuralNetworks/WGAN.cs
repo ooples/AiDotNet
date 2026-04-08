@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
+[ResearchPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
 public class WGAN<T> : NeuralNetworkBase<T>
 {
     private readonly WGANOptions _options;

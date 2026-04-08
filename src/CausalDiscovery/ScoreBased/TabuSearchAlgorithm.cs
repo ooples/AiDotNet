@@ -28,7 +28,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-    [ModelPaper("Tabu Search: A Tutorial", "https://doi.org/10.1287/ijoc.2.1.4")]
+    [ResearchPaper("Tabu Search: A Tutorial", "https://doi.org/10.1287/ijoc.2.1.4")]
 public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
 {
     private const int DEFAULT_TABU_SIZE = 100;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
@@ -13,6 +15,8 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <para>Reference: Hsu, T.-M. H., et al. (2019). "Measuring the Effects of Non-Identical Data
 /// Distribution for Federated Visual Classification." NeurIPS Workshop 2019.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FedAvgMServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

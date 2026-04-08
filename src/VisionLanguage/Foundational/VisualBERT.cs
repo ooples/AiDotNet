@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VisualBERT: A Simple and Performant Baseline for Vision and Language", "https://arxiv.org/abs/1908.03557", Year = 2019, Authors = "Li et al.")]
+[ResearchPaper("VisualBERT: A Simple and Performant Baseline for Vision and Language", "https://arxiv.org/abs/1908.03557", Year = 2019, Authors = "Li et al.")]
 public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VisualBERTOptions _options; public override ModelOptions GetOptions() => _options;

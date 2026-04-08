@@ -42,7 +42,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Efficient Lifelong Learning with A-GEM", "https://arxiv.org/abs/1812.00420", Year = 2019, Authors = "Arslan Chaudhry, Marc'Aurelio Ranzato, Marcus Rohrbach, Mohamed Elhoseiny")]
+[ResearchPaper("Efficient Lifelong Learning with A-GEM", "https://arxiv.org/abs/1812.00420", Year = 2019, Authors = "Arslan Chaudhry, Marc'Aurelio Ranzato, Marcus Rohrbach, Mohamed Elhoseiny")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class AveragedGEM<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

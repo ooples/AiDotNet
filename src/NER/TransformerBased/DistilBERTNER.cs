@@ -59,7 +59,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+[ResearchPaper("DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
     "https://arxiv.org/abs/1910.01108",
     Year = 2019,
     Authors = "Victor Sanh, Lysandre Debut, Julien Chaumond, Thomas Wolf")]

@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unsupervised Universal Image Segmentation", "https://arxiv.org/abs/2312.17243", Year = 2024, Authors = "Dantong Niu, Xudong Wang, Xinyang Han, Long Lian, Roei Herzig, Trevor Darrell")]
+[ResearchPaper("Unsupervised Universal Image Segmentation", "https://arxiv.org/abs/2312.17243", Year = 2024, Authors = "Dantong Niu, Xudong Wang, Xinyang Han, Long Lian, Roei Herzig, Trevor Darrell")]
 public class U2Seg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly U2SegOptions _options;

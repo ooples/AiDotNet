@@ -109,7 +109,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HunyuanVideo: A Systematic Framework For Large Video Generative Models", "https://arxiv.org/abs/2412.03603", Year = 2024, Authors = "Kong et al.")]
+[ResearchPaper("HunyuanVideo: A Systematic Framework For Large Video Generative Models", "https://arxiv.org/abs/2412.03603", Year = 2024, Authors = "Kong et al.")]
 public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

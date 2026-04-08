@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GR00T N1: An Open Foundation Model for Generalist Humanoid Robots", "https://arxiv.org/abs/2503.14734", Year = 2025, Authors = "NVIDIA")]
+[ResearchPaper("GR00T N1: An Open Foundation Model for Generalist Humanoid Robots", "https://arxiv.org/abs/2503.14734", Year = 2025, Authors = "NVIDIA")]
 public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options; public override ModelOptions GetOptions() => _options;

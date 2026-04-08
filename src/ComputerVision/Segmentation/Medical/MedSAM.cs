@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
+[ResearchPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
 public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSAMOptions _options;

@@ -35,6 +35,8 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// Vector&lt;double&gt; predictions = adaptedModel.Predict(newData);
 /// </code>
 /// </example>
+[ComponentType(ComponentType.TransferAlgorithm)]
+[PipelineStage(PipelineStage.Training)]
 public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     private readonly RandomForestRegressionOptions _options;
@@ -289,7 +291,9 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324")]
+[ResearchPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324")]
+[ComponentType(ComponentType.TransferAlgorithm)]
+[PipelineStage(PipelineStage.Training)]
 public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<T>>
 {
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'

@@ -38,7 +38,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RefChecker: Reference-based Fine-grained Hallucination Checker and Benchmark for LLMs",
+[ResearchPaper("RefChecker: Reference-based Fine-grained Hallucination Checker and Benchmark for LLMs",
     "https://arxiv.org/abs/2405.14486",
     Year = 2024,
     Authors = "Xiangkun Hu, Dongyu Ru, Shicheng Tan, Tong Yu, et al.")]

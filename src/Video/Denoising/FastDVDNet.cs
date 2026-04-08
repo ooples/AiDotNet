@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FastDVDnet: Towards Real-Time Deep Video Denoising Without Flow Estimation",
+[ResearchPaper("FastDVDnet: Towards Real-Time Deep Video Denoising Without Flow Estimation",
     "https://arxiv.org/abs/1907.01361",
     Year = 2020,
     Authors = "Matias Tassano, Julie Delon, Thomas Veit")]

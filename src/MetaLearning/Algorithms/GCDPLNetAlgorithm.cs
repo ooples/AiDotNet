@@ -45,10 +45,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Cross-Domain Few-Shot Learning with Graph Neural Networks",
+[ResearchPaper("Cross-Domain Few-Shot Learning with Graph Neural Networks",
     "https://arxiv.org/abs/2003.13552",
     Year = 2020,
     Authors = "Tianshi Li, Zhixiang Chi, Yang Wang, et al.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

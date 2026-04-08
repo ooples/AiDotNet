@@ -58,7 +58,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Nonparametric Estimation from Incomplete Observations", "https://doi.org/10.2307/2281868", Year = 1958, Authors = "Edward L. Kaplan, Paul Meier")]
+[ResearchPaper("Nonparametric Estimation from Incomplete Observations", "https://doi.org/10.2307/2281868", Year = 1958, Authors = "Edward L. Kaplan, Paul Meier")]
 public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>

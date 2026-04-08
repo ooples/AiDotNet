@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
@@ -8,6 +10,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// <summary>
     /// Code-aware text splitter that respects code structure and syntax.
     /// </summary>
+    [ComponentType(ComponentType.Chunker)]
+    [PipelineStage(PipelineStage.DataIngestion)]
     public class CodeAwareTextSplitter : ChunkingStrategyBase
     {
         private readonly string _language;

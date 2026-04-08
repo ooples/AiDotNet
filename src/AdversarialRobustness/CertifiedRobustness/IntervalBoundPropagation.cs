@@ -51,7 +51,7 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Scalable Verified Training for Provably Robust Image Classifiers", "https://arxiv.org/abs/1810.12715", Year = 2018, Authors = "Sven Gowal, Krishnamurthy Dvijotham, Robert Stanforth, Rudy Bunel, Chongli Qin, Jonathan Uesato, Relja Arandjelovic, Timothy Mann, Pushmeet Kohli")]
+[ResearchPaper("Scalable Verified Training for Provably Robust Image Classifiers", "https://arxiv.org/abs/1810.12715", Year = 2018, Authors = "Sven Gowal, Krishnamurthy Dvijotham, Robert Stanforth, Rudy Bunel, Chongli Qin, Jonathan Uesato, Relja Arandjelovic, Timothy Mann, Pushmeet Kohli")]
 public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
     /// <summary>

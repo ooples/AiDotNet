@@ -33,7 +33,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Mixture Density Networks",
+    [ResearchPaper("Mixture Density Networks",
         "https://publications.aston.ac.uk/id/eprint/373/1/NCRG_94_004.pdf",
         Year = 1994,
         Authors = "Bishop, C. M.")]

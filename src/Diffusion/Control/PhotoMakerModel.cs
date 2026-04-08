@@ -69,7 +69,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PhotoMaker: Customizing Realistic Human Photos via Stacked ID Embedding", "https://arxiv.org/abs/2312.04461", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("PhotoMaker: Customizing Realistic Human Photos via Stacked ID Embedding", "https://arxiv.org/abs/2312.04461", Year = 2024, Authors = "Li et al.")]
 public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

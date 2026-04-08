@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing;
 
@@ -25,6 +27,8 @@ namespace AiDotNet.Preprocessing;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ColumnTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly List<(string Name, IDataTransformer<T, Matrix<T>, Matrix<T>> Transformer, int[] Columns)> _transformers;

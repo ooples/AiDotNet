@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using Newtonsoft.Json;
@@ -51,6 +53,8 @@ namespace AiDotNet.KnowledgeDistillation;
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
 public class DistillationCheckpointManager<T>
 {
     private readonly DistillationCheckpointConfig _config;

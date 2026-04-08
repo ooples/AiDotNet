@@ -81,7 +81,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep State Space Models for Time Series Forecasting", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
+[ResearchPaper("Deep State Space Models for Time Series Forecasting", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
 public class DeepState<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

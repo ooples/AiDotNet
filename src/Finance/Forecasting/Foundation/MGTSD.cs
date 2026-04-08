@@ -60,7 +60,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", "https://arxiv.org/abs/2403.05751", Year = 2024, Authors = "Xinyao Fan, Yueying Wu, Chang Xu, Yuhao Huang, Weiqing Liu, Jiang Bian")]
+[ResearchPaper("MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", "https://arxiv.org/abs/2403.05751", Year = 2024, Authors = "Xinyao Fan, Yueying Wu, Chang Xu, Yuhao Huang, Weiqing Liu, Jiang Bian")]
 public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

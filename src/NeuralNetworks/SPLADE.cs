@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Ranking)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
+    [ResearchPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
     public class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SPLADEOptions _options;

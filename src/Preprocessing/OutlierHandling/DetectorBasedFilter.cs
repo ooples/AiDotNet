@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -72,6 +74,8 @@ public enum FilterMode
 /// </code>
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly IAnomalyDetector<T> _detector;

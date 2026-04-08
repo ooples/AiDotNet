@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3D-LLM: Injecting the 3D World into Large Language Models", "https://arxiv.org/abs/2307.12981", Year = 2023, Authors = "Hong et al.")]
+[ResearchPaper("3D-LLM: Injecting the 3D World into Large Language Models", "https://arxiv.org/abs/2307.12981", Year = 2023, Authors = "Hong et al.")]
 public class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly ThreeDLLMOptions _options; public override ModelOptions GetOptions() => _options;

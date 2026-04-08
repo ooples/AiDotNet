@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks", "https://arxiv.org/abs/1511.06434", Year = 2016, Authors = "Alec Radford, Luke Metz, Soumith Chintala")]
+[ResearchPaper("Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks", "https://arxiv.org/abs/1511.06434", Year = 2016, Authors = "Alec Radford, Luke Metz, Soumith Chintala")]
 public class DCGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly DCGANOptions _options;

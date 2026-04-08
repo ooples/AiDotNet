@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -34,6 +36,8 @@ namespace AiDotNet.ActiveLearning.Data;
 /// var unlabeled = InMemoryDataset&lt;double, double[], int&gt;.CreateUnlabeled(inputs);
 /// </code>
 /// </remarks>
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class InMemoryDataset<T, TInput, TOutput> : IExtendedDataset<T, TInput, TOutput>
 {
     private readonly TInput[] _inputs;
@@ -440,6 +444,8 @@ public class InMemoryDataset<T, TInput, TOutput> : IExtendedDataset<T, TInput, T
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The type of input features.</typeparam>
 /// <typeparam name="TOutput">The type of output labels.</typeparam>
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class InMemoryDatasetFactory<T, TInput, TOutput> : IDatasetFactory<T, TInput, TOutput>
 {
     /// <inheritdoc/>

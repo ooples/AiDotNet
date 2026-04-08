@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 [ModelTask(ModelTask.MotionGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", "https://arxiv.org/abs/2208.15001", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", "https://arxiv.org/abs/2208.15001", Year = 2024, Authors = "Zhang et al.")]
 public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 {
     /// <summary>

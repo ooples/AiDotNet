@@ -55,7 +55,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MatCha: Enhancing Visual Language Pretraining with Math Reasoning and Chart Derendering", "https://doi.org/10.48550/arXiv.2212.09662", Year = 2023, Authors = "Fangyu Liu, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Yasemin Altun, Nigel Collier, Julian Martin Eisenschlos")]
+[ResearchPaper("MatCha: Enhancing Visual Language Pretraining with Math Reasoning and Chart Derendering", "https://doi.org/10.48550/arXiv.2212.09662", Year = 2023, Authors = "Fangyu Liu, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Yasemin Altun, Nigel Collier, Julian Martin Eisenschlos")]
 public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExtractor<T>
 {
     private readonly MATCHAOptions _options;

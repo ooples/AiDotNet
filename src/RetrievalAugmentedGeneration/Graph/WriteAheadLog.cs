@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
@@ -35,6 +37,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Money isn't lost!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DocumentStore)]
+[PipelineStage(PipelineStage.Indexing)]
 public class WriteAheadLog : IDisposable
 {
     private readonly string _walFilePath;

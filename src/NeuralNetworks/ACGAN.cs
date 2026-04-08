@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
+[ResearchPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
 public class ACGAN<T> : NeuralNetworkBase<T>
 {
     private readonly ACGANOptions _options;

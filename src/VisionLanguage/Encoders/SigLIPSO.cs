@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
+[ResearchPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
 public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SigLIPSOOptions _options; public override ModelOptions GetOptions() => _options;

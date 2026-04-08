@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.TransferLearning.FeatureMapping;
@@ -19,6 +21,8 @@ namespace AiDotNet.TransferLearning.FeatureMapping;
 /// a good starting point.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.TransferAlgorithm)]
+[PipelineStage(PipelineStage.Training)]
 public class LinearFeatureMapper<T> : IFeatureMapper<T>
 {
     private readonly INumericOperations<T> _numOps;

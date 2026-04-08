@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Shikra: Unleashing Multimodal LLM's Referential Dialogue Magic", "https://arxiv.org/abs/2306.15195", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("Shikra: Unleashing Multimodal LLM's Referential Dialogue Magic", "https://arxiv.org/abs/2306.15195", Year = 2023, Authors = "Chen et al.")]
 public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly ShikraOptions _options; public override ModelOptions GetOptions() => _options;

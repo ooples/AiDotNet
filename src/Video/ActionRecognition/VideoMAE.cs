@@ -63,7 +63,7 @@ namespace AiDotNet.Video.ActionRecognition;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training",
+[ResearchPaper("VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training",
     "https://arxiv.org/abs/2203.12602",
     Year = 2022,
     Authors = "Zhan Tong, Yibing Song, Jue Wang, Limin Wang")]

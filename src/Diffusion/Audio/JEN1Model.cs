@@ -80,7 +80,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models", "https://arxiv.org/abs/2308.04729", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper("JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models", "https://arxiv.org/abs/2308.04729", Year = 2023, Authors = "Li et al.")]
 public class JEN1Model<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

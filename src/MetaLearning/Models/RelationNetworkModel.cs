@@ -35,10 +35,12 @@ namespace AiDotNet.MetaLearning.Models;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning to Compare: Relation Network for Few-Shot Learning",
+[ResearchPaper("Learning to Compare: Relation Network for Few-Shot Learning",
     "https://arxiv.org/abs/1711.06025",
     Year = 2018,
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -44,7 +44,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Spectral Analysis and Time Series", "https://doi.org/10.1016/C2013-0-03566-2", Year = 1981, Authors = "M. B. Priestley")]
+[ResearchPaper("Spectral Analysis and Time Series", "https://doi.org/10.1016/C2013-0-03566-2", Year = 1981, Authors = "M. B. Priestley")]
 public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

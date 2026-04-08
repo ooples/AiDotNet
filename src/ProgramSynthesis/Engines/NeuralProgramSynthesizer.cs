@@ -58,7 +58,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning to Synthesize Programs as Interpretable and Generalizable Policies",
+[ResearchPaper("Learning to Synthesize Programs as Interpretable and Generalizable Policies",
     "https://arxiv.org/abs/2108.13643",
     Year = 2021,
     Authors = "Dweep Trivedi, Jesse Zhang, Shao-Hua Sun, Joseph J. Lim")]

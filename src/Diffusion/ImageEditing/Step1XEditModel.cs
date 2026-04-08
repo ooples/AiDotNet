@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Step1X-Edit", "https://arxiv.org/abs/2504.17761", Year = 2025, Authors = "StepFun")]
+[ResearchPaper("Step1X-Edit", "https://arxiv.org/abs/2504.17761", Year = 2025, Authors = "StepFun")]
 public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

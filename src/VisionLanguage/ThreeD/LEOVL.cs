@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LEO: An Embodied Generalist Agent in 3D World", "https://arxiv.org/abs/2311.12871", Year = 2024, Authors = "Huang et al.")]
+[ResearchPaper("LEO: An Embodied Generalist Agent in 3D World", "https://arxiv.org/abs/2311.12871", Year = 2024, Authors = "Huang et al.")]
 public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly LEOVLOptions _options; public override ModelOptions GetOptions() => _options;

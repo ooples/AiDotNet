@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Regularization;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements L2 regularization (also known as Ridge), a technique that adds a penalty equal to the
@@ -21,6 +24,8 @@
 /// - It particularly penalizes large coefficient values
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Regularizer)]
+[PipelineStage(PipelineStage.Training)]
 public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>

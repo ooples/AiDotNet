@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Better Speech Synthesis Through Scaling", "https://arxiv.org/abs/2305.07243", Year = 2023, Authors = "Betker")]
+[ResearchPaper("Better Speech Synthesis Through Scaling", "https://arxiv.org/abs/2305.07243", Year = 2023, Authors = "Betker")]
 public class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly TortoiseTTSOptions _options; public override ModelOptions GetOptions() => _options;

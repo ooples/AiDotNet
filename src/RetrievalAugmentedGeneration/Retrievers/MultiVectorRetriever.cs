@@ -1,6 +1,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -63,6 +65,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Documents with uniform content (no benefit from multiple vectors)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class MultiVectorRetriever<T> : RetrieverBase<T>
 {
     private readonly int _vectorsPerDocument;

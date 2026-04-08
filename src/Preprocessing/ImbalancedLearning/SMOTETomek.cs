@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -48,6 +50,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 ///   Machine Learning Training Data"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class SMOTETomek<T> : IResamplingStrategy<T>
 {
     private readonly SMOTE<T> _smote;

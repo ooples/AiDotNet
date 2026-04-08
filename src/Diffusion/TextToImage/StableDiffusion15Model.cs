@@ -108,7 +108,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("High-Resolution Image Synthesis with Latent Diffusion Models", "https://arxiv.org/abs/2112.10752", Year = 2022, Authors = "Rombach et al.")]
+[ResearchPaper("High-Resolution Image Synthesis with Latent Diffusion Models", "https://arxiv.org/abs/2112.10752", Year = 2022, Authors = "Rombach et al.")]
 public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

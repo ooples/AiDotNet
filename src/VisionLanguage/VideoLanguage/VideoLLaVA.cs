@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Video-LLaVA: Learning United Visual Representation by Alignment Before Projection", "https://arxiv.org/abs/2311.10122", Year = 2024, Authors = "Lin et al.")]
+[ResearchPaper("Video-LLaVA: Learning United Visual Representation by Alignment Before Projection", "https://arxiv.org/abs/2311.10122", Year = 2024, Authors = "Lin et al.")]
 public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaVAOptions _options; public override ModelOptions GetOptions() => _options;

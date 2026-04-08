@@ -1,6 +1,8 @@
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -29,6 +31,8 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para><b>Reference:</b> Meadows, "A More Efficient Cryptographic Matchmaking Protocol for Use in the
 /// Absence of a Continuously Available Third Party", IEEE S&amp;P 1986.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class DiffieHellmanPsi : PsiBase
 {
     // Use a safe prime for the group. This is a 256-bit prime where (p-1)/2 is also prime.

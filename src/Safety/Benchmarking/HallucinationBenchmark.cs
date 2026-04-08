@@ -31,7 +31,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HaluEval: A Large-Scale Hallucination Evaluation Benchmark for Large Language Models",
+[ResearchPaper("HaluEval: A Large-Scale Hallucination Evaluation Benchmark for Large Language Models",
     "https://arxiv.org/abs/2305.11747",
     Year = 2023,
     Authors = "Junyi Li, Xiaoxue Cheng, Wayne Xin Zhao, Jian-Yun Nie, Ji-Rong Wen")]

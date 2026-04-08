@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PaLI-3 Vision Language Models: Smaller, Faster, Stronger", "https://arxiv.org/abs/2310.09199", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper("PaLI-3 Vision Language Models: Smaller, Faster, Stronger", "https://arxiv.org/abs/2310.09199", Year = 2023, Authors = "Chen et al.")]
 public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLI3Options _options; public override ModelOptions GetOptions() => _options;

@@ -48,7 +48,9 @@ namespace AiDotNet.ActiveLearning.Strategies.Diversity;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Active Learning for Convolutional Neural Networks: A Core-Set Approach", "https://arxiv.org/abs/1708.00489", Year = 2018, Authors = "Ozan Sener, Silvio Savarese")]
+[ResearchPaper("Active Learning for Convolutional Neural Networks: A Core-Set Approach", "https://arxiv.org/abs/1708.00489", Year = 2018, Authors = "Ozan Sener, Silvio Savarese")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

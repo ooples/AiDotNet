@@ -45,7 +45,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
+[ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
 public class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CanaryFlashOptions _options; public override ModelOptions GetOptions() => _options;

@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Peng et al.")]
+[ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Peng et al.")]
 public class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceCraftOptions _options; public override ModelOptions GetOptions() => _options;

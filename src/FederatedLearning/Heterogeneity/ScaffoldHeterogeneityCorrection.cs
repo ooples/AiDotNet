@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -11,6 +13,8 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// how each client's local training differs from the global direction.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class ScaffoldHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     private readonly double _clientLearningRate;

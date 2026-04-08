@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// <para>Reference: FedAGC: Adaptive Gradient Correction for Federated Continual Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _correctionStrength;

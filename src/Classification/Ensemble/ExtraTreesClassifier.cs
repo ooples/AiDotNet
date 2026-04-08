@@ -55,7 +55,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Extremely Randomized Trees", "https://doi.org/10.1007/s10994-006-6226-1", Year = 2006, Authors = "Pierre Geurts, Damien Ernst, Louis Wehenkel")]
+[ResearchPaper("Extremely Randomized Trees", "https://doi.org/10.1007/s10994-006-6226-1", Year = 2006, Authors = "Pierre Geurts, Damien Ernst, Louis Wehenkel")]
 public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>

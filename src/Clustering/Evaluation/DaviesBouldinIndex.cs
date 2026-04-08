@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -36,6 +38,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// A score of 0 would be perfect separation.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class DaviesBouldinIndex<T> : IClusterMetric<T>
 {
     private readonly IDistanceMetric<T>? _distanceMetric;

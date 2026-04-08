@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RegionCLIP: Region-based Language-Image Pretraining", "https://arxiv.org/abs/2112.09106", Year = 2022, Authors = "Zhong et al.")]
+[ResearchPaper("RegionCLIP: Region-based Language-Image Pretraining", "https://arxiv.org/abs/2112.09106", Year = 2022, Authors = "Zhong et al.")]
 public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RegionCLIPOptions _options; public override ModelOptions GetOptions() => _options;

@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Recurrent Video Restoration Transformer with Guided Deformable Attention",
+[ResearchPaper("Recurrent Video Restoration Transformer with Guided Deformable Attention",
     "https://arxiv.org/abs/2206.02146",
     Year = 2022,
     Authors = "Jingyun Liang, Yuchen Fan, Xiaoyu Xiang, Rakesh Ranjan, Eddy Ilg, Simon Green, Jiezhang Cao, Kai Zhang, Radu Timofte, Luc Van Gool")]

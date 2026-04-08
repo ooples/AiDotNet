@@ -35,7 +35,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Learning without Forgetting", "https://doi.org/10.1109/TPAMI.2017.2773081", Year = 2017, Authors = "Zhizhong Li, Derek Hoiem")]
+[ResearchPaper("Learning without Forgetting", "https://doi.org/10.1109/TPAMI.2017.2773081", Year = 2017, Authors = "Zhizhong Li, Derek Hoiem")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

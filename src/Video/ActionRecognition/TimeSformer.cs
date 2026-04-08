@@ -69,7 +69,7 @@ namespace AiDotNet.Video.ActionRecognition;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Is Space-Time Attention All You Need for Video Understanding?",
+[ResearchPaper("Is Space-Time Attention All You Need for Video Understanding?",
     "https://arxiv.org/abs/2102.05095",
     Year = 2021,
     Authors = "Gedas Bertasius, Heng Wang, Lorenzo Torresani")]

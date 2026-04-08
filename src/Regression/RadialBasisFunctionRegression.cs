@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
+    [ResearchPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
 public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

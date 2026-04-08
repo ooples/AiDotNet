@@ -66,7 +66,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
+[ResearchPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
 public class InfoGAN<T> : NeuralNetworkBase<T>
 {
     private readonly InfoGANOptions _options;

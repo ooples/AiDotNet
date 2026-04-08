@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generalized Adaptive Video Stabilization",
+[ResearchPaper("Generalized Adaptive Video Stabilization",
     "https://arxiv.org/abs/2501.06868",
     Year = 2025,
     Authors = "Donghao Zhang")]

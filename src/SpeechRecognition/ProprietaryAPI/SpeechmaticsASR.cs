@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Speechmatics ASR", "https://www.speechmatics.com")]
+[ResearchPaper("Speechmatics ASR", "https://www.speechmatics.com")]
 public class SpeechmaticsASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechmaticsASROptions _options; public override ModelOptions GetOptions() => _options;

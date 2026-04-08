@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Feature Bagging for Outlier Detection", "https://doi.org/10.1145/1081870.1081891", Year = 2005, Authors = "Aleksandar Lazarevic, Vipin Kumar")]
+[ResearchPaper("Feature Bagging for Outlier Detection", "https://doi.org/10.1145/1081870.1081891", Year = 2005, Authors = "Aleksandar Lazarevic, Vipin Kumar")]
 public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

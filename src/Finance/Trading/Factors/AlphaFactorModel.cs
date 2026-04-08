@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Deep Learning for Alpha Factor Investing", "https://doi.org/10.1016/j.jfineco.2020.06.024")]
+[ResearchPaper("Deep Learning for Alpha Factor Investing", "https://doi.org/10.1016/j.jfineco.2020.06.024")]
 public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

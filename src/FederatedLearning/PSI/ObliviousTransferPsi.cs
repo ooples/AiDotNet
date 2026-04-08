@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -27,6 +29,8 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para><b>Reference:</b> Pinkas et al., "Efficient Circuit-Based PSI via Cuckoo Hashing",
 /// EUROCRYPT 2018.</para>
 /// </remarks>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class ObliviousTransferPsi : PsiBase
 {
     private const int CuckooHashFunctions = 3;

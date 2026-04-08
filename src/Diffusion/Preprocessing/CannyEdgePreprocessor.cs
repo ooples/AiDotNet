@@ -1,5 +1,7 @@
 ﻿using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -21,6 +23,8 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Canny, "A Computational Approach to Edge Detection", IEEE TPAMI 1986
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class CannyEdgePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly double _lowThreshold;

@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SeACo-Paraformer: A Non-Autoregressive ASR System with Flexible and Effective Hot-Word Customization Ability", "https://arxiv.org/abs/2308.03266", Year = 2023, Authors = "An et al.")]
+[ResearchPaper("SeACo-Paraformer: A Non-Autoregressive ASR System with Flexible and Effective Hot-Word Customization Ability", "https://arxiv.org/abs/2308.03266", Year = 2023, Authors = "An et al.")]
 public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;

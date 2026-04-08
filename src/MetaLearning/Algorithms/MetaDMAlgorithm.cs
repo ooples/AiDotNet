@@ -55,10 +55,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Applications of Diffusion Models on Few-Shot Learning",
+[ResearchPaper("Applications of Diffusion Models on Few-Shot Learning",
     "https://arxiv.org/abs/2409.15383",
     Year = 2024,
     Authors = "Kaiyu Hu")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

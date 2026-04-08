@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -41,6 +43,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Chunk 3: " the lazy dog" (30-43) - overlaps with Chunk 2
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Chunker)]
+[PipelineStage(PipelineStage.DataIngestion)]
 public class FixedSizeChunkingStrategy : ChunkingStrategyBase
 {
     /// <summary>

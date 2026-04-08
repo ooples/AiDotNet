@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Fish Audio")]
+[ResearchPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Fish Audio")]
 public class FishSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FishSpeechOptions _options; public override ModelOptions GetOptions() => _options;

@@ -34,7 +34,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Causation, Prediction, and Search", "https://doi.org/10.7551/mitpress/1754.001.0001", Year = 2000, Authors = "Peter Spirtes, Clark Glymour, Richard Scheines")]
+[ResearchPaper("Causation, Prediction, and Search", "https://doi.org/10.7551/mitpress/1754.001.0001", Year = 2000, Authors = "Peter Spirtes, Clark Glymour, Richard Scheines")]
 public class PCAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>

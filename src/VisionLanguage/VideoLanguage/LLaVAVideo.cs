@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Video Instruction Tuning With Synthetic Data", "https://arxiv.org/abs/2410.02713", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper("Video Instruction Tuning With Synthetic Data", "https://arxiv.org/abs/2410.02713", Year = 2024, Authors = "Zhang et al.")]
 public class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LLaVAVideoOptions _options; public override ModelOptions GetOptions() => _options;

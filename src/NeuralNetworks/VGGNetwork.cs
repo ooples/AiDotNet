@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
+[ResearchPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
 public class VGGNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly VGGOptions _options;

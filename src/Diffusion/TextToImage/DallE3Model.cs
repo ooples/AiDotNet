@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improving Image Generation with Better Captions", "https://cdn.openai.com/papers/dall-e-3.pdf", Year = 2023, Authors = "Betker et al.")]
+[ResearchPaper("Improving Image Generation with Better Captions", "https://cdn.openai.com/papers/dall-e-3.pdf", Year = 2023, Authors = "Betker et al.")]
 public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 {
     #region Constants

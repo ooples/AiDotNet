@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Improved Baselines with Visual Instruction Tuning", "https://arxiv.org/abs/2310.03744", Year = 2024, Authors = "Liu et al.")]
+[ResearchPaper("Improved Baselines with Visual Instruction Tuning", "https://arxiv.org/abs/2310.03744", Year = 2024, Authors = "Liu et al.")]
 public class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVA15Options _options; public override ModelOptions GetOptions() => _options;

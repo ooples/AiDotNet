@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 
@@ -23,6 +25,8 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 /// Reference: Hang et al., "Efficient Diffusion Training via Min-SNR Weighting Strategy", ICCV 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public class LogSNRImportanceSampling<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

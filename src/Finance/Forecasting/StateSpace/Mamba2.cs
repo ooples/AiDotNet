@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
+[ResearchPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
 public class Mamba2<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

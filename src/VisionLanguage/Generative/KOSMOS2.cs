@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Kosmos-2: Grounding Multimodal Large Language Models to the World", "https://arxiv.org/abs/2306.14824", Year = 2023, Authors = "Peng et al.")]
+[ResearchPaper("Kosmos-2: Grounding Multimodal Large Language Models to the World", "https://arxiv.org/abs/2306.14824", Year = 2023, Authors = "Peng et al.")]
 public class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly KOSMOS2Options _options; public override ModelOptions GetOptions() => _options;

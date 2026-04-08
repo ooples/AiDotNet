@@ -52,7 +52,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Demystifying CLIP Data", "https://arxiv.org/abs/2309.16671", Year = 2023, Authors = "Xu et al.")]
+[ResearchPaper("Demystifying CLIP Data", "https://arxiv.org/abs/2309.16671", Year = 2023, Authors = "Xu et al.")]
 public class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly MetaCLIPOptions _options; public override ModelOptions GetOptions() => _options;

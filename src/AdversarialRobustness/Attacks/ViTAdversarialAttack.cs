@@ -42,7 +42,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("On the Adversarial Robustness of Vision Transformers", "https://arxiv.org/abs/2103.15670", Year = 2021, Authors = "Srinadh Bhojanapalli, Ayan Chakrabarti, Daniel Glasner, Daliang Li, Thomas Unterthiner, Andreas Veit")]
+[ResearchPaper("On the Adversarial Robustness of Vision Transformers", "https://arxiv.org/abs/2103.15670", Year = 2021, Authors = "Srinadh Bhojanapalli, Ayan Chakrabarti, Daniel Glasner, Daliang Li, Thomas Unterthiner, Andreas Veit")]
 public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     private readonly int _patchSize;

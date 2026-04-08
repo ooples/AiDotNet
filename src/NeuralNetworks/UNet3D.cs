@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation", "https://arxiv.org/abs/1606.06650", Year = 2016, Authors = "Ozgun Cicek, Ahmed Abdulkadir, Soeren S. Lienkamp, Thomas Brox, Olaf Ronneberger")]
+[ResearchPaper("3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation", "https://arxiv.org/abs/1606.06650", Year = 2016, Authors = "Ozgun Cicek, Ahmed Abdulkadir, Soeren S. Lienkamp, Thomas Brox, Olaf Ronneberger")]
 public class UNet3D<T> : NeuralNetworkBase<T>
 {
     private readonly UNet3DOptions _options;

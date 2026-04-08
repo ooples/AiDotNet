@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Style Aligned Image Generation via Shared Attention", "https://arxiv.org/abs/2312.02133", Year = 2024, Authors = "Hertz et al.")]
+[ResearchPaper("Style Aligned Image Generation via Shared Attention", "https://arxiv.org/abs/2312.02133", Year = 2024, Authors = "Hertz et al.")]
 public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

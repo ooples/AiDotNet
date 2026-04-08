@@ -82,7 +82,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees",
+[ResearchPaper("PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees",
     "https://arxiv.org/abs/1906.09338",
     Year = 2019,
     Authors = "James Jordon, Jinsung Yoon, Mihaela van der Schaar")]

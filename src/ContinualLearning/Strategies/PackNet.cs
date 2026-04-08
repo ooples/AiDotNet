@@ -93,7 +93,9 @@ public class PackNetOptions<T>
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("PackNet: Adding Multiple Tasks to a Single Network by Iterative Pruning", "https://arxiv.org/abs/1711.05769", Year = 2018, Authors = "Arun Mallya, Svetlana Lazebnik")]
+[ResearchPaper("PackNet: Adding Multiple Tasks to a Single Network by Iterative Pruning", "https://arxiv.org/abs/1711.05769", Year = 2018, Authors = "Arun Mallya, Svetlana Lazebnik")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInput, TOutput>
 {
     private readonly T _pruningRatio;

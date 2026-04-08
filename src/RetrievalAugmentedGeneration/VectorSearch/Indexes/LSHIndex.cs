@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
@@ -21,6 +23,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// <typeparam name="T">The numeric type for vector operations. Must be a numeric type
     /// that implements IConvertible (e.g., float, double, decimal). Using non-numeric types
     /// will result in InvalidCastException at runtime.</typeparam>
+    [ComponentType(ComponentType.VectorIndex)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class LSHIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

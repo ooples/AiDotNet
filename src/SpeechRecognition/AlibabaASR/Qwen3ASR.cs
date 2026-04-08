@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
+[ResearchPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
 public class Qwen3ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Qwen3ASROptions _options; public override ModelOptions GetOptions() => _options;

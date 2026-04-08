@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Finite-time Analysis of the Multiarmed Bandit Problem",
+[ResearchPaper("Finite-time Analysis of the Multiarmed Bandit Problem",
     "https://doi.org/10.1023/A:1013689704352",
     Year = 2002,
     Authors = "Auer, P., Cesa-Bianchi, N., & Fischer, P.")]

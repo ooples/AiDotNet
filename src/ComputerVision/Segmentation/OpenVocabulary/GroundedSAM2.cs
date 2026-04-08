@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
+[ResearchPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
 public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly GroundedSAM2Options _options;

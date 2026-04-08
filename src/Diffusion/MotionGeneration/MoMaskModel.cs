@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 [ModelTask(ModelTask.MotionGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MoMask: Generative Masked Modeling of 3D Human Motions", "https://arxiv.org/abs/2312.00063", Year = 2024, Authors = "Guo et al.")]
+[ResearchPaper("MoMask: Generative Masked Modeling of 3D Human Motions", "https://arxiv.org/abs/2312.00063", Year = 2024, Authors = "Guo et al.")]
 public class MoMaskModel<T> : LatentDiffusionModelBase<T>
 {
     /// <summary>

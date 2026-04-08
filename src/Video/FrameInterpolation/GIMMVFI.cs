@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generalizable Implicit Motion Modeling for Video Frame Interpolation",
+[ResearchPaper("Generalizable Implicit Motion Modeling for Video Frame Interpolation",
     "https://arxiv.org/abs/2407.08680",
     Year = 2024,
     Authors = "Zujin Guo, Wei Li, Chen Change Loy")]

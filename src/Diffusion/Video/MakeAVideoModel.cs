@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Make-A-Video: Text-to-Video Generation without Text-Video Data", "https://arxiv.org/abs/2209.14792", Year = 2022, Authors = "Singer et al.")]
+[ResearchPaper("Make-A-Video: Text-to-Video Generation without Text-Video Data", "https://arxiv.org/abs/2209.14792", Year = 2022, Authors = "Singer et al.")]
 public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

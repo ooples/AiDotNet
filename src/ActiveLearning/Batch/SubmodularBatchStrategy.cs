@@ -42,7 +42,9 @@ namespace AiDotNet.ActiveLearning.Batch;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Submodularity in Data Subset Selection and Active Learning", "https://arxiv.org/abs/1505.05123", Year = 2015, Authors = "Kai Wei, Rishabh Iyer, Jeff Bilmes")]
+[ResearchPaper("Submodularity in Data Subset Selection and Active Learning", "https://arxiv.org/abs/1505.05123", Year = 2015, Authors = "Kai Wei, Rishabh Iyer, Jeff Bilmes")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

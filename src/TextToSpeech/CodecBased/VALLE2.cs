@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2406.05370", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2406.05370", Year = 2024, Authors = "Chen et al.")]
 public class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLE2Options _options; public override ModelOptions GetOptions() => _options;

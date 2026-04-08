@@ -45,7 +45,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
+[ResearchPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
 public class DistilWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly DistilWhisperOptions _options; public override ModelOptions GetOptions() => _options;

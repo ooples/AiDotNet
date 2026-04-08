@@ -1,4 +1,5 @@
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TransferLearning.DomainAdaptation;
 
@@ -18,6 +19,8 @@ namespace AiDotNet.TransferLearning.DomainAdaptation;
 /// transfer learning more effective.
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.DomainAdapter)]
+[PipelineStage(PipelineStage.Training)]
 public class CORALDomainAdapter<T> : IDomainAdapter<T>
 {
     private readonly INumericOperations<T> _numOps;

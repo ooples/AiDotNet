@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SwiftBrush: One-Step Text-to-Image Diffusion Model with Variational Score Distillation", "https://arxiv.org/abs/2312.05239", Year = 2024, Authors = "Nguyen et al.")]
+[ResearchPaper("SwiftBrush: One-Step Text-to-Image Diffusion Model with Variational Score Distillation", "https://arxiv.org/abs/2312.05239", Year = 2024, Authors = "Nguyen et al.")]
 public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

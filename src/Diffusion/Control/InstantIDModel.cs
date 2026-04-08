@@ -76,7 +76,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("InstantID: Zero-shot Identity-Preserving Generation in Seconds", "https://arxiv.org/abs/2401.07519", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("InstantID: Zero-shot Identity-Preserving Generation in Seconds", "https://arxiv.org/abs/2401.07519", Year = 2024, Authors = "Wang et al.")]
 public class InstantIDModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SoundStream: An End-to-End Neural Audio Codec", "https://arxiv.org/abs/2107.03312", Year = 2021, Authors = "Neil Zeghidour, Alejandro Luebs, Ahmed Omran, Jan Skoglund, Marco Tagliasacchi")]
+[ResearchPaper("SoundStream: An End-to-End Neural Audio Codec", "https://arxiv.org/abs/2107.03312", Year = 2021, Authors = "Neil Zeghidour, Alejandro Luebs, Ahmed Omran, Jan Skoglund, Marco Tagliasacchi")]
 public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     #region Fields

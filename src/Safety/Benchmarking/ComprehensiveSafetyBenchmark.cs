@@ -31,7 +31,7 @@ namespace AiDotNet.Safety.Benchmarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SafetyBench: Evaluating the Safety of Large Language Models",
+[ResearchPaper("SafetyBench: Evaluating the Safety of Large Language Models",
     "https://arxiv.org/abs/2309.07045",
     Year = 2024,
     Authors = "Zhexin Zhang, Leqi Lei, Lindong Wu, et al.")]

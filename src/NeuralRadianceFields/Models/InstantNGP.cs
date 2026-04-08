@@ -151,7 +151,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
+[ResearchPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
 public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
     private readonly InstantNGPOptions<T> _options;

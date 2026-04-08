@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("DirectLiNGAM: A Direct Method for Learning a Linear Non-Gaussian Structural Equation Model", "https://jmlr.org/papers/v12/shimizu11a.html", Year = 2011, Authors = "Shohei Shimizu, Takanori Inazumi, Yasuhiro Sogawa, Aapo Hyvarinen, Yoshinobu Kawahara, Takashi Washio, Patrik O. Hoyer, Kenneth Bollen")]
+[ResearchPaper("DirectLiNGAM: A Direct Method for Learning a Linear Non-Gaussian Structural Equation Model", "https://jmlr.org/papers/v12/shimizu11a.html", Year = 2011, Authors = "Shohei Shimizu, Takanori Inazumi, Yasuhiro Sogawa, Aapo Hyvarinen, Yoshinobu Kawahara, Takashi Washio, Patrik O. Hoyer, Kenneth Bollen")]
 public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     private double _threshold = 0.1;

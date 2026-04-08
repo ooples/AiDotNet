@@ -1,5 +1,7 @@
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
@@ -27,6 +29,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This makes your searches clearer and gets better results!
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.QueryProcessor)]
+[PipelineStage(PipelineStage.QueryProcessing)]
 public class QueryRewritingProcessor<T> : QueryProcessorBase
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

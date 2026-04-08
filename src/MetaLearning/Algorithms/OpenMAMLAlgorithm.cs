@@ -77,10 +77,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Open-Set Recognition: A Good Closed-Set Classifier is All You Need",
+[ResearchPaper("Open-Set Recognition: A Good Closed-Set Classifier is All You Need",
     "https://arxiv.org/abs/2110.06207",
     Year = 2022,
     Authors = "Sagar Vaze, Kai Han, Andrea Vedaldi, Andrew Zisserman")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

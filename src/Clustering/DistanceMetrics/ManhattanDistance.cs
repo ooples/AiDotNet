@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -27,6 +29,8 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 /// - Sparse data
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class ManhattanDistance<T> : DistanceMetricBase<T>
 {
     /// <inheritdoc />

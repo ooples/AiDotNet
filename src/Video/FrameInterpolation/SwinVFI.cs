@@ -48,7 +48,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Video Frame Interpolation with Transformer",
+[ResearchPaper("Video Frame Interpolation with Transformer",
     "https://arxiv.org/abs/2205.07230",
     Year = 2022,
     Authors = "Liying Lu, Ruizheng Wu, Huaijia Lin, Jiangbo Lu, Jiaya Jia")]

@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GANDALF: Gated Adaptive Network for Deep Automated Learning of Features",
+[ResearchPaper("GANDALF: Gated Adaptive Network for Deep Automated Learning of Features",
     "https://arxiv.org/abs/2207.08548",
     Year = 2022,
     Authors = "Joseph, R. & Raj, H.")]

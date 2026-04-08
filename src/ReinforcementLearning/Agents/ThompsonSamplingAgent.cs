@@ -38,7 +38,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples",
+[ResearchPaper("On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples",
     "https://doi.org/10.2307/2332286",
     Year = 1933,
     Authors = "Thompson, W. R.")]

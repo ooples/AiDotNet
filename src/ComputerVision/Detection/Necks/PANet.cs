@@ -29,7 +29,7 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Path Aggregation Network for Instance Segmentation",
+[ResearchPaper("Path Aggregation Network for Instance Segmentation",
     "https://arxiv.org/abs/1803.01534",
     Year = 2018,
     Authors = "Shu Liu, Lu Qi, Haifang Qin, Jianping Shi, Jiaya Jia")]

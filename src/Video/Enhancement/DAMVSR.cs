@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DAM-VSR: Disentanglement of Appearance and Motion for Video Super-Resolution",
+[ResearchPaper("DAM-VSR: Disentanglement of Appearance and Motion for Video Super-Resolution",
     "https://arxiv.org/abs/2501.02540",
     Year = 2025,
     Authors = "Kaichen Chi, Xin Li, Zhi-Song Liu, Wan-Chi Siu")]

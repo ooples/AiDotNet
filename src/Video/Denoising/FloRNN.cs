@@ -46,7 +46,7 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Flowing Recurrent Network for Video Denoising",
+[ResearchPaper("Flowing Recurrent Network for Video Denoising",
     "https://arxiv.org/abs/2111.05507",
     Year = 2022,
     Authors = "Jiahao Li, Bin Chen, Dawei Leng, Yuhui Quan")]

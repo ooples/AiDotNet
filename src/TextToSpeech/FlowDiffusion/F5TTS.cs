@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching", "https://arxiv.org/abs/2410.06885", Year = 2024, Authors = "Chen et al.")]
+[ResearchPaper("F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching", "https://arxiv.org/abs/2410.06885", Year = 2024, Authors = "Chen et al.")]
 public class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly F5TTSOptions _options; public override ModelOptions GetOptions() => _options;

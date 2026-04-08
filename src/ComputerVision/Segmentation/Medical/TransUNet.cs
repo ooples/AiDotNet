@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TransUNet: Transformers Make Strong Encoders for Medical Image Segmentation", "https://arxiv.org/abs/2102.04306", Year = 2021, Authors = "Jieneng Chen, Yongyi Lu, Qihang Yu, Xiangde Luo, Ehsan Adeli, Yan Wang, Le Lu, Alan L. Yuille, Yuyin Zhou")]
+[ResearchPaper("TransUNet: Transformers Make Strong Encoders for Medical Image Segmentation", "https://arxiv.org/abs/2102.04306", Year = 2021, Authors = "Jieneng Chen, Yongyi Lu, Qihang Yu, Xiangde Luo, Ehsan Adeli, Yan Wang, Le Lu, Alan L. Yuille, Yuyin Zhou")]
 public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly TransUNetOptions _options;

@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SED: A Simple Encoder-Decoder for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2311.15537", Year = 2024, Authors = "Xie et al.")]
+[ResearchPaper("SED: A Simple Encoder-Decoder for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2311.15537", Year = 2024, Authors = "Xie et al.")]
 public class SED<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly SEDOptions _options;

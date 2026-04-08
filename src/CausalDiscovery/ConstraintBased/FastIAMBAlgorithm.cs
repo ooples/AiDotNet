@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Speculative Markov Blanket Discovery for Optimal Feature Selection", "https://doi.org/10.1109/ICDM.2005.138", Year = 2005, Authors = "Sandeep Yaramakala, Dimitris Margaritis")]
+[ResearchPaper("Speculative Markov Blanket Discovery for Optimal Feature Selection", "https://doi.org/10.1109/ICDM.2005.138", Year = 2005, Authors = "Sandeep Yaramakala, Dimitris Margaritis")]
 public class FastIAMBAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>

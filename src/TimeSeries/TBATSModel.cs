@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Forecasting time series with complex seasonal patterns using exponential smoothing", "https://doi.org/10.1198/jasa.2011.tm09771", Year = 2011, Authors = "Alysha M. De Livera, Rob J. Hyndman, Ralph D. Snyder")]
+[ResearchPaper("Forecasting time series with complex seasonal patterns using exponential smoothing", "https://doi.org/10.1198/jasa.2011.tm09771", Year = 2011, Authors = "Alysha M. De Livera, Rob J. Hyndman, Ralph D. Snyder")]
 public class TBATSModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

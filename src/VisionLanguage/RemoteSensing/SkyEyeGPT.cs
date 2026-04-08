@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model", "https://arxiv.org/abs/2401.09712", Year = 2024, Authors = "Zhan et al.")]
+[ResearchPaper("SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model", "https://arxiv.org/abs/2401.09712", Year = 2024, Authors = "Zhan et al.")]
 public class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly SkyEyeGPTOptions _options; public override ModelOptions GetOptions() => _options;

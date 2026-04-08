@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments",
+[ResearchPaper("Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments",
     "https://arxiv.org/abs/1706.02275",
     Year = 2017,
     Authors = "Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P., & Mordatch, I.")]

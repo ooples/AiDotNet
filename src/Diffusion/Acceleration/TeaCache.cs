@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -22,6 +25,8 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// - Achieves 2-3x speedup on typical 50-step diffusion sampling
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Optimizer)]
+[PipelineStage(PipelineStage.Training)]
 public class TeaCache<T>
 {
     private readonly double _reuseThreshold;

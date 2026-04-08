@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model", "https://arxiv.org/abs/2409.01704", Year = 2024, Authors = "Wei et al.")]
+[ResearchPaper("General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model", "https://arxiv.org/abs/2409.01704", Year = 2024, Authors = "Wei et al.")]
 public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly GOTOCR2Options _options; public override ModelOptions GetOptions() => _options;

@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
+    [ResearchPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
 public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly RadialBasisFunctionNetworkOptions _options;

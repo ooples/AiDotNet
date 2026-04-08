@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("LISA: Reasoning Segmentation via Large Language Model", "https://arxiv.org/abs/2308.00692", Year = 2024, Authors = "Lai et al.")]
+[ResearchPaper("LISA: Reasoning Segmentation via Large Language Model", "https://arxiv.org/abs/2308.00692", Year = 2024, Authors = "Lai et al.")]
 public class LISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly LISAOptions _options;

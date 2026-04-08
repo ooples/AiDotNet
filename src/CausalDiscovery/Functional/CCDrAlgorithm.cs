@@ -45,7 +45,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Concave Penalized Estimation of Sparse Gaussian Bayesian Networks", "https://jmlr.org/papers/v16/aragam15a.html", Year = 2015, Authors = "Bryon Aragam, Qing Zhou")]
+[ResearchPaper("Concave Penalized Estimation of Sparse Gaussian Bayesian Networks", "https://jmlr.org/papers/v16/aragam15a.html", Year = 2015, Authors = "Bryon Aragam, Qing Zhou")]
 public class CCDrAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _lambda;

@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.StyleTransfer)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ICEdit: In-Context Image Editing", "https://arxiv.org/abs/2501.00031", Year = 2025, Authors = "Zhang et al.")]
+[ResearchPaper("ICEdit: In-Context Image Editing", "https://arxiv.org/abs/2501.00031", Year = 2025, Authors = "Zhang et al.")]
 public class ICEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

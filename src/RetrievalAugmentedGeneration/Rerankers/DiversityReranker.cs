@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -67,6 +69,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - After initial retrieval that returns many similar docs
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Reranker)]
+[PipelineStage(PipelineStage.PostRetrieval)]
 public class DiversityReranker<T> : RerankerBase<T>
 {
     private readonly T _lambda;

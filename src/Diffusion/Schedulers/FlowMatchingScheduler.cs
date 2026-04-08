@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -43,6 +44,8 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// Liu et al., "Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow", ICLR 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Scheduler)]
+[PipelineStage(PipelineStage.Training)]
 public sealed class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

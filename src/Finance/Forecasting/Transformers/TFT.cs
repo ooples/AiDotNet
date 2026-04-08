@@ -67,7 +67,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting", "https://arxiv.org/abs/1912.09363", Year = 2021, Authors = "Bryan Lim, Sercan O. Arik, Nicolas Loeff, Tomas Pfister")]
+[ResearchPaper("Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting", "https://arxiv.org/abs/1912.09363", Year = 2021, Authors = "Bryan Lim, Sercan O. Arik, Nicolas Loeff, Tomas Pfister")]
 public class TFT<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

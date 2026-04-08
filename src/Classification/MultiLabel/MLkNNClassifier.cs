@@ -67,7 +67,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("ML-KNN: A Lazy Learning Approach to Multi-Label Learning", "https://doi.org/10.1016/j.patcog.2006.12.019", Year = 2007, Authors = "Min-Ling Zhang, Zhi-Hua Zhou")]
+[ResearchPaper("ML-KNN: A Lazy Learning Approach to Multi-Label Learning", "https://doi.org/10.1016/j.patcog.2006.12.019", Year = 2007, Authors = "Min-Ling Zhang, Zhi-Hua Zhou")]
 public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 {
     private readonly MLkNNOptions<T> _options;

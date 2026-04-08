@@ -30,7 +30,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ModelPaper("Applied Linear Statistical Models", "https://doi.org/10.1080/00401706.1997.10485117")]
+    [ResearchPaper("Applied Linear Statistical Models", "https://doi.org/10.1080/00401706.1997.10485117")]
 public class PolynomialRegression<T> : RegressionBase<T>
 {
     private readonly PolynomialRegressionOptions<T> _polyOptions;

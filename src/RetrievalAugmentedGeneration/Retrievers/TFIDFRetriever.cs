@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -24,6 +26,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// when documents are added or removed.
     /// </para>
     /// </remarks>
+    [ComponentType(ComponentType.Retriever)]
+    [PipelineStage(PipelineStage.Retrieval)]
     public class TFIDFRetriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;

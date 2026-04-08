@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("REB-former: RWKV-Enhanced E-Branchformer for Speech Recognition", "https://arxiv.org/abs/2501.13986", Year = 2025, Authors = "Song et al.")]
+[ResearchPaper("REB-former: RWKV-Enhanced E-Branchformer for Speech Recognition", "https://arxiv.org/abs/2501.13986", Year = 2025, Authors = "Song et al.")]
 public class REBFormer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly REBFormerOptions _options; public override ModelOptions GetOptions() => _options;

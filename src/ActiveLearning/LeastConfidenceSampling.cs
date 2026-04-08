@@ -40,7 +40,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Heterogeneous Uncertainty Sampling for Supervised Learning", "https://doi.org/10.1016/B978-1-55860-335-6.50026-X", Year = 1994, Authors = "David D. Lewis, Jason Catlett")]
+[ResearchPaper("Heterogeneous Uncertainty Sampling for Supervised Learning", "https://doi.org/10.1016/B978-1-55860-335-6.50026-X", Year = 1994, Authors = "David D. Lewis, Jason Catlett")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class LeastConfidenceSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

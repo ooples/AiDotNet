@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Sundial: A Family of Highly Capable Time Series Foundation Models", "https://arxiv.org/abs/2502.00816")]
+[ResearchPaper("Sundial: A Family of Highly Capable Time Series Foundation Models", "https://arxiv.org/abs/2502.00816")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Sundial<T> : TimeSeriesFoundationModelBase<T>
 {

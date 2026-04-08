@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Lumina-Image 2.0: A Unified and Efficient Image Generative Framework", "https://arxiv.org/abs/2503.09153", Year = 2025, Authors = "Gao et al.")]
+[ResearchPaper("Lumina-Image 2.0: A Unified and Efficient Image Generative Framework", "https://arxiv.org/abs/2503.09153", Year = 2025, Authors = "Gao et al.")]
 public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

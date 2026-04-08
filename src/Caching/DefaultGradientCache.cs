@@ -1,4 +1,6 @@
 global using System.Collections.Concurrent;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Caching;
 
@@ -23,6 +25,7 @@ namespace AiDotNet.Caching;
 /// (like names or identifiers) to look them up quickly.
 /// </para>
 /// </remarks>
+[InfraType(InfraType.Cache)]
 public class DefaultGradientCache<T> : IGradientCache<T>
 {
     /// <summary>

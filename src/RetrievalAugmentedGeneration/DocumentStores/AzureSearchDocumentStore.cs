@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -12,6 +14,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// Provides in-memory simulation of Azure Search features including field-level search and faceted filtering.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ComponentType(ComponentType.DocumentStore)]
+    [PipelineStage(PipelineStage.Indexing)]
     public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     {
         private readonly Dictionary<string, VectorDocument<T>> _documents;

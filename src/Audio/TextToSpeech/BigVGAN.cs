@@ -53,7 +53,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Sang-gil Lee, Wei Ping, Boris Ginsburg, Bryan Catanzaro, Sungroh Yoon")]
+[ResearchPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Sang-gil Lee, Wei Ping, Boris Ginsburg, Bryan Catanzaro, Sungroh Yoon")]
 public class BigVGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

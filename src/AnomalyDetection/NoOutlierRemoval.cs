@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.AnomalyDetection;
@@ -21,6 +23,8 @@ namespace AiDotNet.AnomalyDetection;
 /// - When your domain requires keeping all data points (e.g., fraud detection)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.FeatureSelector)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class NoOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     /// <summary>

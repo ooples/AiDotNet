@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FunAudioLLM: Voice Understanding and Generation Foundation Models for Natural Interaction Between Humans and LLMs", "https://arxiv.org/abs/2407.04051", Year = 2024, Authors = "Du et al.")]
+[ResearchPaper("FunAudioLLM: Voice Understanding and Generation Foundation Models for Natural Interaction Between Humans and LLMs", "https://arxiv.org/abs/2407.04051", Year = 2024, Authors = "Du et al.")]
 public class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SenseVoiceLargeOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Regularization;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements Elastic Net regularization, a hybrid approach that combines L1 (Lasso) and L2 (Ridge) regularization techniques.
@@ -20,6 +23,8 @@
 /// - Elastic Net lets you blend these two approaches for the best of both worlds
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Regularizer)]
+[PipelineStage(PipelineStage.Training)]
 public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>

@@ -1,5 +1,8 @@
 ﻿using AiDotNet.Interfaces;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Audio;
 
 /// <summary>
@@ -36,6 +39,8 @@ namespace AiDotNet.Diffusion.Audio;
 /// ```
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class AudioProcessor<T>
 {
     /// <summary>

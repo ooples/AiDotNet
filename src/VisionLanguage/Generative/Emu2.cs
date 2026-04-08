@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Generative Multimodal Models are In-Context Learners", "https://arxiv.org/abs/2312.13286", Year = 2024, Authors = "Sun et al.")]
+[ResearchPaper("Generative Multimodal Models are In-Context Learners", "https://arxiv.org/abs/2312.13286", Year = 2024, Authors = "Sun et al.")]
 public class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu2Options _options; public override ModelOptions GetOptions() => _options;

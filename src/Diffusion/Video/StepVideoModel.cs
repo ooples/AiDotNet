@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Step Video T2V Technical Report", "https://arxiv.org/abs/2502.10248", Year = 2025, Authors = "Step AI")]
+[ResearchPaper("Step Video T2V Technical Report", "https://arxiv.org/abs/2502.10248", Year = 2025, Authors = "Step AI")]
 public class StepVideoModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

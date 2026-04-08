@@ -82,7 +82,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Zero-1-to-3: Zero-shot One Image to 3D Object", "https://arxiv.org/abs/2303.11328", Year = 2023, Authors = "Liu et al.")]
+[ResearchPaper("Zero-1-to-3: Zero-shot One Image to 3D Object", "https://arxiv.org/abs/2303.11328", Year = 2023, Authors = "Liu et al.")]
 public class Zero123Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

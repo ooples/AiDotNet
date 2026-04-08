@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ModelPaper("Seedance 1.0: Exploring the Boundaries of Video Generation Models", "https://arxiv.org/abs/2506.09113")]
+    [ResearchPaper("Seedance 1.0: Exploring the Boundaries of Video Generation Models", "https://arxiv.org/abs/2506.09113")]
 public class Seedance1Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

@@ -47,7 +47,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Jungil Kong, Jaehyeon Kim, Jaekyoung Bae")]
+[ResearchPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Jungil Kong, Jaehyeon Kim, Jaekyoung Bae")]
 public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

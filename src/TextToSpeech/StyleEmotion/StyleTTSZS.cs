@@ -33,7 +33,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("StyleTTS-ZS: Efficient High-Quality Zero-Shot Text-to-Speech Synthesis with Distilled Time-Varying Style Diffusion", "https://arxiv.org/abs/2409.10058", Year = 2024, Authors = "Li et al.")]
+[ResearchPaper("StyleTTS-ZS: Efficient High-Quality Zero-Shot Text-to-Speech Synthesis with Distilled Time-Varying Style Diffusion", "https://arxiv.org/abs/2409.10058", Year = 2024, Authors = "Li et al.")]
 public class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSZSOptions _options; public override ModelOptions GetOptions() => _options;

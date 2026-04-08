@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Language Models are Realistic Tabular Data Generators",
+[ResearchPaper("Language Models are Realistic Tabular Data Generators",
     "https://arxiv.org/abs/2210.06280",
     Year = 2023,
     Authors = "Vadim Borisov, Kathrin Seßler, Tobias Leemann, Martin Pawelczyk, Gjergji Kasneci")]

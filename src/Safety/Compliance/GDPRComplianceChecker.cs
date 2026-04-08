@@ -43,7 +43,7 @@ namespace AiDotNet.Safety.Compliance;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GDPR (Regulation 2016/679)",
+[ResearchPaper("GDPR (Regulation 2016/679)",
     "https://eur-lex.europa.eu/eli/reg/2016/679",
     Year = 2016,
     Authors = "European Parliament and Council")]

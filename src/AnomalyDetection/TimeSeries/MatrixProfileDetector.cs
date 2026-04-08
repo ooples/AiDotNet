@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Matrix Profile I: All Pairs Similarity Joins for Time Series: A Unifying View", "https://doi.org/10.1109/ICDM.2016.0179", Year = 2016, Authors = "Chin-Chia Michael Yeh, Yan Zhu, Liudmila Ulanova, Nurjahan Begum, Yifei Ding, Hoang Anh Dau, Diego Furtado Silva, Abdullah Mueen, Eamonn Keogh")]
+[ResearchPaper("Matrix Profile I: All Pairs Similarity Joins for Time Series: A Unifying View", "https://doi.org/10.1109/ICDM.2016.0179", Year = 2016, Authors = "Chin-Chia Michael Yeh, Yan Zhu, Liudmila Ulanova, Nurjahan Begum, Yifei Ding, Hoang Anh Dau, Diego Furtado Silva, Abdullah Mueen, Eamonn Keogh")]
 public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>Weight for the value-deviation component in the combined anomaly score.</summary>

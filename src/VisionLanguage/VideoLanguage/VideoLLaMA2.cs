@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("VideoLLaMA 2: Advancing Spatial-Temporal Modeling and Audio Understanding in Video-LLMs", "https://arxiv.org/abs/2406.07476", Year = 2024, Authors = "Cheng et al.")]
+[ResearchPaper("VideoLLaMA 2: Advancing Spatial-Temporal Modeling and Audio Understanding in Video-LLMs", "https://arxiv.org/abs/2406.07476", Year = 2024, Authors = "Cheng et al.")]
 public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA2Options _options; public override ModelOptions GetOptions() => _options;

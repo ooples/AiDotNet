@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Loong: Generating Minute-level Long Videos with Autoregressive Language Models", "https://arxiv.org/abs/2410.02757", Year = 2024, Authors = "Wang et al.")]
+[ResearchPaper("Loong: Generating Minute-level Long Videos with Autoregressive Language Models", "https://arxiv.org/abs/2410.02757", Year = 2024, Authors = "Wang et al.")]
 public class LoongModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

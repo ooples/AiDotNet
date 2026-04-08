@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("IART: Implicit Resampling-based Alignment Transformer for Video Super-Resolution",
+[ResearchPaper("IART: Implicit Resampling-based Alignment Transformer for Video Super-Resolution",
     "https://arxiv.org/abs/2404.06573",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]

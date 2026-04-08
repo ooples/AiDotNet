@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Eagle: Exploring The Design Space for Multimodal LLMs with Mixture of Encoders", "https://arxiv.org/abs/2408.15998", Year = 2024, Authors = "Shi et al.")]
+[ResearchPaper("Eagle: Exploring The Design Space for Multimodal LLMs with Mixture of Encoders", "https://arxiv.org/abs/2408.15998", Year = 2024, Authors = "Shi et al.")]
 public class Eagle<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly EagleOptions _options; public override ModelOptions GetOptions() => _options;

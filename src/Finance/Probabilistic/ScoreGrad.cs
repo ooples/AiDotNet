@@ -84,7 +84,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("ScoreGrad: Multivariate Probabilistic Time Series Forecasting with Continuous Energy-based Generative Models", "https://arxiv.org/abs/2106.10121", Year = 2021, Authors = "Tijin Yan, Hongwei Zhang, Tong Zhou, Yufeng Zhan, Yuanqing Xia")]
+[ResearchPaper("ScoreGrad: Multivariate Probabilistic Time Series Forecasting with Continuous Energy-based Generative Models", "https://arxiv.org/abs/2106.10121", Year = 2021, Authors = "Tijin Yan, Hongwei Zhang, Tong Zhou, Yufeng Zhan, Yuanqing Xia")]
 public class ScoreGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

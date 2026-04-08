@@ -83,7 +83,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("REL: An Entity Linker Standing on the Shoulders of Giants",
+[ResearchPaper("REL: An Entity Linker Standing on the Shoulders of Giants",
     "https://arxiv.org/abs/2006.01969",
     Year = 2020,
     Authors = "Johannes M. van Hulst, Faegheh Hasibi, Koen Dercksen, Krisztian Balog, Arjen P. de Vries")]

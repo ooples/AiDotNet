@@ -47,7 +47,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("FlowLens: Seeing Beyond the FoV via Flow-Guided Clip-Recurrent Transformer",
+[ResearchPaper("FlowLens: Seeing Beyond the FoV via Flow-Guided Clip-Recurrent Transformer",
     "https://arxiv.org/abs/2211.11293",
     Year = 2022,
     Authors = "Hao Luo, Peng Zhao, Ling Pei")]

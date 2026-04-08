@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
+[ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
 public class FinancialPPOAgent<T> : TradingAgentBase<T>
 {
     #region Fields

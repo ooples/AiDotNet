@@ -47,7 +47,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TabNet: Attentive Interpretable Tabular Learning", "https://doi.org/10.1609/aaai.v35i8.16826", Year = 2021, Authors = "Sercan O. Arik, Tomas Pfister")]
+[ResearchPaper("TabNet: Attentive Interpretable Tabular Learning", "https://doi.org/10.1609/aaai.v35i8.16826", Year = 2021, Authors = "Sercan O. Arik, Tomas Pfister")]
 public class TabNet<T> : RiskModelBase<T>
 {
     #region Shared Fields

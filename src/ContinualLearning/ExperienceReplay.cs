@@ -48,7 +48,9 @@ namespace AiDotNet.ContinualLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Experience Replay for Continual Learning", "https://arxiv.org/abs/1811.11682", Year = 2019, Authors = "David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, Gregory Wayne")]
+[ResearchPaper("Experience Replay for Continual Learning", "https://arxiv.org/abs/1811.11682", Year = 2019, Authors = "David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, Gregory Wayne")]
+[ComponentType(ComponentType.ContinualLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class ExperienceReplay<T> : IContinualLearningStrategy<T>
 {
     /// <summary>

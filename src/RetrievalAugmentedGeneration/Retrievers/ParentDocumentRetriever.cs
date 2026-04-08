@@ -1,6 +1,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -66,6 +68,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Memory-constrained systems (returns more content per match)
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Retriever)]
+[PipelineStage(PipelineStage.Retrieval)]
 public class ParentDocumentRetriever<T> : RetrieverBase<T>
 {
     private readonly IDocumentStore<T> _documentStore;

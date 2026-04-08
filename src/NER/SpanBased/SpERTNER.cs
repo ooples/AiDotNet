@@ -70,7 +70,7 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Span-based Joint Entity and Relation Extraction with Transformer Pre-training",
+[ResearchPaper("Span-based Joint Entity and Relation Extraction with Transformer Pre-training",
     "https://arxiv.org/abs/1909.07755",
     Year = 2020,
     Authors = "Markus Eberts, Adrian Ulges")]

@@ -42,7 +42,9 @@ namespace AiDotNet.ActiveLearning;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("An Analysis of Active Learning Strategies for Sequence Labeling Tasks", "https://aclanthology.org/D08-1112/", Year = 2008, Authors = "Burr Settles, Mark Craven")]
+[ResearchPaper("An Analysis of Active Learning Strategies for Sequence Labeling Tasks", "https://aclanthology.org/D08-1112/", Year = 2008, Authors = "Burr Settles, Mark Craven")]
+[ComponentType(ComponentType.ActiveLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

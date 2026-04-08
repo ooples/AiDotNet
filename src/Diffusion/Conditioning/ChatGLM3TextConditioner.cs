@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -47,6 +49,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// Reference: Zeng et al., "GLM-130B: An Open Bilingual Pre-trained Model", ICLR 2023
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 {
     /// <summary>

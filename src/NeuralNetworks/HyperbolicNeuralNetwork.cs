@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Hyperbolic Neural Networks", "https://arxiv.org/abs/1805.09112", Year = 2018, Authors = "Octavian-Eugen Ganea, Gary Becigneul, Thomas Hofmann")]
+[ResearchPaper("Hyperbolic Neural Networks", "https://arxiv.org/abs/1805.09112", Year = 2018, Authors = "Octavian-Eugen Ganea, Gary Becigneul, Thomas Hofmann")]
 public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HyperbolicNeuralNetworkOptions _options;

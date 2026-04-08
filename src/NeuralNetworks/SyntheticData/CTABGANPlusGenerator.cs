@@ -83,7 +83,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CTAB-GAN+: Enhancing Tabular Data Synthesis",
+[ResearchPaper("CTAB-GAN+: Enhancing Tabular Data Synthesis",
     "https://arxiv.org/abs/2204.00401",
     Year = 2023,
     Authors = "Zilong Zhao, Aditya Kunar, Robert Birke, Lydia Y. Chen")]

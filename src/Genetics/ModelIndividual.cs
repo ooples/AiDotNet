@@ -47,7 +47,7 @@ namespace AiDotNet.Genetics;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
+[ResearchPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
     [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ModelIndividual<T, TInput, TOutput, TGene> :
     IEvolvable<TGene, T>,

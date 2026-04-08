@@ -84,10 +84,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("SetFeat: Set Features for Fine-Grained Few-Shot Classification",
+[ResearchPaper("SetFeat: Set Features for Fine-Grained Few-Shot Classification",
     "https://arxiv.org/abs/2204.01328",
     Year = 2022,
     Authors = "Arman Afrasiyabi, Hugo Larochelle, Jean-Francois Lalonde, Christian Gagne")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
 public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;

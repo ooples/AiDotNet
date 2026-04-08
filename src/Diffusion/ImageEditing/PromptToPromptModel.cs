@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelTask(ModelTask.Editing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Prompt-to-Prompt Image Editing with Cross Attention Control", "https://arxiv.org/abs/2208.01626", Year = 2023, Authors = "Hertz et al.")]
+[ResearchPaper("Prompt-to-Prompt Image Editing with Cross Attention Control", "https://arxiv.org/abs/2208.01626", Year = 2023, Authors = "Hertz et al.")]
 public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

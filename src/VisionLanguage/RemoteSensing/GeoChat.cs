@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GeoChat: Grounded Large Vision-Language Model for Remote Sensing", "https://arxiv.org/abs/2311.15826", Year = 2024, Authors = "Kuckreja et al.")]
+[ResearchPaper("GeoChat: Grounded Large Vision-Language Model for Remote Sensing", "https://arxiv.org/abs/2311.15826", Year = 2024, Authors = "Kuckreja et al.")]
 public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly GeoChatOptions _options; public override ModelOptions GetOptions() => _options;

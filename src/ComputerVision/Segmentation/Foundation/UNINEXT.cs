@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2308.06820", Year = 2023, Authors = "Yan et al.")]
+[ResearchPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2308.06820", Year = 2023, Authors = "Yan et al.")]
 public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly UNINEXTOptions _options;

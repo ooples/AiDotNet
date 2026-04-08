@@ -29,7 +29,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks",
+[ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks",
     "https://arxiv.org/abs/1905.11946",
     Year = 2019,
     Authors = "Mingxing Tan, Quoc V. Le")]

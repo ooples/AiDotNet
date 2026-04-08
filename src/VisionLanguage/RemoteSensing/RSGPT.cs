@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("RSGPT: A Remote Sensing Vision Language Model and Benchmark", "https://arxiv.org/abs/2307.15266", Year = 2023, Authors = "Hu et al.")]
+[ResearchPaper("RSGPT: A Remote Sensing Vision Language Model and Benchmark", "https://arxiv.org/abs/2307.15266", Year = 2023, Authors = "Hu et al.")]
 public class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly RSGPTOptions _options; public override ModelOptions GetOptions() => _options;

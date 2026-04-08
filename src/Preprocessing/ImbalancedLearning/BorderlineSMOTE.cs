@@ -1,4 +1,6 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Preprocessing.ImbalancedLearning;
 
@@ -33,6 +35,8 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// - Han et al. (2005). "Borderline-SMOTE: A New Over-Sampling Method in Imbalanced Data Sets Learning"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Encoder)]
+[PipelineStage(PipelineStage.Preprocessing)]
 public class BorderlineSMOTE<T> : OversamplingBase<T>
 {
     /// <summary>

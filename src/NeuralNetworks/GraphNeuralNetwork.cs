@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
+[ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>

@@ -63,7 +63,7 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
+[ResearchPaper("DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
     "https://arxiv.org/abs/2006.03654",
     Year = 2021,
     Authors = "Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen")]

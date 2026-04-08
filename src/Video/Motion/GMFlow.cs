@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("GMFlow: Learning Optical Flow via Global Matching",
+[ResearchPaper("GMFlow: Learning Optical Flow via Global Matching",
     "https://arxiv.org/abs/2111.13680",
     Year = 2022,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Dacheng Tao")]

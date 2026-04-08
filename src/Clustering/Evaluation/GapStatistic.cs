@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -36,6 +38,8 @@ namespace AiDotNet.Clustering.Evaluation;
 /// - "So k=3 is probably right!"
 /// </para>
 /// </remarks>
+[ComponentType(ComponentType.Evaluator)]
+[PipelineStage(PipelineStage.Evaluation)]
 public class GapStatistic<T>
 {
     private readonly INumericOperations<T> _numOps;

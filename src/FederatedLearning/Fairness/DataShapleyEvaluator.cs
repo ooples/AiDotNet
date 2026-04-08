@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -25,6 +27,8 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para><b>Recommended for:</b> Federations with 10+ clients where exact Shapley is too expensive.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ComponentType(ComponentType.FederatedAggregator)]
+[PipelineStage(PipelineStage.Training)]
 public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClientContributionEvaluator<T>
 {
     private readonly ContributionEvaluationOptions _options;

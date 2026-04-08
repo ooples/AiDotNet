@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration",
+[ResearchPaper("DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration",
     "https://arxiv.org/abs/2501.00766",
     Year = 2025,
     Authors = "Zheyuan Chen, Yue Wu, Zijian Chen, Ming Lu, Shanghang Zhang")]
