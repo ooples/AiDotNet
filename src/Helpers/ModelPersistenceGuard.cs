@@ -60,6 +60,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeSave()
     {
+        if (_internalOperationDepth > 0) return;
         EnforceCore();
     }
 
@@ -72,6 +73,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeLoad()
     {
+        if (_internalOperationDepth > 0) return;
         EnforceCore();
     }
 

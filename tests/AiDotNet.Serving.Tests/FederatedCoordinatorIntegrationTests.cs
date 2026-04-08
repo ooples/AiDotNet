@@ -229,12 +229,15 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         await File.WriteAllBytesAsync(proPath, proBytes);
         _createdModelFiles.Add(proPath);
 
-        var proModel = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
-            proPath,
-            metadata => new VectorModel<double>(new Vector<double>(metadata.FeatureCount > 0 ? metadata.FeatureCount : createResponse.ParameterCount)));
+        using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var proModel = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+                proPath,
+                metadata => new VectorModel<double>(new Vector<double>(metadata.FeatureCount > 0 ? metadata.FeatureCount : createResponse.ParameterCount)));
 
-        var proParams = proModel.GetParameters();
-        Assert.Equal(2.0, proParams[0], precision: 6);
+            var proParams = proModel.GetParameters();
+            Assert.Equal(2.0, proParams[0], precision: 6);
+        }
 
         // Option C (Enterprise) returns encrypted artifact and requires key release via attestation.
         SetApiKey(enterpriseApiKey);

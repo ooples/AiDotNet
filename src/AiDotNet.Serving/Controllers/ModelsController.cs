@@ -405,10 +405,10 @@ public class ModelsController : ControllerBase
     /// </remarks>
     private ModelInfo LoadTypedModel<T>(string name, string path, NumericType numericType)
     {
-        // Load the serialized AiModelResult using internal constructor
-        // This is accessible via InternalsVisibleTo
-        // NOTE: No InternalOperation bypass here — HTTP model loading enforces license checks.
-        // Only internal services (startup, federated coordinator) bypass license checks.
+        // Serving infrastructure loads models internally — bypass trial limits.
+        // The trial is for end-user SDK usage, not for server-side model serving.
+        using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
+        {
         var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
 
@@ -501,5 +501,6 @@ public class ModelsController : ControllerBase
             OutputDimension = outputDim,
             LoadedAt = DateTime.UtcNow
         };
+        } // end InternalOperation scope
     }
 }
