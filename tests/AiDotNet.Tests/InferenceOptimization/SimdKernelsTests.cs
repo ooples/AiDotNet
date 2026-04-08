@@ -10,103 +10,121 @@ public class SimdKernelsTests
     [Fact(Timeout = 60000)]
     public async Task VectorAdd_MatchesScalar()
     {
-        var a = CreateInput(32, 1);
-        var b = CreateInput(32, 17);
-        var result = new float[a.Length];
-        var expected = new float[a.Length];
-
-        for (int i = 0; i < a.Length; i++)
+        await Task.Run(() =>
         {
-            expected[i] = a[i] + b[i];
-        }
+            var a = CreateInput(32, 1);
+            var b = CreateInput(32, 17);
+            var result = new float[a.Length];
+            var expected = new float[a.Length];
 
-        SimdKernels.VectorAdd(a, b, result);
+            for (int i = 0; i < a.Length; i++)
+            {
+                expected[i] = a[i] + b[i];
+            }
 
-        AssertEqual(expected, result);
+            SimdKernels.VectorAdd(a, b, result);
+
+            AssertEqual(expected, result);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task VectorMultiply_MatchesScalar()
     {
-        var a = CreateInput(32, 3);
-        var b = CreateInput(32, 9);
-        var result = new float[a.Length];
-        var expected = new float[a.Length];
-
-        for (int i = 0; i < a.Length; i++)
+        await Task.Run(() =>
         {
-            expected[i] = a[i] * b[i];
-        }
+            var a = CreateInput(32, 3);
+            var b = CreateInput(32, 9);
+            var result = new float[a.Length];
+            var expected = new float[a.Length];
 
-        SimdKernels.VectorMultiply(a, b, result);
+            for (int i = 0; i < a.Length; i++)
+            {
+                expected[i] = a[i] * b[i];
+            }
 
-        AssertEqual(expected, result);
+            SimdKernels.VectorMultiply(a, b, result);
+
+            AssertEqual(expected, result);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task DotProduct_MatchesScalar()
     {
-        var a = CreateInput(37, 5);
-        var b = CreateInput(37, 11);
-
-        float expected = 0f;
-        for (int i = 0; i < a.Length; i++)
+        await Task.Run(() =>
         {
-            expected += a[i] * b[i];
-        }
+            var a = CreateInput(37, 5);
+            var b = CreateInput(37, 11);
 
-        float actual = SimdKernels.DotProduct(a, b);
-        Assert.Equal(expected, actual, 5);
+            float expected = 0f;
+            for (int i = 0; i < a.Length; i++)
+            {
+                expected += a[i] * b[i];
+            }
+
+            float actual = SimdKernels.DotProduct(a, b);
+            Assert.Equal(expected, actual, 5);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task ScalarMultiplyAdd_MatchesScalar()
     {
-        var a = CreateInput(31, 7);
-        var b = CreateInput(31, 13);
-        var result = new float[a.Length];
-        var expected = new float[a.Length];
-
-        float scalar = 0.25f;
-        for (int i = 0; i < a.Length; i++)
+        await Task.Run(() =>
         {
-            expected[i] = a[i] + scalar * b[i];
-        }
+            var a = CreateInput(31, 7);
+            var b = CreateInput(31, 13);
+            var result = new float[a.Length];
+            var expected = new float[a.Length];
 
-        SimdKernels.ScalarMultiplyAdd(a, b, scalar, result);
+            float scalar = 0.25f;
+            for (int i = 0; i < a.Length; i++)
+            {
+                expected[i] = a[i] + scalar * b[i];
+            }
 
-        AssertEqual(expected, result);
+            SimdKernels.ScalarMultiplyAdd(a, b, scalar, result);
+
+            AssertEqual(expected, result);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task ReLU_MatchesScalar()
     {
-        var input = CreateSignedInput(33);
-        var output = new float[input.Length];
-        var expected = new float[input.Length];
-
-        for (int i = 0; i < input.Length; i++)
+        await Task.Run(() =>
         {
-            expected[i] = Math.Max(0f, input[i]);
-        }
+            var input = CreateSignedInput(33);
+            var output = new float[input.Length];
+            var expected = new float[input.Length];
 
-        SimdKernels.ReLU(input, output);
+            for (int i = 0; i < input.Length; i++)
+            {
+                expected[i] = Math.Max(0f, input[i]);
+            }
 
-        AssertEqual(expected, output);
+            SimdKernels.ReLU(input, output);
+
+            AssertEqual(expected, output);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task Sum_MatchesScalar()
     {
-        var input = CreateInput(100, 23);
-        float expected = 0f;
-        for (int i = 0; i < input.Length; i++)
+        await Task.Run(() =>
         {
-            expected += input[i];
-        }
+            var input = CreateInput(100, 23);
+            float expected = 0f;
+            for (int i = 0; i < input.Length; i++)
+            {
+                expected += input[i];
+            }
 
-        float actual = SimdKernels.Sum(input);
-        Assert.Equal(expected, actual, 5);
+            float actual = SimdKernels.Sum(input);
+            Assert.Equal(expected, actual, 5);
+        });
     }
 
     private static float[] CreateInput(int length, int seed)
@@ -150,4 +168,3 @@ public class SimdKernelsTests
         }
     }
 }
-

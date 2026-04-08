@@ -581,9 +581,14 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
     {
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
         {
-            var model = new AiModelResult<T, Matrix<T>, Vector<T>>();
-            model.LoadFromFile(artifactPath);
-            var updated = model.WithParameters(ToVector<T>(globalParameters));
+            var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
+            modelResult.LoadFromFile(artifactPath);
+
+            // Use the same pattern as AggregateRoundInternal: extract inner model
+            // which implements IParameterizable, apply new parameters, then save
+            var innerModel = modelResult.Model
+                ?? throw new InvalidOperationException("Loaded model has no inner model.");
+            var updated = Helpers.InterfaceGuard.Parameterizable(innerModel).WithParameters(ToVector<T>(globalParameters));
             updated.SaveModel(artifactPath);
         }
     }

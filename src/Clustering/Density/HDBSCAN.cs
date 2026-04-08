@@ -552,9 +552,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 {
                     T deathLambda = node.Lambda;
                     T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
-                    // Clamp birth to avoid using MaxValue for clusters that only appear as parents
+                    // Clamp birth to deathLambda so contribution is zero (not negative or inflated)
                     if (NumOps.GreaterThan(birth, deathLambda))
-                        birth = NumOps.Zero;
+                        birth = deathLambda;
                     T sizeT = NumOps.FromDouble(node.Size);
                     stability[node.Parent] = NumOps.Add(stability[node.Parent],
                         NumOps.Multiply(NumOps.Subtract(deathLambda, birth), sizeT));
